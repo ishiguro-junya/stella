@@ -234,16 +234,45 @@ describe('Stella app shell', () => {
       'Activity',
       'Settings',
     ]);
-    await expect($('button[aria-label="Changes"]')).toHaveAttribute('aria-current', 'page');
-    const commitToggle = $('.commit-disclosure-toggle');
-    await expect(commitToggle).toHaveAttribute('aria-expanded', 'false');
     expect(
-      await $$('.remote-action-bar .remote-action-button').map((button) => button.getText()),
-    ).toEqual(['Pull', 'Push', 'Fetch']);
-    await expect($('[data-commit-field="description"]')).not.toBeDisplayed();
+      await browser.tauri.execute(() =>
+        [...document.querySelectorAll('.titlebar-context, .titlebar-actions')].every((element) =>
+          element.hasAttribute('data-tauri-drag-region'),
+        ),
+      ),
+    ).toBe(true);
+    await expect($('button[aria-label="Changes"]')).toHaveAttribute('aria-current', 'page');
+    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="Commit"]');
+    await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');
+    const actionButtons = $$('.changes-action-bar .changes-action-button');
+    expect(await actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Commit',
+      'Pull',
+      'Push',
+      'Fetch',
+    ]);
+    expect(await actionButtons.map((button) => button.getAttribute('title'))).toEqual([
+      'Commit',
+      'Pull',
+      'Push',
+      'Fetch',
+    ]);
+    await expect($('[role="dialog"] [data-commit-field="description"]')).not.toExist();
     const repositoryToggle = $(`.repository-toggle[title="${repositoryPath}"]`);
     await expect(repositoryToggle).toBeDisplayed();
     await expect($('.branch-toggle')).toHaveText('main');
+    const longBranchFits = await browser.execute(() => {
+      const toggle = document.querySelector<HTMLButtonElement>('.branch-toggle');
+      const label = toggle?.querySelector<HTMLSpanElement>('span');
+      if (!label) return false;
+
+      const currentLabel = label.textContent;
+      label.textContent = 'feature/keep-a-branch-name-this-long-visible';
+      const fits = label.scrollWidth <= label.clientWidth;
+      label.textContent = currentLabel;
+      return fits;
+    });
+    expect(longBranchFits).toBe(true);
 
     await repositoryToggle.click();
     let switcher = $('[role="dialog"][aria-labelledby]');
@@ -280,19 +309,31 @@ describe('Stella app shell', () => {
     await stage.waitForClickable();
     const changesPaneLayout = await browser.execute(() => {
       const sidebar = document.querySelector<HTMLElement>('.changes-sidebar-pane')!;
-      const commitSection = sidebar.querySelector<HTMLElement>('.changes-commit-section')!;
+      const actionSection = sidebar.querySelector<HTMLElement>('.changes-action-section')!;
+      const actionButtonElements = [
+        ...actionSection.querySelectorAll<HTMLElement>('.changes-action-button'),
+      ];
       const filesRegion = sidebar.querySelector<HTMLElement>('.changes-files-scroll-region')!;
       const staged = sidebar.querySelector<HTMLElement>('.change-group-staged')!;
       const unstaged = sidebar.querySelector<HTMLElement>('.change-group-worktree')!;
       const stagedContent = staged.querySelector<HTMLElement>('.change-group-content')!;
       const unstagedContent = unstaged.querySelector<HTMLElement>('.change-group-content')!;
-      const commitRect = commitSection.getBoundingClientRect();
+      const actionRect = actionSection.getBoundingClientRect();
       const filesRect = filesRegion.getBoundingClientRect();
       const stagedRect = staged.getBoundingClientRect();
       const unstagedRect = unstaged.getBoundingClientRect();
 
       return {
-        commitBeforeFiles: commitRect.bottom <= filesRect.top + 1,
+        actionsBeforeFiles: actionRect.bottom <= filesRect.top + 1,
+        actionLabelsHidden: actionButtonElements.every(
+          (button) => getComputedStyle(button.querySelector('span')!).display === 'none',
+        ),
+        actionIconsKeepNormalSize: actionButtonElements.every((button) => {
+          const icon = button.querySelector<SVGElement>('.lucide')!;
+          return (
+            getComputedStyle(icon).width === '13px' && getComputedStyle(icon).height === '13px'
+          );
+        }),
         groupsMeetAtMiddle: Math.abs(stagedRect.bottom - unstagedRect.top) <= 1,
         groupHeightDifference: Math.abs(stagedRect.height - unstagedRect.height),
         stagedOverflow: getComputedStyle(stagedContent).overflowY,
@@ -300,11 +341,41 @@ describe('Stella app shell', () => {
       };
     });
     expect(changesPaneLayout).toEqual({
-      commitBeforeFiles: true,
+      actionsBeforeFiles: true,
+      actionLabelsHidden: true,
+      actionIconsKeepNormalSize: true,
       groupsMeetAtMiddle: true,
       groupHeightDifference: 0,
       stagedOverflow: 'auto',
       unstagedOverflow: 'auto',
+    });
+    const expandedActionLayout = await browser.execute(() => {
+      const workspace = document.querySelector<HTMLElement>('.changes-view')!;
+      const originalLeftPane = workspace.style.getPropertyValue('--left-pane');
+      workspace.style.setProperty('--left-pane', '360px');
+      workspace.getBoundingClientRect();
+      const buttons = [...workspace.querySelectorAll<HTMLElement>('.changes-action-button')];
+      const result = {
+        labelsVisible: buttons.every(
+          (button) => getComputedStyle(button.querySelector('span')!).display !== 'none',
+        ),
+        textKeepsNormalSize: buttons.every(
+          (button) => getComputedStyle(button).fontSize === '11px',
+        ),
+        iconsKeepNormalSize: buttons.every((button) => {
+          const icon = button.querySelector<SVGElement>('.lucide')!;
+          return (
+            getComputedStyle(icon).width === '13px' && getComputedStyle(icon).height === '13px'
+          );
+        }),
+      };
+      workspace.style.setProperty('--left-pane', originalLeftPane);
+      return result;
+    });
+    expect(expandedActionLayout).toEqual({
+      labelsVisible: true,
+      textKeepsNormalSize: true,
+      iconsKeepNormalSize: true,
     });
 
     await $('button.change-row').click();
@@ -361,13 +432,31 @@ describe('Stella app shell', () => {
       (await run('/usr/bin/git', ['-C', repositoryPath, 'diff', '--cached', '--name-only'])).stdout,
     ).toBe('README.md\n');
 
-    await commitToggle.waitForClickable();
-    await commitToggle.click();
-    await expect(commitToggle).toHaveAttribute('aria-expanded', 'true');
-    await $('[data-commit-field="description"]').setValue('E2Eリポジトリを初期化する');
-    const commit = $('.commit-form button[type="submit"]');
+    await commitTrigger.waitForClickable();
+    await commitTrigger.click();
+    await expect(commitTrigger).toHaveAttribute('aria-expanded', 'true');
+    const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    await expect(commitDialog).toBeDisplayed();
+    expect(
+      await browser.execute(() => document.activeElement?.getAttribute('data-commit-field')),
+    ).toBe('description');
+    await setLogicalWindowSize(860, 560);
+    expect(
+      await browser.execute(() => {
+        const commitDialogElement = document.querySelector<HTMLElement>('[role="dialog"]');
+        if (!commitDialogElement) return false;
+        const rect = commitDialogElement.getBoundingClientRect();
+        return (
+          rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth
+        );
+      }),
+    ).toBe(true);
+    await setLogicalWindowSize(1180, 760);
+    await commitDialog.$('[data-commit-field="description"]').setValue('E2Eリポジトリを初期化する');
+    const commit = commitDialog.$('.commit-form button[type="submit"]');
     await commit.waitForClickable();
     await commit.click();
+    await expect(commitDialog).not.toExist();
     await browser.waitUntil(
       async () =>
         (await browser.execute(() => document.querySelectorAll('.change-row').length)) === 0,
@@ -401,7 +490,8 @@ describe('Stella app shell', () => {
     await expect($('#activity-title')).toHaveText('Activity');
     const activityPanelHeader = $('.activity-panel-header');
     await expect(activityPanelHeader).toBeDisplayed();
-    await expect($('#commit-activity-title')).toHaveText('Commit activity');
+    await expect($('#commit-activity-title')).toHaveText('Repository analytics');
+    await expect($('#commit-activity-title')).toHaveElementClass('sr-only');
     expect(
       await browser.execute(
         () =>
@@ -409,52 +499,93 @@ describe('Stella app shell', () => {
             .height,
       ),
     ).toBeLessThanOrEqual(48);
-    const activityRange = $('select[aria-label="Commit activity range"]');
+    const activityRange = $('select[aria-label="Activity range"]');
     expect(await activityRange.getValue()).toBe('30d');
     expect(
       await browser.execute(() =>
         Array.from(
           document.querySelectorAll<HTMLOptionElement>(
-            'select[aria-label="Commit activity range"] option',
+            'select[aria-label="Activity range"] option',
           ),
           (option) => option.textContent,
         ),
       ),
     ).toEqual(['7 days', '30 days', '90 days', '180 days', '1 year']);
+    const activityMetric = $('select[aria-label="Activity metric"]');
+    expect(await activityMetric.getValue()).toBe('commits');
+    expect(
+      await browser.execute(() =>
+        Array.from(
+          document.querySelectorAll<HTMLOptionElement>(
+            'select[aria-label="Activity metric"] option',
+          ),
+          (option) => option.textContent,
+        ),
+      ),
+    ).toEqual(['Commits', 'Contributors', 'Branches']);
     const operationHeaders = $$('.activity-operation-table thead th');
     const operationHeaderTexts = await operationHeaders.map((header) => header.getText());
     expect(operationHeaderTexts).toEqual(['Status', 'Action', 'Summary', 'Timestamp', 'Duration']);
     await expect($('.activity-list')).toHaveText(expect.stringContaining('Commit'));
-    await browser.waitUntil(async () => (await $('.activity-metrics').getText()).includes('1'), {
-      timeout: 10_000,
-      timeoutMsg: 'Commit activity metrics did not load.',
-    });
+    await browser.waitUntil(
+      async () => (await $('.activity-metrics').getText()).includes('1 commit'),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Commit activity metrics did not load.',
+      },
+    );
+    await expect($('.activity-analytics-summary')).not.toExist();
+    await expect($('.activity-chart-data table')).toBeDisplayed();
+    expect(
+      await browser.execute(() => {
+        const container = document.querySelector<HTMLElement>('.activity-chart-data > div');
+        return {
+          overflowY: container ? getComputedStyle(container).overflowY : '',
+          scrollable: Boolean(container && container.scrollHeight > container.clientHeight),
+        };
+      }),
+    ).toEqual({ overflowY: 'auto', scrollable: true });
+    const setActivityMetric = async (value: 'commits' | 'contributors' | 'branches') => {
+      await browser.execute((nextValue) => {
+        const select = document.querySelector<HTMLSelectElement>(
+          'select[aria-label="Activity metric"]',
+        );
+        if (!select) throw new Error('Activity metric select was not found.');
+
+        select.value = nextValue;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+      await browser.waitUntil(async () => (await activityMetric.getValue()) === value, {
+        timeout: 10_000,
+        timeoutMsg: `Activity metric did not change to ${value}.`,
+      });
+    };
+    await setActivityMetric('contributors');
+    await expect($('.activity-chart-data thead th:last-child')).toHaveText('Contributors');
+    await setActivityMetric('branches');
+    await expect($('.activity-chart-data thead th:last-child')).toHaveText('Branches');
+    await setActivityMetric('commits');
     await browser.execute(() => {
       const select = document.querySelector<HTMLSelectElement>(
-        'select[aria-label="Commit activity range"]',
+        'select[aria-label="Activity range"]',
       );
-      if (!select) throw new Error('Commit activity range select was not found.');
+      if (!select) throw new Error('Activity range select was not found.');
 
       select.value = '7d';
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await browser.waitUntil(async () => (await activityRange.getValue()) === '7d', {
       timeout: 10_000,
-      timeoutMsg: 'Commit activity range did not change to seven days.',
+      timeoutMsg: 'Activity range did not change to seven days.',
     });
     await browser.waitUntil(
-      async () =>
-        (await $('.activity-analytics-summary').isDisplayed()) &&
-        (await $('.activity-analytics-summary').getText()).includes('1 commit'),
+      async () => (await $('.activity-metrics').getText()).includes('1 commit'),
       {
         timeout: 10_000,
         timeoutMsg: 'Seven-day commit activity did not settle.',
       },
     );
     await expect($('.activity-chart .recharts-wrapper svg.recharts-surface')).toBeDisplayed();
-    const chartData = $('.activity-chart-data > summary');
-    await expect(chartData).toHaveText('View chart data');
-    await chartData.click();
     await expect($('.activity-chart-data table')).toBeDisplayed();
 
     const settings = $('button[aria-label="Settings"]');
@@ -486,6 +617,32 @@ describe('Stella app shell', () => {
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: E2Eリポジトリを初期化する'),
     );
+    const historySearch = $('input[aria-label="Search history"]');
+    await expect(historySearch).toBeDisplayed();
+    await historySearch.setValue('E2Eリポジトリ');
+    await expect($('.commit-list')).toHaveText(
+      expect.stringContaining('feat: E2Eリポジトリを初期化する'),
+    );
+    await historySearch.setValue('一致しない検索');
+    await expect($('.history-search-empty')).toHaveText('No commits match your search.');
+    await historySearch.setValue('');
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+          return host?.shadowRoot?.textContent?.includes('README.md') ?? false;
+        }),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The History diff did not display its file name.',
+      },
+    );
+    const historyDiffText = await browser.execute(
+      () =>
+        document.querySelector<HTMLElement>('.diff-surface diffs-container')?.shadowRoot
+          ?.textContent ?? '',
+    );
+    expect(historyDiffText).not.toMatch(/unmodified lines?/iu);
     expect(
       await browser.execute(() =>
         getComputedStyle(
@@ -493,6 +650,26 @@ describe('Stella app shell', () => {
         ).getPropertyValue('box-shadow'),
       ),
     ).toBe('none');
+
+    const historyActions = $('button=Actions');
+    await historyActions.click();
+    const historyActionsDialog = $('[role="dialog"][aria-labelledby="history-actions-title"]');
+    await expect(historyActionsDialog).toBeDisplayed();
+    expect(
+      await browser.execute(
+        () =>
+          document.activeElement ===
+          document.querySelector('#history-actions-dialog input[data-dialog-initial-focus]'),
+      ),
+    ).toBe(true);
+    await browser.keys(['Escape']);
+    await expect(historyActionsDialog).not.toExist();
+    expect(
+      await browser.execute(
+        (selector) => document.activeElement === document.querySelector(selector),
+        '.history-actions-toggle',
+      ),
+    ).toBe(true);
 
     await $('button=Changes').click();
     await expect($('.changes-view')).toBeDisplayed();
@@ -628,7 +805,7 @@ describe('Stella app shell', () => {
         ),
       ).toBe(true);
       await setLogicalWindowSize(1180, 760);
-      await $('button[aria-label="変更"]').click();
+      await $('button[aria-label="変更差分"]').click();
       await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-1180x760.png'), 1180, 760);
       await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-860x560.png'), 860, 560);
       await settings.click();
