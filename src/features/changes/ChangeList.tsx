@@ -163,7 +163,6 @@ export function ChangeList({
   const groupCheckboxRefs = useRef(new Map<StageGroup, HTMLInputElement>());
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const groupFocusRefs = useRef(new Map<DisplayGroup, HTMLElement>());
-  const emptyStateRef = useRef<HTMLParagraphElement>(null);
   const interactionsDisabled = disabled || transferPending;
 
   const groups: ChangeGroup[] = [
@@ -288,7 +287,7 @@ export function ChangeList({
     } else {
       const sourceHeading = groupFocusRefs.current.get(displayGroupForArea(pending.sourceArea));
       const fallbackHeading = groupFocusRefs.current.values().next().value;
-      (sourceHeading ?? fallbackHeading ?? emptyStateRef.current)?.focus();
+      (sourceHeading ?? fallbackHeading)?.focus();
     }
     pendingTrashFocusRef.current = undefined;
   }, [entries, generation]);
@@ -626,10 +625,6 @@ export function ChangeList({
               ) : compatibleDrop ? (
                 <p className="change-drop-placeholder">
                   {t(targetArea === 'staged' ? 'dropHereToStage' : 'dropHereToUnstage')}
-                </p>
-              ) : id === 'worktree' && !entries.length ? (
-                <p ref={emptyStateRef} className="empty-state-small" tabIndex={-1}>
-                  {t('workingTreeClean')}
                 </p>
               ) : null}
             </div>

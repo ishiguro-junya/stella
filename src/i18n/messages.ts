@@ -91,7 +91,6 @@ export const MESSAGES = {
     en: (args) => `${text(args, 'status')} ${text(args, 'path')}`,
     ja: (args) => `${text(args, 'status')} ${text(args, 'path')}`,
   },
-  workingTreeClean: { en: 'Working tree is clean.', ja: '作業ツリーに変更はありません。' },
   moreActionsFor: {
     en: (args) => `More actions for ${text(args, 'path')}`,
     ja: (args) => `${text(args, 'path')}のその他の操作`,

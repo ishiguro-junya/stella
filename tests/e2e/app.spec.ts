@@ -362,7 +362,15 @@ describe('Stella app shell', () => {
     const commit = $('.commit-form button[type="submit"]');
     await commit.waitForClickable();
     await commit.click();
-    await expect($('.change-groups')).toHaveText(expect.stringContaining('Working tree is clean.'));
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() => document.querySelectorAll('.change-row').length)) === 0,
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Committed changes did not disappear from the change list.',
+      },
+    );
+    expect(await $('.change-group-worktree .empty-state-small').isExisting()).toBe(false);
 
     const activity = $('button[aria-label="Activity"]');
     await expect(activity).toHaveText('Activity');
