@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceAdapterError, type WorkspaceAdapter } from './adapters/workspaceAdapter';
@@ -433,6 +434,49 @@ describe('App repository attach', () => {
         path: repo.path,
       }),
     );
+    expect(await screen.findByRole('button', { name: /Current repository stella/u })).toBeVisible();
+  });
+
+  it('前回のリポジトリを復元している間は Repository Landing を表示しない', async () => {
+    const repo = repoSnapshot({ path: '/tmp/restored-stella' });
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [repo.path],
+      openRepoPaths: [repo.path],
+      selectedRepoPath: repo.path,
+    });
+    let resolveAttach: ((snapshot: WorkspaceSnapshot) => void) | undefined;
+    const pendingAttach = new Promise<WorkspaceSnapshot>((resolve) => {
+      resolveAttach = resolve;
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => await pendingAttach),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({
+        kind: 'activity' as const,
+        entries: [],
+      })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(
+      <StrictMode>
+        <App adapter={adapter} />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(adapter.attach).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('heading', { name: 'Repositories' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveAttach?.({ repos: [repo], selectedRepoId: repo.repoId, activities: [] });
+      await pendingAttach;
+    });
     expect(await screen.findByRole('button', { name: /Current repository stella/u })).toBeVisible();
   });
 

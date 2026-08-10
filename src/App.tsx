@@ -265,11 +265,14 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
+  const [restoringWorkspace, setRestoringWorkspace] = useState(
+    initialPreferences.openRepoPaths.length > 0,
+  );
   const leaveHandleRef = useRef<ConflictLeaveHandle | null>(null);
   const conflictDirtyRef = useRef(false);
   const workspaceRef = useRef(workspace);
   const pageRef = useRef(page);
-  const restoredRef = useRef(false);
+  const restorePromiseRef = useRef<Promise<RepoSnapshot[]> | undefined>(undefined);
   const pollingRef = useRef(false);
   const requestNavigationRef = useRef<(navigation: PendingNavigation) => void>(() => undefined);
   const activityButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -314,6 +317,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
 
   useEffect(() => {
     workspaceRef.current = workspace;
+    if (restoringWorkspace) return;
     updatePreferences((current) => ({
       ...current,
       appearance,
@@ -323,7 +327,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
       view,
       paneWidths,
     }));
-  }, [appearance, language, paneWidths, repo, view, workspace]);
+  }, [appearance, language, paneWidths, repo, restoringWorkspace, view, workspace]);
 
   useEffect(() => {
     setLatestConflict((current) => {
@@ -389,29 +393,30 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   }, [adapter]);
 
   useEffect(() => {
-    if (restoredRef.current) return () => undefined;
-    restoredRef.current = true;
     const preferences = initialPreferences;
     if (!preferences.openRepoPaths.length) return () => undefined;
-    let cancelled = false;
-    void Promise.allSettled(
-      preferences.openRepoPaths.map((path) => adapter.attach({ kind: 'openExisting', path })),
-    ).then((results) => {
-      if (!cancelled) {
-        const restored = results.flatMap((result) =>
-          result.status === 'fulfilled' ? result.value.repos : [],
+    let active = true;
+    const restorePromise =
+      restorePromiseRef.current ??
+      Promise.allSettled(
+        preferences.openRepoPaths.map((path) => adapter.attach({ kind: 'openExisting', path })),
+      ).then((results) =>
+        results.flatMap((result) => (result.status === 'fulfilled' ? result.value.repos : [])),
+      );
+    restorePromiseRef.current = restorePromise;
+    void restorePromise.then((restored) => {
+      if (!active) return;
+      const selected =
+        restored.find((candidate) => candidate.path === preferences.selectedRepoPath) ??
+        restored[0];
+      if (selected)
+        setWorkspace((current) =>
+          selectWorkspaceRepo(restored.reduce(replaceRepo, current), selected.repoId),
         );
-        const selected =
-          restored.find((candidate) => candidate.path === preferences.selectedRepoPath) ??
-          restored[0];
-        if (selected)
-          setWorkspace((current) =>
-            selectWorkspaceRepo(restored.reduce(replaceRepo, current), selected.repoId),
-          );
-      }
+      setRestoringWorkspace(false);
     });
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, [adapter, initialPreferences]);
 
@@ -804,6 +809,18 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const branchDialogRepo = branchDialog
     ? workspace.repos.find((candidate) => candidate.repoId === branchDialog.repoId)
     : undefined;
+
+  if (restoringWorkspace) {
+    return (
+      <I18nProvider language={language}>
+        <AppearanceProvider appearance={appearance}>
+          <div className="app-shell" data-testid="app-shell" aria-busy="true">
+            <header className="titlebar" data-tauri-drag-region />
+          </div>
+        </AppearanceProvider>
+      </I18nProvider>
+    );
+  }
 
   return (
     <I18nProvider language={language}>
