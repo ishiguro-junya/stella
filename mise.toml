@@ -1,0 +1,78 @@
+[tools]
+cocogitto = "7.0.0"
+lefthook = "2.1.10"
+lychee = "0.24.2"
+node = "24.18.1"
+pnpm = "11.21.0"
+rust = { version = "1.96.0", components = "clippy,rustfmt" }
+taplo = "0.10.0"
+
+[tasks.setup]
+description = "依存packageをinstallしてGit hooksを有効にする"
+run = [ "pnpm install --frozen-lockfile", "lefthook install" ]
+
+[tasks.dev]
+description = "Tauri applicationを開発modeで起動する"
+run = "pnpm exec tauri dev"
+
+[tasks.build]
+description = "通常のTauri application bundleをbuildする"
+run = "pnpm exec tauri build"
+
+[tasks.lint]
+description = "Frontend、Rust、設定、文書、Commit履歴をlintする"
+depends = [ "lint:frontend", "lint:rust", "lint:config", "lint:docs" ]
+run = "node scripts/check-commits.mjs"
+
+[tasks."lint:frontend"]
+description = "Frontendをformat検査してlintする"
+run = [
+  "pnpm exec oxfmt --check .",
+  "pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives .",
+]
+
+[tasks."lint:rust"]
+description = "Rustをformat検査してlintする"
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+]
+
+[tasks."lint:config"]
+description = "TOMLをformat検査してlintする"
+run = [ "taplo fmt --check", "taplo check" ]
+
+[tasks."lint:docs"]
+description = "Markdownとlinkをlintする"
+run = [ "pnpm exec markdownlint-cli2", "lychee --files-from .lycheeinputs" ]
+
+[tasks."lint:commit-message"]
+description = "Commit messageをConventional Commitsとしてlintする"
+run = "node scripts/verify-commit-message.mjs"
+
+[tasks.format]
+description = "Frontend、Rust、TOML、Markdownを整形する"
+run = [ "pnpm exec oxfmt .", "cargo fmt --all", "taplo fmt", "pnpm exec markdownlint-cli2 --fix" ]
+
+[tasks.typecheck]
+description = "TypeScriptをtypecheckする"
+run = "pnpm exec tsc -b"
+
+[tasks.test]
+description = "FrontendとRustのtestを実行する"
+depends = [ "test:frontend", "test:rust" ]
+
+[tasks."test:frontend"]
+description = "FrontendのUnit testを実行する"
+run = "pnpm exec vitest run"
+
+[tasks."test:rust"]
+description = "RustのUnit testと統合testを実行する"
+run = "cargo test --workspace --all-targets --all-features"
+
+[tasks."test:e2e"]
+description = "Native applicationのE2E testを実行する"
+run = [
+  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "pnpm exec wdio run wdio.conf.ts",
+]

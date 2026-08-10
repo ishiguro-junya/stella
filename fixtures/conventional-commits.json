@@ -1,0 +1,23 @@
+{
+  "valid": [
+    "feat: リポジトリを開けるようにする",
+    "fix(conflict): CRLFを保持する",
+    "docs: セットアップ手順を更新する",
+    "stella: ローカル設定を保存する",
+    "refactor!: Workspace契約を変更する",
+    "feat(history)!: 履歴取得形式を変更する\n\nBREAKING CHANGE: graphの形式を変更した"
+  ],
+  "invalid": [
+    "リポジトリを開けるようにする",
+    "feat(sc(ope)): scope内の括弧は許可しない",
+    "feat リポジトリを開けるようにする",
+    "feat(): 空のscopeは許可しない",
+    "stella2: typeに数字は使用しない",
+    "stella-tool: typeにハイフンは使用しない",
+    "Merge branch 'topic'",
+    "Revert \"feat: old change\"",
+    "fixup! feat: temporary fix",
+    "feat: ",
+    "fix(scope: 閉じ括弧がない"
+  ]
+}

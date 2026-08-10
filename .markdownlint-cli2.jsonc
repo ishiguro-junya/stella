@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/markdownlint-cli2/markdownlint-cli2-config-schema.json",
+  "customRules": [
+    "./.markdownlint-rules/japanese-sentence-per-line.mjs",
+    "./.markdownlint-rules/paragraph-line-end-spaces.mjs",
+  ],
+  "globs": ["**/*.md"],
+  "gitignore": true,
+  "ignores": ["coverage/**", "dist/**", "node_modules/**", "src-tauri/target/**", "target/**"],
+  "config": {
+    "default": true,
+    "MD009": {
+      "br_spaces": 2,
+    },
+    "MD013": false,
+    "MD033": {
+      "allowed_elements": ["details", "summary", "kbd", "h1", "p", "img"],
+    },
+    "japanese-sentence-per-line": true,
+    "paragraph-line-end-spaces": true,
+  },
+}

@@ -1,0 +1,17 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - '@pierre/theme@2.0.0'
+  - '@wdio/logger@9.18.0'
+  - '@wdio/repl@9.16.2'
+  - 'chokidar@4.0.3'
+  - 'undici-types@6.21.0'
+strictDepBuilds: true
+dangerouslyAllowAllBuilds: false
+blockExoticSubdeps: true
+allowBuilds:
+  edgedriver: false
+  esbuild: true
+  geckodriver: false

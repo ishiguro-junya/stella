@@ -1,0 +1,17 @@
+lefthook: mise exec -- lefthook
+glob_matcher: doublestar
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: mise run lint:commit-message -- "{1}"
+
+pre-push:
+  parallel: true
+  commands:
+    lint:
+      run: mise run lint
+    test:
+      run: mise run test
+    build:
+      run: mise run build

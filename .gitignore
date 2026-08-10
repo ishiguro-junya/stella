@@ -1,0 +1,29 @@
+# JavaScript
+node_modules/
+.pnpm-store/
+dist/*
+!dist/.gitkeep
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Rust and Tauri
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Test and quality-tool output
+.lycheecache
+test-results/
+wdio-logs/
+
+# Local configuration and logs
+*.local
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Temporary files
+.tmp/

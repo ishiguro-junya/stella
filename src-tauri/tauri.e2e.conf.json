@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.emuni.stella.e2e",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Stella",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "width": 1180,
+        "height": 760,
+        "minWidth": 860,
+        "minHeight": 560,
+        "incognito": true
+      }
+    ],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "e2e",
+          "description": "Permissions enabled only by the E2E config overlay",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "core:app:allow-set-app-theme",
+            "dialog:allow-open",
+            "wdio:default",
+            "wdio-webdriver:default"
+          ]
+        }
+      ]
+    }
+  }
+}
