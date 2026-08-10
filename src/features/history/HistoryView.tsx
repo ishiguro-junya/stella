@@ -1,3 +1,4 @@
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
 import {
   useCallback,
   useEffect,
@@ -13,10 +14,11 @@ import {
   GitCommitHorizontal,
   GitMerge,
   GitPullRequest,
-  PanelRightClose,
-  PanelRightOpen,
+  LoaderCircle,
+  Ellipsis,
   RotateCcw,
   Rows3,
+  Search,
   Tag,
   Undo2,
 } from 'lucide-react';
@@ -38,6 +40,7 @@ import type {
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
 import type { PaneWidths } from '../../persistence/preferences';
+import { Dialog } from '../../ui/Dialog';
 import { PaneResizer } from '../../ui/PaneResizer';
 import {
   describeWorkspaceError,
@@ -62,6 +65,13 @@ const GRAPH_EDGE_TOP = 0;
 const GRAPH_EDGE_BOTTOM = GRAPH_HEIGHT;
 const GRAPH_LANE_GAP = 12;
 const GRAPH_HORIZONTAL_PADDING = 6;
+const HISTORY_LANE_COLOR_COUNT = 6;
+
+type HistoryLaneStyle = CSSProperties & { '--history-lane-color': string };
+
+function historyLaneStyle(lane: number): HistoryLaneStyle {
+  return { '--history-lane-color': `var(--history-lane-${lane % HISTORY_LANE_COLOR_COUNT})` };
+}
 
 function graphWidth(laneCount: number): number {
   return Math.max(20, GRAPH_HORIZONTAL_PADDING * 2 + (laneCount - 1) * GRAPH_LANE_GAP);
@@ -155,7 +165,11 @@ function HistoryGraph({
   const width = graphWidth(laneCount);
   const incomingLanes = new Set(commit.incomingEdges.map((edge) => edge.fromLane));
   const throughLanes = commit.activeLanes.filter((lane) => !incomingLanes.has(lane));
-  const graphStyle: CSSProperties & { '--history-node-x': string } = {
+  const graphStyle: CSSProperties & {
+    '--history-lane-color': string;
+    '--history-node-x': string;
+  } = {
+    ...historyLaneStyle(commit.lane),
     '--history-node-x': `${laneX(commit.lane)}px`,
   };
 
@@ -179,6 +193,7 @@ function HistoryGraph({
             data-edge-kind="active"
             data-from-lane={lane}
             data-to-lane={lane}
+            style={historyLaneStyle(lane)}
             d={graphEdgePath(lane, GRAPH_EDGE_TOP, lane, GRAPH_EDGE_BOTTOM)}
           />
         ))}
@@ -189,6 +204,7 @@ function HistoryGraph({
             data-edge-kind="incoming"
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
+            style={historyLaneStyle(edge.fromLane)}
             d={graphEdgePath(edge.fromLane, GRAPH_EDGE_TOP, edge.toLane, GRAPH_MIDDLE)}
           />
         ))}
@@ -199,6 +215,7 @@ function HistoryGraph({
             data-edge-kind="parent"
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
+            style={historyLaneStyle(edge.toLane)}
             d={graphEdgePath(edge.fromLane, GRAPH_MIDDLE, edge.toLane, GRAPH_EDGE_BOTTOM)}
           />
         ))}
@@ -259,11 +276,18 @@ export function HistoryView({
   const [mainlineParent, setMainlineParent] = useState(1);
   const [error, setError] = useState<WorkspaceErrorContent>();
   const [diffStyle, setDiffStyle] = useState<DiffStyle>('unified');
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState<HistoryPageState>(() =>
     initialHistoryPage(repo.history),
   );
+  const [historySearch, setHistorySearch] = useState('');
+  const [activeHistorySearch, setActiveHistorySearch] = useState('');
+  const [searchingHistory, setSearchingHistory] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const historySearchRef = useRef<HTMLInputElement>(null);
+  const historyListRef = useRef<HTMLOListElement>(null);
+  const historyEndRef = useRef<HTMLLIElement>(null);
+  const loadingMoreRef = useRef(false);
   const historyRequestIdRef = useRef(0);
   const visibleHistory = useMemo(
     () => assignHistoryLanes(historyPage.commits),
@@ -322,17 +346,99 @@ export function HistoryView({
   }, [adapter, repo.repoId, reportRuntimeError, selectedOid, t]);
 
   useEffect(() => {
-    historyRequestIdRef.current += 1;
-    setHistoryPage(initialHistoryPage(repo.history));
-    setLoadingMore(false);
-  }, [repo.branch.oid, repo.history, repo.repoId]);
+    const normalizedSearch = historySearch.trim();
+    if (!normalizedSearch) {
+      setActiveHistorySearch('');
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setActiveHistorySearch(normalizedSearch), 180);
+    return () => window.clearTimeout(timeout);
+  }, [historySearch]);
 
   useEffect(() => {
-    setSelectedOid((current) =>
-      current && visibleHistory.some((commit) => commit.oid === current)
-        ? current
-        : (repo.selectedCommitOid ?? visibleHistory[0]?.oid),
-    );
+    const focusHistorySearch = (event: KeyboardEvent): void => {
+      if (
+        event.key.toLowerCase() !== 'f' ||
+        !event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        document.querySelector('[role="dialog"][aria-modal="true"]')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      historySearchRef.current?.focus();
+      historySearchRef.current?.select();
+    };
+    window.addEventListener('keydown', focusHistorySearch);
+    return () => window.removeEventListener('keydown', focusHistorySearch);
+  }, []);
+
+  useEffect(() => {
+    historyRequestIdRef.current += 1;
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+    if (!activeHistorySearch) {
+      setSearchingHistory(false);
+      setHistoryPage(initialHistoryPage(repo.history));
+      return undefined;
+    }
+
+    let cancelled = false;
+    const requestId = historyRequestIdRef.current;
+    setError(undefined);
+    setSearchingHistory(true);
+    setHistoryPage({ commits: [], nextSkip: 0, complete: true });
+    void adapter
+      .query({
+        kind: 'history',
+        repoId: repo.repoId,
+        limit: HISTORY_PAGE_SIZE,
+        skip: 0,
+        search: activeHistorySearch,
+      })
+      .then((result) => {
+        if (cancelled || requestId !== historyRequestIdRef.current || result.kind !== 'history')
+          return;
+        setHistoryPage({
+          commits: result.commits,
+          nextSkip: result.commits.length,
+          complete: result.commits.length < HISTORY_PAGE_SIZE,
+        });
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled && requestId === historyRequestIdRef.current) {
+          reportRuntimeError(t('searchHistoryFailedTitle'), cause, t('searchHistoryFailed'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled && requestId === historyRequestIdRef.current) setSearchingHistory(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeHistorySearch,
+    adapter,
+    repo.branch.oid,
+    repo.history,
+    repo.repoId,
+    reportRuntimeError,
+    t,
+  ]);
+
+  useEffect(() => {
+    setSelectedOid((current) => {
+      if (current && visibleHistory.some((commit) => commit.oid === current)) return current;
+      if (
+        repo.selectedCommitOid &&
+        visibleHistory.some((commit) => commit.oid === repo.selectedCommitOid)
+      ) {
+        return repo.selectedCommitOid;
+      }
+      return visibleHistory[0]?.oid;
+    });
   }, [repo.selectedCommitOid, visibleHistory]);
 
   useEffect(() => {
@@ -340,9 +446,10 @@ export function HistoryView({
   }, [selectedOid]);
 
   const loadMoreHistory = useCallback(async (): Promise<void> => {
-    if (loadingMore || historyPage.complete) return;
+    if (loadingMoreRef.current || historyPage.complete) return;
     const requestId = ++historyRequestIdRef.current;
     const skip = historyPage.nextSkip;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     setError(undefined);
     try {
@@ -351,6 +458,7 @@ export function HistoryView({
         repoId: repo.repoId,
         limit: HISTORY_PAGE_SIZE,
         skip,
+        ...(activeHistorySearch ? { search: activeHistorySearch } : {}),
       });
       if (requestId !== historyRequestIdRef.current || result.kind !== 'history') return;
       setHistoryPage((current) => ({
@@ -363,17 +471,35 @@ export function HistoryView({
         reportRuntimeError(t('loadMoreHistoryFailedTitle'), cause, t('loadMoreHistoryFailed'));
       }
     } finally {
-      if (requestId === historyRequestIdRef.current) setLoadingMore(false);
+      if (requestId === historyRequestIdRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
     }
   }, [
+    activeHistorySearch,
     adapter,
     historyPage.complete,
     historyPage.nextSkip,
-    loadingMore,
     repo.repoId,
     reportRuntimeError,
     t,
   ]);
+
+  useEffect(() => {
+    const root = historyListRef.current;
+    const target = historyEndRef.current;
+    if (!root || !target || historyPage.complete) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) settleAction(loadMoreHistory());
+      },
+      { root, rootMargin: '0px 0px 160px 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [historyPage.complete, loadMoreHistory]);
 
   const graphLaneCount = Math.max(1, ...visibleHistory.map((commit) => commit.laneCount));
   const historyListStyle: CSSProperties & { '--history-graph-width': string } = {
@@ -397,9 +523,8 @@ export function HistoryView({
     setSourceRef('');
   };
 
-  const paneStyle: CSSProperties & { '--left-pane': string; '--right-pane': string } = {
+  const paneStyle: CSSProperties & { '--left-pane': string } = {
     '--left-pane': `${paneWidths.left}px`,
-    '--right-pane': `${paneWidths.right}px`,
   };
 
   const updateResetMode = (value: string): void => {
@@ -410,24 +535,17 @@ export function HistoryView({
     <button
       type="button"
       className="history-actions-toggle"
-      aria-expanded={inspectorOpen}
-      aria-controls="history-actions-inspector"
-      onClick={() => setInspectorOpen((current) => !current)}
+      aria-expanded={actionsOpen}
+      aria-haspopup="dialog"
+      aria-controls="history-actions-dialog"
+      onClick={() => setActionsOpen(true)}
     >
-      {inspectorOpen ? (
-        <PanelRightClose aria-hidden="true" size={14} />
-      ) : (
-        <PanelRightOpen aria-hidden="true" size={14} />
-      )}{' '}
-      {t('actions')}
+      <Ellipsis aria-hidden="true" size={14} /> {t('actions')}
     </button>
   );
 
   return (
-    <div
-      className={`three-pane history-view ${inspectorOpen ? 'inspector-open' : 'inspector-closed'}`}
-      style={paneStyle}
-    >
+    <div className="three-pane history-view" style={paneStyle}>
       <aside className="pane commit-list-pane" aria-label={t('commitHistory')}>
         <div className="pane-toolbar history-list-toolbar">
           <div className="history-branch-context" title={repo.branch.name ?? t('detachedHead')}>
@@ -436,7 +554,29 @@ export function HistoryView({
           </div>
           {actionsToggle}
         </div>
-        <ol className="commit-list" style={historyListStyle}>
+        <label className="history-search">
+          <Search className="history-search-icon" aria-hidden="true" focusable="false" />
+          <input
+            ref={historySearchRef}
+            type="search"
+            value={historySearch}
+            aria-label={t('searchHistory')}
+            aria-keyshortcuts="Meta+F"
+            placeholder={t('searchHistory')}
+            onChange={(event) => setHistorySearch(event.currentTarget.value)}
+          />
+          {searchingHistory ? (
+            <>
+              <LoaderCircle
+                className="history-search-loading"
+                aria-hidden="true"
+                focusable="false"
+              />
+              <output className="sr-only">{t('loading')}</output>
+            </>
+          ) : null}
+        </label>
+        <ol ref={historyListRef} className="commit-list" style={historyListStyle}>
           {visibleHistory.map((commit) => (
             <li key={commit.oid}>
               <button
@@ -467,18 +607,24 @@ export function HistoryView({
               </button>
             </li>
           ))}
-        </ol>
-        {!historyPage.complete ? (
-          <div className="history-load-more">
-            <button
-              type="button"
-              disabled={loadingMore}
-              onClick={() => settleAction(loadMoreHistory())}
+          {activeHistorySearch && !searchingHistory && visibleHistory.length === 0 ? (
+            <li className="history-search-empty">{t('noHistorySearchResults')}</li>
+          ) : null}
+          {!historyPage.complete ? (
+            <li
+              ref={historyEndRef}
+              className={`history-load-sentinel ${loadingMore ? 'loading' : ''}`}
+              data-testid="history-load-sentinel"
             >
-              {loadingMore ? t('loading') : t('loadMore')}
-            </button>
-          </div>
-        ) : null}
+              {loadingMore ? (
+                <>
+                  <LoaderCircle aria-hidden="true" focusable="false" />
+                  <output className="sr-only">{t('loading')}</output>
+                </>
+              ) : null}
+            </li>
+          ) : null}
+        </ol>
       </aside>
       <PaneResizer
         label={t('historyListWidth')}
@@ -565,6 +711,8 @@ export function HistoryView({
                   }
                   diffStyle={diffStyle}
                   performanceMode={Boolean(details.diff.tooLarge)}
+                  showFileHeaders
+                  hunkSeparators="simple"
                   ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
                 />
               </>
@@ -585,23 +733,14 @@ export function HistoryView({
           </>
         )}
       </main>
-      {inspectorOpen ? (
-        <>
-          <PaneResizer
-            label={t('historyActionsWidth')}
-            value={paneWidths.right}
-            direction="growLeft"
-            onChange={(right) => onPaneWidthsChange({ ...paneWidths, right })}
-          />
-
-          <aside
-            id="history-actions-inspector"
-            className="pane history-actions"
-            aria-labelledby="history-actions-title"
-          >
-            <div className="pane-toolbar">
-              <h2 id="history-actions-title">{t('actions')}</h2>
-            </div>
+      {actionsOpen ? (
+        <Dialog
+          labelledBy="history-actions-title"
+          onDismiss={() => setActionsOpen(false)}
+          role="dialog"
+        >
+          <h2 id="history-actions-title">{t('actions')}</h2>
+          <div id="history-actions-dialog" className="history-actions-dialog">
             {operationActionDisabledReason ? (
               <p id="history-operation-action-reason" className="remote-action-hint">
                 {operationActionDisabledReason}
@@ -611,6 +750,7 @@ export function HistoryView({
               <label>
                 <span>{t('createBranchFromSelected')}</span>
                 <input
+                  data-dialog-initial-focus
                   value={branchName}
                   onChange={(event) => setBranchName(event.target.value)}
                   placeholder={t('branchNamePlaceholder')}
@@ -758,8 +898,13 @@ export function HistoryView({
                 })}
               </button>
             </div>
-          </aside>
-        </>
+          </div>
+          <div className="button-row end">
+            <button type="button" onClick={() => setActionsOpen(false)}>
+              {t('close')}
+            </button>
+          </div>
+        </Dialog>
       ) : null}
     </div>
   );

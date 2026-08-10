@@ -98,6 +98,11 @@ function requestedHistoryPage(args: unknown): { limit: number; skip: number } | 
   return typeof limit === 'number' && typeof skip === 'number' ? { limit, skip } : undefined;
 }
 
+function requestedHistorySearch(args: unknown): string | undefined {
+  if (!isRecord(args) || !isRecord(args.request) || !isRecord(args.request.query)) return undefined;
+  return typeof args.request.query.search === 'string' ? args.request.query.search : undefined;
+}
+
 function wireCommit(oid: string, parents: string[] = []): WireCommitSummary {
   return {
     oid,
@@ -699,6 +704,59 @@ describe('tauriWorkspaceAdapter', () => {
         query: { kind: 'history', limit: HISTORY_PAGE_SIZE, skip: 0 },
       },
     });
+  });
+
+  it('passes History search to Tauri without replacing the unfiltered cache', async () => {
+    const initial = wireCommit('local-head');
+    const searchMatch = {
+      ...wireCommit('remote-match'),
+      refs: ['refs/remotes/origin/feature'],
+    };
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_attach') return { repoId: 'repo-1', snapshot: snapshot() };
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'history') {
+        return {
+          kind: 'history',
+          data: {
+            commits: requestedHistorySearch(args) ? [searchMatch] : [initial],
+            repoGeneration: 1,
+          },
+        };
+      }
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'status') {
+        return { kind: 'status', data: snapshot() };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    const result = await adapter.query({
+      kind: 'history',
+      repoId: 'repo-1',
+      limit: HISTORY_PAGE_SIZE,
+      skip: 0,
+      search: 'origin/feature',
+    });
+    expect(result).toEqual({
+      kind: 'history',
+      commits: [expect.objectContaining({ oid: 'remote-match' })],
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_query', {
+      request: {
+        repoId: 'repo-1',
+        query: {
+          kind: 'history',
+          limit: HISTORY_PAGE_SIZE,
+          skip: 0,
+          search: 'origin/feature',
+        },
+      },
+    });
+
+    const refreshed = await adapter.query({ kind: 'snapshot', repoId: 'repo-1' });
+    if (refreshed.kind !== 'snapshot') throw new Error('Expected snapshot');
+    expect(refreshed.snapshot.history.map((commit) => commit.oid)).toEqual(['local-head']);
   });
 
   it('keeps HEAD oid and failed Git output in the frontend domain', async () => {

@@ -187,7 +187,7 @@ export const MESSAGES = {
     en: (args) =>
       `${text(args, 'operation')}. Repository actions are unavailable in History until you finish or abort the operation.`,
     ja: (args) =>
-      `${text(args, 'operation')}。操作を完了またはAbortするまで履歴のリポジトリ操作は利用できません。`,
+      `${text(args, 'operation')}。操作を完了またはAbortするまで操作履歴のリポジトリ操作は利用できません。`,
   },
   loadCommitDetailsFailedTitle: {
     en: 'Could not load commit details',
@@ -199,14 +199,27 @@ export const MESSAGES = {
   },
   loadMoreHistoryFailedTitle: {
     en: 'Could not load more history',
-    ja: '履歴を追加で読み込めませんでした',
+    ja: '操作履歴を追加で読み込めませんでした',
   },
   loadMoreHistoryFailed: {
     en: 'Could not load more history.',
-    ja: '履歴を追加で読み込めませんでした。',
+    ja: '操作履歴を追加で読み込めませんでした。',
+  },
+  searchHistoryFailedTitle: {
+    en: 'Could not search history',
+    ja: '操作履歴を検索できませんでした',
+  },
+  searchHistoryFailed: {
+    en: 'Could not search history.',
+    ja: '操作履歴を検索できませんでした。',
   },
   actions: { en: 'Actions', ja: '操作' },
-  commitHistory: { en: 'Commit history', ja: 'Commit履歴' },
+  commitHistory: { en: 'Commit history', ja: '操作履歴' },
+  searchHistory: { en: 'Search history', ja: '操作履歴を検索' },
+  noHistorySearchResults: {
+    en: 'No commits match your search.',
+    ja: '一致する操作履歴はありません。',
+  },
   tagRefLabel: {
     en: (args) => `Tag ${text(args, 'name')}`,
     ja: (args) => `Tag ${text(args, 'name')}`,
@@ -216,8 +229,7 @@ export const MESSAGES = {
     ja: (args) => `Parent ${text(args, 'parents')}`,
   },
   rootCommit: { en: 'Root commit', ja: '最初のCommit' },
-  loadMore: { en: 'Load more', ja: 'さらに読み込む' },
-  historyListWidth: { en: 'History list width', ja: '履歴一覧の幅' },
+  historyListWidth: { en: 'History list width', ja: '操作履歴一覧の幅' },
   author: { en: 'Author', ja: '作成者' },
   date: { en: 'Date', ja: '日時' },
   binaryDiffUnavailable: {
@@ -239,7 +251,6 @@ export const MESSAGES = {
   commitDetails: { en: 'Commit details', ja: 'Commit詳細' },
   loadingCommitDetails: { en: 'Loading commit details…', ja: 'Commit詳細を読み込み中…' },
   selectCommit: { en: 'Select a commit.', ja: 'Commitを選択してください。' },
-  historyActionsWidth: { en: 'History actions width', ja: '履歴操作の幅' },
   createBranchFromSelected: {
     en: 'Create branch from selected commit',
     ja: '選択したCommitからBranchを作成',

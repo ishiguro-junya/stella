@@ -24,7 +24,7 @@ export interface WireQueryRequest {
 export type WireQuery =
   | { kind: 'status' }
   | { kind: 'diff'; target: WireDiffTarget; paths: string[] }
-  | { kind: 'history'; limit: number; skip: number }
+  | { kind: 'history'; limit: number; skip: number; search?: string }
   | { kind: 'branches' }
   | { kind: 'commitDetails'; oid: string }
   | { kind: 'conflict'; path: string }

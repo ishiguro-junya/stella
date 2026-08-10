@@ -24,6 +24,7 @@ use uuid::Uuid;
 const PREVIEW_TTL: Duration = Duration::from_secs(60);
 const MAX_PREVIEW_RECORDS: usize = 256;
 const DIFF_LIMIT: usize = 5 * 1024 * 1024;
+const HISTORY_PAGE_LIMIT: u32 = 2_000;
 const COMMIT_ACTIVITY_SCAN_LIMIT: u32 = 100_000;
 const MAX_COMMIT_ACTIVITY_BUCKETS: usize = 365;
 const MAX_COMMIT_ACTIVITY_CACHE_ENTRIES: usize = 8;
@@ -552,23 +553,69 @@ impl Workspace {
                     truncated,
                 }))
             }
-            Query::History { limit, skip } => {
+            Query::History {
+                limit,
+                skip,
+                search,
+            } => {
                 let snapshot = self.snapshot(&repo)?;
-                let output = self.git.run(
-                    Some(&repo.root),
-                    GitCommand::History {
-                        limit: limit.clamp(1, 2_000),
-                        skip,
-                    },
-                    None,
-                    None,
-                )?;
-                let commits = if output.success() {
-                    parse_history(&output.stdout_text())
-                } else if matches!(snapshot.head, HeadState::Unborn { .. }) {
-                    Vec::new()
+                let requested_limit = limit.clamp(1, HISTORY_PAGE_LIMIT);
+                let normalized_search = search
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_lowercase);
+                let read_page = |page_limit: u32, page_skip: u32| {
+                    let output = self.git.run(
+                        Some(&repo.root),
+                        GitCommand::History {
+                            limit: page_limit,
+                            skip: page_skip,
+                        },
+                        None,
+                        None,
+                    )?;
+                    if output.success() {
+                        Ok(parse_history(&output.stdout_text()))
+                    } else if matches!(&snapshot.head, HeadState::Unborn { .. }) {
+                        Ok(Vec::new())
+                    } else {
+                        Err(output.ensure_success().expect_err("failed history"))
+                    }
+                };
+                let commits = if let Some(search) = normalized_search {
+                    let mut commits = Vec::with_capacity(requested_limit as usize);
+                    let mut raw_skip = 0_u32;
+                    let mut matched = 0_u32;
+                    loop {
+                        let page = read_page(HISTORY_PAGE_LIMIT, raw_skip)?;
+                        let page_len = page.len() as u32;
+                        for commit in page {
+                            if !history_commit_matches_search(&commit, &search) {
+                                continue;
+                            }
+                            if matched >= skip {
+                                commits.push(commit);
+                            }
+                            matched = matched.saturating_add(1);
+                            if commits.len() >= requested_limit as usize {
+                                break;
+                            }
+                        }
+                        if commits.len() >= requested_limit as usize
+                            || page_len < HISTORY_PAGE_LIMIT
+                        {
+                            break;
+                        }
+                        let next_skip = raw_skip.saturating_add(page_len);
+                        if next_skip == raw_skip {
+                            break;
+                        }
+                        raw_skip = next_skip;
+                    }
+                    commits
                 } else {
-                    return Err(output.ensure_success().expect_err("failed history"));
+                    read_page(requested_limit, skip)?
                 };
                 Ok(QueryOutcome::History(HistoryResult {
                     commits,
@@ -4265,6 +4312,13 @@ fn parse_history(text: &str) -> Vec<CommitSummary> {
             })
         })
         .collect()
+}
+
+fn history_commit_matches_search(commit: &CommitSummary, search: &str) -> bool {
+    [&commit.oid, &commit.author, &commit.subject]
+        .into_iter()
+        .chain(commit.refs.iter())
+        .any(|value| value.to_lowercase().contains(search))
 }
 
 fn validate_commit_activity_boundaries(boundaries: &[i64]) -> WorkspaceResult<()> {
@@ -9290,6 +9344,64 @@ mod tests {
         assert_eq!(error.code, ErrorCode::StaleGeneration);
         assert!(!error.details["beforeHead"].is_empty());
         assert!(!error.details["afterHead"].is_empty());
+    }
+
+    #[test]
+    fn history_search_matches_subject_author_oid_and_ref_with_match_pagination() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "first\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git_at(&["commit", "-m", "feat: Needle first"], 1_700_000_100);
+        let first_oid = fixture.git_output(&["rev-parse", "HEAD"]).trim().to_owned();
+
+        fixture.write("f.txt", "author\n");
+        fixture.git_with_author_and_dates(
+            &["commit", "-am", "chore: unrelated"],
+            1_700_000_200,
+            1_700_000_200,
+            "Search Author",
+            "search-author@example.test",
+        );
+        let author_oid = fixture.git_output(&["rev-parse", "HEAD"]).trim().to_owned();
+
+        fixture.write("f.txt", "second\n");
+        fixture.git_at(&["commit", "-am", "fix: Needle second"], 1_700_000_300);
+        let second_oid = fixture.git_output(&["rev-parse", "HEAD"]).trim().to_owned();
+        fixture.git(&[
+            "update-ref",
+            "refs/remotes/origin/review-candidate",
+            &first_oid,
+        ]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let search = |value: &str, skip: u32| match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::History {
+                    limit: 1,
+                    skip,
+                    search: Some(value.into()),
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::History(result) => result.commits,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+
+        assert_eq!(search("needle", 0)[0].oid, second_oid);
+        assert_eq!(search("needle", 1)[0].oid, first_oid);
+        assert_eq!(search("search author", 0)[0].oid, author_oid);
+        assert_eq!(search(&author_oid[..12], 0)[0].oid, author_oid);
+        assert_eq!(search("origin/review", 0)[0].oid, first_oid);
     }
 
     #[test]

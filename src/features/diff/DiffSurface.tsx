@@ -111,6 +111,8 @@ export interface DiffSurfaceProps {
   diffStyle?: DiffStyle;
   selectable?: boolean;
   performanceMode?: boolean;
+  showFileHeaders?: boolean;
+  hunkSeparators?: 'simple' | 'line-info-basic';
   ariaLabel?: string;
   onSelectionChange?: (selection: SurfaceSelection | null) => void;
 }
@@ -159,6 +161,8 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     diffStyle = 'unified',
     selectable = false,
     performanceMode = false,
+    showFileHeaders = false,
+    hunkSeparators = 'line-info-basic',
     ariaLabel,
     onSelectionChange,
   },
@@ -191,8 +195,8 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       themeType: appearance,
       diffStyle: performanceMode ? ('unified' as const) : diffStyle,
       diffIndicators: 'classic' as const,
-      disableFileHeader: true,
-      hunkSeparators: 'line-info-basic' as const,
+      disableFileHeader: !showFileHeaders,
+      hunkSeparators,
       overflow: 'wrap' as const,
       layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
       itemMetrics: { spacing: 0, paddingTop: 0, paddingBottom: 0 },
@@ -206,7 +210,15 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
         onSelectionChange?.(toSurfaceSelection(range));
       },
     }),
-    [appearance, diffStyle, onSelectionChange, performanceMode, selectable],
+    [
+      appearance,
+      diffStyle,
+      hunkSeparators,
+      onSelectionChange,
+      performanceMode,
+      selectable,
+      showFileHeaders,
+    ],
   );
 
   useImperativeHandle(

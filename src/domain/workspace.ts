@@ -300,7 +300,7 @@ export type AttachRequest =
 export type WorkspaceQuery =
   | { kind: 'snapshot'; repoId: RepoId }
   | { kind: 'diff'; repoId: RepoId; path: string; area: ChangeArea }
-  | { kind: 'history'; repoId: RepoId; limit: number; skip: number }
+  | { kind: 'history'; repoId: RepoId; limit: number; skip: number; search?: string }
   | { kind: 'commitDetails'; repoId: RepoId; oid: string }
   | { kind: 'branches'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }

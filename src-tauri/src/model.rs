@@ -96,6 +96,8 @@ pub enum Query {
         limit: u32,
         #[serde(default)]
         skip: u32,
+        #[serde(default)]
+        search: Option<String>,
     },
     CommitActivity {
         operation_id: String,
@@ -971,6 +973,37 @@ mod tests {
                 remote: "/tmp/remote.git".into(),
                 destination: "/tmp/repo".into(),
                 operation_id: "clone-1".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn history_search_uses_the_exact_optional_wire_field() {
+        let query = Query::History {
+            limit: 100,
+            skip: 20,
+            search: Some("origin/feature".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(query).unwrap(),
+            json!({
+                "kind": "history",
+                "limit": 100,
+                "skip": 20,
+                "search": "origin/feature"
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<Query>(json!({
+                "kind": "history",
+                "limit": 100,
+                "skip": 0
+            }))
+            .unwrap(),
+            Query::History {
+                limit: 100,
+                skip: 0,
+                search: None,
             }
         );
     }

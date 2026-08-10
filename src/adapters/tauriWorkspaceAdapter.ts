@@ -921,21 +921,19 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
           return { kind: 'commitDetails', commit: mapCommitDetails(outcome.data, request.repoId) };
         }
         case 'history': {
+          const search = request.search?.trim();
           const outcome = await queryWire(request.repoId, {
             kind: 'history',
             limit: request.limit,
             skip: request.skip,
+            ...(search ? { search } : {}),
           });
           if (outcome.kind !== 'history') throw new Error('Invalid history response.');
           return {
             kind: 'history',
-            commits: mergeHistoryPage(
-              state,
-              request.repoId,
-              outcome.data,
-              request.skip,
-              request.limit,
-            ),
+            commits: search
+              ? mapHistory(outcome.data)
+              : mergeHistoryPage(state, request.repoId, outcome.data, request.skip, request.limit),
           };
         }
         case 'branches': {

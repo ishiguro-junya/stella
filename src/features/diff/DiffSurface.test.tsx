@@ -8,6 +8,8 @@ interface MockCodeViewProps {
 }
 
 interface MockPatchDiffOptions {
+  disableFileHeader?: boolean;
+  hunkSeparators?: 'simple' | 'line-info-basic';
   onLineSelectionChange?: (range: SelectedLineRange | null) => void;
 }
 
@@ -135,6 +137,25 @@ describe('DiffSurface line selection', () => {
     );
     expect(patchDiffOptionsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ themeType: 'dark' }),
+    );
+  });
+
+  it('can show file headers with simple hunk separators', () => {
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        showFileHeaders
+        hunkSeparators="simple"
+      />,
+    );
+
+    expect(patchDiffOptionsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ disableFileHeader: false, hunkSeparators: 'simple' }),
     );
   });
 

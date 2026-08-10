@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +16,47 @@ import { HistoryView } from './HistoryView';
 const { diffSurfaceMock } = vi.hoisted(() => ({
   diffSurfaceMock: vi.fn<(props: unknown) => void>(),
 }));
+
+let intersectionObserverCallback: IntersectionObserverCallback | undefined;
+const observeIntersection = vi.fn<(target: Element) => void>();
+const disconnectIntersection = vi.fn<() => void>();
+const unobserveIntersection = vi.fn<(target: Element) => void>();
+
+const intersectionObserverArgument: IntersectionObserver = {
+  root: null,
+  rootMargin: '0px',
+  scrollMargin: '0px',
+  thresholds: [0],
+  disconnect: disconnectIntersection,
+  observe: observeIntersection,
+  takeRecords: () => [],
+  unobserve: unobserveIntersection,
+};
+
+class IntersectionObserverMock implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '0px';
+  readonly scrollMargin = '0px';
+  readonly thresholds = [0];
+
+  constructor(callback: IntersectionObserverCallback) {
+    intersectionObserverCallback = callback;
+  }
+
+  disconnect(): void {
+    disconnectIntersection();
+  }
+
+  observe(target: Element): void {
+    observeIntersection(target);
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  unobserve(): void {}
+}
 
 vi.mock('../diff/DiffSurface', () => ({
   DiffSurface: (props: unknown) => {
@@ -79,13 +120,132 @@ function linearHistory(prefix: string, count: number): CommitSummary[] {
 
 beforeEach(() => {
   diffSurfaceMock.mockClear();
+  intersectionObserverCallback = undefined;
+  observeIntersection.mockClear();
+  disconnectIntersection.mockClear();
+  unobserveIntersection.mockClear();
+  vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
 });
 
-async function openActionsInspector(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+function reachHistoryEnd(): void {
+  const target = screen.getByTestId('history-load-sentinel');
+  if (!intersectionObserverCallback) throw new Error('History observer is not ready.');
+  const callback = intersectionObserverCallback;
+  const bounds = target.getBoundingClientRect();
+  act(() => {
+    callback(
+      [
+        {
+          boundingClientRect: bounds,
+          intersectionRatio: 1,
+          intersectionRect: bounds,
+          isIntersecting: true,
+          rootBounds: null,
+          target,
+          time: 0,
+        },
+      ],
+      intersectionObserverArgument,
+    );
+  });
+}
+
+async function openActionsDialog(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(await screen.findByRole('button', { name: 'Actions' }));
+  await screen.findByRole('dialog', { name: 'Actions' });
 }
 
 describe('HistoryView', () => {
+  it('searches operation history through the adapter and focuses the field with Command-F', async () => {
+    const user = userEvent.setup();
+    const searchResult = {
+      ...commitSummary('remote-match', [], ['refs/remotes/origin/feature']),
+      subject: 'fix: remote result',
+      authorName: 'Search Author',
+    };
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'history') {
+        return {
+          kind: 'history' as const,
+          commits: request.search === 'origin/feature' ? [searchResult] : [],
+        };
+      }
+      if (request.kind === 'commitDetails') {
+        return {
+          kind: 'commitDetails' as const,
+          commit: {
+            ...commitDetails(undefined),
+            oid: request.oid,
+            shortOid: request.oid.slice(0, 7),
+          },
+        };
+      }
+      if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+      return { kind: 'activity' as const, entries: [] };
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: 'local-head', detached: false, ahead: 0, behind: 0 },
+          history: [commitSummary('local-head')],
+        })}
+        adapter={adapterWithQuery(query)}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const search = screen.getByRole('searchbox', { name: 'Search history' });
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'f', metaKey: true, bubbles: true }),
+      );
+    });
+    expect(search).toHaveFocus();
+
+    await user.type(search, 'origin/feature');
+    await waitFor(() =>
+      expect(query).toHaveBeenCalledWith({
+        kind: 'history',
+        repoId: 'repo-1',
+        limit: HISTORY_PAGE_SIZE,
+        skip: 0,
+        search: 'origin/feature',
+      }),
+    );
+    expect(await screen.findByRole('button', { name: /fix: remote result/u })).toBeVisible();
+    expect(screen.getByText('origin/feature')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /local-head/u })).not.toBeInTheDocument();
+
+    await user.clear(search);
+    expect(await screen.findByRole('button', { name: /local-head/u })).toBeVisible();
+  });
+
+  it('shows an empty state when operation history has no search matches', async () => {
+    const user = userEvent.setup();
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'history') return { kind: 'history' as const, commits: [] };
+      if (request.kind === 'commitDetails') {
+        return { kind: 'commitDetails' as const, commit: commitDetails(undefined) };
+      }
+      if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+      return { kind: 'activity' as const, entries: [] };
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitSummary('head')] })}
+        adapter={adapterWithQuery(query)}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search history' }), 'missing');
+    expect(await screen.findByText('No commits match your search.')).toBeVisible();
+  });
+
   it('forwards query failures to the shared error dialog handler', async () => {
     const failure = new Error('History query failed.');
     const onError = vi.fn<(title: string, cause: unknown, fallback: string) => void>();
@@ -118,7 +278,7 @@ describe('HistoryView', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('keeps the Actions inspector closed until it is requested', async () => {
+  it('opens Actions in a dialog and restores focus when it closes', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) => {
@@ -148,25 +308,31 @@ describe('HistoryView', () => {
     const toggle = await screen.findByRole('button', { name: 'Actions' });
     expect(toggle.parentElement).toHaveClass('history-list-toolbar');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).toHaveAttribute('aria-controls', 'history-actions-inspector');
-    expect(toggle.closest('.history-view')).toHaveClass('inspector-closed');
-    expect(screen.queryByRole('complementary', { name: 'Actions' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('separator', { name: 'History actions width' }),
-    ).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(toggle).toHaveAttribute('aria-controls', 'history-actions-dialog');
+    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
 
     await user.click(toggle);
+    const dialog = screen.getByRole('dialog', { name: 'Actions' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(toggle.closest('.history-view')).toHaveClass('inspector-open');
-    expect(screen.getByRole('complementary', { name: 'Actions' })).toHaveAttribute(
-      'id',
-      'history-actions-inspector',
-    );
-    expect(screen.getByRole('separator', { name: 'History actions width' })).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('textbox', { name: 'Create branch from selected commit' }),
+    ).toHaveFocus();
+    expect(dialog.querySelector('#history-actions-dialog')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
 
     await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('complementary', { name: 'Actions' })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Actions' })).getByRole('button', {
+        name: 'Close',
+      }),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
   });
 
   it('keeps branch checkout out of History Actions after moving it to the titlebar', async () => {
@@ -188,7 +354,7 @@ describe('HistoryView', () => {
         onPaneWidthsChange={() => undefined}
       />,
     );
-    await openActionsInspector(user);
+    await openActionsDialog(user);
     expect(screen.queryByRole('combobox', { name: 'Checkout branch' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Checkout' })).not.toBeInTheDocument();
     expect(
@@ -317,11 +483,16 @@ describe('HistoryView', () => {
       />,
     );
 
-    expect(
-      screen
-        .getByTestId('history-graph-main-base')
-        .querySelector('[data-edge-kind="active"][data-from-lane="1"]'),
-    ).not.toBeNull();
+    const graph = screen.getByTestId('history-graph-main-base');
+    const mainEdge = graph.querySelector<SVGPathElement>(
+      '[data-edge-kind="incoming"][data-from-lane="0"]',
+    );
+    const sideEdge = graph.querySelector<SVGPathElement>(
+      '[data-edge-kind="active"][data-from-lane="1"]',
+    );
+    expect(mainEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
+    expect(sideEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-1)');
+    expect(graph.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
   });
 
   it('renders merge connectors as decorative SVG while exposing parent ids in the row', () => {
@@ -358,15 +529,19 @@ describe('HistoryView', () => {
     expect(
       graph.querySelector('[data-edge-kind="parent"][data-to-lane="1"]')?.getAttribute('d'),
     ).toContain(' C ');
+    expect(
+      graph
+        .querySelector<SVGPathElement>('[data-edge-kind="parent"][data-to-lane="1"]')
+        ?.style.getPropertyValue('--history-lane-color'),
+    ).toBe('var(--history-lane-1)');
     expect(screen.getByRole('button', { name: /merge.*Parents left, right/u })).toBeInTheDocument();
   });
 
   it('loads another page and keeps commits from every ref in the combined list', async () => {
-    const user = userEvent.setup();
     const initial = linearHistory('current', HISTORY_PAGE_SIZE);
     const nextPage = [
       commitSummary(`current-${HISTORY_PAGE_SIZE}`),
-      commitSummary('other-tip', [], ['feature']),
+      commitSummary('other-tip', [], ['refs/remotes/origin/feature']),
     ];
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
       if (request.kind === 'history') return { kind: 'history' as const, commits: nextPage };
@@ -394,21 +569,23 @@ describe('HistoryView', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    reachHistoryEnd();
     expect(
       (await screen.findByTestId(`history-graph-current-${HISTORY_PAGE_SIZE}`)).closest('button'),
     ).toBeVisible();
     expect(screen.getByRole('button', { name: /other-tip/u })).toBeVisible();
+    expect(screen.getByText('origin/feature')).toBeVisible();
     expect(query).toHaveBeenCalledWith({
       kind: 'history',
       repoId: 'repo-1',
       limit: HISTORY_PAGE_SIZE,
       skip: HISTORY_PAGE_SIZE,
     });
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('history-load-sentinel')).not.toBeInTheDocument();
   });
 
-  it('waits for an explicit request before loading the next all-refs page', async () => {
+  it('waits until the scroll sentinel is visible before loading the next all-refs page', async () => {
     const initial = linearHistory('other', HISTORY_PAGE_SIZE);
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
       if (request.kind === 'history')
@@ -437,15 +614,19 @@ describe('HistoryView', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
+    expect(screen.getByTestId('history-load-sentinel')).toBeInTheDocument();
     await waitFor(() =>
       expect(query.mock.calls.some(([request]) => request.kind === 'commitDetails')).toBe(true),
     );
     expect(query.mock.calls.some(([request]) => request.kind === 'history')).toBe(false);
+
+    reachHistoryEnd();
+    await waitFor(() =>
+      expect(query.mock.calls.some(([request]) => request.kind === 'history')).toBe(true),
+    );
   });
 
   it('drops loaded pages and restarts from the first page when HEAD changes', async () => {
-    const user = userEvent.setup();
     const initial = linearHistory('old', HISTORY_PAGE_SIZE);
     const extra = [commitSummary(`old-${HISTORY_PAGE_SIZE}`)];
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
@@ -471,7 +652,7 @@ describe('HistoryView', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    reachHistoryEnd();
     expect(
       (await screen.findByTestId(`history-graph-old-${HISTORY_PAGE_SIZE}`)).closest('button'),
     ).toBeVisible();
@@ -517,7 +698,7 @@ describe('HistoryView', () => {
       />,
     );
 
-    await openActionsInspector(user);
+    await openActionsDialog(user);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Mainline parent' }), '2');
     await user.click(screen.getByRole('button', { name: 'Cherry-pick' }));
     await user.click(screen.getByRole('button', { name: 'Revert' }));
@@ -572,7 +753,7 @@ describe('HistoryView', () => {
       />,
     );
 
-    await openActionsInspector(user);
+    await openActionsDialog(user);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Mainline parent' }), '3');
     await user.click(screen.getByRole('button', { name: /two parent merge/u }));
     await user.click(screen.getByRole('button', { name: 'Cherry-pick' }));
@@ -621,7 +802,7 @@ describe('HistoryView', () => {
     );
 
     expect(await screen.findByRole('heading', { name: first.subject })).toBeInTheDocument();
-    await openActionsInspector(user);
+    await openActionsDialog(user);
     await user.click(screen.getByTestId(`history-graph-${second.oid}`).closest('button')!);
 
     expect(screen.getByText('Loading commit details…')).toBeInTheDocument();
@@ -669,7 +850,7 @@ describe('HistoryView', () => {
       />,
     );
 
-    await openActionsInspector(user);
+    await openActionsDialog(user);
     await user.type(
       screen.getByRole('textbox', { name: 'Create branch from selected commit' }),
       'topic',
@@ -808,7 +989,7 @@ describe('HistoryView', () => {
     );
   });
 
-  it('uses CodeView for a commit patch containing multiple files', async () => {
+  it('uses CodeView with file headers and simple separators for a multi-file commit', async () => {
     const multiFileDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'multi-revision',
       repoId: 'repo-1',
@@ -843,7 +1024,11 @@ describe('HistoryView', () => {
 
     await screen.findByText('Diff');
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({ source: expect.objectContaining({ kind: 'codeView' }) }),
+      expect.objectContaining({
+        source: expect.objectContaining({ kind: 'codeView' }),
+        showFileHeaders: true,
+        hunkSeparators: 'simple',
+      }),
     );
   });
 });
