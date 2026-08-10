@@ -68,6 +68,10 @@ const HISTORY_LANE_COLOR_COUNT = 6;
 
 type HistoryLaneStyle = CSSProperties & { '--history-lane-color': string };
 
+const WORKING_TREE_LANE_STYLE: HistoryLaneStyle = {
+  '--history-lane-color': 'var(--text-muted)',
+};
+
 function historyLaneStyle(lane: number): HistoryLaneStyle {
   return { '--history-lane-color': `var(--history-lane-${lane % HISTORY_LANE_COLOR_COUNT})` };
 }
@@ -157,9 +161,11 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
 function HistoryGraph({
   commit,
   laneCount,
+  connectsFromWorkingTree = false,
 }: {
   commit: HistoryGraphNode<CommitSummary>;
   laneCount: number;
+  connectsFromWorkingTree?: boolean;
 }) {
   const width = graphWidth(laneCount);
   const incomingLanes = new Set(commit.incomingEdges.map((edge) => edge.fromLane));
@@ -185,6 +191,16 @@ function HistoryGraph({
         preserveAspectRatio="none"
         focusable="false"
       >
+        {connectsFromWorkingTree ? (
+          <path
+            className="history-graph-edge working-tree"
+            data-edge-kind="working-tree"
+            data-from-lane={commit.lane}
+            data-to-lane={commit.lane}
+            style={WORKING_TREE_LANE_STYLE}
+            d={graphEdgePath(commit.lane, GRAPH_EDGE_TOP, commit.lane, GRAPH_MIDDLE)}
+          />
+        ) : null}
         {throughLanes.map((lane) => (
           <path
             key={`active:${lane}`}
@@ -220,6 +236,44 @@ function HistoryGraph({
         ))}
       </svg>
       <span className="history-graph-node" data-node-lane={commit.lane} />
+    </span>
+  );
+}
+
+function WorkingTreeGraph({ laneCount, connected }: { laneCount: number; connected: boolean }) {
+  const width = graphWidth(laneCount);
+  const graphStyle: CSSProperties & {
+    '--history-lane-color': string;
+    '--history-node-x': string;
+  } = {
+    ...WORKING_TREE_LANE_STYLE,
+    '--history-node-x': `${laneX(0)}px`,
+  };
+
+  return (
+    <span
+      className="history-graph history-working-tree-graph"
+      data-testid="history-graph-working-tree"
+      aria-hidden="true"
+      style={graphStyle}
+    >
+      <svg
+        width={width}
+        viewBox={`0 0 ${width} ${GRAPH_HEIGHT}`}
+        preserveAspectRatio="none"
+        focusable="false"
+      >
+        {connected ? (
+          <path
+            className="history-graph-edge working-tree"
+            data-edge-kind="working-tree"
+            data-from-lane="0"
+            data-to-lane="0"
+            d={graphEdgePath(0, GRAPH_MIDDLE, 0, GRAPH_EDGE_BOTTOM)}
+          />
+        ) : null}
+      </svg>
+      <span className="history-graph-node" data-node-lane="0" />
     </span>
   );
 }
@@ -293,6 +347,7 @@ export function HistoryView({
     [historyPage.commits],
   );
   const selectedCommit = visibleHistory.find((commit) => commit.oid === selectedOid);
+  const changedFileCount = new Set(repo.changes.map((change) => change.path)).size;
   const selectedActionOid = details?.oid === selectedOid ? selectedOid : undefined;
   const selectedCommitNeedsMainline = Boolean(selectedCommit && selectedCommit.parents.length > 1);
   const selectedMainlineParent = Math.min(
@@ -501,6 +556,8 @@ export function HistoryView({
   }, [historyPage.complete, loadMoreHistory]);
 
   const graphLaneCount = Math.max(1, ...visibleHistory.map((commit) => commit.laneCount));
+  const workingTreeConnectsToHistory =
+    changedFileCount > 0 && !activeHistorySearch && visibleHistory.length > 0;
   const historyListStyle: CSSProperties & { '--history-graph-width': string } = {
     '--history-graph-width': `${graphWidth(graphLaneCount)}px`,
   };
@@ -576,7 +633,21 @@ export function HistoryView({
           ) : null}
         </label>
         <ol ref={historyListRef} className="commit-list" style={historyListStyle}>
-          {visibleHistory.map((commit) => (
+          {changedFileCount > 0 ? (
+            <li className="history-working-tree-item">
+              <div className="commit-row history-working-tree-entry">
+                <WorkingTreeGraph
+                  laneCount={graphLaneCount}
+                  connected={workingTreeConnectsToHistory}
+                />
+                <span className="commit-copy">
+                  <strong>{t('uncommittedChanges')}</strong>
+                  <small>{t('uncommittedFileCount', { count: changedFileCount })}</small>
+                </span>
+              </div>
+            </li>
+          ) : null}
+          {visibleHistory.map((commit, index) => (
             <li key={commit.oid}>
               <button
                 type="button"
@@ -584,7 +655,11 @@ export function HistoryView({
                 aria-current={selectedOid === commit.oid ? 'true' : undefined}
                 onClick={() => setSelectedOid(commit.oid)}
               >
-                <HistoryGraph commit={commit} laneCount={graphLaneCount} />
+                <HistoryGraph
+                  commit={commit}
+                  laneCount={graphLaneCount}
+                  connectsFromWorkingTree={workingTreeConnectsToHistory && index === 0}
+                />
                 <span className="commit-copy">
                   <strong>{commit.subject}</strong>
                   <small>

@@ -156,6 +156,63 @@ async function openActionsDialog(user: ReturnType<typeof userEvent.setup>): Prom
 }
 
 describe('HistoryView', () => {
+  it('shows uncommitted changes before the commit list and counts unique files', () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: commitDetails(undefined) };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+    const dirtyRepo = repoSnapshot({
+      history: [commitSummary('head')],
+      changes: [
+        { path: 'src/app.ts', area: 'staged', status: 'modified' },
+        { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
+        { path: 'README.md', area: 'untracked', status: 'added' },
+      ],
+    });
+    const { rerender } = render(
+      <HistoryView
+        repo={dirtyRepo}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const historyPane = screen.getByRole('complementary', { name: 'Commit history' });
+    const historyList = within(historyPane).getByRole('list');
+    expect(historyList.firstElementChild).toHaveClass('history-working-tree-item');
+    expect(historyList.firstElementChild?.querySelector('.commit-row')).toHaveClass(
+      'history-working-tree-entry',
+    );
+    expect(within(historyPane).getByText('Uncommitted changes')).toBeVisible();
+    expect(within(historyPane).getByText('2 files')).toBeVisible();
+    const workingTreeGraph = within(historyPane).getByTestId('history-graph-working-tree');
+    expect(workingTreeGraph).toHaveStyle('--history-lane-color: var(--text-muted)');
+    expect(workingTreeGraph.querySelector('[data-edge-kind="working-tree"]')).toBeInTheDocument();
+    expect(
+      within(historyPane)
+        .getByTestId('history-graph-head')
+        .querySelector('[data-edge-kind="working-tree"]'),
+    ).toBeInTheDocument();
+
+    rerender(
+      <HistoryView
+        repo={{ ...dirtyRepo, changes: [] }}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    expect(within(historyPane).queryByText('Uncommitted changes')).not.toBeInTheDocument();
+  });
+
   it('searches operation history through the adapter and focuses the field with Command-F', async () => {
     const user = userEvent.setup();
     const searchResult = {
