@@ -18,6 +18,7 @@ vi.mock('./CommitActivityChart', () => ({
 const repo = repoSnapshot();
 const noopCancel = async (): Promise<void> => undefined;
 const noopError: ShowWorkspaceError = () => undefined;
+const noopPaneWidthChange = (): void => undefined;
 
 function latestCommitActivityQuery(adapter: WorkspaceAdapter): {
   request: Extract<WorkspaceQuery, { kind: 'commitActivity' }>;
@@ -100,6 +101,8 @@ describe('ActivityView', () => {
       adapter: adapterWithSeries(),
       repo: undefined,
       entries: [entry],
+      paneWidth: 560,
+      onPaneWidthChange: noopPaneWidthChange,
       onCancel: noopCancel,
       onError: noopError,
     };
@@ -117,17 +120,15 @@ describe('ActivityView', () => {
     );
     expect(screen.getAllByText('Fetchが完了しました').length).toBeGreaterThan(0);
     expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
-    const metrics = screen.getByRole('region', { name: 'リポジトリアクティビティの概要' });
-    expect(within(metrics).getByText('コミット')).toBeVisible();
-    expect(within(metrics).getByText('アクティブ')).toBeVisible();
-    expect(within(metrics).getByText('コントリビューター')).toBeVisible();
-    expect(within(metrics).getByText('ブランチ')).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'アクティビティの指標' })).toBeVisible();
+    expect(screen.getByRole('separator', { name: '操作一覧の幅' })).toBeVisible();
   });
 
   it('loads 30-day commit metrics, exposes chart data, and keeps raw session detail cancellable', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithSeries();
     const onCancel = vi.fn<(entry: ActivityEntry) => Promise<void>>(async () => undefined);
+    const onPaneWidthChange = vi.fn<(width: number) => void>();
     const committed = activity({
       id: 'commit-1',
       action: { id: 'actionCommit' },
@@ -143,6 +144,8 @@ describe('ActivityView', () => {
         adapter={adapter}
         repo={repo}
         entries={[activity(), committed]}
+        paneWidth={560}
+        onPaneWidthChange={onPaneWidthChange}
         onCancel={onCancel}
         onError={noopError}
       />,
@@ -164,6 +167,9 @@ describe('ActivityView', () => {
         .getAllByRole('option')
         .map((option) => option.textContent),
     ).toEqual(['Commits', 'Contributors', 'Branches']);
+    expect(
+      metricSelect.compareDocumentPosition(rangeSelect) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByText('Commit activity')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Repository analytics' })).toHaveClass('sr-only');
     const operations = screen.getByRole('table', { name: 'Operations' });
@@ -181,10 +187,6 @@ describe('ActivityView', () => {
     expect(fetchRow.querySelector('button')).toBeNull();
     expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
-    expect(await screen.findByText('8 commits')).toBeVisible();
-    expect(screen.getByText('4 days')).toBeVisible();
-    expect(screen.getByText('2 contributors')).toBeVisible();
-    expect(screen.getByText('3 branches')).toBeVisible();
     expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('30');
 
     const query = latestCommitActivityQuery(adapter);
@@ -194,11 +196,24 @@ describe('ActivityView', () => {
 
     const table = screen.getByRole('table', { name: 'Activity data' });
     expect(within(table).getAllByRole('row')).toHaveLength(31);
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Period', 'Commits', 'Contributors', 'Branches']);
+    expect(within(table).getAllByText('1 commit').length).toBeGreaterThan(0);
+    expect(within(table).getAllByText('1 contributor').length).toBeGreaterThan(0);
+    expect(within(table).getAllByText('1 branch').length).toBeGreaterThan(0);
     expect(table.closest('.activity-chart-data')).not.toBeInstanceOf(HTMLDetailsElement);
     await user.selectOptions(metricSelect, 'contributors');
-    expect(within(table).getByRole('columnheader', { name: 'Contributors' })).toBeVisible();
+    expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('30');
     await user.selectOptions(metricSelect, 'branches');
-    expect(within(table).getByRole('columnheader', { name: 'Branches' })).toBeVisible();
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(4);
+    const resizer = screen.getByRole('separator', { name: 'Operations width' });
+    expect(resizer).toHaveAttribute('aria-valuenow', '560');
+    resizer.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(onPaneWidthChange).toHaveBeenCalledWith(552);
     expect(screen.getByText('git fetch origin')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'fetch-1' }));
@@ -248,11 +263,13 @@ describe('ActivityView', () => {
         adapter={adapter}
         repo={repo}
         entries={[]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
         onCancel={noopCancel}
         onError={noopError}
       />,
     );
-    await screen.findByText(/18 commits/u);
+    await screen.findByRole('table', { name: 'Activity data' });
 
     const rangeSelect = screen.getByRole('combobox', { name: 'Activity range' });
     await user.selectOptions(rangeSelect, '90d');
@@ -304,6 +321,8 @@ describe('ActivityView', () => {
         adapter={adapter}
         repo={repo}
         entries={[]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
         onCancel={noopCancel}
         onError={noopError}
       />,
@@ -322,13 +341,14 @@ describe('ActivityView', () => {
         kind: 'commitActivity',
         series: series({
           totals: { commits: 999, activeDays: 30, contributors: 20, branches: 12 },
+          buckets: [{ ...series().buckets[0]!, commitCount: 999 }],
         }),
       });
       resolveSecond?.({
         kind: 'commitActivity',
         series: series({
           totals: { commits: 7, activeDays: 5, contributors: 2, branches: 1 },
-          buckets: series().buckets.slice(0, 7),
+          buckets: [{ ...series().buckets[0]!, commitCount: 7 }],
         }),
       });
     });
@@ -368,6 +388,8 @@ describe('ActivityView', () => {
         adapter={emptyAdapter}
         repo={undefined}
         entries={[persisted]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
         onCancel={noopCancel}
         onError={noopError}
       />,
@@ -382,6 +404,8 @@ describe('ActivityView', () => {
         adapter={emptyAdapter}
         repo={repo}
         entries={[persisted]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
         onCancel={noopCancel}
         onError={noopError}
       />,
@@ -403,6 +427,8 @@ describe('ActivityView', () => {
         adapter={adapter}
         repo={repo}
         entries={[]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
         onCancel={noopCancel}
         onError={onError}
       />,

@@ -26,7 +26,7 @@ describe('appearance preferences', () => {
     expect(readPreferences().appearance).toBe('system');
   });
 
-  it('fills a missing v1 language from macOS while preserving every existing field', () => {
+  it('fills a missing v1 language from macOS and defaults the screen-specific pane widths', () => {
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP']);
     localStorage.setItem(
       'stella.preferences.v1',
@@ -49,7 +49,24 @@ describe('appearance preferences', () => {
       openRepoPaths: ['/tmp/stella'],
       selectedRepoPath: '/tmp/stella',
       view: 'history',
-      paneWidths: { left: 300, right: 400 },
+      paneWidths: DEFAULT_PREFERENCES.paneWidths,
+    });
+  });
+
+  it('round-trips independent pane widths for Changes, History, and Activity', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      paneWidths: {
+        changes: { left: 312, right: 408 },
+        history: { left: 288 },
+        activity: { left: 584 },
+      },
+    });
+
+    expect(readPreferences().paneWidths).toEqual({
+      changes: { left: 312, right: 408 },
+      history: { left: 288 },
+      activity: { left: 584 },
     });
   });
 

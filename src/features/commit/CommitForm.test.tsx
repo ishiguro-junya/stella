@@ -54,7 +54,7 @@ describe('CommitForm validation', () => {
     const onCommit = vi.fn<() => Promise<void>>(async () => undefined);
     const onAttentionRequired = vi.fn<() => void>();
     render(<CommitForm onAttentionRequired={onAttentionRequired} onCommit={onCommit} />);
-    const description = screen.getByLabelText('Description');
+    const description = screen.getByLabelText('Message');
     const commit = screen.getByRole('button', { name: 'Commit' });
 
     expect(commit).toBeEnabled();
@@ -62,7 +62,7 @@ describe('CommitForm validation', () => {
 
     await user.click(commit);
 
-    const error = screen.getByText('Enter a description.');
+    const error = screen.getByText('Enter a message.');
     expect(description).toHaveFocus();
     expect(description).toHaveAttribute('aria-invalid', 'true');
     expect(description).toHaveAttribute('aria-describedby', error.id);
@@ -82,7 +82,7 @@ describe('CommitForm validation', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Description'), 'handle a failed commit');
+    await user.type(screen.getByLabelText('Message'), 'handle a failed commit');
     await user.click(screen.getByRole('button', { name: 'Commit' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Hook rejected the commit.');
@@ -102,7 +102,7 @@ describe('CommitForm validation', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Description'), 'report a failed commit');
+    await user.type(screen.getByLabelText('Message'), 'report a failed commit');
     await user.click(screen.getByRole('button', { name: 'Commit' }));
 
     expect(onError).toHaveBeenCalledWith('Commit failed', failure, 'Commit failed.');
@@ -121,7 +121,7 @@ describe('CommitForm validation', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('Description'), 'avoid duplicate dialogs');
+    await user.type(screen.getByLabelText('Message'), 'avoid duplicate dialogs');
     await user.click(screen.getByRole('button', { name: 'Commit' }));
 
     expect(onError).not.toHaveBeenCalled();
@@ -145,6 +145,7 @@ describe('CommitForm validation', () => {
     expect(type).toHaveAttribute('aria-describedby', typeError.id);
     expect(scope).toHaveAttribute('aria-invalid', 'true');
     expect(scope).toHaveAttribute('aria-describedby', scopeError.id);
+    expect(document.querySelectorAll('.commit-field-error')).toHaveLength(3);
   });
 
   it('omits legacy Body and Footer values restored from a draft', async () => {
@@ -206,7 +207,7 @@ describe('CommitForm validation', () => {
     expect(onCancel).toHaveBeenCalledOnce();
     expect(onCommit).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText('Description'), 'finish dialog commit');
+    await user.type(screen.getByLabelText('Message'), 'finish dialog commit');
     await user.click(screen.getByRole('button', { name: 'Commit' }));
     expect(onCommit).toHaveBeenCalledOnce();
     expect(onCommitted).toHaveBeenCalledOnce();

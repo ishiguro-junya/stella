@@ -106,23 +106,23 @@ export const MESSAGES = {
   moveToTrashEllipsis: { en: 'Move to Trash…', ja: 'ゴミ箱に入れる…' },
   resolveConflictsBeforeCommit: {
     en: 'Resolve all conflicts before committing.',
-    ja: 'すべてのConflictを解決してからCommitしてください。',
+    ja: 'すべてのConflictを解決してからコミットしてください。',
   },
   stageChangesToCommit: {
     en: 'Stage changes to commit.',
-    ja: 'Commitする変更をStageしてください。',
+    ja: 'コミットする変更をStageしてください。',
   },
   regularCommitUnavailable: {
     en: (args) =>
       `${text(args, 'operation')}. Regular commits are unavailable; use Continue, Skip, or Abort.`,
     ja: (args) =>
-      `${text(args, 'operation')}。通常のCommitは利用できません。Continue、Skip、Abortを使用してください。`,
+      `${text(args, 'operation')}。通常のコミットは利用できません。Continue、Skip、Abortを使用してください。`,
   },
   regularCommitAbortOnly: {
     en: (args) =>
       `${text(args, 'operation')}. Regular commits are unavailable; use Abort to restore the pre-operation state.`,
     ja: (args) =>
-      `${text(args, 'operation')}。通常のCommitは利用できません。操作前の状態に戻すにはAbortを使用してください。`,
+      `${text(args, 'operation')}。通常のコミットは利用できません。操作前の状態に戻すにはAbortを使用してください。`,
   },
   operationActionsUnavailable: {
     en: (args) =>
@@ -216,6 +216,14 @@ export const MESSAGES = {
   actions: { en: 'Actions', ja: '操作' },
   commitHistory: { en: 'Commit history', ja: '操作履歴' },
   searchHistory: { en: 'Search history', ja: '操作履歴を検索' },
+  uncommittedChanges: { en: 'Uncommitted changes', ja: '未コミットの変更' },
+  uncommittedFileCount: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'file' : 'files'}`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}ファイル`,
+  },
   noHistorySearchResults: {
     en: 'No commits match your search.',
     ja: '一致する操作履歴はありません。',
@@ -499,7 +507,6 @@ export const MESSAGES = {
   },
   activityOneYear: { en: '1 year', ja: '1年' },
   activityCommits: { en: 'Commits', ja: 'コミット' },
-  activityActiveDays: { en: 'Active', ja: 'アクティブ' },
   activityContributors: { en: 'Contributors', ja: 'コントリビューター' },
   activityBranches: { en: 'Branches', ja: 'ブランチ' },
   activityCommitValue: {
@@ -508,13 +515,6 @@ export const MESSAGES = {
       return `${number(value)} ${value === 1 ? 'commit' : 'commits'}`;
     },
     ja: (args, { number }) => `${number(count(args, 'count'))}件`,
-  },
-  activityActiveValue: {
-    en: (args, { number }) => {
-      const value = count(args, 'count');
-      return `${number(value)} ${value === 1 ? 'day' : 'days'}`;
-    },
-    ja: (args, { number }) => `${number(count(args, 'count'))}日`,
   },
   activityContributorValue: {
     en: (args, { number }) => {
@@ -530,11 +530,8 @@ export const MESSAGES = {
     },
     ja: (args, { number }) => `${number(count(args, 'count'))}件`,
   },
-  activitySummaryLabel: {
-    en: 'Repository activity summary',
-    ja: 'リポジトリアクティビティの概要',
-  },
   activityOperations: { en: 'Operations', ja: '操作' },
+  activityOperationsWidth: { en: 'Operations width', ja: '操作一覧の幅' },
   activityStatus: { en: 'Status', ja: '状態' },
   activityAction: { en: 'Action', ja: '操作' },
   activitySummary: { en: 'Summary', ja: '概要' },
@@ -924,26 +921,27 @@ export const MESSAGES = {
     en: 'Could not apply the whole-file choice.',
     ja: 'ファイル全体の選択を適用できませんでした。',
   },
-  commit: { en: 'Commit', ja: 'Commit' },
-  commitFailed: { en: 'Commit failed', ja: 'Commitに失敗しました' },
-  commitFailedDescription: { en: 'Commit failed.', ja: 'Commitに失敗しました。' },
-  description: { en: 'Description', ja: '説明' },
+  commit: { en: 'Commit', ja: 'コミット' },
+  commitFailed: { en: 'Commit failed', ja: 'コミットに失敗しました' },
+  commitFailedDescription: { en: 'Commit failed.', ja: 'コミットに失敗しました。' },
+  description: { en: 'Message', ja: 'メッセージ' },
   commitDescriptionPlaceholder: {
     en: 'Briefly describe your changes',
     ja: '変更内容を簡潔に入力',
   },
-  type: { en: 'Type', ja: 'Type' },
-  breakingChange: { en: 'Breaking Change', ja: 'Breaking Change' },
-  committing: { en: 'Committing…', ja: 'Commit中…' },
+  type: { en: 'Type', ja: '型' },
+  scope: { en: 'Scope', ja: 'スコープ' },
+  breakingChange: { en: 'Breaking Change', ja: '破壊的変更' },
+  committing: { en: 'Committing…', ja: 'コミット中…' },
   commitTypeLowercase: {
     en: 'Type must contain lowercase letters only.',
-    ja: 'Typeには小文字の英字のみ使用できます。',
+    ja: '型には小文字の英字のみ使用できます。',
   },
   commitScopeInvalid: {
     en: 'Scope cannot contain parentheses or line breaks.',
-    ja: 'Scopeには括弧や改行を使用できません。',
+    ja: 'スコープには括弧や改行を使用できません。',
   },
-  commitDescriptionRequired: { en: 'Enter a description.', ja: '説明を入力してください。' },
+  commitDescriptionRequired: { en: 'Enter a message.', ja: 'メッセージを入力してください。' },
   commitBodyLf: {
     en: 'Body must use LF line endings.',
     ja: 'Bodyの改行コードにはLFを使用してください。',

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Ban, CircleCheck, CircleX, LoaderCircle, RotateCw } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
@@ -10,6 +10,7 @@ import type {
   RepoSnapshot,
 } from '../../domain/workspace';
 import type { ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
+import { PaneResizer } from '../../ui/PaneResizer';
 import { useI18n, type I18nValue, type Language } from '../../i18n/i18n';
 import {
   ACTIVITY_RANGE_DAYS,
@@ -20,6 +21,8 @@ import {
 const CommitActivityChart = lazy(() => import('./CommitActivityChart'));
 const ACTIVITY_RANGES: readonly ActivityRange[] = ['7d', '30d', '90d', '180d', '1y'];
 const ACTIVITY_METRICS = ['commits', 'contributors', 'branches'] as const;
+const ACTIVITY_LEFT_PANE_MIN = 360;
+const ACTIVITY_LEFT_PANE_MAX = 600;
 type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
 
 function isActivityRange(value: string): value is ActivityRange {
@@ -40,6 +43,8 @@ export interface ActivityViewProps {
   adapter: WorkspaceAdapter;
   repo: RepoSnapshot | undefined;
   entries: ActivityEntry[];
+  paneWidth: number;
+  onPaneWidthChange: (width: number) => void;
   onCancel: (entry: ActivityEntry) => Promise<void>;
   onError: ShowWorkspaceError;
   onReady?: () => void;
@@ -49,6 +54,8 @@ export function ActivityView({
   adapter,
   repo,
   entries,
+  paneWidth,
+  onPaneWidthChange,
   onCancel,
   onError,
   onReady,
@@ -114,7 +121,7 @@ export function ActivityView({
   );
   const selected = activities.find((entry) => entry.id === selectedId) ?? activities[0];
   const series = analytics.kind === 'ready' ? analytics.series : undefined;
-  const buckets = useMemo(
+  const chartBuckets = useMemo(
     () =>
       series
         ? metric === 'contributors'
@@ -123,6 +130,13 @@ export function ActivityView({
         : [],
     [metric, range, series],
   );
+  const tableBuckets = useMemo(
+    () => series?.buckets.map((bucket) => ({ ...bucket })) ?? [],
+    [series],
+  );
+  const paneStyle: CSSProperties & { '--activity-left-pane': string } = {
+    '--activity-left-pane': `${paneWidth}px`,
+  };
 
   return (
     <main className="activity-view" aria-labelledby="activity-title">
@@ -130,17 +144,25 @@ export function ActivityView({
         {t('appActivity')}
       </h1>
       <div className="activity-page-content">
-        <ActivityMetrics analytics={analytics} />
-        <div className="activity-page-panels">
+        <div className="activity-page-panels" style={paneStyle}>
           <OperationsPanel
             activities={activities}
             selected={selected}
             onSelect={setSelectedId}
             onCancel={onCancel}
           />
+          <PaneResizer
+            label={t('activityOperationsWidth')}
+            value={paneWidth}
+            direction="growRight"
+            min={ACTIVITY_LEFT_PANE_MIN}
+            max={ACTIVITY_LEFT_PANE_MAX}
+            onChange={onPaneWidthChange}
+          />
           <AnalyticsPanel
             analytics={analytics}
-            buckets={buckets}
+            chartBuckets={chartBuckets}
+            tableBuckets={tableBuckets}
             range={range}
             metric={metric}
             onRangeChange={setRange}
@@ -150,44 +172,6 @@ export function ActivityView({
         </div>
       </div>
     </main>
-  );
-}
-
-function ActivityMetrics({ analytics }: { analytics: AnalyticsState }) {
-  const { t } = useI18n();
-  const totals = analytics.kind === 'ready' ? analytics.series.totals : undefined;
-  const metrics = [
-    {
-      label: t('activityCommits'),
-      value: totals === undefined ? undefined : t('activityCommitValue', { count: totals.commits }),
-    },
-    {
-      label: t('activityActiveDays'),
-      value:
-        totals === undefined ? undefined : t('activityActiveValue', { count: totals.activeDays }),
-    },
-    {
-      label: t('activityContributors'),
-      value:
-        totals === undefined
-          ? undefined
-          : t('activityContributorValue', { count: totals.contributors }),
-    },
-    {
-      label: t('activityBranches'),
-      value:
-        totals === undefined ? undefined : t('activityBranchValue', { count: totals.branches }),
-    },
-  ];
-  return (
-    <section className="activity-metrics" aria-label={t('activitySummaryLabel')}>
-      {metrics.map((metric) => (
-        <div key={metric.label}>
-          <span>{metric.label}</span>
-          <strong>{metric.value ?? '—'}</strong>
-        </div>
-      ))}
-    </section>
   );
 }
 
@@ -364,7 +348,8 @@ function ActivityDetail({
 
 interface AnalyticsPanelProps {
   analytics: AnalyticsState;
-  buckets: CommitActivityBucket[];
+  chartBuckets: CommitActivityBucket[];
+  tableBuckets: CommitActivityBucket[];
   range: ActivityRange;
   metric: ActivityMetric;
   onRangeChange: (range: ActivityRange) => void;
@@ -374,7 +359,8 @@ interface AnalyticsPanelProps {
 
 function AnalyticsPanel({
   analytics,
-  buckets,
+  chartBuckets,
+  tableBuckets,
   range,
   metric,
   onRangeChange,
@@ -391,22 +377,6 @@ function AnalyticsPanel({
         </h2>
         <div className="activity-analytics-controls">
           <select
-            className="activity-range-select"
-            aria-label={t('activityRange')}
-            value={range}
-            onChange={(event) => {
-              if (isActivityRange(event.currentTarget.value)) {
-                onRangeChange(event.currentTarget.value);
-              }
-            }}
-          >
-            {ACTIVITY_RANGES.map((option) => (
-              <option key={option} value={option}>
-                {activityRangeLabel(option, t)}
-              </option>
-            ))}
-          </select>
-          <select
             className="activity-metric-select"
             aria-label={t('activityMetric')}
             value={metric}
@@ -419,6 +389,22 @@ function AnalyticsPanel({
             {ACTIVITY_METRICS.map((option) => (
               <option key={option} value={option}>
                 {activityMetricLabel(option, t)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="activity-range-select"
+            aria-label={t('activityRange')}
+            value={range}
+            onChange={(event) => {
+              if (isActivityRange(event.currentTarget.value)) {
+                onRangeChange(event.currentTarget.value);
+              }
+            }}
+          >
+            {ACTIVITY_RANGES.map((option) => (
+              <option key={option} value={option}>
+                {activityRangeLabel(option, t)}
               </option>
             ))}
           </select>
@@ -446,12 +432,13 @@ function AnalyticsPanel({
             <ActivityState title={t('activityNoCommits')}>
               {t('activityNoCommitsDescription', { days })}
             </ActivityState>
-            <ChartDataTable buckets={buckets} range={range} metric={metric} />
+            <ChartDataTable buckets={tableBuckets} range={range} />
           </>
         ) : (
           <CommitAnalyticsReady
             series={analytics.series}
-            buckets={buckets}
+            chartBuckets={chartBuckets}
+            tableBuckets={tableBuckets}
             range={range}
             metric={metric}
           />
@@ -479,17 +466,19 @@ function activityMetricLabel(metric: ActivityMetric, t: I18nValue['t']): string 
 
 function CommitAnalyticsReady({
   series,
-  buckets,
+  chartBuckets,
+  tableBuckets,
   range,
   metric,
 }: {
   series: CommitActivitySeries;
-  buckets: CommitActivityBucket[];
+  chartBuckets: CommitActivityBucket[];
+  tableBuckets: CommitActivityBucket[];
   range: ActivityRange;
   metric: ActivityMetric;
 }) {
   const { t, locale } = useI18n();
-  const chartData = buckets.map((bucket) => ({
+  const chartData = chartBuckets.map((bucket) => ({
     label: formatBucketLabel(bucket, metric === 'contributors' ? '30d' : range, locale),
     value: activityMetricValue(bucket, metric),
   }));
@@ -508,7 +497,7 @@ function CommitAnalyticsReady({
           <CommitActivityChart data={chartData} metricLabel={activityMetricLabel(metric, t)} />
         </Suspense>
       </figure>
-      <ChartDataTable buckets={buckets} range={range} metric={metric} />
+      <ChartDataTable buckets={tableBuckets} range={range} />
     </>
   );
 }
@@ -516,11 +505,9 @@ function CommitAnalyticsReady({
 function ChartDataTable({
   buckets,
   range,
-  metric,
 }: {
   buckets: CommitActivityBucket[];
   range: ActivityRange;
-  metric: ActivityMetric;
 }) {
   const { t, locale } = useI18n();
   return (
@@ -531,14 +518,18 @@ function ChartDataTable({
           <thead>
             <tr>
               <th scope="col">{t('activityPeriod')}</th>
-              <th scope="col">{activityMetricLabel(metric, t)}</th>
+              <th scope="col">{t('activityCommits')}</th>
+              <th scope="col">{t('activityContributors')}</th>
+              <th scope="col">{t('activityBranches')}</th>
             </tr>
           </thead>
           <tbody>
             {buckets.map((bucket) => (
               <tr key={`${bucket.startUnixSeconds}:${bucket.endUnixSeconds}`}>
                 <th scope="row">{formatBucketLabel(bucket, range, locale, true)}</th>
-                <td>{activityMetricValue(bucket, metric)}</td>
+                <td>{t('activityCommitValue', { count: bucket.commitCount })}</td>
+                <td>{t('activityContributorValue', { count: bucket.contributorCount })}</td>
+                <td>{t('activityBranchValue', { count: bucket.branchCount })}</td>
               </tr>
             ))}
           </tbody>

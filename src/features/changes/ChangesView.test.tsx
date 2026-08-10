@@ -209,8 +209,8 @@ describe('ChangesView diff lifecycle', () => {
     await user.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Commit' });
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(within(dialog).getByRole('textbox', { name: 'Description' })).toHaveFocus();
-    expect(within(dialog).getByText('Stage changes to commit.')).toBeVisible();
+    expect(within(dialog).getByRole('textbox', { name: 'Message' })).toHaveFocus();
+    expect(within(dialog).getByText('Stage changes to commit.')).toHaveClass('sr-only');
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toBeVisible();
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
@@ -590,7 +590,7 @@ describe('ChangesView diff lifecycle', () => {
 
     await openCommit(user);
     const dialog = screen.getByRole('dialog', { name: 'Commit' });
-    const description = within(dialog).getByRole('textbox', { name: 'Description' });
+    const description = within(dialog).getByRole('textbox', { name: 'Message' });
     await user.type(description, 'handle commit errors');
     await user.click(within(dialog).getByRole('button', { name: 'Commit' }));
     await waitFor(() => expect(rejectCommit).toBeDefined());
@@ -619,14 +619,14 @@ describe('ChangesView diff lifecycle', () => {
     );
 
     const trigger = await openCommit(user);
-    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'preserve this draft');
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'preserve this draft');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
 
     await openCommit(user);
     const dialog = screen.getByRole('dialog', { name: 'Commit' });
-    expect(within(dialog).getByRole('textbox', { name: 'Description' })).toHaveValue(
+    expect(within(dialog).getByRole('textbox', { name: 'Message' })).toHaveValue(
       'preserve this draft',
     );
     await user.click(within(dialog).getByRole('button', { name: 'Commit' }));
@@ -641,7 +641,7 @@ describe('ChangesView diff lifecycle', () => {
     });
 
     await openCommit(user);
-    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
   });
 
   it('disables file, line, and remote mutations while a Git operation is in progress', async () => {

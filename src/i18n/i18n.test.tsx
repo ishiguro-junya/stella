@@ -48,26 +48,35 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'previewMovePathToTrash', { path: 'src/app.ts' })).toBe(
       'src/app.tsをゴミ箱に入れます',
     );
+    expect(translate('en', 'uncommittedFileCount', { count: 1 })).toBe('1 file');
+    expect(translate('en', 'uncommittedFileCount', { count: 2 })).toBe('2 files');
+    expect(translate('ja', 'uncommittedFileCount', { count: 2 })).toBe('2ファイル');
   });
 
-  it('localizes Japanese navigation and general UI terms while retaining Git terms', () => {
+  it('localizes Japanese navigation, Commit form terms, and general UI terms', () => {
     expect(translate('ja', 'appActivity')).toBe('アクティビティ');
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
     expect(translate('ja', 'changes')).toBe('変更差分');
     expect(translate('ja', 'history')).toBe('操作履歴');
+    expect(translate('ja', 'uncommittedChanges')).toBe('未コミットの変更');
     expect(translate('ja', 'activityCommand')).toBe('コマンド');
     expect(translate('ja', 'unified')).toBe('統合');
-    expect(translate('ja', 'commit')).toBe('Commit');
+    expect(translate('ja', 'commit')).toBe('コミット');
+    expect(translate('ja', 'description')).toBe('メッセージ');
+    expect(translate('ja', 'type')).toBe('型');
+    expect(translate('ja', 'scope')).toBe('スコープ');
+    expect(translate('ja', 'breakingChange')).toBe('破壊的変更');
+    expect(translate('ja', 'commitTypeLowercase')).toBe('型には小文字の英字のみ使用できます。');
+    expect(translate('ja', 'commitScopeInvalid')).toBe('スコープには括弧や改行を使用できません。');
+    expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'stage')).toBe('Stage');
   });
 
   it('uses the requested Japanese terms for Activity metrics', () => {
     expect(translate('ja', 'activityCommits')).toBe('コミット');
-    expect(translate('ja', 'activityActiveDays')).toBe('アクティブ');
     expect(translate('ja', 'activityContributors')).toBe('コントリビューター');
     expect(translate('ja', 'activityBranches')).toBe('ブランチ');
     expect(translate('ja', 'activityCommitValue', { count: 8 })).toBe('8件');
-    expect(translate('ja', 'activityActiveValue', { count: 4 })).toBe('4日');
     expect(translate('ja', 'activityContributorValue', { count: 2 })).toBe('2人');
     expect(translate('ja', 'activityBranchValue', { count: 3 })).toBe('3件');
   });

@@ -10,6 +10,12 @@ export interface PaneWidths {
   right: number;
 }
 
+export interface PaneWidthPreferences {
+  changes: PaneWidths;
+  history: { left: number };
+  activity: { left: number };
+}
+
 export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
@@ -18,7 +24,7 @@ export interface StellaPreferences {
   openRepoPaths: string[];
   selectedRepoPath?: string;
   view: WorkspaceView;
-  paneWidths: PaneWidths;
+  paneWidths: PaneWidthPreferences;
   commitDrafts: Record<string, ConventionalCommitInput>;
 }
 
@@ -29,7 +35,11 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   registeredRepoPaths: [],
   openRepoPaths: [],
   view: 'changes',
-  paneWidths: { left: 244, right: 336 },
+  paneWidths: {
+    changes: { left: 244, right: 336 },
+    history: { left: 244 },
+    activity: { left: 560 },
+  },
   commitDrafts: {},
 };
 
@@ -84,9 +94,9 @@ function stringArray(value: unknown, limit?: number): string[] {
   return limit === undefined ? strings : strings.slice(0, limit);
 }
 
-function boundedWidth(value: unknown, fallback: number): number {
+function boundedWidth(value: unknown, fallback: number, min = 180, max = 520): number {
   return typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(520, Math.max(180, value))
+    ? Math.min(max, Math.max(min, value))
     : fallback;
 }
 
@@ -100,6 +110,9 @@ export function readPreferences(): StellaPreferences {
     }
     const value = parsed;
     const paneWidths = isRecord(value.paneWidths) ? value.paneWidths : {};
+    const changesPaneWidths = isRecord(paneWidths.changes) ? paneWidths.changes : {};
+    const historyPaneWidths = isRecord(paneWidths.history) ? paneWidths.history : {};
+    const activityPaneWidths = isRecord(paneWidths.activity) ? paneWidths.activity : {};
     return {
       version: STORAGE_VERSION,
       appearance: isAppearance(value.appearance)
@@ -113,8 +126,28 @@ export function readPreferences(): StellaPreferences {
         : {}),
       view: isView(value.view) ? value.view : DEFAULT_PREFERENCES.view,
       paneWidths: {
-        left: boundedWidth(paneWidths.left, DEFAULT_PREFERENCES.paneWidths.left),
-        right: boundedWidth(paneWidths.right, DEFAULT_PREFERENCES.paneWidths.right),
+        changes: {
+          left: boundedWidth(
+            changesPaneWidths.left,
+            DEFAULT_PREFERENCES.paneWidths.changes.left,
+            240,
+          ),
+          right: boundedWidth(
+            changesPaneWidths.right,
+            DEFAULT_PREFERENCES.paneWidths.changes.right,
+          ),
+        },
+        history: {
+          left: boundedWidth(historyPaneWidths.left, DEFAULT_PREFERENCES.paneWidths.history.left),
+        },
+        activity: {
+          left: boundedWidth(
+            activityPaneWidths.left,
+            DEFAULT_PREFERENCES.paneWidths.activity.left,
+            360,
+            600,
+          ),
+        },
       },
       commitDrafts: commitDraftRecord(value.commitDrafts),
     };

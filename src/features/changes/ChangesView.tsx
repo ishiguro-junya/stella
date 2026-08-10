@@ -812,6 +812,7 @@ export function ChangesView({
       {commitDialogOpen ? (
         <Dialog
           labelledBy="commit-dialog-title"
+          className="commit-dialog"
           onDismiss={() => {
             if (!busy) setCommitDialogOpen(false);
           }}
@@ -823,6 +824,7 @@ export function ChangesView({
             draftKey={repo.path}
             disabled={Boolean(disabledCommitReason)}
             disabledReason={disabledCommitReason}
+            hideDisabledReason={disabledCommitReason === t('stageChangesToCommit')}
             busy={busy}
             showHeading={false}
             labelledBy="commit-dialog-title"

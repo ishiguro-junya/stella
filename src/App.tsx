@@ -66,7 +66,7 @@ import {
   readPreferences,
   rememberRepositoryPath,
   updatePreferences,
-  type PaneWidths,
+  type PaneWidthPreferences,
 } from './persistence/preferences';
 import {
   AppearanceProvider,
@@ -250,7 +250,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [activityFocusRequest, setActivityFocusRequest] = useState(0);
   const [activityReady, setActivityReady] = useState(false);
   const [cloneToStart, setCloneToStart] = useState<Extract<AttachRequest, { kind: 'clone' }>>();
-  const [paneWidths, setPaneWidths] = useState<PaneWidths>(initialPreferences.paneWidths);
+  const [paneWidths, setPaneWidths] = useState<PaneWidthPreferences>(initialPreferences.paneWidths);
   const [registeredPaths, setRegisteredPaths] = useState(initialPreferences.registeredRepoPaths);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<AppNotice>();
@@ -264,6 +264,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
+  const [branchControlFocused, setBranchControlFocused] = useState(false);
   const [restoringWorkspace, setRestoringWorkspace] = useState(
     initialPreferences.openRepoPaths.length > 0,
   );
@@ -859,7 +860,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                   </button>
                   <button
                     type="button"
-                    className="titlebar-context-toggle branch-toggle"
+                    className={`titlebar-context-toggle branch-toggle${branchControlFocused ? ' is-focused' : ''}`}
                     aria-label={t('switchBranchCurrent', {
                       branch: repo.branch.detached ? t('detachedHead') : (repo.branch.name ?? ''),
                     })}
@@ -868,6 +869,8 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                     title={
                       repo.branch.detached ? t('detachedHead') : (repo.branch.name ?? undefined)
                     }
+                    onFocus={() => setBranchControlFocused(true)}
+                    onBlur={() => setBranchControlFocused(false)}
                     onClick={openBranchSwitcher}
                   >
                     <GitBranch aria-hidden="true" focusable="false" />
@@ -999,6 +1002,10 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                 adapter={adapter}
                 repo={repo}
                 entries={currentActivities}
+                paneWidth={paneWidths.activity.left}
+                onPaneWidthChange={(left) =>
+                  setPaneWidths((current) => ({ ...current, activity: { left } }))
+                }
                 onCancel={cancelActivity}
                 onError={showError}
                 onReady={markActivityReady}
@@ -1060,8 +1067,10 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                       onConflictLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
-                      paneWidths={paneWidths}
-                      onPaneWidthsChange={setPaneWidths}
+                      paneWidths={paneWidths.changes}
+                      onPaneWidthsChange={(changes) =>
+                        setPaneWidths((current) => ({ ...current, changes }))
+                      }
                     />
                   ) : (
                     <HistoryView
@@ -1071,8 +1080,10 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                       busy={busy}
                       onError={showError}
                       onAction={runAction}
-                      paneWidths={paneWidths}
-                      onPaneWidthsChange={setPaneWidths}
+                      paneWidths={paneWidths.history}
+                      onPaneWidthsChange={({ left }) =>
+                        setPaneWidths((current) => ({ ...current, history: { left } }))
+                      }
                     />
                   )}
                 </main>

@@ -19,6 +19,7 @@ import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/Works
 export interface CommitFormProps {
   disabled?: boolean;
   disabledReason?: string | undefined;
+  hideDisabledReason?: boolean;
   busy?: boolean;
   draftKey?: string;
   headerActions?: ReactNode;
@@ -64,6 +65,7 @@ function editableCommitInput(draft?: ConventionalCommitInput): ConventionalCommi
 export function CommitForm({
   disabled = false,
   disabledReason,
+  hideDisabledReason = false,
   busy = false,
   draftKey,
   headerActions,
@@ -191,11 +193,13 @@ export function CommitForm({
           onChange={(event) => update('description', event.target.value)}
           placeholder={t('commitDescriptionPlaceholder')}
         />
-        {showsError('description') ? (
-          <small id={ERROR_IDS.description} className="field-error">
-            {errors.description ? t(errors.description) : null}
-          </small>
-        ) : null}
+        <small
+          id={ERROR_IDS.description}
+          className={`field-error commit-field-error${showsError('description') ? '' : ' is-placeholder'}`}
+          aria-hidden={!showsError('description')}
+        >
+          {showsError('description') && errors.description ? t(errors.description) : null}
+        </small>
       </label>
 
       <div className="commit-meta-grid">
@@ -216,15 +220,17 @@ export function CommitForm({
               </option>
             ))}
           </datalist>
-          {showsError('type') ? (
-            <small id={ERROR_IDS.type} className="field-error">
-              {errors.type ? t(errors.type) : null}
-            </small>
-          ) : null}
+          <small
+            id={ERROR_IDS.type}
+            className={`field-error commit-field-error${showsError('type') ? '' : ' is-placeholder'}`}
+            aria-hidden={!showsError('type')}
+          >
+            {showsError('type') && errors.type ? t(errors.type) : null}
+          </small>
         </label>
 
         <label>
-          <span>Scope</span>
+          <span>{t('scope')}</span>
           <input
             data-commit-field="scope"
             value={input.scope ?? ''}
@@ -232,11 +238,13 @@ export function CommitForm({
             aria-describedby={showsError('scope') ? ERROR_IDS.scope : undefined}
             onChange={(event) => update('scope', event.target.value)}
           />
-          {showsError('scope') ? (
-            <small id={ERROR_IDS.scope} className="field-error">
-              {errors.scope ? t(errors.scope) : null}
-            </small>
-          ) : null}
+          <small
+            id={ERROR_IDS.scope}
+            className={`field-error commit-field-error${showsError('scope') ? '' : ' is-placeholder'}`}
+            aria-hidden={!showsError('scope')}
+          >
+            {showsError('scope') && errors.scope ? t(errors.scope) : null}
+          </small>
         </label>
       </div>
 
@@ -255,7 +263,10 @@ export function CommitForm({
         </div>
       ) : null}
       {disabled && disabledReason ? (
-        <output id="commit-disabled-reason" className="commit-disabled-reason">
+        <output
+          id="commit-disabled-reason"
+          className={`commit-disabled-reason${hideDisabledReason ? ' sr-only' : ''}`}
+        >
           {disabledReason}
         </output>
       ) : null}

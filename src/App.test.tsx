@@ -137,6 +137,11 @@ describe('App repository attach', () => {
     const settings = screen.getByRole('button', { name: 'Settings' });
     expect(changes).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    const changesResizer = screen.getByRole('separator', { name: 'Changes list width' });
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '244');
+    changesResizer.focus();
+    await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '268');
 
     await user.click(activity);
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -144,6 +149,11 @@ describe('App repository attach', () => {
     expect(activity).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /Current repository/u })).toBeVisible();
     expect(screen.getByRole('button', { name: /Current branch/u })).toBeVisible();
+    const activityResizer = await screen.findByRole('separator', { name: 'Operations width' });
+    expect(activityResizer).toHaveAttribute('aria-valuenow', '560');
+    activityResizer.focus();
+    await user.keyboard('{Shift>}{ArrowLeft}{/Shift}');
+    expect(activityResizer).toHaveAttribute('aria-valuenow', '536');
 
     await user.click(activity);
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -154,10 +164,19 @@ describe('App repository attach', () => {
     expect(changes).toHaveAttribute('aria-current', 'page');
     expect(changes).toHaveFocus();
     expect(activity).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
+      'aria-valuenow',
+      '268',
+    );
 
     await user.click(history);
     expect(history).toHaveAttribute('aria-current', 'page');
     expect(history).toHaveFocus();
+    const historyResizer = screen.getByRole('separator', { name: 'History list width' });
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
+    historyResizer.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '236');
 
     await user.click(settings);
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -168,6 +187,19 @@ describe('App repository attach', () => {
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(activity).toHaveFocus();
     expect(activity).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('separator', { name: 'Operations width' })).toHaveAttribute(
+      'aria-valuenow',
+      '536',
+    );
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
+        paneWidths: {
+          changes: { left: 268, right: 336 },
+          history: { left: 236 },
+          activity: { left: 536 },
+        },
+      }),
+    );
 
     await user.keyboard('{Escape}');
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -1204,7 +1236,7 @@ describe('App repository attach', () => {
         name: 'Commit',
       }),
     );
-    const description = await screen.findByRole('textbox', { name: 'Description' });
+    const description = await screen.findByRole('textbox', { name: 'Message' });
     await user.type(description, 'first draft');
     await selectRepository(user, 'second');
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
@@ -1213,7 +1245,7 @@ describe('App repository attach', () => {
         name: 'Commit',
       }),
     );
-    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
     await selectRepository(user, 'first');
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
     await user.click(
@@ -1221,7 +1253,7 @@ describe('App repository attach', () => {
         name: 'Commit',
       }),
     );
-    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('first draft');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('first draft');
     await selectRepository(user, 'second');
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
     await user.click(
@@ -1229,7 +1261,7 @@ describe('App repository attach', () => {
         name: 'Commit',
       }),
     );
-    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
   });
 
   it('does not let a late older snapshot overwrite newer repository state', async () => {

@@ -478,6 +478,12 @@ kbd {
 
 .titlebar-context-toggle.branch-toggle {
   max-width: min(400px, 64vw);
+  outline: none;
+}
+
+.titlebar-context-toggle.branch-toggle.is-focused {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .titlebar-context-toggle > span {
@@ -1342,6 +1348,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   display: flex;
   min-height: 100%;
   flex-direction: column;
+  gap: 18px;
   padding-bottom: 0;
 }
 .commit-form > label,
@@ -1350,14 +1357,17 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .history-actions-dialog > form,
 .history-actions-dialog > .action-section {
   display: grid;
-  gap: 5px;
+  gap: 8px;
 }
 .commit-meta-grid {
   grid-template-columns: minmax(92px, 0.65fr) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 16px;
 }
 .commit-meta-grid > label {
   display: grid;
-  gap: 5px;
+  align-content: start;
+  gap: 8px;
 }
 .commit-form label > span,
 .history-actions-dialog label > span,
@@ -1378,6 +1388,18 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 }
 .field-error {
   color: var(--danger);
+}
+.commit-form .commit-field-error {
+  display: block;
+  min-height: 1.4em;
+  margin: 0;
+  line-height: 1.4;
+}
+.commit-meta-grid .commit-field-error {
+  min-height: 2.8em;
+}
+.commit-field-error.is-placeholder {
+  visibility: hidden;
 }
 .commit-breaking {
   display: flex;
@@ -1402,6 +1424,14 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 }
 .confirmation-sheet > .commit-form {
   min-height: 0;
+}
+.commit-dialog {
+  gap: 20px;
+  width: min(580px, 100%);
+  padding: 28px;
+}
+.commit-dialog > h2 {
+  margin-bottom: 0;
 }
 .confirmation-sheet > .commit-form .commit-submit {
   position: static;
@@ -1435,6 +1465,15 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   color: var(--text-muted);
   font-size: 11px;
   text-align: center;
+}
+.history-working-tree-entry {
+  cursor: default;
+}
+.history-working-tree-entry:hover:not(:disabled) {
+  background: transparent;
+}
+.history-working-tree-graph .history-graph-node {
+  background: var(--surface-raised);
 }
 .history-load-sentinel {
   display: grid;
@@ -1840,41 +1879,9 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   padding: 0;
   overflow: hidden;
 }
-.activity-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  flex: none;
-  min-height: 64px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-raised);
-}
-.activity-metrics > div {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding: 8px 14px;
-  text-align: center;
-}
-.activity-metrics > div + div {
-  border-left: 1px solid var(--border-subtle);
-}
-.activity-metrics span {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.activity-metrics strong {
-  margin-top: 2px;
-  font-size: 19px;
-  font-variant-numeric: tabular-nums;
-}
 .activity-page-panels {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: var(--activity-left-pane, 560px) 5px minmax(250px, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1892,7 +1899,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   grid-template-rows: minmax(0, 1fr);
 }
 .activity-analytics-panel {
-  border-left: 1px solid var(--border-subtle);
+  border-left: 0;
 }
 .activity-panel-header {
   display: flex;
@@ -2015,6 +2022,10 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.activity-list thead th:first-child,
+.activity-list tbody td:first-child {
+  padding-left: 14px;
+}
 .activity-list tbody th {
   font-weight: 600;
 }
@@ -2068,7 +2079,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .activity-details {
   min-width: 0;
   min-height: 0;
-  padding: 10px 11px 12px;
+  padding: 16px 18px 18px;
   overflow: auto;
   background: var(--surface-inspector);
 }
@@ -2190,6 +2201,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 }
 .activity-chart-data table {
   width: 100%;
+  min-width: 430px;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
@@ -2198,6 +2210,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   padding: 4px 6px;
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
+  white-space: nowrap;
 }
 .activity-chart-data thead th {
   position: sticky;
@@ -2206,7 +2219,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   background: var(--surface-raised);
 }
 .activity-chart-data td,
-.activity-chart-data thead th:last-child {
+.activity-chart-data thead th:not(:first-child) {
   text-align: right;
 }
 .log-output {
@@ -2576,7 +2589,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
     display: none;
   }
   .activity-page-panels {
-    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+    grid-template-columns: var(--activity-left-pane, 560px) 5px minmax(250px, 1fr);
   }
   .three-pane {
     grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);

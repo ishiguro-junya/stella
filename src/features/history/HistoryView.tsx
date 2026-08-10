@@ -39,7 +39,6 @@ import type {
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
-import type { PaneWidths } from '../../persistence/preferences';
 import { Dialog } from '../../ui/Dialog';
 import { PaneResizer } from '../../ui/PaneResizer';
 import {
@@ -55,8 +54,8 @@ export interface HistoryViewProps {
   busy?: boolean;
   onError?: ShowWorkspaceError | undefined;
   onAction: (action: WorkspaceAction) => Promise<void>;
-  paneWidths: PaneWidths;
-  onPaneWidthsChange: (widths: PaneWidths) => void;
+  paneWidths: { left: number; right?: number };
+  onPaneWidthsChange: (widths: { left: number; right?: number }) => void;
 }
 
 const GRAPH_HEIGHT = 48;

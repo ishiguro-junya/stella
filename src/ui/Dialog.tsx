@@ -3,6 +3,7 @@ import { useEffect, useRef, type FormEventHandler, type ReactNode } from 'react'
 export interface DialogProps {
   labelledBy: string;
   describedBy?: string | undefined;
+  className?: string | undefined;
   onDismiss: () => void;
   children: ReactNode;
   onSubmit?: FormEventHandler<HTMLFormElement> | undefined;
@@ -35,6 +36,7 @@ function setDialogInteractive(element: HTMLElement, interactive: boolean): void 
 export function Dialog({
   labelledBy,
   describedBy,
+  className,
   onDismiss,
   children,
   onSubmit,
@@ -113,7 +115,7 @@ export function Dialog({
           ref={(node) => {
             dialogRef.current = node;
           }}
-          className={`confirmation-sheet${variant === 'switcher' ? ' switcher-sheet' : ''}`}
+          className={`confirmation-sheet${variant === 'switcher' ? ' switcher-sheet' : ''}${className ? ` ${className}` : ''}`}
           role={role}
           aria-modal="true"
           aria-labelledby={labelledBy}
@@ -128,7 +130,7 @@ export function Dialog({
           ref={(node) => {
             dialogRef.current = node;
           }}
-          className={`confirmation-sheet${variant === 'switcher' ? ' switcher-sheet' : ''}`}
+          className={`confirmation-sheet${variant === 'switcher' ? ' switcher-sheet' : ''}${className ? ` ${className}` : ''}`}
           role={role}
           aria-modal="true"
           aria-labelledby={labelledBy}
