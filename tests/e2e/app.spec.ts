@@ -281,13 +281,26 @@ describe('Stella app shell', () => {
     expect(await switcher.getText()).not.toMatch(/Open repositories|Recent|[⌘⇧]/u);
     await browser.keys(['Escape']);
 
-    await $('.branch-toggle').click();
+    const branchToggle = $('.branch-toggle');
+    await branchToggle.click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
     await expect(switcher.$('[role="option"][aria-current="true"]')).toHaveText(
       expect.stringContaining('main'),
     );
     await browser.keys(['Escape']);
+    expect(
+      await browser.execute(() => {
+        const toggle = document.querySelector<HTMLElement>('.branch-toggle');
+        if (!toggle) return undefined;
+        const style = getComputedStyle(toggle);
+        return {
+          focused: document.activeElement === toggle,
+          outlineWidth: style.outlineWidth,
+          outlineOffset: style.outlineOffset,
+        };
+      }),
+    ).toEqual({ focused: true, outlineWidth: '2px', outlineOffset: '-2px' });
 
     await run('/usr/bin/git', ['-C', repositoryPath, 'config', 'user.name', 'Stella E2E']);
     await run('/usr/bin/git', [
@@ -300,11 +313,21 @@ describe('Stella app shell', () => {
     await run('/usr/bin/git', ['-C', repositoryPath, 'config', 'commit.gpgsign', 'false']);
     await writeFile(join(repositoryPath, 'README.md'), '# Stella E2E\n', 'utf8');
 
+    await $('input[aria-label="Stage README.md"]').waitForClickable();
+    await $('button=History').click();
+    const uncommittedChanges = $('.history-working-tree-entry');
+    await expect(uncommittedChanges).toBeDisplayed();
+    await expect(uncommittedChanges).toHaveText(expect.stringContaining('Uncommitted changes'));
+    await expect(uncommittedChanges).toHaveText(expect.stringContaining('1 file'));
+    await expect($('.history-working-tree-graph')).toHaveAttribute(
+      'style',
+      expect.stringContaining('--history-lane-color: var(--text-muted)'),
+    );
+    await $('button=Changes').click();
     const stagedGroup = $('section[aria-labelledby="area-staged"]');
     const unstagedGroup = $('section[aria-labelledby="area-worktree"]');
     await expect(stagedGroup).toBeDisplayed();
     await expect(unstagedGroup).toBeDisplayed();
-
     const stage = $('input[aria-label="Stage README.md"]');
     await stage.waitForClickable();
     const changesPaneLayout = await browser.execute(() => {
@@ -432,9 +455,12 @@ describe('Stella app shell', () => {
       (await run('/usr/bin/git', ['-C', repositoryPath, 'diff', '--cached', '--name-only'])).stdout,
     ).toBe('README.md\n');
 
-    await commitTrigger.waitForClickable();
-    await commitTrigger.click();
-    await expect(commitTrigger).toHaveAttribute('aria-expanded', 'true');
+    const activeCommitTrigger = $(
+      '.changes-action-bar .changes-action-button[aria-label="Commit"]',
+    );
+    await activeCommitTrigger.waitForClickable();
+    await activeCommitTrigger.click();
+    await expect(activeCommitTrigger).toHaveAttribute('aria-expanded', 'true');
     const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
     await expect(commitDialog).toBeDisplayed();
     expect(
@@ -451,6 +477,30 @@ describe('Stella app shell', () => {
         );
       }),
     ).toBe(true);
+    const dialogHeightBeforeValidation = await browser.execute(
+      () =>
+        document.querySelector<HTMLElement>('[role="dialog"]')?.getBoundingClientRect().height ?? 0,
+    );
+    await commitDialog.$('[data-commit-field="type"]').setValue('Ss');
+    await expect(commitDialog.$('#commit-type-error')).toBeDisplayed();
+    const validationLayout = await browser.execute(() => {
+      const commitDialogElement = document.querySelector<HTMLElement>('[role="dialog"]');
+      const type = document.querySelector<HTMLElement>('[data-commit-field="type"]');
+      const scope = document.querySelector<HTMLElement>('[data-commit-field="scope"]');
+      if (!commitDialogElement || !type || !scope) return undefined;
+      return {
+        dialogHeight: commitDialogElement.getBoundingClientRect().height,
+        fieldsAligned: Math.abs(
+          type.getBoundingClientRect().top - scope.getBoundingClientRect().top,
+        ),
+      };
+    });
+    expect(
+      Math.abs((validationLayout?.dialogHeight ?? 0) - dialogHeightBeforeValidation),
+    ).toBeLessThanOrEqual(1);
+    expect(validationLayout?.fieldsAligned).toBeLessThanOrEqual(1);
+    await commitDialog.$('[data-commit-field="type"]').setValue('feat');
+    await expect(commitDialog.$('#commit-type-error')).not.toBeDisplayed();
     await setLogicalWindowSize(1180, 760);
     await commitDialog.$('[data-commit-field="description"]').setValue('E2Eリポジトリを初期化する');
     const commit = commitDialog.$('.commit-form button[type="submit"]');
@@ -523,19 +573,52 @@ describe('Stella app shell', () => {
         ),
       ),
     ).toEqual(['Commits', 'Contributors', 'Branches']);
+    expect(
+      await browser.execute(() => {
+        const metric = document.querySelector('select[aria-label="Activity metric"]');
+        const range = document.querySelector('select[aria-label="Activity range"]');
+        return Boolean(
+          metric &&
+          range &&
+          metric.compareDocumentPosition(range) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+      }),
+    ).toBe(true);
     const operationHeaders = $$('.activity-operation-table thead th');
     const operationHeaderTexts = await operationHeaders.map((header) => header.getText());
     expect(operationHeaderTexts).toEqual(['Status', 'Action', 'Summary', 'Timestamp', 'Duration']);
     await expect($('.activity-list')).toHaveText(expect.stringContaining('Commit'));
+    expect(
+      await browser.execute(() => {
+        const status = document.querySelector<HTMLElement>('.activity-list tbody td:first-child');
+        const details = document.querySelector<HTMLElement>('.activity-details');
+        return {
+          statusPaddingLeft: status ? Number.parseFloat(getComputedStyle(status).paddingLeft) : 0,
+          detailPaddingLeft: details ? Number.parseFloat(getComputedStyle(details).paddingLeft) : 0,
+        };
+      }),
+    ).toEqual({ statusPaddingLeft: 14, detailPaddingLeft: 18 });
     await browser.waitUntil(
-      async () => (await $('.activity-metrics').getText()).includes('1 commit'),
+      async () => (await $('.activity-chart-data').getText()).includes('1 commit'),
       {
         timeout: 10_000,
-        timeoutMsg: 'Commit activity metrics did not load.',
+        timeoutMsg: 'Commit activity data did not load.',
       },
     );
+    await expect($('.activity-metrics')).not.toExist();
     await expect($('.activity-analytics-summary')).not.toExist();
     await expect($('.activity-chart-data table')).toBeDisplayed();
+    expect(await $$('.activity-chart-data thead th').map((header) => header.getText())).toEqual([
+      'Period',
+      'Commits',
+      'Contributors',
+      'Branches',
+    ]);
+    const activityResizer = $('[role="separator"][aria-label="Operations width"]');
+    await expect(activityResizer).toHaveAttribute('aria-valuenow', '560');
+    await activityResizer.click();
+    await browser.keys(['ArrowLeft']);
+    await expect(activityResizer).toHaveAttribute('aria-valuenow', '552');
     expect(
       await browser.execute(() => {
         const container = document.querySelector<HTMLElement>('.activity-chart-data > div');
@@ -561,9 +644,7 @@ describe('Stella app shell', () => {
       });
     };
     await setActivityMetric('contributors');
-    await expect($('.activity-chart-data thead th:last-child')).toHaveText('Contributors');
     await setActivityMetric('branches');
-    await expect($('.activity-chart-data thead th:last-child')).toHaveText('Branches');
     await setActivityMetric('commits');
     await browser.execute(() => {
       const select = document.querySelector<HTMLSelectElement>(
@@ -579,7 +660,7 @@ describe('Stella app shell', () => {
       timeoutMsg: 'Activity range did not change to seven days.',
     });
     await browser.waitUntil(
-      async () => (await $('.activity-metrics').getText()).includes('1 commit'),
+      async () => (await $('.activity-chart-data').getText()).includes('1 commit'),
       {
         timeout: 10_000,
         timeoutMsg: 'Seven-day commit activity did not settle.',
@@ -595,6 +676,10 @@ describe('Stella app shell', () => {
     await activity.click();
     await expect($('#activity-title')).toHaveText('Activity');
     await expect(activity).toHaveAttribute('aria-current', 'page');
+    await expect($('[role="separator"][aria-label="Operations width"]')).toHaveAttribute(
+      'aria-valuenow',
+      '552',
+    );
 
     await browser.keys(['Escape']);
     await expect($('.activity-view')).toBeDisplayed();
@@ -609,11 +694,31 @@ describe('Stella app shell', () => {
         'button[aria-label="Changes"]',
       ),
     ).toBe(true);
+    const changesResizer = $('[role="separator"][aria-label="Changes list width"]');
+    await expect(changesResizer).toHaveAttribute('aria-valuenow', '244');
+    await changesResizer.click();
+    await browser.keys(['ArrowRight']);
+    await expect(changesResizer).toHaveAttribute('aria-valuenow', '252');
 
     await $('button=History').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="History"]')).toHaveAttribute('aria-current', 'page');
     await expect($('.repository-view-tabs')).not.toExist();
+    const historyResizer = $('[role="separator"][aria-label="History list width"]');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
+    await historyResizer.click();
+    await browser.keys(['ArrowLeft']);
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '236');
+    await activity.click();
+    await expect($('[role="separator"][aria-label="Operations width"]')).toHaveAttribute(
+      'aria-valuenow',
+      '552',
+    );
+    await $('button=History').click();
+    await expect($('[role="separator"][aria-label="History list width"]')).toHaveAttribute(
+      'aria-valuenow',
+      '236',
+    );
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: E2Eリポジトリを初期化する'),
     );
