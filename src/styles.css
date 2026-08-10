@@ -736,81 +736,43 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   min-height: 0;
   overflow: hidden;
 }
-.changes-commit-section {
+.changes-action-section {
+  container: changes-actions / inline-size;
   display: flex;
   flex: 0 0 auto;
-  max-height: min(50%, 430px);
   flex-direction: column;
-  overflow: hidden;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-inspector);
 }
-.commit-disclosure-header {
-  display: block;
-}
-.commit-disclosure-heading {
-  min-width: 0;
-  margin: 0;
-  font-size: inherit;
-}
-.remote-action-bar {
+.changes-action-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border-subtle);
 }
-.remote-action-button {
+.changes-action-button {
   width: 100%;
   min-height: 30px;
+  gap: 6px;
   padding: 4px 6px;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
-.remote-action-button > .lucide {
+.changes-action-button > .lucide {
   width: 13px;
   height: 13px;
 }
-.commit-disclosure-toggle {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  flex: none;
-  width: 100%;
-  min-height: 38px;
-  gap: 7px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  text-align: left;
+@container changes-actions (max-width: 319px) {
+  .changes-action-button {
+    padding-inline: 4px;
+  }
+  .changes-action-button > span {
+    display: none;
+  }
 }
-.commit-disclosure-toggle > span {
-  font-size: 12px;
-  font-weight: 650;
-}
-.commit-disclosure-chevron {
-  transition: transform 120ms ease;
-}
-.commit-disclosure-toggle[aria-expanded='true'] .commit-disclosure-chevron {
-  transform: rotate(90deg);
-}
-.commit-disclosure-content {
-  min-height: 0;
-  overflow: auto;
-  border-top: 1px solid var(--border-subtle);
-}
-.commit-disclosure-content[hidden] {
-  display: none;
-}
-.changes-commit-section .commit-form {
-  min-height: 0;
-}
-.commit-pane,
-.history-actions {
+.commit-pane {
   background: var(--surface-inspector);
 }
 .conflict-pane-span {
@@ -1389,6 +1351,25 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   border-top: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--surface-inspector) 92%, transparent);
   backdrop-filter: blur(16px);
+}
+.commit-disabled-reason {
+  display: block;
+  margin: 0 12px;
+  padding: 8px 9px;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.confirmation-sheet > .commit-form {
+  min-height: 0;
+}
+.confirmation-sheet > .commit-form .commit-submit {
+  position: static;
+  margin: 4px 0 0;
+  padding: 12px 0 0;
+  background: transparent;
+  backdrop-filter: none;
 }
 .remote-action-hint {
   margin: 0;

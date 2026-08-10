@@ -25,6 +25,8 @@ export interface CommitFormProps {
   showHeading?: boolean;
   labelledBy?: string | undefined;
   onAttentionRequired?: (() => void) | undefined;
+  onCancel?: (() => void) | undefined;
+  onCommitted?: (() => void) | undefined;
   onError?: ShowWorkspaceError | undefined;
   onCommit: (input: ConventionalCommitInput) => Promise<void>;
 }
@@ -68,6 +70,8 @@ export function CommitForm({
   showHeading = true,
   labelledBy,
   onAttentionRequired,
+  onCancel,
+  onCommitted,
   onError,
   onCommit,
 }: CommitFormProps) {
@@ -138,9 +142,16 @@ export function CommitForm({
         ...(input.scope?.trim() ? { scope: input.scope.trim() } : {}),
       };
       await onCommit(normalized);
+      if (draftKey) {
+        updatePreferences((current) => ({
+          ...current,
+          commitDrafts: { ...current.commitDrafts, [draftKey]: { ...EMPTY_INPUT } },
+        }));
+      }
       setInput({ ...EMPTY_INPUT });
       setSubmitted(false);
       setTouched({});
+      onCommitted?.();
     } catch (cause) {
       onAttentionRequired?.();
       if (isWorkspaceErrorHandled(cause)) return;
@@ -172,6 +183,7 @@ export function CommitForm({
         <span>{t('description')}</span>
         <input
           data-commit-field="description"
+          data-dialog-initial-focus
           autoComplete="off"
           value={input.description}
           aria-invalid={showsError('description')}
@@ -243,15 +255,20 @@ export function CommitForm({
         </div>
       ) : null}
       {disabled && disabledReason ? (
-        <span id="commit-disabled-reason" hidden>
+        <output id="commit-disabled-reason" className="commit-disabled-reason">
           {disabledReason}
-        </span>
+        </output>
       ) : null}
 
-      <div className="commit-submit">
+      <div className="commit-submit button-row end">
+        {onCancel ? (
+          <button type="button" disabled={busy} onClick={onCancel}>
+            {t('cancel')}
+          </button>
+        ) : null}
         <button
           type="submit"
-          className="primary full"
+          className={`primary${onCancel ? '' : ' full'}`}
           title={disabledReason}
           aria-describedby={disabled && disabledReason ? 'commit-disabled-reason' : undefined}
           disabled={disabled || busy}

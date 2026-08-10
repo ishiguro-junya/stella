@@ -143,12 +143,12 @@ function changeRow(name: RegExp): HTMLButtonElement {
 }
 
 async function openCommit(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-  const visibleToggle = screen.queryByRole('button', { name: 'Hide Commit' });
-  if (visibleToggle) return visibleToggle;
-  const toggle = screen.getByRole('button', { name: 'Show Commit' });
-  await user.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  return toggle;
+  const actions = screen.getByRole('group', { name: 'Actions' });
+  const trigger = within(actions).getByRole('button', { name: 'Commit' });
+  await user.click(trigger);
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('dialog', { name: 'Commit' })).toBeVisible();
+  return trigger;
 }
 
 describe('ChangesView diff lifecycle', () => {
@@ -182,7 +182,7 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('keeps the closed Commit form fixed above the changed file groups', async () => {
+  it('keeps the action bar above changed files and opens Commit as a dialog', async () => {
     const user = userEvent.setup();
     render(
       <ChangesView
@@ -196,22 +196,21 @@ describe('ChangesView diff lifecycle', () => {
 
     const sidebar = screen.getByRole('complementary', { name: 'Changes' });
     const changedFiles = within(sidebar).getByRole('region', { name: 'Changed files' });
-    const commit = within(sidebar).getByRole('region', { name: 'Commit' });
-    expect(sidebar.firstElementChild).toBe(commit);
-    expect(commit.nextElementSibling).toBe(changedFiles);
+    const actions = within(sidebar).getByRole('group', { name: 'Actions' });
+    const actionSection = actions.closest('.changes-action-section');
+    expect(sidebar.firstElementChild).toBe(actionSection);
+    expect(actionSection?.nextElementSibling).toBe(changedFiles);
     expect(within(sidebar).queryByRole('tablist')).not.toBeInTheDocument();
     expect(changedFiles).toBeVisible();
-    const toggle = within(commit).getByRole('button', { name: 'Show Commit' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(within(commit).getAllByRole('heading', { name: 'Commit' })).toHaveLength(1);
-    expect(toggle.querySelector('.lucide-chevron-right')).toBeInTheDocument();
+    const trigger = within(actions).getByRole('button', { name: 'Commit' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
 
-    await user.click(toggle);
-    expect(toggle).toHaveAccessibleName('Hide Commit');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(within(commit).getAllByRole('heading', { name: 'Commit' })).toHaveLength(1);
-    expect(within(commit).getByRole('textbox', { name: 'Description' })).toBeVisible();
-    expect(within(commit).getByRole('group', { name: 'Remote actions' })).toBeVisible();
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Commit' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(within(dialog).getByRole('textbox', { name: 'Description' })).toHaveFocus();
+    expect(within(dialog).getByText('Stage changes to commit.')).toBeVisible();
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toBeVisible();
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
@@ -223,6 +222,11 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.queryByText('No selection')).not.toBeInTheDocument();
     expect(screen.queryByText('Select a change')).not.toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Diff' })).toBeVisible();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
   });
 
   it('keeps the left pane resizable without changing the persisted History inspector width', async () => {
@@ -531,7 +535,7 @@ describe('ChangesView diff lifecycle', () => {
     );
   });
 
-  it('keeps labeled remote actions above Commit with Fetch last', () => {
+  it('keeps Commit left of Pull in the labeled action bar with Fetch last', () => {
     render(
       <ChangesView
         repo={repoSnapshot({ branch: { name: 'main', detached: false, ahead: 0, behind: 0 } })}
@@ -542,32 +546,28 @@ describe('ChangesView diff lifecycle', () => {
       />,
     );
 
-    const remoteActions = screen.getByRole('group', { name: 'Remote actions' });
+    const actions = screen.getByRole('group', { name: 'Actions' });
     expect(
-      within(remoteActions)
+      within(actions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Pull', 'Push', 'Fetch']);
+    ).toEqual(['Commit', 'Pull', 'Push', 'Fetch']);
     const pull = screen.getByRole('button', { name: 'Pull' });
     expect(pull).toBeDisabled();
-    expect(pull).toHaveClass('remote-action-button');
+    expect(pull).toHaveClass('changes-action-button');
     expect(pull).toHaveAttribute('title', 'Pull');
     expect(pull).toHaveTextContent('Pull');
     expect(pull).toHaveAccessibleDescription('Set an upstream branch before pulling.');
     expect(screen.getByText('Set an upstream branch before pulling.')).toHaveClass('sr-only');
-    const commitHeader = screen
-      .getByRole('heading', { name: 'Commit' })
-      .closest('.commit-disclosure-header');
-    expect(remoteActions.nextElementSibling).toBe(commitHeader);
-    for (const label of ['Push', 'Fetch']) {
-      const action = screen.getByRole('button', { name: label });
-      expect(action).toHaveClass('remote-action-button');
+    for (const label of ['Commit', 'Push', 'Fetch']) {
+      const action = within(actions).getByRole('button', { name: label });
+      expect(action).toHaveClass('changes-action-button');
       expect(action).toHaveAttribute('title', label);
       expect(action).toHaveTextContent(label);
     }
   });
 
-  it('reopens Commit when a submission that was hidden finishes with an error', async () => {
+  it('keeps Commit open with its draft when submission fails', async () => {
     const user = userEvent.setup();
     let rejectCommit: ((cause: unknown) => void) | undefined;
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async (action) => {
@@ -589,19 +589,59 @@ describe('ChangesView diff lifecycle', () => {
     );
 
     await openCommit(user);
-    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'handle commit errors');
-    await user.click(screen.getByRole('button', { name: 'Commit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Commit' });
+    const description = within(dialog).getByRole('textbox', { name: 'Description' });
+    await user.type(description, 'handle commit errors');
+    await user.click(within(dialog).getByRole('button', { name: 'Commit' }));
     await waitFor(() => expect(rejectCommit).toBeDefined());
-    await user.click(screen.getByRole('button', { name: 'Hide Commit' }));
-    expect(screen.queryByRole('textbox', { name: 'Description' })).not.toBeInTheDocument();
 
     act(() => rejectCommit?.(new Error('Commit hook failed.')));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Commit hook failed.');
-    expect(screen.getByRole('button', { name: 'Hide Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    expect(screen.getByRole('dialog', { name: 'Commit' })).toBeVisible();
+    expect(description).toHaveValue('handle commit errors');
+  });
+
+  it('preserves a cancelled draft and closes with a cleared draft after success', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          path: '/tmp/dialog-draft',
+          changes: [{ path: 'src/app.ts', area: 'staged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
     );
+
+    const trigger = await openCommit(user);
+    await user.type(screen.getByRole('textbox', { name: 'Description' }), 'preserve this draft');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+
+    await openCommit(user);
+    const dialog = screen.getByRole('dialog', { name: 'Commit' });
+    expect(within(dialog).getByRole('textbox', { name: 'Description' })).toHaveValue(
+      'preserve this draft',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Commit' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Commit' })).toBeNull());
+    expect(onAction).toHaveBeenCalledWith({
+      kind: 'commit',
+      input: {
+        type: 'feat',
+        breaking: false,
+        description: 'preserve this draft',
+      },
+    });
+
+    await openCommit(user);
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
   });
 
   it('disables file, line, and remote mutations while a Git operation is in progress', async () => {
@@ -686,9 +726,11 @@ describe('ChangesView diff lifecycle', () => {
     );
 
     await openCommit(user);
-    const commit = screen.getByRole('button', { name: 'Commit' });
+    const dialog = screen.getByRole('dialog', { name: 'Commit' });
+    const commit = within(dialog).getByRole('button', { name: 'Commit' });
     expect(commit).toBeDisabled();
     expect(commit).toHaveAccessibleDescription('Resolve all conflicts before committing.');
+    expect(within(dialog).getByText('Resolve all conflicts before committing.')).toBeVisible();
   });
 
   it('keeps the diverged Pull choice visible across the Fetch generation refresh', async () => {
@@ -715,16 +757,14 @@ describe('ChangesView diff lifecycle', () => {
     } as const;
     const { rerender } = render(<ChangesView repo={repo} {...props} />);
 
-    expect(screen.getByRole('button', { name: 'Show Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    const commit = within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
+      name: 'Commit',
+    });
+    expect(commit).toHaveAttribute('aria-expanded', 'false');
     await user.click(screen.getByRole('button', { name: 'Pull' }));
     expect(await screen.findByText('Fast-forward unavailable')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Hide Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(commit).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
     rerender(<ChangesView repo={{ ...repo, generation: 2 }} {...props} />);
     expect(screen.getByText('Fast-forward unavailable')).toBeVisible();
 

@@ -1,6 +1,6 @@
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
-  ChevronRight,
   Columns2,
   Download,
   GitCommitHorizontal,
@@ -50,8 +50,6 @@ export interface ChangesViewProps {
   onAction: (action: WorkspaceAction) => Promise<void>;
   onConflictDirtyChange?: ((dirty: boolean) => void) | undefined;
   onConflictLeaveHandleChange?: ((handle: ConflictLeaveHandle | null) => void) | undefined;
-  commitOpen?: boolean | undefined;
-  onCommitOpenChange?: ((open: boolean) => void) | undefined;
   paneWidths: PaneWidths;
   onPaneWidthsChange: (widths: PaneWidths) => void;
 }
@@ -93,8 +91,6 @@ export function ChangesView({
   onAction,
   onConflictDirtyChange,
   onConflictLeaveHandleChange,
-  commitOpen: controlledCommitOpen,
-  onCommitOpenChange,
   paneWidths,
   onPaneWidthsChange,
 }: ChangesViewProps) {
@@ -111,7 +107,7 @@ export function ChangesView({
   const [pullDiverged, setPullDiverged] = useState(false);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>('unified');
   const [conflictDirty, setConflictDirty] = useState(false);
-  const [localCommitOpen, setLocalCommitOpen] = useState(false);
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [pendingSelectedKey, setPendingSelectedKey] = useState<string>();
   const [fileActionNotice, setFileActionNotice] = useState<
     { level: 'info' | 'error'; message: LocalizedMessage } | undefined
@@ -175,13 +171,6 @@ export function ChangesView({
     !diffContainsMultipleFiles &&
     !repositoryActionsDisabled,
   );
-  const commitOpen = controlledCommitOpen ?? localCommitOpen;
-
-  const setCommitOpen = (open: boolean): void => {
-    if (controlledCommitOpen === undefined) setLocalCommitOpen(open);
-    onCommitOpenChange?.(open);
-  };
-
   const reportRuntimeError = useCallback(
     (title: string, cause: unknown, fallback: string): void => {
       if (isWorkspaceErrorHandled(cause)) return;
@@ -513,7 +502,6 @@ export function ChangesView({
     } catch (cause) {
       if (isPullDivergenceError(cause)) {
         setPullDiverged(true);
-        setCommitOpen(true);
       }
     }
   };
@@ -527,133 +515,106 @@ export function ChangesView({
     setPullDiverged(false);
   };
 
-  const commitContentId = 'changes-commit-content';
-  const commitHeadingId = 'changes-commit-heading';
-  const remoteActions = (
-    <fieldset className="remote-action-bar" aria-label={t('remoteActions')}>
-      <button
-        type="button"
-        className="remote-action-button quiet"
-        aria-label={t('pull')}
-        title={t('pull')}
-        disabled={repositoryActionsDisabled || repo.branch.detached || !repo.branch.upstream}
-        aria-describedby={
-          operationActionDisabledReason
-            ? 'changes-operation-action-reason'
-            : !repo.branch.detached && !repo.branch.upstream
-              ? 'pull-disabled-reason'
-              : undefined
-        }
-        onClick={() => void pull()}
-      >
-        <Download aria-hidden="true" focusable="false" size={14} />
-        <span>{t('pull')}</span>
-      </button>
-      <button
-        type="button"
-        className="remote-action-button quiet"
-        aria-label={t('push')}
-        title={t('push')}
-        disabled={repositoryActionsDisabled || repo.branch.detached}
-        aria-describedby={
-          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-        }
-        onClick={() => settleAction(onAction({ kind: 'push' }))}
-      >
-        <Upload aria-hidden="true" focusable="false" size={14} />
-        <span>{t('push')}</span>
-      </button>
-      <button
-        type="button"
-        className="remote-action-button quiet"
-        aria-label={t('fetch')}
-        title={t('fetch')}
-        disabled={repositoryActionsDisabled}
-        aria-describedby={
-          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-        }
-        onClick={() => settleAction(onAction({ kind: 'fetch' }))}
-      >
-        <RefreshCw aria-hidden="true" focusable="false" size={14} />
-        <span>{t('fetch')}</span>
-      </button>
-    </fieldset>
-  );
-  const commitSection = effectiveConflict ? null : (
-    <section className="changes-commit-section" aria-labelledby={commitHeadingId}>
+  const repositoryActions = (
+    <section className="changes-action-section">
       {!repo.branch.detached && !repo.branch.upstream ? (
         <p id="pull-disabled-reason" className="sr-only">
           {t('setUpstreamBeforePull')}
         </p>
       ) : null}
-      {remoteActions}
-      <div className="commit-disclosure-header">
-        <h2 id={commitHeadingId} className="commit-disclosure-heading" aria-label={t('commit')}>
-          <button
-            type="button"
-            className="commit-disclosure-toggle"
-            aria-label={t(commitOpen ? 'hideCommit' : 'showCommit')}
-            aria-expanded={commitOpen}
-            aria-controls={commitContentId}
-            onClick={() => setCommitOpen(!commitOpen)}
-          >
-            <GitCommitHorizontal aria-hidden="true" focusable="false" />
-            <span>{t('commit')}</span>
-            <ChevronRight
-              className="commit-disclosure-chevron"
-              aria-hidden="true"
-              focusable="false"
-            />
-          </button>
-        </h2>
-      </div>
-      <div id={commitContentId} className="commit-disclosure-content" hidden={!commitOpen}>
-        {pullDiverged && pullTarget ? (
-          <section
-            className="inline-alert warning pull-resolution"
-            aria-labelledby="pull-resolution-title"
-          >
-            <div>
-              <strong id="pull-resolution-title">{t('fastForwardUnavailable')}</strong>
-              <p>{t('fetchCompleteResolve', { target: pullTarget })}</p>
-            </div>
-            <div className="button-row">
-              <button
-                type="button"
-                disabled={repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-                }
-                onClick={() => settleAction(resolveDivergedPull('merge'))}
-              >
-                {t('merge')}
-              </button>
-              <button
-                type="button"
-                disabled={repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-                }
-                onClick={() => settleAction(resolveDivergedPull('rebase'))}
-              >
-                {t('rebase')}
-              </button>
-            </div>
-          </section>
-        ) : null}
-        <CommitForm
-          key={repo.path}
-          draftKey={repo.path}
-          disabled={Boolean(disabledCommitReason)}
-          disabledReason={disabledCommitReason}
-          busy={busy}
-          showHeading={false}
-          labelledBy={commitHeadingId}
-          onAttentionRequired={() => setCommitOpen(true)}
-          onError={reportRuntimeError}
-          onCommit={(input) => onAction({ kind: 'commit', input })}
-        />
-      </div>
+      <fieldset className="changes-action-bar" aria-label={t('actions')}>
+        <button
+          type="button"
+          className="changes-action-button quiet"
+          aria-label={t('commit')}
+          aria-haspopup="dialog"
+          aria-expanded={commitDialogOpen}
+          title={t('commit')}
+          onClick={() => setCommitDialogOpen(true)}
+        >
+          <GitCommitHorizontal aria-hidden="true" focusable="false" size={14} />
+          <span>{t('commit')}</span>
+        </button>
+        <button
+          type="button"
+          className="changes-action-button quiet"
+          aria-label={t('pull')}
+          title={t('pull')}
+          disabled={repositoryActionsDisabled || repo.branch.detached || !repo.branch.upstream}
+          aria-describedby={
+            operationActionDisabledReason
+              ? 'changes-operation-action-reason'
+              : !repo.branch.detached && !repo.branch.upstream
+                ? 'pull-disabled-reason'
+                : undefined
+          }
+          onClick={() => void pull()}
+        >
+          <Download aria-hidden="true" focusable="false" size={14} />
+          <span>{t('pull')}</span>
+        </button>
+        <button
+          type="button"
+          className="changes-action-button quiet"
+          aria-label={t('push')}
+          title={t('push')}
+          disabled={repositoryActionsDisabled || repo.branch.detached}
+          aria-describedby={
+            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          }
+          onClick={() => settleAction(onAction({ kind: 'push' }))}
+        >
+          <Upload aria-hidden="true" focusable="false" size={14} />
+          <span>{t('push')}</span>
+        </button>
+        <button
+          type="button"
+          className="changes-action-button quiet"
+          aria-label={t('fetch')}
+          title={t('fetch')}
+          disabled={repositoryActionsDisabled}
+          aria-describedby={
+            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          }
+          onClick={() => settleAction(onAction({ kind: 'fetch' }))}
+        >
+          <RefreshCw aria-hidden="true" focusable="false" size={14} />
+          <span>{t('fetch')}</span>
+        </button>
+      </fieldset>
+      {pullDiverged && pullTarget ? (
+        <section
+          className="inline-alert warning pull-resolution"
+          aria-labelledby="pull-resolution-title"
+        >
+          <div>
+            <strong id="pull-resolution-title">{t('fastForwardUnavailable')}</strong>
+            <p>{t('fetchCompleteResolve', { target: pullTarget })}</p>
+          </div>
+          <div className="button-row">
+            <button
+              type="button"
+              disabled={repositoryActionsDisabled}
+              aria-describedby={
+                operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+              }
+              onClick={() => settleAction(resolveDivergedPull('merge'))}
+            >
+              {t('merge')}
+            </button>
+            <button
+              type="button"
+              disabled={repositoryActionsDisabled}
+              aria-describedby={
+                operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+              }
+              onClick={() => settleAction(resolveDivergedPull('rebase'))}
+            >
+              {t('rebase')}
+            </button>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 
@@ -665,7 +626,7 @@ export function ChangesView({
   return (
     <div className="three-pane changes-view changes-two-pane" style={paneStyle}>
       <aside className="pane changes-list-pane changes-sidebar-pane" aria-label={t('changes')}>
-        {commitSection}
+        {repositoryActions}
         <section className="changes-files-scroll-region" aria-label={t('changedFiles')}>
           {fileActionNotice ? (
             <p
@@ -848,6 +809,30 @@ export function ChangesView({
           ) : null}
         </main>
       )}
+      {commitDialogOpen ? (
+        <Dialog
+          labelledBy="commit-dialog-title"
+          onDismiss={() => {
+            if (!busy) setCommitDialogOpen(false);
+          }}
+          role="dialog"
+        >
+          <h2 id="commit-dialog-title">{t('commit')}</h2>
+          <CommitForm
+            key={repo.path}
+            draftKey={repo.path}
+            disabled={Boolean(disabledCommitReason)}
+            disabledReason={disabledCommitReason}
+            busy={busy}
+            showHeading={false}
+            labelledBy="commit-dialog-title"
+            onCancel={() => setCommitDialogOpen(false)}
+            onCommitted={() => setCommitDialogOpen(false)}
+            onError={reportRuntimeError}
+            onCommit={(input) => onAction({ kind: 'commit', input })}
+          />
+        </Dialog>
+      ) : null}
       {pendingSelectedKey ? (
         <Dialog
           labelledBy="leave-conflict-file-title"

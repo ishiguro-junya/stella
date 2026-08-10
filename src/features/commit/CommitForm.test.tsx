@@ -180,7 +180,7 @@ describe('CommitForm validation', () => {
     });
   });
 
-  it('exposes a disabled reason without adding persistent visible help', () => {
+  it('shows and exposes a disabled reason', () => {
     render(
       <CommitForm
         disabled
@@ -192,6 +192,23 @@ describe('CommitForm validation', () => {
     const commit = screen.getByRole('button', { name: 'Commit' });
     expect(commit).toBeDisabled();
     expect(commit).toHaveAccessibleDescription('Stage changes before committing.');
-    expect(screen.getByText('Stage changes before committing.')).not.toBeVisible();
+    expect(screen.getByText('Stage changes before committing.')).toBeVisible();
+  });
+
+  it('renders Cancel without submitting and reports successful completion', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn<() => void>();
+    const onCommitted = vi.fn<() => void>();
+    const onCommit = vi.fn<() => Promise<void>>(async () => undefined);
+    render(<CommitForm onCancel={onCancel} onCommitted={onCommitted} onCommit={onCommit} />);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onCommit).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText('Description'), 'finish dialog commit');
+    await user.click(screen.getByRole('button', { name: 'Commit' }));
+    expect(onCommit).toHaveBeenCalledOnce();
+    expect(onCommitted).toHaveBeenCalledOnce();
   });
 });

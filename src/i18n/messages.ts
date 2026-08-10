@@ -148,9 +148,6 @@ export const MESSAGES = {
     en: 'Could not copy the file path.',
     ja: 'ファイルパスをコピーできませんでした。',
   },
-  remoteActions: { en: 'Remote actions', ja: 'リモート操作' },
-  hideCommit: { en: 'Hide Commit', ja: 'Commitを閉じる' },
-  showCommit: { en: 'Show Commit', ja: 'Commitを開く' },
   setUpstreamBeforePull: {
     en: 'Set an upstream branch before pulling.',
     ja: 'Pullする前にupstream Branchを設定してください。',

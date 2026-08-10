@@ -1192,27 +1192,35 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await user.type(screen.getByRole('textbox', { name: 'Repository URL or path' }), '/tmp/first');
     await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(await screen.findByRole('button', { name: 'Show Commit' }));
+    await user.click(
+      within(await screen.findByRole('group', { name: 'Actions' })).getByRole('button', {
+        name: 'Commit',
+      }),
+    );
     const description = await screen.findByRole('textbox', { name: 'Description' });
     await user.type(description, 'first draft');
     await selectRepository(user, 'second');
-    expect(screen.getByRole('button', { name: 'Show Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
+        name: 'Commit',
+      }),
     );
-    expect(screen.queryByRole('textbox', { name: 'Description' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Show Commit' }));
     expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
     await selectRepository(user, 'first');
-    expect(screen.getByRole('button', { name: 'Hide Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
+        name: 'Commit',
+      }),
     );
     expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('first draft');
     await selectRepository(user, 'second');
-    expect(screen.getByRole('button', { name: 'Hide Commit' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByRole('group', { name: 'Actions' })).getByRole('button', {
+        name: 'Commit',
+      }),
     );
     expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('');
   });
@@ -1469,7 +1477,6 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await user.type(screen.getByRole('textbox', { name: 'Repository URL or path' }), repo.path);
     await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(await screen.findByRole('button', { name: 'Show Commit' }));
     await user.click(screen.getByRole('button', { name: 'Pull' }));
     await waitFor(() => expect(execute).toHaveBeenCalledOnce());
     await waitFor(() =>

@@ -261,7 +261,6 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation>();
   const [pendingOperationAction, setPendingOperationAction] = useState<GuardedOperationAction>();
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
-  const [commitOpenByRepo, setCommitOpenByRepo] = useState<Record<string, boolean>>({});
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
@@ -1053,14 +1052,6 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                       onConflictLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
-                      commitOpen={commitOpenByRepo[repo.repoId] ?? false}
-                      onCommitOpenChange={(open) =>
-                        setCommitOpenByRepo((current) =>
-                          current[repo.repoId] === open
-                            ? current
-                            : { ...current, [repo.repoId]: open },
-                        )
-                      }
                       paneWidths={paneWidths}
                       onPaneWidthsChange={setPaneWidths}
                     />
