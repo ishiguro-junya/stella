@@ -7,6 +7,23 @@
   "globs": ["**/*.md"],
   "gitignore": true,
   "ignores": ["coverage/**", "dist/**", "node_modules/**", "src-tauri/target/**", "target/**"],
+  "overrides": [
+    {
+      "filter": ["CONTRIBUTING.md"],
+      "config": {
+        "MD041": false,
+        "paragraph-line-end-spaces": false,
+      },
+      "combine": "merge",
+    },
+    {
+      "filter": ["README.md"],
+      "config": {
+        "paragraph-line-end-spaces": false,
+      },
+      "combine": "merge",
+    },
+  ],
   "config": {
     "default": true,
     "MD009": {

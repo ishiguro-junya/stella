@@ -11,6 +11,7 @@ const SETTINGS_MENU_ID: &str = "stella-settings";
 const SETTINGS_MENU_ACCELERATOR: &str = "Cmd+,";
 const SETTINGS_EVENT_TARGET: &str = "main";
 const OPEN_SETTINGS_EVENT: &str = "stella://open-settings";
+const LICENSE_NAME: &str = "Sustainable Use License 1.0";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -110,6 +111,7 @@ fn about_metadata(name: &str, version: &str, copyright: Option<&str>) -> AboutMe
         name: Some(name.to_owned()),
         short_version: Some(version.to_owned()),
         copyright: copyright.map(str::to_owned),
+        credits: Some(LICENSE_NAME.to_owned()),
         ..Default::default()
     }
 }
@@ -269,11 +271,13 @@ mod tests {
     }
 
     #[test]
-    fn about_metadata_includes_the_app_name_and_version() {
-        let metadata = about_metadata("Stella", "1.2.3-alpha.4", None);
+    fn about_metadata_includes_the_app_name_version_and_license() {
+        let metadata = about_metadata("Stella", "1.2.3-alpha.4", Some("© Junya Ishiguro"));
 
         assert_eq!(metadata.name.as_deref(), Some("Stella"));
         assert_eq!(metadata.version, None);
         assert_eq!(metadata.short_version.as_deref(), Some("1.2.3-alpha.4"));
+        assert_eq!(metadata.copyright.as_deref(), Some("© Junya Ishiguro"));
+        assert_eq!(metadata.credits.as_deref(), Some(LICENSE_NAME));
     }
 }

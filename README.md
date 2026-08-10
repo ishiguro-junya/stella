@@ -66,3 +66,7 @@ mise run dev
 - App Sandbox、Developer ID署名、公証、自動更新、Mac App Store配布を扱っていません。
 - GitHub/GitLab固有連携、認証管理、stash、tag、remote管理、interactive rebase、force push、submodule、LFS、worktree管理は対象外です。
 - GUIアプリはshellの初期化ファイルから`PATH`を継承しないため、Git backendは`/usr/bin/git`を利用します。
+
+## ライセンス
+
+[Sustainable Use License 1.0](LICENSE)
