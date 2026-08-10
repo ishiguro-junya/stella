@@ -265,5 +265,14 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
 - 修正: graph座標系を均一なscaleで維持し、固定view boxの外までedge pathを伸ばしてlineの連続性を保ちました。  
   以前の外側spacingは、角の丸くない全幅の行の内側へ移しました。
 - 修正後の資料: sampleしたnodeはすべて8 x 8 CSS pixelで、選択行とhover行はいずれも365 pixel幅、listも365 pixel幅、radiusは0 pixelです。
+- 2回目の検出事項: branchをまたぐ斜線が直線で折れ、ref表示によって行高が変わると上下の接続が不自然に見えていました。
+- 修正: edgeを各行の上端から下端まで描く3次Bezier曲線へ変更し、行のpaddingを含めて隣接行と接続しました。  
+  親子接続の上半分と下半分には同じaccent colorを使い、1本の線として連続させます。  
+  Commit nodeは伸縮するSVGの外へ分離し、可変行高でも10 x 10 CSS pixelの円を維持します。
+- ref表示: Historyは全refを常時表示し、表示切替は設けません。  
+  Tag、local branch、remote branchを個別のchipとして表示し、Tagを専用iconとcolorで区別します。
+- toolbarと日時: 操作buttonは現在のbranch名と同じtoolbarの右端に配置します。  
+  各Commitは日付に加えて時刻も表示します。
+- 自動検証: Historyの全ref、Tag表示、曲線pathを含むfrontend test、typecheck、lint、frontend 283件、Rust 142件のtestが合格しています。
 
 最終結果: 合格  
