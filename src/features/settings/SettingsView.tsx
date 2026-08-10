@@ -50,6 +50,32 @@ export function SettingsView({
       </h1>
       <div className="settings-content">
         <div className="settings-panel">
+          <section className="settings-row" aria-labelledby="language-title">
+            <div className="settings-row-copy">
+              <h2 id="language-title">{t('languageTitle')}</h2>
+              <p id="language-description">{t('languageDescription')}</p>
+            </div>
+            <fieldset
+              className="settings-segmented settings-language-options"
+              aria-describedby="language-description"
+            >
+              <legend className="sr-only">{t('languageTitle')}</legend>
+              {(['ja', 'en'] as const).map((option) => (
+                <label key={option} className="settings-segmented-option">
+                  <input
+                    type="radio"
+                    name="language"
+                    value={option}
+                    checked={language === option}
+                    onChange={() => onLanguageChange(option)}
+                    onKeyDown={handleSegmentedKeyDown}
+                  />
+                  <span>{t(option === 'ja' ? 'languageJapanese' : 'languageEnglish')}</span>
+                </label>
+              ))}
+            </fieldset>
+          </section>
+
           <section className="settings-row" aria-labelledby="appearance-title">
             <div className="settings-row-copy">
               <h2 id="appearance-title">{t('appearanceTitle')}</h2>
@@ -85,32 +111,6 @@ export function SettingsView({
                   </label>
                 );
               })}
-            </fieldset>
-          </section>
-
-          <section className="settings-row" aria-labelledby="language-title">
-            <div className="settings-row-copy">
-              <h2 id="language-title">{t('languageTitle')}</h2>
-              <p id="language-description">{t('languageDescription')}</p>
-            </div>
-            <fieldset
-              className="settings-segmented settings-language-options"
-              aria-describedby="language-description"
-            >
-              <legend className="sr-only">{t('languageTitle')}</legend>
-              {(['ja', 'en'] as const).map((option) => (
-                <label key={option} className="settings-segmented-option">
-                  <input
-                    type="radio"
-                    name="language"
-                    value={option}
-                    checked={language === option}
-                    onChange={() => onLanguageChange(option)}
-                    onKeyDown={handleSegmentedKeyDown}
-                  />
-                  <span>{t(option === 'ja' ? 'languageJapanese' : 'languageEnglish')}</span>
-                </label>
-              ))}
             </fieldset>
           </section>
         </div>

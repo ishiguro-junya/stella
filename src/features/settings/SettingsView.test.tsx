@@ -20,6 +20,9 @@ describe('SettingsView', () => {
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toHaveClass('sr-only');
     expect(
+      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(['Language', 'Appearance']);
+    expect(
       within(screen.getByRole('group', { name: 'Appearance' })).getAllByRole('radio'),
     ).toHaveLength(3);
     expect(
