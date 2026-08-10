@@ -108,7 +108,7 @@ fn labels(language: AppLanguage) -> &'static MenuLabels {
 fn about_metadata(name: &str, version: &str, copyright: Option<&str>) -> AboutMetadata<'static> {
     AboutMetadata {
         name: Some(name.to_owned()),
-        version: Some(version.to_owned()),
+        short_version: Some(version.to_owned()),
         copyright: copyright.map(str::to_owned),
         ..Default::default()
     }
@@ -273,7 +273,7 @@ mod tests {
         let metadata = about_metadata("Stella", "1.2.3-alpha.4", None);
 
         assert_eq!(metadata.name.as_deref(), Some("Stella"));
-        assert_eq!(metadata.version.as_deref(), Some("1.2.3-alpha.4"));
-        assert_eq!(metadata.short_version, None);
+        assert_eq!(metadata.version, None);
+        assert_eq!(metadata.short_version.as_deref(), Some("1.2.3-alpha.4"));
     }
 }
