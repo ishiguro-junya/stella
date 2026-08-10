@@ -53,8 +53,8 @@ describe('Stella i18n', () => {
   it('localizes Japanese navigation and general UI terms while retaining Git terms', () => {
     expect(translate('ja', 'appActivity')).toBe('アクティビティ');
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
-    expect(translate('ja', 'changes')).toBe('変更');
-    expect(translate('ja', 'history')).toBe('履歴');
+    expect(translate('ja', 'changes')).toBe('変更差分');
+    expect(translate('ja', 'history')).toBe('操作履歴');
     expect(translate('ja', 'activityCommand')).toBe('コマンド');
     expect(translate('ja', 'unified')).toBe('統合');
     expect(translate('ja', 'commit')).toBe('Commit');
