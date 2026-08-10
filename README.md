@@ -15,7 +15,7 @@ Stellaは、シンプルなGitクライアントアプリです。
 
 - 変更内容の確認、Stage/Unstage、行単位の部分Stage
 - Conventional Commitsに沿ったCommit作成
-- Branchの切り替えとCommit履歴の確認
+- Branchの切り替えと操作履歴の確認・検索
 - 登録Repositoryの一覧、FinderでのLocal追加、Remote URLからのCloneを1つの入口で操作
 - Finderで選んだpathがGit Repositoryでなければ、新しいRepositoryとして作成
 - Merge、Rebase、Cherry-pick、Revertなどの履歴操作

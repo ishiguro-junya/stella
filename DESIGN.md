@@ -4,7 +4,6 @@
 
 - 参照UI: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-commit-left-audit-post.png`
 - 最終Changes画面: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-workspace-density-v2/01-changes-default.png`
-- Commit展開時: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-workspace-density-v2/02-commit-expanded.png`
 - 最終History画面: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-workspace-density-v2/03-history-default.png`
 - 実行時エラーDialog: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-workspace-density-v2/04-error-dialog.png`
 - Activity参照画像（案3）: `/Users/ishiguro/.codex/generated_images/019fdfab-f0b3-7273-b559-a0e4acc24a7d/exec-214a9f65-534b-4fd5-821a-594b2d12eb7b.png`
@@ -17,9 +16,12 @@
 
 参照画面と最終Changes画面を、1つの比較画像として並べて確認しました。  
 ChangesとHistoryはtitlebarではなく、左paneの階層の先頭に配置されています。  
-Commit formは常時縦方向の領域を占有せず、初期状態では閉じ、必要な場合にだけその場で展開します。  
-Pull、Push、Fetchはiconとlabelを付けて左pane上部に常時表示し、Fetchを最後に配置します。  
-Commitはremote actionの直下に固定し、その下でStagedとUnstagedを上下に等分します。  
+
+- Commit formは常時縦方向の領域を占有せず、左pane上部のCommitからDialogとして開きます。
+- Commit、Pull、Push、Fetchはiconとlabelを付けて左pane上部に常時表示し、CommitをPullの左、Fetchを最後に配置します。
+- 操作バーが狭い場合は通常サイズのiconだけを表示し、各操作名はtooltipとアクセシブル名で維持します。
+- 操作buttonの下でStagedとUnstagedを上下に等分します。
+
 StagedとUnstagedは常に表示される独立したgroupとして残し、それぞれのfile listを個別にscrollできます。  
 
 ## 操作検証
@@ -27,7 +29,9 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 - ChangesとHistoryでは、矢印、Home、End keyに対応したroving-tab keyboard patternを使用しています。
 - StagedとUnstagedは折りたたみheaderを使わず、固定見出し、独立scroll、group checkbox、一括操作、drag and drop、keyboard操作を維持しています。
 - StagedとUnstagedが空でも件数0のgroupを表示し、有効な内部dropを引き続き受け付けます。
-- CommitはRepo単位で初期状態では閉じ、validationまたは非同期処理の失敗で注意が必要な場合に再度開きます。
+- Commit DialogはDescriptionへ初期focusし、CancelまたはEscapeで閉じ、成功時だけ自動で閉じます。
+- 入力途中の下書きはrepository単位で保持します。
+- Commitできない状態でもDialogは開き、実行buttonを理由付きで無効にします。
 - 実行時エラーはqueueされたmodal dialogで表示し、詳細から元のGit出力と終了statusを確認できます。
 - 想定内のfast-forward divergenceはgenericなエラーDialogではなく、MergeまたはRebaseを選ぶinlineの判断として表示します。
 - Dialogのfocus trapはstackを考慮し、IME変換中には閉じません。
@@ -36,15 +40,16 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 ## 注目箇所の比較
 
 最終layoutでは、常時展開されていたCommit formとtitlebarの重複した画面navigationを削除しました。  
-compactな左sidebarにnavigation、change group、file row、折りたたんだCommitをまとめています。  
-diffは以前の右pane全体の幅を使えるようになりました。  
-Commitを展開してもmain diffを隠さずに操作でき、Historyにもactive viewの見出しを重複表示しません。  
+
+- compactな左sidebarにnavigation、change group、file row、4つの操作buttonをまとめています。
+- diffは以前の右pane全体の幅を使えるようになりました。
+- CommitはDialogで入力し、Historyにもactive viewの見出しを重複表示しません。
 
 ## 再現性が必要な要素
 
 - 階層: repository contextはtitlebarに置き、画面navigationとchange操作は左paneに置きます。
 - 密度: 通常状態ではchange group、file、選択中のpath、diffだけを表示します。
-- 操作性: Commitの開閉chevronは、閉じた状態では右、開いた状態では下を一貫して示します。  
+- 操作性: Commit Dialogはfocus trap、focus復帰、IME変換中のEscape抑止を共通Dialogと揃えます。
   StagedとUnstagedは固定見出しです。
 - accessibility: status名、開閉状態、group選択、modalの詳細、focus復元を明示します。
 - 安全性: warningとrecovery状態は残し、実行時エラーはmodal、想定内の判断状態はinlineで表示します。
@@ -67,12 +72,20 @@ Commitを展開してもmain diffを隠さずに操作でき、Historyにもacti
 実装では、上部中央のmodal配置、暗くしたworkspace、検索を先頭にした階層、選択行の表現、常に表示する操作footerを維持しています。  
 mockとの差異は承認済みの方針に従ったものです。  
 RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧はOpenやRecentの見出しがないflatな構成にしています。  
-また、最終利用時刻のlabelとshortcut記号は表示せず、Changes／Historyは既存のsegmented designを維持します。  
+
+- Branch controlは約400pxまでbranch名を省略せずに表示し、それを超える場合は末尾を省略します。
+- titlebarは左右のmenuを含む空き領域をwindowのdrag regionとし、操作button自体はno-dragにしてclick操作を維持します。
+- 最終利用時刻のlabelとshortcut記号は表示せず、Changes／Historyは既存のsegmented designを維持します。
 
 - Repository検索の対象はname、path、branchです。  
   開いているrepositoryは現在の順序を維持し、重複を除いた登録pathをMRU順で後ろに並べます。
 - Branch検索の対象はlocal branch名です。  
   変更中または処理中のrepositoryでは他のbranchを無効にして理由をDialog内に表示し、現在のbranchは選択可能なままにします。
+- HistoryのCommit Diffは各file headerにpathを表示し、省略した未変更行数の文言は表示しません。
+- 画面名は日本語でChangesを「変更差分」、Historyを「操作履歴」と表示します。
+- 操作履歴はlocal Branchに加えてoriginを含むremote-tracking BranchのCommitを同じgraphに表示し、一覧末尾が近づくと次のpageを自動で読み込みます。
+- 手動の「さらに読み込む」は表示しません。
+- 左paneの検索欄はCommit件名、Author、hash、refを読込済みに限らず全履歴から検索し、Command-Fでfocusします。
 - 矢印、Home、End、Enter、Escape、Tabのfocus trap、triggerへのfocus復元をcomponent testで確認しました。
 - native footerの「Add Repository…」から、Remote URL入力とFinderのLocal選択を同じSheetで開始できます。  
   非表示のCommand-Shift-OでもRepository Dialogを開けますが、shortcutは画面上に表示しません。
@@ -83,14 +96,17 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 ## Activity画面の検証
 
 選択した案3の参照画像と最終nativeの1180 x 760 Activity画面を、1つの比較画像として並べて確認しました。  
-実際のrepository dataを使用しながら、同じcompactなheader、4つのmetricを並べた領域、2:1の操作一覧とchartの分割、選択中の操作行、詳細領域、期間control、Darkのsemantic paletteを維持しています。  
+実際のrepository dataを使用しながら、同じcompactなheader、単位付きの4 metricを並べた領域、2:1の操作一覧とchartの分割、選択中の操作行、詳細領域、期間と指標のcontrol、Darkのsemantic paletteを維持しています。  
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
+- Settingsは言語を先頭、外観をその次に表示します。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 現在のsessionの操作にはcommand、終了code、stdout、stderrを表示します。  
   復元した30日間の項目はsummaryだけを表示します。
-- 選択したrepositoryについて、7日、30日、90日、180日、1年のCommit分析、contributor数、local branch数、empty、loading、error、truncatedの各状態、accessibilityに配慮したchart data tableを表示します。
-  期間はCommitアクティビティ見出し右端のselectで切り替え、90日は週単位、180日と1年は月単位で集約します。
+- 選択したrepositoryについて、7日、30日、90日、180日、1年のCommit、Contributor、local Branch tip分析、empty、loading、error、truncatedの各状態を表示します。
+  期間と指標は隣接したselectで切り替え、視覚的な見出しは表示しません。
+- chart data tableは常時表示して内部をscroll可能にし、開閉toggleは設けません。
+  90日は週単位、180日と1年は月単位で集約し、Contributorは重複加算を避けるため日単位で表示します。
 - nativeの860 x 560 captureでも2 columnの分割を維持します。  
   操作一覧と詳細領域は内部でscrollし、chartの位置を動かしません。
 - LightとDarkの明示指定、macOSのliveなSystem appearance、semantic AX table構造、increased-contrast用のborder tokenを確認しました。
@@ -251,6 +267,7 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
 - fontとtypography: 既存のsystem font、weight、size、line height、truncation、日付formatは変更していません。
 - spacingとlayout rhythm: Commit contentのinsetは変更せず、選択行とhover行の背景を`border-radius: 0`で365 pixelのlist全幅へ広げました。
 - colorとvisual token: 選択行は引き続き`--selection-muted`、hoverは既存の6% text mixを使います。
+- graphのlane 0は青、lane 1以降は紫・橙・緑・桃・青緑を循環させます。
 - 画像品質とasset: rasterや生成assetは対象外です。  
   browser上の形状計測では、sampleしたすべてのSVG Commit nodeが8 x 8 CSS pixelで、以前の縦方向の伸びがなくなっています。
 - 文言とcontent: 変更していません。
@@ -272,6 +289,7 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
 - ref表示: Historyは全refを常時表示し、表示切替は設けません。  
   Tag、local branch、remote branchを個別のchipとして表示し、Tagを専用iconとcolorで区別します。
 - toolbarと日時: 操作buttonは現在のbranch名と同じtoolbarの右端に配置します。  
+  操作内容は共通Dialogに表示し、Escapeまたは閉じるbuttonで閉じると操作buttonへfocusを戻します。
   各Commitは日付に加えて時刻も表示します。
 - 自動検証: Historyの全ref、Tag表示、曲線pathを含むfrontend test、typecheck、lint、frontend 283件、Rust 142件のtestが合格しています。
 
