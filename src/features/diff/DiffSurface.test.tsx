@@ -95,11 +95,19 @@ describe('DiffSurface line selection', () => {
     expect(patchDiffOptionsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         diffIndicators: 'classic',
+        overflow: 'wrap',
         theme: { light: 'stella-semantic', dark: 'stella-semantic' },
         themeType: 'system',
         unsafeCSS: expect.stringContaining(
           "[data-line-type='change-addition'] {\n  --diffs-computed-diff-line-bg: var(--diff-addition-surface);",
         ),
+      }),
+    );
+    expect(patchDiffOptionsMock.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        itemMetrics: { spacing: 0, paddingTop: 0, paddingBottom: 0 },
+        layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
+        unsafeCSS: expect.stringContaining('--diffs-gap-block: 0px;'),
       }),
     );
   });

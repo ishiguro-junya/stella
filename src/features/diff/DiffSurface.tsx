@@ -30,6 +30,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   --diffs-deletion-color-override: var(--diff-deletion-accent);
   --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);
   --diffs-bg-deletion-emphasis-override: var(--diff-deletion-emphasis);
+  --diffs-gap-block: 0px;
 }
 
 [data-line-type='change-addition'] {
@@ -192,7 +193,9 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       diffIndicators: 'classic' as const,
       disableFileHeader: true,
       hunkSeparators: 'line-info-basic' as const,
-      overflow: 'scroll' as const,
+      overflow: 'wrap' as const,
+      layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
+      itemMetrics: { spacing: 0, paddingTop: 0, paddingBottom: 0 },
       unsafeCSS: STELLA_DIFF_HIGHLIGHT_CSS,
       enableLineSelection: selectable,
       controlledSelection: selectable,

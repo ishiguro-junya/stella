@@ -105,6 +105,47 @@ function BusyAfterFileActionHarness() {
 }
 
 describe('ChangeList staging controls', () => {
+  it('moves file selection with the up and down arrow keys within each group', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderList({
+      entries: [
+        { path: 'src/staged-one.ts', area: 'staged', status: 'modified' },
+        { path: 'src/staged-two.ts', area: 'staged', status: 'modified' },
+        { path: 'src/unstaged-one.ts', area: 'unstaged', status: 'modified' },
+        { path: 'src/unstaged-two.ts', area: 'unstaged', status: 'modified' },
+      ],
+      selectedKey: 'staged:src/staged-one.ts',
+    });
+    const staged = screen.getByRole('region', { name: 'Staged' });
+    const unstaged = screen.getByRole('region', { name: 'Unstaged' });
+    const stagedOne = changeRow(/Modified src\/staged-one\.ts/u, staged);
+    const stagedTwo = changeRow(/Modified src\/staged-two\.ts/u, staged);
+    const unstagedOne = changeRow(/Modified src\/unstaged-one\.ts/u, unstaged);
+    const unstagedTwo = changeRow(/Modified src\/unstaged-two\.ts/u, unstaged);
+
+    await user.click(stagedOne);
+    expect(stagedOne).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(onSelect).toHaveBeenLastCalledWith('staged:src/staged-two.ts');
+    expect(stagedTwo).toHaveFocus();
+
+    const selectionCountAtStagedBoundary = onSelect.mock.calls.length;
+    await user.keyboard('{ArrowDown}');
+    expect(onSelect).toHaveBeenCalledTimes(selectionCountAtStagedBoundary);
+    expect(stagedTwo).toHaveFocus();
+
+    await user.click(unstagedTwo);
+    expect(unstagedTwo).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(onSelect).toHaveBeenLastCalledWith('unstaged:src/unstaged-one.ts');
+    expect(unstagedOne).toHaveFocus();
+
+    const selectionCountAtUnstagedBoundary = onSelect.mock.calls.length;
+    await user.keyboard('{ArrowUp}');
+    expect(onSelect).toHaveBeenCalledTimes(selectionCountAtUnstagedBoundary);
+    expect(unstagedOne).toHaveFocus();
+  });
+
   it('includes each Git status in the file row accessible name', () => {
     const statusCases: Array<{
       area: ChangeEntry['area'];

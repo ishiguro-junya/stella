@@ -1,5 +1,11 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- native drop targetにはkeyboard操作用の同等なcheckboxがある。 */
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import {
   ArrowRight,
   Binary,
@@ -185,6 +191,24 @@ export function ChangeList({
       entries: entries.filter((entry) => entry.area === 'unstaged' || entry.area === 'untracked'),
     },
   ];
+  const moveFileSelection = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    key: string,
+    offset: -1 | 1,
+  ): void => {
+    const orderedEntryKeys = groups
+      .find((group) => group.entries.some((entry) => entryKey(entry) === key))
+      ?.entries.map(entryKey);
+    if (!orderedEntryKeys) return;
+    const currentIndex = orderedEntryKeys.indexOf(key);
+    if (currentIndex < 0) return;
+    event.preventDefault();
+    const nextIndex = Math.min(Math.max(currentIndex + offset, 0), orderedEntryKeys.length - 1);
+    const nextKey = orderedEntryKeys[nextIndex];
+    if (!nextKey || nextKey === key) return;
+    onSelect(nextKey);
+    rowRefs.current.get(nextKey)?.focus();
+  };
 
   const clearDrag = (): void => {
     activeDragRef.current = undefined;
@@ -580,7 +604,14 @@ export function ChangeList({
                           aria-current={selectedKey === key ? 'true' : undefined}
                           aria-describedby={entryStageableArea ? 'changes-drag-help' : undefined}
                           draggable={entryStageableArea && !interactionsDisabled ? true : undefined}
-                          onClick={() => onSelect(key)}
+                          onClick={(event) => {
+                            event.currentTarget.focus();
+                            onSelect(key);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'ArrowUp') moveFileSelection(event, key, -1);
+                            else if (event.key === 'ArrowDown') moveFileSelection(event, key, 1);
+                          }}
                           onDragStart={(event) => beginDrag(event, entry)}
                           onDragEnd={() => {
                             clearDrag();
