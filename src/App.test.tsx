@@ -91,6 +91,11 @@ describe('App repository attach', () => {
     expect(settings).toBeVisible();
     const titlebarActions = container.querySelector('.titlebar-actions');
     if (!(titlebarActions instanceof HTMLElement)) throw new Error('Titlebar actions are missing.');
+    const titlebarContext = container.querySelector('.titlebar-context');
+    if (!(titlebarContext instanceof HTMLElement)) throw new Error('Titlebar context is missing.');
+    expect(titlebarContext).toHaveAttribute('data-tauri-drag-region');
+    expect(titlebarActions).toHaveAttribute('data-tauri-drag-region');
+    expect(settings).not.toHaveAttribute('data-tauri-drag-region');
     expect(within(titlebarActions).getAllByRole('button')).toEqual([settings]);
     expect(container).not.toHaveTextContent('Workspace Log');
   });

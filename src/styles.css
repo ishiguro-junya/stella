@@ -477,7 +477,7 @@ kbd {
 }
 
 .titlebar-context-toggle.branch-toggle {
-  max-width: min(200px, 32vw);
+  max-width: min(400px, 64vw);
 }
 
 .titlebar-context-toggle > span {

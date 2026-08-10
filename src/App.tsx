@@ -826,7 +826,11 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
       <AppearanceProvider appearance={appearance}>
         <div className="app-shell" data-testid="app-shell">
           <header className="titlebar" data-tauri-drag-region>
-            <nav className="titlebar-context" aria-label={t('workspaceContext')}>
+            <nav
+              className="titlebar-context"
+              aria-label={t('workspaceContext')}
+              data-tauri-drag-region
+            >
               {repo ? (
                 <>
                   <button
@@ -873,7 +877,11 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                 </>
               ) : null}
             </nav>
-            <nav className="titlebar-actions" aria-label={t('appNavigation')}>
+            <nav
+              className="titlebar-actions"
+              aria-label={t('appNavigation')}
+              data-tauri-drag-region
+            >
               {repo ? (
                 <>
                   <button
