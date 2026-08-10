@@ -39,6 +39,8 @@ function commitActivityResult(repo: RepoSnapshot, boundaries: number[], commits 
         startUnixSeconds,
         endUnixSeconds: boundaries[index + 1] ?? startUnixSeconds,
         commitCount: index === boundaries.length - 2 ? commits : 0,
+        contributorCount: index === boundaries.length - 2 && commits ? 1 : 0,
+        branchCount: index === boundaries.length - 2 && commits ? 1 : 0,
       })),
       coverage: { kind: 'complete' },
     },
@@ -619,7 +621,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await screen.findByRole('button', { name: /Current repository first/u });
     await user.click(screen.getByRole('button', { name: 'Activity' }));
-    expect(await screen.findByText(/1 commit across 1 active day/u)).toBeVisible();
+    expect(await screen.findByText('1 commit')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Changes' }));
     await selectRepository(user, 'second');
@@ -630,7 +632,7 @@ describe('App repository attach', () => {
       'aria-current',
       'page',
     );
-    expect(await screen.findByText(/2 commits across 1 active day/u)).toBeVisible();
+    expect(await screen.findByText('2 commits')).toBeVisible();
     expect(adapter.query).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'commitActivity', repoId: second.repoId }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

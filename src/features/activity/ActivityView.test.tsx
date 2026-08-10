@@ -58,6 +58,8 @@ function series(overrides: Partial<CommitActivitySeries> = {}): CommitActivitySe
       startUnixSeconds: 1_754_092_800 + index * 86_400,
       endUnixSeconds: 1_754_179_200 + index * 86_400,
       commitCount: index % 5 === 0 ? 1 : 0,
+      contributorCount: index % 10 === 0 ? 1 : 0,
+      branchCount: index >= 27 ? 1 : 0,
     })),
     coverage: { kind: 'complete' },
     ...overrides,
@@ -115,8 +117,9 @@ describe('ActivityView', () => {
     );
     expect(screen.getAllByText('Fetchが完了しました').length).toBeGreaterThan(0);
     expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
-    const metrics = screen.getByRole('region', { name: 'Commitアクティビティの概要' });
+    const metrics = screen.getByRole('region', { name: 'リポジトリアクティビティの概要' });
     expect(within(metrics).getByText('コミット')).toBeVisible();
+    expect(within(metrics).getByText('アクティブ')).toBeVisible();
     expect(within(metrics).getByText('コントリビューター')).toBeVisible();
     expect(within(metrics).getByText('ブランチ')).toBeVisible();
   });
@@ -147,17 +150,22 @@ describe('ActivityView', () => {
 
     expect(container.querySelector('h1')).toHaveClass('sr-only');
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
-    const rangeSelect = screen.getByRole('combobox', { name: 'Commit activity range' });
+    const rangeSelect = screen.getByRole('combobox', { name: 'Activity range' });
     expect(rangeSelect).toHaveValue('30d');
     expect(
       within(rangeSelect)
         .getAllByRole('option')
         .map((option) => option.textContent),
     ).toEqual(['7 days', '30 days', '90 days', '180 days', '1 year']);
-    expect(rangeSelect.closest('.activity-panel-header')).toContainElement(
-      screen.getByRole('heading', { name: 'Commit activity' }),
-    );
-    await screen.findByText(/8 commits across 4 active days/u);
+    const metricSelect = screen.getByRole('combobox', { name: 'Activity metric' });
+    expect(metricSelect).toHaveValue('commits');
+    expect(
+      within(metricSelect)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Commits', 'Contributors', 'Branches']);
+    expect(screen.queryByText('Commit activity')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Repository analytics' })).toHaveClass('sr-only');
     const operations = screen.getByRole('table', { name: 'Operations' });
     expect(within(operations).getByRole('columnheader', { name: 'Status' })).toBeVisible();
     expect(within(operations).getByRole('columnheader', { name: 'Action' })).toBeVisible();
@@ -173,11 +181,10 @@ describe('ActivityView', () => {
     expect(fetchRow.querySelector('button')).toBeNull();
     expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
-    expect(screen.getByText('8')).toBeVisible();
-    expect(screen.getByText('4')).toBeVisible();
-    expect(screen.getByText('2')).toBeVisible();
-    expect(screen.getByText('3')).toBeVisible();
-    expect(screen.getByText(/8 commits across 4 active days/u)).toBeVisible();
+    expect(await screen.findByText('8 commits')).toBeVisible();
+    expect(screen.getByText('4 days')).toBeVisible();
+    expect(screen.getByText('2 contributors')).toBeVisible();
+    expect(screen.getByText('3 branches')).toBeVisible();
     expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('30');
 
     const query = latestCommitActivityQuery(adapter);
@@ -185,9 +192,13 @@ describe('ActivityView', () => {
     expect(query.request.bucketBoundariesUnixSeconds).toHaveLength(31);
     expect(query.signal).toBeInstanceOf(AbortSignal);
 
-    await user.click(screen.getByText('View chart data'));
-    const table = screen.getByRole('table', { name: 'Commit activity data' });
+    const table = screen.getByRole('table', { name: 'Activity data' });
     expect(within(table).getAllByRole('row')).toHaveLength(31);
+    expect(table.closest('.activity-chart-data')).not.toBeInstanceOf(HTMLDetailsElement);
+    await user.selectOptions(metricSelect, 'contributors');
+    expect(within(table).getByRole('columnheader', { name: 'Contributors' })).toBeVisible();
+    await user.selectOptions(metricSelect, 'branches');
+    expect(within(table).getByRole('columnheader', { name: 'Branches' })).toBeVisible();
     expect(screen.getByText('git fetch origin')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'fetch-1' }));
@@ -226,6 +237,8 @@ describe('ActivityView', () => {
           startUnixSeconds: 1_748_908_800 + index * 86_400,
           endUnixSeconds: 1_748_995_200 + index * 86_400,
           commitCount: index % 7 === 0 ? 2 : 0,
+          contributorCount: index % 14 === 0 ? 1 : 0,
+          branchCount: index === 80 || index === 89 ? 1 : 0,
         })),
       }),
     );
@@ -241,13 +254,19 @@ describe('ActivityView', () => {
     );
     await screen.findByText(/18 commits/u);
 
-    const rangeSelect = screen.getByRole('combobox', { name: 'Commit activity range' });
+    const rangeSelect = screen.getByRole('combobox', { name: 'Activity range' });
     await user.selectOptions(rangeSelect, '90d');
     await waitFor(() => {
       expect(latestCommitActivityQuery(adapter).request.bucketBoundariesUnixSeconds).toHaveLength(
         91,
       );
     });
+    expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('13');
+
+    const metricSelect = screen.getByRole('combobox', { name: 'Activity metric' });
+    await user.selectOptions(metricSelect, 'contributors');
+    expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('90');
+    await user.selectOptions(metricSelect, 'branches');
     expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('13');
 
     await user.selectOptions(rangeSelect, '180d');
@@ -292,7 +311,7 @@ describe('ActivityView', () => {
     await waitFor(() => expect(adapter.query).toHaveBeenCalledTimes(1));
     const firstSignal = latestCommitActivityQuery(adapter).signal;
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Commit activity range' }), '7d');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Activity range' }), '7d');
     await waitFor(() => expect(adapter.query).toHaveBeenCalledTimes(2));
     expect(firstSignal).toBeInstanceOf(AbortSignal);
     expect(firstSignal?.aborted).toBe(true);
@@ -313,7 +332,7 @@ describe('ActivityView', () => {
         }),
       });
     });
-    expect(await screen.findByText(/7 commits across 5 active days/u)).toBeVisible();
+    expect(await screen.findByText('7 commits')).toBeVisible();
     expect(screen.queryByText(/999 commits/u)).not.toBeInTheDocument();
 
     unmount();
@@ -339,6 +358,8 @@ describe('ActivityView', () => {
           startUnixSeconds: 1_754_092_800 + index * 86_400,
           endUnixSeconds: 1_754_179_200 + index * 86_400,
           commitCount: 0,
+          contributorCount: 0,
+          branchCount: 0,
         })),
       }),
     );

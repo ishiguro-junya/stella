@@ -50,6 +50,8 @@ function dailyBuckets(count: number): CommitActivityBucket[] {
     startUnixSeconds: index * 10,
     endUnixSeconds: (index + 1) * 10,
     commitCount: index + 1,
+    contributorCount: index + 1,
+    branchCount: index + 1,
   }));
 }
 
@@ -59,6 +61,8 @@ function calendarDailyBuckets(range: ActivityRange): CommitActivityBucket[] {
     startUnixSeconds,
     endUnixSeconds: boundaries[index + 1]!,
     commitCount: index + 1,
+    contributorCount: index + 1,
+    branchCount: index + 1,
   }));
 }
 
@@ -91,16 +95,22 @@ describe('bucketsForActivityRange', () => {
       startUnixSeconds: 0,
       endUnixSeconds: 60,
       commitCount: 21,
+      contributorCount: 21,
+      branchCount: 21,
     });
     expect(displayed[1]).toEqual({
       startUnixSeconds: 60,
       endUnixSeconds: 130,
       commitCount: 70,
+      contributorCount: 70,
+      branchCount: 70,
     });
     expect(displayed.at(-1)).toEqual({
       startUnixSeconds: 830,
       endUnixSeconds: 900,
       commitCount: 609,
+      contributorCount: 609,
+      branchCount: 609,
     });
     expect(displayed.reduce((total, bucket) => total + bucket.commitCount, 0)).toBe(4_095);
   });
@@ -127,6 +137,8 @@ describe('bucketsForActivityRange', () => {
       startUnixSeconds,
       endUnixSeconds: boundaries[index + 1]!,
       commitCount: 1,
+      contributorCount: 1,
+      branchCount: 1,
     }));
 
     const displayed = bucketsForActivityRange(series(buckets), '90d');

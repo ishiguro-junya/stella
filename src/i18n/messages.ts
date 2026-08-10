@@ -491,17 +491,49 @@ export const MESSAGES = {
   conflictCherryPickedCommit: { en: 'Cherry-picked commit', ja: 'Cherry-pickするCommit' },
   conflictRevertResult: { en: 'Revert result', ja: 'Revert結果' },
   activityNoRepository: { en: 'No repository selected', ja: 'リポジトリが選択されていません' },
-  activityRange: { en: 'Commit activity range', ja: 'Commitアクティビティの期間' },
+  activityRange: { en: 'Activity range', ja: 'アクティビティの期間' },
+  activityMetric: { en: 'Activity metric', ja: 'アクティビティの指標' },
   activityDays: {
     en: (args, { number }) => `${number(count(args, 'count'))} days`,
     ja: (args, { number }) => `${number(count(args, 'count'))}日`,
   },
   activityOneYear: { en: '1 year', ja: '1年' },
   activityCommits: { en: 'Commits', ja: 'コミット' },
-  activityActiveDays: { en: 'Active days', ja: 'アクティブ日数' },
+  activityActiveDays: { en: 'Active', ja: 'アクティブ' },
   activityContributors: { en: 'Contributors', ja: 'コントリビューター' },
   activityBranches: { en: 'Branches', ja: 'ブランチ' },
-  activitySummaryLabel: { en: 'Commit activity summary', ja: 'Commitアクティビティの概要' },
+  activityCommitValue: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'commit' : 'commits'}`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}件`,
+  },
+  activityActiveValue: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'day' : 'days'}`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}日`,
+  },
+  activityContributorValue: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'contributor' : 'contributors'}`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}人`,
+  },
+  activityBranchValue: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'branch' : 'branches'}`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}件`,
+  },
+  activitySummaryLabel: {
+    en: 'Repository activity summary',
+    ja: 'リポジトリアクティビティの概要',
+  },
   activityOperations: { en: 'Operations', ja: '操作' },
   activityStatus: { en: 'Status', ja: '状態' },
   activityAction: { en: 'Action', ja: '操作' },
@@ -524,7 +556,7 @@ export const MESSAGES = {
     en: 'Command output is only available during the current app session.',
     ja: 'コマンド出力は現在のアプリセッション中のみ表示できます。',
   },
-  activityCommitActivity: { en: 'Commit activity', ja: 'Commitアクティビティ' },
+  activityAnalytics: { en: 'Repository analytics', ja: 'リポジトリ分析' },
   activityOpenRepository: {
     en: 'Open a repository to see its commit activity.',
     ja: 'Commitアクティビティを確認するにはリポジトリを開いてください。',
@@ -557,12 +589,11 @@ export const MESSAGES = {
       `${number(count(args, 'count'))}件のCommitを走査した時点で結果を省略しています。`,
   },
   activityChartDescription: {
-    en: 'Commit count over the selected date range. Use View chart data for exact values.',
-    ja: '選択期間のCommit数です。正確な値は「チャートデータを表示」で確認できます。',
+    en: 'Selected repository metric over the chosen date range. Exact values are listed below.',
+    ja: '選択期間のリポジトリ指標です。正確な値は下の一覧で確認できます。',
   },
   loadingChart: { en: 'Loading chart…', ja: 'チャートを読み込み中…' },
-  activityViewChartData: { en: 'View chart data', ja: 'チャートデータを表示' },
-  activityData: { en: 'Commit activity data', ja: 'Commitアクティビティデータ' },
+  activityData: { en: 'Activity data', ja: 'アクティビティデータ' },
   activityPeriod: { en: 'Period', ja: '期間' },
   activitySucceeded: { en: 'Succeeded', ja: '成功' },
   activityRunning: { en: 'Running', ja: '実行中' },
@@ -1004,17 +1035,6 @@ export const MESSAGES = {
   errorUnknown: {
     en: 'The workspace operation failed.',
     ja: 'ワークスペースの操作に失敗しました。',
-  },
-  activityCommitsSummary: {
-    en: (args, { number }) => {
-      const commits = count(args, 'commits');
-      const days = count(args, 'days');
-      const contributors = count(args, 'contributors');
-      const branches = count(args, 'branches');
-      return `${number(commits)} ${commits === 1 ? 'commit' : 'commits'} across ${number(days)} active ${days === 1 ? 'day' : 'days'} by ${number(contributors)} ${contributors === 1 ? 'contributor' : 'contributors'} on ${number(branches)} ${branches === 1 ? 'branch' : 'branches'}.`;
-    },
-    ja: (args, { number }) =>
-      `コミット${number(count(args, 'commits'))}件、アクティブ${number(count(args, 'days'))}日、コントリビューター${number(count(args, 'contributors'))}人、ブランチ${number(count(args, 'branches'))}件です。`,
   },
 } as const satisfies Record<string, MessageTranslations>;
 

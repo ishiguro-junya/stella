@@ -352,7 +352,7 @@ impl GitCommand {
             }
             Self::Branches => strings([
                 "for-each-ref",
-                "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream)",
+                "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream)%00%(committerdate:unix)",
                 "refs/heads",
                 "refs/remotes",
             ]),
@@ -1147,6 +1147,22 @@ mod tests {
                 OsString::from("--until=@199"),
                 OsString::from("--max-count=100001"),
                 OsString::from("abc123"),
+            ]
+        );
+    }
+
+    #[test]
+    fn branch_inventory_includes_each_tip_commit_time_for_activity_buckets() {
+        assert_eq!(
+            GitCommand::Branches.args(),
+            [
+                OsString::from("--literal-pathspecs"),
+                OsString::from("for-each-ref"),
+                OsString::from(
+                    "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream)%00%(committerdate:unix)",
+                ),
+                OsString::from("refs/heads"),
+                OsString::from("refs/remotes"),
             ]
         );
     }

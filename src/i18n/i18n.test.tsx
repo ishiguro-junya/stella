@@ -63,16 +63,13 @@ describe('Stella i18n', () => {
 
   it('uses the requested Japanese terms for Activity metrics', () => {
     expect(translate('ja', 'activityCommits')).toBe('コミット');
+    expect(translate('ja', 'activityActiveDays')).toBe('アクティブ');
     expect(translate('ja', 'activityContributors')).toBe('コントリビューター');
     expect(translate('ja', 'activityBranches')).toBe('ブランチ');
-    expect(
-      translate('ja', 'activityCommitsSummary', {
-        commits: 8,
-        days: 4,
-        contributors: 2,
-        branches: 3,
-      }),
-    ).toBe('コミット8件、アクティブ4日、コントリビューター2人、ブランチ3件です。');
+    expect(translate('ja', 'activityCommitValue', { count: 8 })).toBe('8件');
+    expect(translate('ja', 'activityActiveValue', { count: 4 })).toBe('4日');
+    expect(translate('ja', 'activityContributorValue', { count: 2 })).toBe('2人');
+    expect(translate('ja', 'activityBranchValue', { count: 3 })).toBe('3件');
   });
 
   it('keeps the product name out of in-app explanatory copy', () => {

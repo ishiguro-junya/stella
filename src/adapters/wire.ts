@@ -278,6 +278,8 @@ export interface WireCommitActivitySeries {
     startUnixSeconds: number;
     endUnixSeconds: number;
     commitCount: number;
+    contributorCount: number;
+    branchCount: number;
   }>;
   coverage: { kind: 'complete' } | { kind: 'truncated'; scanLimit: number };
 }

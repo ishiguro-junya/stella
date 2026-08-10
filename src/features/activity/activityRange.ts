@@ -36,6 +36,8 @@ function aggregateBuckets(buckets: readonly CommitActivityBucket[]): CommitActiv
     startUnixSeconds: first.startUnixSeconds,
     endUnixSeconds: last.endUnixSeconds,
     commitCount: buckets.reduce((total, bucket) => total + bucket.commitCount, 0),
+    contributorCount: buckets.reduce((total, bucket) => total + bucket.contributorCount, 0),
+    branchCount: buckets.reduce((total, bucket) => total + bucket.branchCount, 0),
   };
 }
 

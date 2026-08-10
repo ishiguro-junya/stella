@@ -564,6 +564,8 @@ pub struct CommitActivityBucket {
     pub start_unix_seconds: i64,
     pub end_unix_seconds: i64,
     pub commit_count: u64,
+    pub contributor_count: u64,
+    pub branch_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1037,6 +1039,8 @@ mod tests {
                 start_unix_seconds: 1_700_000_000,
                 end_unix_seconds: 1_700_086_400,
                 commit_count: 3,
+                contributor_count: 2,
+                branch_count: 1,
             }],
             coverage: CommitActivityCoverage::Truncated {
                 scan_limit: 100_000,
@@ -1059,7 +1063,9 @@ mod tests {
                     "buckets": [{
                         "startUnixSeconds": 1_700_000_000_i64,
                         "endUnixSeconds": 1_700_086_400_i64,
-                        "commitCount": 3
+                        "commitCount": 3,
+                        "contributorCount": 2,
+                        "branchCount": 1
                     }],
                     "coverage": {
                         "kind": "truncated",

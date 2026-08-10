@@ -19,9 +19,15 @@ import {
 
 const CommitActivityChart = lazy(() => import('./CommitActivityChart'));
 const ACTIVITY_RANGES: readonly ActivityRange[] = ['7d', '30d', '90d', '180d', '1y'];
+const ACTIVITY_METRICS = ['commits', 'contributors', 'branches'] as const;
+type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
 
 function isActivityRange(value: string): value is ActivityRange {
   return ACTIVITY_RANGES.some((range) => range === value);
+}
+
+function isActivityMetric(value: string): value is ActivityMetric {
+  return ACTIVITY_METRICS.some((metric) => metric === value);
 }
 
 type AnalyticsState =
@@ -49,6 +55,7 @@ export function ActivityView({
 }: ActivityViewProps) {
   const { t } = useI18n();
   const [range, setRange] = useState<ActivityRange>('30d');
+  const [metric, setMetric] = useState<ActivityMetric>('commits');
   const [retryRequest, setRetryRequest] = useState(0);
   const [analytics, setAnalytics] = useState<AnalyticsState>(() =>
     repo ? { kind: 'loading' } : { kind: 'noRepo' },
@@ -108,8 +115,13 @@ export function ActivityView({
   const selected = activities.find((entry) => entry.id === selectedId) ?? activities[0];
   const series = analytics.kind === 'ready' ? analytics.series : undefined;
   const buckets = useMemo(
-    () => (series ? bucketsForActivityRange(series, range) : []),
-    [range, series],
+    () =>
+      series
+        ? metric === 'contributors'
+          ? series.buckets.map((bucket) => ({ ...bucket }))
+          : bucketsForActivityRange(series, range)
+        : [],
+    [metric, range, series],
   );
 
   return (
@@ -130,7 +142,9 @@ export function ActivityView({
             analytics={analytics}
             buckets={buckets}
             range={range}
+            metric={metric}
             onRangeChange={setRange}
+            onMetricChange={setMetric}
             onRetry={() => setRetryRequest((current) => current + 1)}
           />
         </div>
@@ -140,20 +154,37 @@ export function ActivityView({
 }
 
 function ActivityMetrics({ analytics }: { analytics: AnalyticsState }) {
-  const { t, formatNumber } = useI18n();
+  const { t } = useI18n();
   const totals = analytics.kind === 'ready' ? analytics.series.totals : undefined;
   const metrics = [
-    { label: t('activityCommits'), value: totals?.commits },
-    { label: t('activityActiveDays'), value: totals?.activeDays },
-    { label: t('activityContributors'), value: totals?.contributors },
-    { label: t('activityBranches'), value: totals?.branches },
+    {
+      label: t('activityCommits'),
+      value: totals === undefined ? undefined : t('activityCommitValue', { count: totals.commits }),
+    },
+    {
+      label: t('activityActiveDays'),
+      value:
+        totals === undefined ? undefined : t('activityActiveValue', { count: totals.activeDays }),
+    },
+    {
+      label: t('activityContributors'),
+      value:
+        totals === undefined
+          ? undefined
+          : t('activityContributorValue', { count: totals.contributors }),
+    },
+    {
+      label: t('activityBranches'),
+      value:
+        totals === undefined ? undefined : t('activityBranchValue', { count: totals.branches }),
+    },
   ];
   return (
     <section className="activity-metrics" aria-label={t('activitySummaryLabel')}>
       {metrics.map((metric) => (
         <div key={metric.label}>
           <span>{metric.label}</span>
-          <strong>{metric.value === undefined ? '—' : formatNumber(metric.value)}</strong>
+          <strong>{metric.value ?? '—'}</strong>
         </div>
       ))}
     </section>
@@ -335,7 +366,9 @@ interface AnalyticsPanelProps {
   analytics: AnalyticsState;
   buckets: CommitActivityBucket[];
   range: ActivityRange;
+  metric: ActivityMetric;
   onRangeChange: (range: ActivityRange) => void;
+  onMetricChange: (metric: ActivityMetric) => void;
   onRetry: () => void;
 }
 
@@ -343,31 +376,53 @@ function AnalyticsPanel({
   analytics,
   buckets,
   range,
+  metric,
   onRangeChange,
+  onMetricChange,
   onRetry,
 }: AnalyticsPanelProps) {
   const { t } = useI18n();
   const days = ACTIVITY_RANGE_DAYS[range];
   return (
     <section className="activity-analytics-panel" aria-labelledby="commit-activity-title">
-      <header className="activity-panel-header">
-        <h2 id="commit-activity-title">{t('activityCommitActivity')}</h2>
-        <select
-          className="activity-range-select"
-          aria-label={t('activityRange')}
-          value={range}
-          onChange={(event) => {
-            if (isActivityRange(event.currentTarget.value)) {
-              onRangeChange(event.currentTarget.value);
-            }
-          }}
-        >
-          {ACTIVITY_RANGES.map((option) => (
-            <option key={option} value={option}>
-              {activityRangeLabel(option, t)}
-            </option>
-          ))}
-        </select>
+      <header className="activity-panel-header activity-analytics-header">
+        <h2 id="commit-activity-title" className="sr-only">
+          {t('activityAnalytics')}
+        </h2>
+        <div className="activity-analytics-controls">
+          <select
+            className="activity-range-select"
+            aria-label={t('activityRange')}
+            value={range}
+            onChange={(event) => {
+              if (isActivityRange(event.currentTarget.value)) {
+                onRangeChange(event.currentTarget.value);
+              }
+            }}
+          >
+            {ACTIVITY_RANGES.map((option) => (
+              <option key={option} value={option}>
+                {activityRangeLabel(option, t)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="activity-metric-select"
+            aria-label={t('activityMetric')}
+            value={metric}
+            onChange={(event) => {
+              if (isActivityMetric(event.currentTarget.value)) {
+                onMetricChange(event.currentTarget.value);
+              }
+            }}
+          >
+            {ACTIVITY_METRICS.map((option) => (
+              <option key={option} value={option}>
+                {activityMetricLabel(option, t)}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
       <div className="activity-analytics-body" aria-live="polite">
         {analytics.kind === 'noRepo' ? (
@@ -391,10 +446,15 @@ function AnalyticsPanel({
             <ActivityState title={t('activityNoCommits')}>
               {t('activityNoCommitsDescription', { days })}
             </ActivityState>
-            <ChartDataTable buckets={buckets} range={range} />
+            <ChartDataTable buckets={buckets} range={range} metric={metric} />
           </>
         ) : (
-          <CommitAnalyticsReady series={analytics.series} buckets={buckets} range={range} />
+          <CommitAnalyticsReady
+            series={analytics.series}
+            buckets={buckets}
+            range={range}
+            metric={metric}
+          />
         )}
       </div>
     </section>
@@ -407,30 +467,34 @@ function activityRangeLabel(range: ActivityRange, t: I18nValue['t']): string {
     : t('activityDays', { count: ACTIVITY_RANGE_DAYS[range] });
 }
 
+function activityMetricLabel(metric: ActivityMetric, t: I18nValue['t']): string {
+  return t(
+    metric === 'commits'
+      ? 'activityCommits'
+      : metric === 'contributors'
+        ? 'activityContributors'
+        : 'activityBranches',
+  );
+}
+
 function CommitAnalyticsReady({
   series,
   buckets,
   range,
+  metric,
 }: {
   series: CommitActivitySeries;
   buckets: CommitActivityBucket[];
   range: ActivityRange;
+  metric: ActivityMetric;
 }) {
   const { t, locale } = useI18n();
   const chartData = buckets.map((bucket) => ({
-    label: formatBucketLabel(bucket, range, locale),
-    commits: bucket.commitCount,
+    label: formatBucketLabel(bucket, metric === 'contributors' ? '30d' : range, locale),
+    value: activityMetricValue(bucket, metric),
   }));
   return (
     <>
-      <p className="activity-analytics-summary">
-        {t('activityCommitsSummary', {
-          commits: series.totals.commits,
-          days: series.totals.activeDays,
-          contributors: series.totals.contributors,
-          branches: series.totals.branches,
-        })}
-      </p>
       {series.coverage.kind === 'truncated' ? (
         <output className="activity-coverage-note">
           {t('activityResultsTruncated', { count: series.coverage.scanLimit })}
@@ -441,10 +505,10 @@ function CommitAnalyticsReady({
           {t('activityChartDescription')}
         </figcaption>
         <Suspense fallback={<p>{t('loadingChart')}</p>}>
-          <CommitActivityChart data={chartData} />
+          <CommitActivityChart data={chartData} metricLabel={activityMetricLabel(metric, t)} />
         </Suspense>
       </figure>
-      <ChartDataTable buckets={buckets} range={range} />
+      <ChartDataTable buckets={buckets} range={range} metric={metric} />
     </>
   );
 }
@@ -452,35 +516,44 @@ function CommitAnalyticsReady({
 function ChartDataTable({
   buckets,
   range,
+  metric,
 }: {
   buckets: CommitActivityBucket[];
   range: ActivityRange;
+  metric: ActivityMetric;
 }) {
   const { t, locale } = useI18n();
   return (
-    <details className="activity-chart-data">
-      <summary>{t('activityViewChartData')}</summary>
+    <div className="activity-chart-data">
       <div>
         <table>
           <caption className="sr-only">{t('activityData')}</caption>
           <thead>
             <tr>
               <th scope="col">{t('activityPeriod')}</th>
-              <th scope="col">{t('activityCommits')}</th>
+              <th scope="col">{activityMetricLabel(metric, t)}</th>
             </tr>
           </thead>
           <tbody>
             {buckets.map((bucket) => (
               <tr key={`${bucket.startUnixSeconds}:${bucket.endUnixSeconds}`}>
                 <th scope="row">{formatBucketLabel(bucket, range, locale, true)}</th>
-                <td>{bucket.commitCount}</td>
+                <td>{activityMetricValue(bucket, metric)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </details>
+    </div>
   );
+}
+
+function activityMetricValue(bucket: CommitActivityBucket, metric: ActivityMetric): number {
+  return metric === 'commits'
+    ? bucket.commitCount
+    : metric === 'contributors'
+      ? bucket.contributorCount
+      : bucket.branchCount;
 }
 
 function ActivityState({

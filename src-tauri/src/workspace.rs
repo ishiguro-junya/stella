@@ -823,7 +823,12 @@ impl Workspace {
 
             result.repo_generation = snapshot.repo_generation;
             result.history_revision = history_revision;
-            result.totals.branches = self.local_branch_count(repo, control)?;
+            let (branch_total, branch_counts) =
+                self.local_branch_activity(repo, bucket_boundaries_unix_seconds, control)?;
+            result.totals.branches = branch_total;
+            for (bucket, branch_count) in result.buckets.iter_mut().zip(branch_counts) {
+                bucket.branch_count = branch_count;
+            }
             let after_branches_head = self.head_oid_optional(repo, control)?;
             if after_branches_head != head_oid {
                 last_before = result.history_revision.clone();
@@ -903,15 +908,32 @@ impl Workspace {
             .then(|| output.stdout_text().trim().to_owned()))
     }
 
-    fn local_branch_count(&self, repo: &RepoContext, control: &RunControl) -> WorkspaceResult<u64> {
+    fn local_branch_activity(
+        &self,
+        repo: &RepoContext,
+        boundaries: &[i64],
+        control: &RunControl,
+    ) -> WorkspaceResult<(u64, Vec<u64>)> {
         let output = self
             .git
             .run(Some(&repo.root), GitCommand::Branches, None, Some(control))?
             .ensure_success()?;
-        Ok(parse_branches(&output.stdout)
-            .into_iter()
-            .filter(|branch| !branch.remote)
-            .count() as u64)
+        let mut bucket_counts = vec![0; boundaries.len().saturating_sub(1)];
+        let mut total = 0_u64;
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let fields = line.split('\0').collect::<Vec<_>>();
+            if fields.len() != 6 || !fields[0].starts_with("refs/heads/") {
+                continue;
+            }
+            total += 1;
+            let Ok(committed_at) = fields[5].parse::<i64>() else {
+                continue;
+            };
+            if let Some(index) = bucket_index(boundaries, committed_at) {
+                bucket_counts[index] += 1;
+            }
+        }
+        Ok((total, bucket_counts))
     }
 
     fn preview(&self, request: PreviewRequest) -> WorkspaceResult<PreviewOutcome> {
@@ -4350,9 +4372,12 @@ fn aggregate_commit_activity(
             start_unix_seconds: pair[0],
             end_unix_seconds: pair[1],
             commit_count: 0,
+            contributor_count: 0,
+            branch_count: 0,
         })
         .collect::<Vec<_>>();
     let mut contributors = BTreeSet::new();
+    let mut bucket_contributors = vec![BTreeSet::new(); buckets.len()];
     let mut relevant_records = 0_u64;
 
     for record in text.split('\u{1e}') {
@@ -4382,8 +4407,13 @@ fn aggregate_commit_activity(
         }
         buckets[bucket_index].commit_count += 1;
         if let Some(contributor) = normalized_contributor(fields[1], fields[2]) {
+            bucket_contributors[bucket_index].insert(contributor.clone());
             contributors.insert(contributor);
         }
+    }
+
+    for (bucket, bucket_contributors) in buckets.iter_mut().zip(bucket_contributors) {
+        bucket.contributor_count = bucket_contributors.len() as u64;
     }
 
     let commits = relevant_records.min(u64::from(scan_limit));
@@ -4457,7 +4487,7 @@ fn parse_branches(bytes: &[u8]) -> Vec<BranchSummary> {
         .lines()
         .filter_map(|line| {
             let fields: Vec<&str> = line.split('\0').collect();
-            if fields.len() != 5 {
+            if fields.len() != 6 {
                 return None;
             }
             Some(BranchSummary {
@@ -5095,6 +5125,8 @@ mod tests {
         assert_eq!(result.totals.contributors, 2);
         assert_eq!(result.buckets[0].commit_count, 2);
         assert_eq!(result.buckets[1].commit_count, 1);
+        assert_eq!(result.buckets[0].contributor_count, 1);
+        assert_eq!(result.buckets[1].contributor_count, 1);
         assert_eq!(result.coverage, CommitActivityCoverage::Complete);
     }
 
@@ -9051,6 +9083,22 @@ mod tests {
                 .collect::<Vec<_>>(),
             [1, 1, 1, 1, 0]
         );
+        assert_eq!(
+            result
+                .buckets
+                .iter()
+                .map(|bucket| bucket.contributor_count)
+                .collect::<Vec<_>>(),
+            [1, 1, 1, 1, 0]
+        );
+        assert_eq!(
+            result
+                .buckets
+                .iter()
+                .map(|bucket| bucket.branch_count)
+                .collect::<Vec<_>>(),
+            [0, 1, 0, 1, 1]
+        );
         assert_eq!(result.coverage, CommitActivityCoverage::Complete);
 
         fixture.git(&["branch", "spare"]);
@@ -9069,6 +9117,7 @@ mod tests {
         };
         assert_eq!(cached.totals.commits, 4);
         assert_eq!(cached.totals.branches, 4);
+        assert_eq!(cached.buckets[3].branch_count, 2);
         assert!(cached.repo_generation > result.repo_generation);
     }
 

@@ -129,6 +129,8 @@ export interface CommitActivityBucket {
   startUnixSeconds: number;
   endUnixSeconds: number;
   commitCount: number;
+  contributorCount: number;
+  branchCount: number;
 }
 
 export interface CommitActivitySeries {

@@ -1,17 +1,16 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useI18n } from '../../i18n/i18n';
 
 export interface CommitActivityChartDatum {
   label: string;
-  commits: number;
+  value: number;
 }
 
 export interface CommitActivityChartProps {
   data: CommitActivityChartDatum[];
+  metricLabel: string;
 }
 
-export default function CommitActivityChart({ data }: CommitActivityChartProps) {
-  const { t } = useI18n();
+export default function CommitActivityChart({ data, metricLabel }: CommitActivityChartProps) {
   return (
     <ResponsiveContainer width="100%" height="100%" minHeight={112}>
       <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 8, bottom: 4, left: -20 }}>
@@ -41,8 +40,8 @@ export default function CommitActivityChart({ data }: CommitActivityChartProps) 
           }}
         />
         <Bar
-          dataKey="commits"
-          name={t('activityCommits')}
+          dataKey="value"
+          name={metricLabel}
           fill="var(--accent)"
           maxBarSize={24}
           radius={[3, 3, 0, 0]}
