@@ -1,6 +1,6 @@
 [package]
 name = "stella"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "Stella Git client backend"
 edition.workspace = true
 rust-version.workspace = true
