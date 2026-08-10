@@ -328,6 +328,12 @@ describe('Stella app shell', () => {
     await expect($('.loading-state')).not.toExist();
     await expect($('.change-item.is-current')).toBeDisplayed();
     expect(
+      await browser.execute(() => document.activeElement?.classList.contains('change-row')),
+    ).toBe(true);
+    await browser.execute(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+    expect(
       await browser.execute(() =>
         getComputedStyle(
           document.querySelector<HTMLElement>('.change-item.is-current')!,
