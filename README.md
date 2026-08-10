@@ -11,19 +11,6 @@ Stellaは、シンプルなGitクライアントアプリです。
 > このアプリは現在アルファ版です。
 > 将来的に破壊的な変更が入る可能性があります。
 
-## ✨ 機能
-
-- 変更内容の確認、Stage/Unstage、行単位の部分Stage
-- Conventional Commitsに沿ったCommit作成
-- Branchの切り替えと操作履歴の確認・検索
-- 登録Repositoryの一覧、FinderでのLocal追加、Remote URLからのCloneを1つの入口で操作
-- Finderで選んだpathがGit Repositoryでなければ、新しいRepositoryとして作成
-- Merge、Rebase、Cherry-pick、Revertなどの履歴操作
-- 競合内容の比較、編集、解消
-- Repository操作とCommit傾向を確認できるActivity
-- System/Light/Darkの外観切り替え
-- 日本語/Englishの言語切り替え
-
 ## 📁 ディレクトリ構成
 
 ```text
@@ -66,7 +53,7 @@ mise run dev
 
 ## 📚 ドキュメント
 
-- [アーキテクチャ](docs/architecture.md) — Module境界、Git操作、安全方針、品質gate
+- [アーキテクチャ](docs/architecture.md) — モジュール境界、Git操作、安全方針、品質ゲート
 - [デザインQA](DESIGN.md) — UI比較、操作確認、検証結果
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md) — 利用ライブラリの著作権とライセンス
 

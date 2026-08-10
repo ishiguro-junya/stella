@@ -27,9 +27,12 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 ## 操作検証
 
 - ChangesとHistoryでは、矢印、Home、End keyに対応したroving-tab keyboard patternを使用しています。
+- Historyは未コミットの変更がある場合、Commit一覧の先頭に対象ファイル数付きの履歴項目を表示し、graphをグレーにして未コミットであることを区別します。
 - StagedとUnstagedは折りたたみheaderを使わず、固定見出し、独立scroll、group checkbox、一括操作、drag and drop、keyboard操作を維持しています。
 - StagedとUnstagedが空でも件数0のgroupを表示し、有効な内部dropを引き続き受け付けます。
-- Commit DialogはDescriptionへ初期focusし、CancelまたはEscapeで閉じ、成功時だけ自動で閉じます。
+- Commit DialogはMessageへ初期focusし、CancelまたはEscapeで閉じ、成功時だけ自動で閉じます。
+- Commit Dialogの日本語labelはコミット、メッセージ、型、スコープ、破壊的変更とし、validation messageが表示されても入力欄の位置を維持します。
+- Stageされた変更がない場合はDialog内のCommit buttonを無効にしますが、理由の帯は表示しません。
 - 入力途中の下書きはrepository単位で保持します。
 - Commitできない状態でもDialogは開き、実行buttonを理由付きで無効にします。
 - 実行時エラーはqueueされたmodal dialogで表示し、詳細から元のGit出力と終了statusを確認できます。
@@ -74,6 +77,7 @@ mockとの差異は承認済みの方針に従ったものです。
 RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧はOpenやRecentの見出しがないflatな構成にしています。  
 
 - Branch controlは約400pxまでbranch名を省略せずに表示し、それを超える場合は末尾を省略します。
+- Branch controlのfocus ringはcontrol内側へ表示し、titlebar端で欠けないようにします。
 - titlebarは左右のmenuを含む空き領域をwindowのdrag regionとし、操作button自体はno-dragにしてclick操作を維持します。
 - 最終利用時刻のlabelとshortcut記号は表示せず、Changes／Historyは既存のsegmented designを維持します。
 
@@ -96,19 +100,22 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 ## Activity画面の検証
 
 選択した案3の参照画像と最終nativeの1180 x 760 Activity画面を、1つの比較画像として並べて確認しました。  
-実際のrepository dataを使用しながら、同じcompactなheader、単位付きの4 metricを並べた領域、2:1の操作一覧とchartの分割、選択中の操作行、詳細領域、期間と指標のcontrol、Darkのsemantic paletteを維持しています。  
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
 - Settingsは言語を先頭、外観をその次に表示します。
+- 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
+- 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。
 - 現在のsessionの操作にはcommand、終了code、stdout、stderrを表示します。  
   復元した30日間の項目はsummaryだけを表示します。
 - 選択したrepositoryについて、7日、30日、90日、180日、1年のCommit、Contributor、local Branch tip分析、empty、loading、error、truncatedの各状態を表示します。
-  期間と指標は隣接したselectで切り替え、視覚的な見出しは表示しません。
+  指標select、期間selectの順で隣接して表示し、視覚的な見出しは表示しません。
 - chart data tableは常時表示して内部をscroll可能にし、開閉toggleは設けません。
-  90日は週単位、180日と1年は月単位で集約し、Contributorは重複加算を避けるため日単位で表示します。
+  Period、Commits、Contributors、Branchesを固定列として単位付きで日別表示します。
+  chartは90日を週単位、180日と1年を月単位で集約し、Contributorは重複加算を避けるため日単位で表示します。
 - nativeの860 x 560 captureでも2 columnの分割を維持します。  
-  操作一覧と詳細領域は内部でscrollし、chartの位置を動かしません。
+  操作一覧と分析の間はpointerとkeyboardでresizeでき、各領域は内部でscrollします。
+- Changes、History、Activityのpane幅は画面別の値として保存し、他画面のresizeでは変更しません。
 - LightとDarkの明示指定、macOSのliveなSystem appearance、semantic AX table構造、increased-contrast用のborder tokenを確認しました。
 - Activity画面とRecharts chartを別々のlazy chunkとして読み込み、workspace bundleではRechartsを先読みしません。
 
