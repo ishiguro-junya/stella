@@ -17,6 +17,7 @@ import {
   PanelRightOpen,
   RotateCcw,
   Rows3,
+  Tag,
   Undo2,
 } from 'lucide-react';
 
@@ -57,8 +58,8 @@ export interface HistoryViewProps {
 
 const GRAPH_HEIGHT = 48;
 const GRAPH_MIDDLE = GRAPH_HEIGHT / 2;
-const GRAPH_EDGE_TOP = -GRAPH_HEIGHT;
-const GRAPH_EDGE_BOTTOM = GRAPH_HEIGHT * 2;
+const GRAPH_EDGE_TOP = 0;
+const GRAPH_EDGE_BOTTOM = GRAPH_HEIGHT;
 const GRAPH_LANE_GAP = 12;
 const GRAPH_HORIZONTAL_PADDING = 6;
 
@@ -68,6 +69,80 @@ function graphWidth(laneCount: number): number {
 
 function laneX(lane: number): number {
   return GRAPH_HORIZONTAL_PADDING + lane * GRAPH_LANE_GAP;
+}
+
+function graphEdgePath(fromLane: number, fromY: number, toLane: number, toY: number): string {
+  const fromX = laneX(fromLane);
+  const toX = laneX(toLane);
+  if (fromX === toX) return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+  const controlY = (fromY + toY) / 2;
+  return `M ${fromX} ${fromY} C ${fromX} ${controlY}, ${toX} ${controlY}, ${toX} ${toY}`;
+}
+
+type HistoryRefKind = 'tag' | 'branch' | 'remote' | 'head' | 'other';
+
+interface HistoryRefLabel {
+  raw: string;
+  kind: HistoryRefKind;
+  label: string;
+}
+
+function historyRefLabel(raw: string): HistoryRefLabel {
+  const tagPrefix = 'tag: refs/tags/';
+  if (raw.startsWith(tagPrefix)) {
+    return { raw, kind: 'tag', label: raw.slice(tagPrefix.length) };
+  }
+  if (raw.startsWith('refs/tags/')) {
+    return { raw, kind: 'tag', label: raw.slice('refs/tags/'.length) };
+  }
+
+  const headTarget = raw.startsWith('HEAD -> ') ? raw.slice('HEAD -> '.length) : raw;
+  if (headTarget.startsWith('refs/heads/')) {
+    return { raw, kind: 'branch', label: headTarget.slice('refs/heads/'.length) };
+  }
+  if (headTarget.startsWith('refs/remotes/')) {
+    return { raw, kind: 'remote', label: headTarget.slice('refs/remotes/'.length) };
+  }
+  if (raw === 'HEAD') return { raw, kind: 'head', label: raw };
+  return { raw, kind: 'other', label: raw };
+}
+
+const HISTORY_REF_ORDER: Record<HistoryRefKind, number> = {
+  tag: 0,
+  branch: 1,
+  remote: 2,
+  head: 3,
+  other: 4,
+};
+
+function HistoryRefs({ refs }: { refs: readonly string[] }) {
+  const { t } = useI18n();
+  const labels = refs
+    .map(historyRefLabel)
+    .toSorted((left, right) => HISTORY_REF_ORDER[left.kind] - HISTORY_REF_ORDER[right.kind]);
+  if (!labels.length) return null;
+
+  return (
+    <span className="ref-list">
+      {labels.map((ref) => (
+        <span
+          key={ref.raw}
+          className={`ref-chip ${ref.kind}`}
+          title={ref.raw}
+          aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
+        >
+          {ref.kind === 'tag' ? (
+            <Tag aria-hidden="true" focusable="false" />
+          ) : ref.kind === 'head' ? (
+            <GitCommitHorizontal aria-hidden="true" focusable="false" />
+          ) : (
+            <GitBranch aria-hidden="true" focusable="false" />
+          )}
+          <span>{ref.label}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function HistoryGraph({
@@ -80,71 +155,57 @@ function HistoryGraph({
   const width = graphWidth(laneCount);
   const incomingLanes = new Set(commit.incomingEdges.map((edge) => edge.fromLane));
   const throughLanes = commit.activeLanes.filter((lane) => !incomingLanes.has(lane));
+  const graphStyle: CSSProperties & { '--history-node-x': string } = {
+    '--history-node-x': `${laneX(commit.lane)}px`,
+  };
 
   return (
-    <svg
+    <span
       className="history-graph"
       data-testid={`history-graph-${commit.oid}`}
-      width={width}
-      viewBox={`0 0 ${width} ${GRAPH_HEIGHT}`}
-      preserveAspectRatio="xMinYMid meet"
       aria-hidden="true"
-      focusable="false"
+      style={graphStyle}
     >
-      {throughLanes.map((lane) => (
-        <path
-          key={`active:${lane}`}
-          className="history-graph-edge active"
-          data-edge-kind="active"
-          data-from-lane={lane}
-          data-to-lane={lane}
-          d={`M ${laneX(lane)} ${GRAPH_EDGE_TOP} L ${laneX(lane)} ${GRAPH_EDGE_BOTTOM}`}
-        />
-      ))}
-      {commit.incomingEdges.map((edge) => (
-        <path
-          key={`incoming:${edge.fromLane}:${edge.toLane}`}
-          className="history-graph-edge incoming"
-          data-edge-kind="incoming"
-          data-from-lane={edge.fromLane}
-          data-to-lane={edge.toLane}
-          d={`M ${laneX(edge.fromLane)} ${GRAPH_EDGE_TOP} L ${laneX(edge.toLane)} ${GRAPH_MIDDLE}`}
-        />
-      ))}
-      {commit.parentEdges.map((edge) => (
-        <path
-          key={`parent:${edge.parentOid}:${edge.toLane}`}
-          className="history-graph-edge parent"
-          data-edge-kind="parent"
-          data-from-lane={edge.fromLane}
-          data-to-lane={edge.toLane}
-          d={`M ${laneX(edge.fromLane)} ${GRAPH_MIDDLE} L ${laneX(edge.toLane)} ${GRAPH_EDGE_BOTTOM}`}
-        />
-      ))}
-      <circle
-        className="history-graph-node"
-        data-node-lane={commit.lane}
-        cx={laneX(commit.lane)}
-        cy={GRAPH_MIDDLE}
-        r="4"
-      />
-    </svg>
+      <svg
+        width={width}
+        viewBox={`0 0 ${width} ${GRAPH_HEIGHT}`}
+        preserveAspectRatio="none"
+        focusable="false"
+      >
+        {throughLanes.map((lane) => (
+          <path
+            key={`active:${lane}`}
+            className="history-graph-edge active"
+            data-edge-kind="active"
+            data-from-lane={lane}
+            data-to-lane={lane}
+            d={graphEdgePath(lane, GRAPH_EDGE_TOP, lane, GRAPH_EDGE_BOTTOM)}
+          />
+        ))}
+        {commit.incomingEdges.map((edge) => (
+          <path
+            key={`incoming:${edge.fromLane}:${edge.toLane}`}
+            className="history-graph-edge incoming"
+            data-edge-kind="incoming"
+            data-from-lane={edge.fromLane}
+            data-to-lane={edge.toLane}
+            d={graphEdgePath(edge.fromLane, GRAPH_EDGE_TOP, edge.toLane, GRAPH_MIDDLE)}
+          />
+        ))}
+        {commit.parentEdges.map((edge) => (
+          <path
+            key={`parent:${edge.parentOid}:${edge.toLane}`}
+            className="history-graph-edge parent"
+            data-edge-kind="parent"
+            data-from-lane={edge.fromLane}
+            data-to-lane={edge.toLane}
+            d={graphEdgePath(edge.fromLane, GRAPH_MIDDLE, edge.toLane, GRAPH_EDGE_BOTTOM)}
+          />
+        ))}
+      </svg>
+      <span className="history-graph-node" data-node-lane={commit.lane} />
+    </span>
   );
-}
-
-function reachableCommitOids(history: RepoSnapshot['history'], headOid: string | undefined) {
-  const reachable = new Set<string>();
-  if (!headOid) return reachable;
-  const byOid = new Map(history.map((commit) => [commit.oid, commit]));
-  const pending = [headOid];
-  while (pending.length) {
-    const oid = pending.pop();
-    if (!oid || reachable.has(oid)) continue;
-    reachable.add(oid);
-    const commit = byOid.get(oid);
-    if (commit) pending.push(...commit.parents);
-  }
-  return reachable;
 }
 
 function settleAction(promise: Promise<unknown>): void {
@@ -156,8 +217,6 @@ interface HistoryPageState {
   nextSkip: number;
   complete: boolean;
 }
-
-const AUTO_HISTORY_PAGE_LIMIT = 5;
 
 function initialHistoryPage(commits: RepoSnapshot['history']): HistoryPageState {
   return {
@@ -194,7 +253,6 @@ export function HistoryView({
   const { t, message, formatDate } = useI18n();
   const [selectedOid, setSelectedOid] = useState(repo.selectedCommitOid ?? repo.history[0]?.oid);
   const [details, setDetails] = useState<CommitDetails>();
-  const [allRefs, setAllRefs] = useState(false);
   const [sourceRef, setSourceRef] = useState('');
   const [branchName, setBranchName] = useState('');
   const [resetMode, setResetMode] = useState<'soft' | 'mixed' | 'hard'>('mixed');
@@ -206,15 +264,11 @@ export function HistoryView({
     initialHistoryPage(repo.history),
   );
   const [loadingMore, setLoadingMore] = useState(false);
-  const [automaticPagesLoaded, setAutomaticPagesLoaded] = useState(0);
   const historyRequestIdRef = useRef(0);
-  const visibleHistory = useMemo(() => {
-    const reachable = reachableCommitOids(historyPage.commits, repo.branch.oid);
-    const visibleCommits = allRefs
-      ? historyPage.commits
-      : historyPage.commits.filter((commit) => reachable.has(commit.oid));
-    return assignHistoryLanes(visibleCommits);
-  }, [allRefs, historyPage.commits, repo.branch.oid]);
+  const visibleHistory = useMemo(
+    () => assignHistoryLanes(historyPage.commits),
+    [historyPage.commits],
+  );
   const selectedCommit = visibleHistory.find((commit) => commit.oid === selectedOid);
   const selectedActionOid = details?.oid === selectedOid ? selectedOid : undefined;
   const selectedCommitNeedsMainline = Boolean(selectedCommit && selectedCommit.parents.length > 1);
@@ -271,7 +325,6 @@ export function HistoryView({
     historyRequestIdRef.current += 1;
     setHistoryPage(initialHistoryPage(repo.history));
     setLoadingMore(false);
-    setAutomaticPagesLoaded(0);
   }, [repo.branch.oid, repo.history, repo.repoId]);
 
   useEffect(() => {
@@ -286,60 +339,46 @@ export function HistoryView({
     setMainlineParent(1);
   }, [selectedOid]);
 
-  const loadMoreHistory = useCallback(
-    async (automatic = false): Promise<void> => {
-      if (loadingMore || historyPage.complete) return;
-      const requestId = ++historyRequestIdRef.current;
-      const skip = historyPage.nextSkip;
-      setLoadingMore(true);
-      setError(undefined);
-      try {
-        const result = await adapter.query({
-          kind: 'history',
-          repoId: repo.repoId,
-          limit: HISTORY_PAGE_SIZE,
-          skip,
-        });
-        if (requestId !== historyRequestIdRef.current || result.kind !== 'history') return;
-        setHistoryPage((current) => ({
-          commits: appendUniqueCommits(current.commits, result.commits),
-          nextSkip: skip + result.commits.length,
-          complete: result.commits.length < HISTORY_PAGE_SIZE,
-        }));
-      } catch (cause) {
-        if (requestId === historyRequestIdRef.current) {
-          reportRuntimeError(t('loadMoreHistoryFailedTitle'), cause, t('loadMoreHistoryFailed'));
-          if (automatic) setAutomaticPagesLoaded(AUTO_HISTORY_PAGE_LIMIT);
-        }
-      } finally {
-        if (requestId === historyRequestIdRef.current) setLoadingMore(false);
+  const loadMoreHistory = useCallback(async (): Promise<void> => {
+    if (loadingMore || historyPage.complete) return;
+    const requestId = ++historyRequestIdRef.current;
+    const skip = historyPage.nextSkip;
+    setLoadingMore(true);
+    setError(undefined);
+    try {
+      const result = await adapter.query({
+        kind: 'history',
+        repoId: repo.repoId,
+        limit: HISTORY_PAGE_SIZE,
+        skip,
+      });
+      if (requestId !== historyRequestIdRef.current || result.kind !== 'history') return;
+      setHistoryPage((current) => ({
+        commits: appendUniqueCommits(current.commits, result.commits),
+        nextSkip: skip + result.commits.length,
+        complete: result.commits.length < HISTORY_PAGE_SIZE,
+      }));
+    } catch (cause) {
+      if (requestId === historyRequestIdRef.current) {
+        reportRuntimeError(t('loadMoreHistoryFailedTitle'), cause, t('loadMoreHistoryFailed'));
       }
-    },
-    [
-      adapter,
-      historyPage.complete,
-      historyPage.nextSkip,
-      loadingMore,
-      repo.repoId,
-      reportRuntimeError,
-      t,
-    ],
-  );
+    } finally {
+      if (requestId === historyRequestIdRef.current) setLoadingMore(false);
+    }
+  }, [
+    adapter,
+    historyPage.complete,
+    historyPage.nextSkip,
+    loadingMore,
+    repo.repoId,
+    reportRuntimeError,
+    t,
+  ]);
 
-  const currentHeadNeedsMore = Boolean(
-    repo.branch.oid && !allRefs && visibleHistory.length === 0 && !historyPage.complete,
-  );
   const graphLaneCount = Math.max(1, ...visibleHistory.map((commit) => commit.laneCount));
   const historyListStyle: CSSProperties & { '--history-graph-width': string } = {
     '--history-graph-width': `${graphWidth(graphLaneCount)}px`,
   };
-
-  useEffect(() => {
-    if (!currentHeadNeedsMore || loadingMore || automaticPagesLoaded >= AUTO_HISTORY_PAGE_LIMIT)
-      return;
-    setAutomaticPagesLoaded((current) => current + 1);
-    void loadMoreHistory(true);
-  }, [automaticPagesLoaded, currentHeadNeedsMore, loadMoreHistory, loadingMore]);
 
   const submitBranch = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -395,14 +434,7 @@ export function HistoryView({
             <GitBranch aria-hidden="true" focusable="false" />
             <span>{repo.branch.name ?? t('detachedHead')}</span>
           </div>
-          <label className="compact-toggle">
-            <input
-              type="checkbox"
-              checked={allRefs}
-              onChange={(event) => setAllRefs(event.target.checked)}
-            />
-            <span>{t('allRefs')}</span>
-          </label>
+          {actionsToggle}
         </div>
         <ol className="commit-list" style={historyListStyle}>
           {visibleHistory.map((commit) => (
@@ -424,15 +456,12 @@ export function HistoryView({
                       ? t('commitParents', { parents: commit.parents.join(', ') })
                       : t('rootCommit')}
                   </span>
-                  {commit.refs.length ? (
-                    <span className="ref-list">{commit.refs.join(' · ')}</span>
-                  ) : null}
+                  <HistoryRefs refs={commit.refs} />
                 </span>
                 <time dateTime={commit.authoredAt}>
                   {formatDate(commit.authoredAt, {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
                   })}
                 </time>
               </button>
@@ -441,17 +470,9 @@ export function HistoryView({
         </ol>
         {!historyPage.complete ? (
           <div className="history-load-more">
-            {currentHeadNeedsMore && automaticPagesLoaded >= AUTO_HISTORY_PAGE_LIMIT ? (
-              <p id="history-head-not-loaded">{t('headNotLoaded')}</p>
-            ) : null}
             <button
               type="button"
               disabled={loadingMore}
-              aria-describedby={
-                currentHeadNeedsMore && automaticPagesLoaded >= AUTO_HISTORY_PAGE_LIMIT
-                  ? 'history-head-not-loaded'
-                  : undefined
-              }
               onClick={() => settleAction(loadMoreHistory())}
             >
               {loadingMore ? t('loading') : t('loadMore')}
@@ -479,8 +500,8 @@ export function HistoryView({
                 <div>
                   <p className="eyebrow">{details.shortOid}</p>
                   <h2 id="commit-detail-title">{details.subject}</h2>
+                  <HistoryRefs refs={details.refs} />
                 </div>
-                {actionsToggle}
               </div>
               <p>{details.body}</p>
               <dl className="metadata-list inline">
@@ -556,7 +577,6 @@ export function HistoryView({
             <header className="commit-detail-header">
               <div className="commit-detail-heading">
                 <h2 id="commit-detail-title">{t('commitDetails')}</h2>
-                {actionsToggle}
               </div>
             </header>
             <p className="empty-state-small">

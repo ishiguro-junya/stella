@@ -146,6 +146,7 @@ describe('HistoryView', () => {
     expect(within(historyPane).getByText('main').closest('.history-branch-context')).toBeVisible();
 
     const toggle = await screen.findByRole('button', { name: 'Actions' });
+    expect(toggle.parentElement).toHaveClass('history-list-toolbar');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).toHaveAttribute('aria-controls', 'history-actions-inspector');
     expect(toggle.closest('.history-view')).toHaveClass('inspector-closed');
@@ -196,8 +197,7 @@ describe('HistoryView', () => {
     expect(screen.getByRole('textbox', { name: 'Source ref' })).toBeVisible();
   });
 
-  it('shows only commits reachable from the current HEAD until All refs is enabled', async () => {
-    const user = userEvent.setup();
+  it('shows commits from every ref without a visibility toggle', () => {
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) =>
         request.kind === 'branches'
@@ -249,15 +249,48 @@ describe('HistoryView', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /current head/u })).toBeInTheDocument();
+    const currentHead = screen.getByRole('button', { name: /current head/u });
+    expect(currentHead).toBeInTheDocument();
+    expect(currentHead.querySelector('time')).toHaveAttribute('datetime', '2026-08-08T00:00:00Z');
+    expect(currentHead.querySelector('time')?.textContent).toMatch(/\d{1,2}:\d{2}/u);
     expect(screen.getByRole('button', { name: /shared base/u })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /other branch only/u })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('checkbox', { name: 'All refs' }));
     expect(screen.getByRole('button', { name: /other branch only/u })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'All refs' })).not.toBeInTheDocument();
   });
 
-  it('lays out current-HEAD commits before adding hidden branch lanes for All refs', async () => {
-    const user = userEvent.setup();
+  it('shows Tag and shortened branch decorations in the list and commit details', async () => {
+    const refs = ['refs/remotes/origin/main', 'tag: refs/tags/v1.2.3', 'HEAD -> refs/heads/main'];
+    const details = { ...commitDetails(undefined), refs };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: details };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: 'head', detached: false, ahead: 0, behind: 0 },
+          history: [{ ...details, refs }],
+        })}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByLabelText('Tag v1.2.3')).toHaveLength(2));
+    expect(screen.getAllByText('main')).toHaveLength(3);
+    expect(screen.getAllByText('origin/main')).toHaveLength(2);
+    expect(screen.getAllByTitle('tag: refs/tags/v1.2.3')).toHaveLength(2);
+  });
+
+  it('lays out lanes from every ref immediately', () => {
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) =>
         request.kind === 'branches'
@@ -283,11 +316,6 @@ describe('HistoryView', () => {
         onPaneWidthsChange={() => undefined}
       />,
     );
-
-    const currentGraph = screen.getByTestId('history-graph-main-base');
-    expect(currentGraph.querySelector('[data-edge-kind="active"][data-from-lane="1"]')).toBeNull();
-
-    await user.click(screen.getByRole('checkbox', { name: 'All refs' }));
 
     expect(
       screen
@@ -324,14 +352,16 @@ describe('HistoryView', () => {
 
     const graph = screen.getByTestId('history-graph-merge');
     expect(graph).toHaveAttribute('aria-hidden', 'true');
-    expect(graph).toHaveAttribute('focusable', 'false');
-    expect(graph).toHaveAttribute('preserveAspectRatio', 'xMinYMid meet');
+    expect(graph.querySelector('svg')).toHaveAttribute('focusable', 'false');
+    expect(graph.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'none');
     expect(graph.querySelectorAll('[data-edge-kind="parent"]')).toHaveLength(2);
-    expect(graph.querySelector('[data-edge-kind="parent"][data-to-lane="1"]')).not.toBeNull();
+    expect(
+      graph.querySelector('[data-edge-kind="parent"][data-to-lane="1"]')?.getAttribute('d'),
+    ).toContain(' C ');
     expect(screen.getByRole('button', { name: /merge.*Parents left, right/u })).toBeInTheDocument();
   });
 
-  it('loads another page and applies current-HEAD reachability and All refs to the combined list', async () => {
+  it('loads another page and keeps commits from every ref in the combined list', async () => {
     const user = userEvent.setup();
     const initial = linearHistory('current', HISTORY_PAGE_SIZE);
     const nextPage = [
@@ -368,7 +398,7 @@ describe('HistoryView', () => {
     expect(
       (await screen.findByTestId(`history-graph-current-${HISTORY_PAGE_SIZE}`)).closest('button'),
     ).toBeVisible();
-    expect(screen.queryByRole('button', { name: /other-tip/u })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /other-tip/u })).toBeVisible();
     expect(query).toHaveBeenCalledWith({
       kind: 'history',
       repoId: 'repo-1',
@@ -376,12 +406,9 @@ describe('HistoryView', () => {
       skip: HISTORY_PAGE_SIZE,
     });
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('checkbox', { name: 'All refs' }));
-    expect(screen.getByRole('button', { name: /other-tip/u })).toBeVisible();
   });
 
-  it('automatically pages until the current HEAD enters the loaded history', async () => {
+  it('waits for an explicit request before loading the next all-refs page', async () => {
     const initial = linearHistory('other', HISTORY_PAGE_SIZE);
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
       if (request.kind === 'history')
@@ -410,14 +437,11 @@ describe('HistoryView', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /current-head/u })).toBeVisible();
-    expect(query).toHaveBeenCalledWith({
-      kind: 'history',
-      repoId: 'repo-1',
-      limit: HISTORY_PAGE_SIZE,
-      skip: HISTORY_PAGE_SIZE,
-    });
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
+    await waitFor(() =>
+      expect(query.mock.calls.some(([request]) => request.kind === 'commitDetails')).toBe(true),
+    );
+    expect(query.mock.calls.some(([request]) => request.kind === 'history')).toBe(false);
   });
 
   it('drops loaded pages and restarts from the first page when HEAD changes', async () => {

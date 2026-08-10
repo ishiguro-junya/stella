@@ -210,16 +210,15 @@ export const MESSAGES = {
   },
   actions: { en: 'Actions', ja: '操作' },
   commitHistory: { en: 'Commit history', ja: 'Commit履歴' },
-  allRefs: { en: 'All refs', ja: 'すべてのref' },
+  tagRefLabel: {
+    en: (args) => `Tag ${text(args, 'name')}`,
+    ja: (args) => `Tag ${text(args, 'name')}`,
+  },
   commitParents: {
     en: (args) => `Parents ${text(args, 'parents')}`,
     ja: (args) => `Parent ${text(args, 'parents')}`,
   },
   rootCommit: { en: 'Root commit', ja: '最初のCommit' },
-  headNotLoaded: {
-    en: 'Current HEAD has not been loaded yet. Use Load more to continue searching.',
-    ja: '現在のHEADはまだ読み込まれていません。「さらに読み込む」で検索を続けてください。',
-  },
   loadMore: { en: 'Load more', ja: 'さらに読み込む' },
   historyListWidth: { en: 'History list width', ja: '履歴一覧の幅' },
   author: { en: 'Author', ja: '作成者' },
