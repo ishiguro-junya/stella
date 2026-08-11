@@ -11,6 +11,19 @@ Stellaは、シンプルなGitクライアントアプリです。
 > このアプリは現在アルファ版です。
 > 将来的に破壊的な変更が入る可能性があります。
 
+## 📦 インストール
+
+macOS 26以降のApple Silicon Macで、次のコマンドを実行します。  
+
+```sh
+brew install --cask ishiguro-junya/tap/ishiguro-stella
+```
+
+StellaはDeveloper ID署名とApple公証にまだ対応していません。  
+初回起動が拒否された場合は、Stellaを一度開いてから「システム設定」→「プライバシーとセキュリティ」→「このまま開く」を選択してください。  
+
+更新方法とアンインストール方法は、[Homebrew Tap](https://github.com/ishiguro-junya/homebrew-tap)を参照してください。  
+
 ## ✨ 機能
 
 - 変更内容の確認、Stage/Unstage、行単位の部分Stage

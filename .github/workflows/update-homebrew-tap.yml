@@ -1,0 +1,115 @@
+name: Homebrew Tapを更新
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 更新対象のRelease tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-homebrew-tap
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Cask更新PRを作成
+    runs-on: macos-26
+    timeout-minutes: 15
+
+    steps:
+      - name: Release情報を確定
+        id: release
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${EVENT_TAG:-${INPUT_TAG:-}}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tagの形式が不正です: $tag" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          asset_name="Stella_${version}_arm64.zip"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "asset_name=$asset_name"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Release assetを検証
+        id: asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          ASSET_NAME: ${{ steps.release.outputs.asset_name }}
+        run: |
+          mkdir -p .tmp/release/unpacked
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$ASSET_NAME" \
+            --dir .tmp/release
+          unzip -q ".tmp/release/$ASSET_NAME" -d .tmp/release/unpacked
+
+          app_path=".tmp/release/unpacked/Stella.app"
+          test -d "$app_path"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$app_path/Contents/Info.plist")" = "com.emuni.stella"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app_path/Contents/Info.plist")" = "$RELEASE_VERSION"
+          file "$app_path/Contents/MacOS/stella" | grep -q "arm64"
+
+          sha256="$(shasum -a 256 ".tmp/release/$ASSET_NAME" | awk '{print $1}')"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Tap更新鍵を確認
+        env:
+          TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          if [[ -z "$TAP_DEPLOY_KEY" ]]; then
+            echo "Repository secret HOMEBREW_TAP_DEPLOY_KEYを設定してください" >&2
+            exit 1
+          fi
+
+      - name: Homebrew Tapを取得
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ishiguro-junya/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          fetch-depth: 0
+          path: .tmp/homebrew-tap
+
+      - name: Caskを更新
+        id: update
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_SHA256: ${{ steps.asset.outputs.sha256 }}
+        working-directory: .tmp/homebrew-tap
+        run: |
+          ruby scripts/update-stella-cask.rb "$RELEASE_VERSION" "$RELEASE_SHA256"
+          if git diff --quiet -- Casks/ishiguro-stella.rb; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tap更新branchをpush
+        if: steps.update.outputs.changed == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        working-directory: .tmp/homebrew-tap
+        run: |
+          branch="update/stella-${RELEASE_TAG}"
+          git switch -C "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/ishiguro-stella.rb
+          git commit -m "chore(cask): Stella ${RELEASE_TAG}へ更新"
+          git push --force-with-lease origin "$branch"
