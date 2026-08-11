@@ -52,26 +52,16 @@ mise run dev
 
 ## 📚 ドキュメント
 
+- [仕様](docs/specification.md) — 対応環境、表示言語、リポジトリ表示、対象範囲
 - [アーキテクチャ](docs/architecture.md) — モジュール境界、Git操作、安全方針、品質ゲート
 - [デザインQA](DESIGN.md) — UI比較、操作確認、検証結果
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md) — 利用ライブラリの著作権とライセンス
-
-## 📝 備考
-
-- 動作環境はMacのApple Siliconのみ対応しています。
-- 初回表示はmacOSの言語が日本語なら日本語、それ以外は英語です。  
-  以後は設定画面で選んだ言語を保持します。
-- UIとStella由来の通知・エラーは日本語/英語に対応し、Git出力、path、Branch名、Commit本文は原文のまま表示します。
-- リポジトリ一覧では、リポジトリ直下の`logo.svg`、`logo.png`、`logo.webp`、`logo.jpg`、`logo.jpeg`をロゴとして表示します。
-  `.stella/`、`.github/`、`docs/`直下の`logo.svg`または`logo.png`と、`src-tauri/icons/128x128.png`にも対応します。
-- App Sandbox、Developer ID署名、公証、自動更新、Mac App Store配布を扱っていません。
-- GitHub/GitLab固有連携、認証管理、stash、tag、remote管理、interactive rebase、force push、submodule、LFS、worktree管理は対象外です。
-- GUIアプリはshellの初期化ファイルから`PATH`を継承しないため、Git backendは`/usr/bin/git`を利用します。
 
 ## 🔗 参考リンク
 
 - [mise](https://mise.jdx.dev/)
 - [Tauri](https://github.com/tauri-apps/tauri)
+- [Oxc](https://oxc.rs/)
 - [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
 - [Lychee](https://github.com/lycheeverse/lychee)
 - [Lefthook](https://lefthook.dev/)
