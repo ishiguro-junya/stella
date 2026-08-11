@@ -915,6 +915,138 @@ describe('tauriWorkspaceAdapter', () => {
     expect(activityResult.entries[0]?.action).toEqual({ id: 'actionFetch' });
   });
 
+  it('creates and checks out a branch through the typed action', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_preview')
+        return {
+          confirmationToken: 'branch-preview',
+          expiresAtUnixMs: 1,
+          summary: { id: 'actionCreateBranch' },
+          destructive: false,
+          affectedPaths: [],
+          affectedCommits: ['head-1'],
+          resolvedTargets: [{ input: 'head-1', oid: 'head-1' }],
+          lostCommitOids: [],
+          remoteEffect: null,
+        };
+      if (command === 'workspace_execute')
+        return {
+          operationId: 'branch-1',
+          summary: { id: 'backendBranchCreated' },
+          repoGeneration: 2,
+          eventSeq: 2,
+          snapshot: { ...snapshot(), repoGeneration: 2, eventSeq: 2 },
+          command: {
+            argv: ['git', 'switch', '-c', 'feature/new-flow', 'head-1'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+    const action = {
+      kind: 'createBranch' as const,
+      name: 'feature/new-flow',
+      startOid: 'head-1',
+      checkout: true,
+    };
+    const preview = await adapter.preview({ repoId: 'repo-1', action });
+
+    await adapter.execute({ repoId: 'repo-1', action, preview });
+
+    expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
+      request: {
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: {
+          kind: 'createBranch',
+          name: 'feature/new-flow',
+          startPoint: 'head-1',
+          checkout: true,
+        },
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
+      request: expect.objectContaining({
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: {
+          kind: 'createBranch',
+          name: 'feature/new-flow',
+          startPoint: 'head-1',
+          checkout: true,
+        },
+        confirmationToken: 'branch-preview',
+      }),
+    });
+  });
+
+  it('creates a Tag through the typed action and refreshes History refs', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_preview')
+        return {
+          confirmationToken: 'tag-preview',
+          expiresAtUnixMs: 1,
+          summary: { id: 'actionCreateTag' },
+          destructive: false,
+          affectedPaths: [],
+          affectedCommits: ['head-1'],
+          resolvedTargets: [{ input: 'head-1', oid: 'head-1' }],
+          lostCommitOids: [],
+          remoteEffect: null,
+        };
+      if (command === 'workspace_execute')
+        return {
+          operationId: 'tag-1',
+          summary: { id: 'backendTagCreated' },
+          repoGeneration: 2,
+          eventSeq: 2,
+          snapshot: { ...snapshot(), repoGeneration: 2, eventSeq: 2 },
+          command: {
+            argv: ['git', 'tag', '--no-sign', '--', 'v1.0.0', 'head-1'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+    const action = { kind: 'createTag' as const, name: 'v1.0.0', targetOid: 'head-1' };
+    const preview = await adapter.preview({ repoId: 'repo-1', action });
+
+    await adapter.execute({ repoId: 'repo-1', action, preview });
+
+    expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
+      request: {
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: { kind: 'createTag', name: 'v1.0.0', target: 'head-1' },
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
+      request: expect.objectContaining({
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: { kind: 'createTag', name: 'v1.0.0', target: 'head-1' },
+        confirmationToken: 'tag-preview',
+      }),
+    });
+    const historyCalls = invokeMock.mock.calls.filter(
+      ([command, args]) => command === 'workspace_query' && requestedQueryKind(args) === 'history',
+    );
+    expect(historyCalls).toHaveLength(2);
+    const activityResult = await adapter.query({ kind: 'activity' });
+    if (activityResult.kind !== 'activity') throw new Error('Expected activity result');
+    expect(activityResult.entries[0]?.action).toEqual({ id: 'actionCreateTag' });
+  });
+
   it('preserves the started time from progress events and uses a human action title', async () => {
     vi.useFakeTimers();
     try {
@@ -1016,6 +1148,27 @@ describe('tauriWorkspaceAdapter', () => {
       expect(mapped.canAbort).toBe(canAbort);
     },
   );
+
+  it('restores Git Flow conflict recovery controls from the native state marker', async () => {
+    invokeMock.mockImplementation(
+      baseInvoke({
+        ...snapshot({ kind: 'merge', incomingOid: null }),
+        gitFlowOperation: 'finish',
+      }),
+    );
+    const adapter = createTauriWorkspaceAdapter();
+    const workspace = await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+    const operation = workspace.repos[0]?.operation;
+
+    expect(operation).toMatchObject({
+      kind: 'merge',
+      gitFlowOperation: 'finish',
+      label: { id: 'operationGitFlowInProgress', args: { operation: 'finish' } },
+      canContinue: true,
+      canSkip: false,
+      canAbort: true,
+    });
+  });
 
   it('replaces an old same-path conflict session before Mark resolved', async () => {
     let conflictQueries = 0;

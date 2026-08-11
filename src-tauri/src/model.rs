@@ -104,6 +104,7 @@ pub enum Query {
         bucket_boundaries_unix_seconds: Vec<i64>,
     },
     Branches,
+    GitFlowOverview,
     CommitDetails {
         oid: String,
     },
@@ -154,6 +155,7 @@ pub enum QueryOutcome {
     History(HistoryResult),
     CommitActivity(CommitActivityResult),
     Branches(BranchResult),
+    GitFlowOverview(GitFlowOverview),
     CommitDetails(CommitDetails),
     Conflict(Box<ConflictDocument>),
 }
@@ -271,6 +273,13 @@ pub enum Action {
         start_point: String,
         checkout: bool,
     },
+    CreateTag {
+        name: String,
+        target: String,
+    },
+    GitFlow {
+        request: GitFlowRequest,
+    },
     Checkout {
         branch: String,
     },
@@ -349,7 +358,7 @@ impl Action {
                     operation: FileOperation::MoveToTrash,
                     ..
                 }
-        )
+        ) || matches!(self, Self::GitFlow { request } if request.destructive())
     }
 
     pub fn kind_name(&self) -> &'static str {
@@ -362,6 +371,8 @@ impl Action {
             Self::Pull { .. } => "pull",
             Self::Push { .. } => "push",
             Self::CreateBranch { .. } => "createBranch",
+            Self::CreateTag { .. } => "createTag",
+            Self::GitFlow { .. } => "gitFlow",
             Self::Checkout { .. } => "checkout",
             Self::Merge { .. } => "merge",
             Self::Rebase { .. } => "rebase",
@@ -390,7 +401,127 @@ impl Action {
                     | Self::CherryPick { .. }
                     | Self::Revert { .. }
                     | Self::CreateBranch { .. }
+                    | Self::CreateTag { .. }
+                    | Self::GitFlow { .. }
             )
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitFlowCommand {
+    Init,
+    Start,
+    List,
+    Checkout,
+    Update,
+    Publish,
+    Track,
+    Rename,
+    Delete,
+    Finish,
+    Integrate,
+    ConfigList,
+    ConfigAddBase,
+    ConfigAddTopic,
+    ConfigEditBase,
+    ConfigEditTopic,
+    ConfigRenameBase,
+    ConfigRenameTopic,
+    ConfigDeleteBase,
+    ConfigDeleteTopic,
+    ConfigStatus,
+    ConfigSync,
+    Continue,
+    Abort,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitFlowPreset {
+    Classic,
+    Github,
+    Gitlab,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitFlowStrategy {
+    Merge,
+    Rebase,
+    Squash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFlowRequest {
+    pub command: GitFlowCommand,
+    pub topic_type: Option<String>,
+    pub name: Option<String>,
+    pub secondary_name: Option<String>,
+    pub parent: Option<String>,
+    pub base: Option<String>,
+    pub preset: Option<GitFlowPreset>,
+    #[serde(default)]
+    pub shared: bool,
+    #[serde(default)]
+    pub fetch: bool,
+    #[serde(default)]
+    pub remote: bool,
+    pub tag_name: Option<String>,
+    pub tag_message: Option<String>,
+    #[serde(default)]
+    pub sign: bool,
+    pub signing_key: Option<String>,
+    #[serde(default)]
+    pub keep: bool,
+    #[serde(default)]
+    pub push: bool,
+    pub strategy: Option<GitFlowStrategy>,
+    pub downstream_strategy: Option<GitFlowStrategy>,
+    pub prefix: Option<String>,
+    pub starting_point: Option<String>,
+    pub auto_update: Option<bool>,
+    pub tag: Option<bool>,
+}
+
+impl GitFlowRequest {
+    pub fn destructive(&self) -> bool {
+        matches!(
+            self.command,
+            GitFlowCommand::Delete
+                | GitFlowCommand::Finish
+                | GitFlowCommand::Integrate
+                | GitFlowCommand::ConfigRenameBase
+                | GitFlowCommand::ConfigRenameTopic
+                | GitFlowCommand::ConfigDeleteBase
+                | GitFlowCommand::ConfigDeleteTopic
+                | GitFlowCommand::Abort
+        )
+    }
+
+    pub fn remote_effect(&self) -> bool {
+        self.remote || self.push || matches!(self.command, GitFlowCommand::Publish)
+    }
+
+    pub fn uploads_lfs_objects(&self) -> bool {
+        matches!(self.command, GitFlowCommand::Publish)
+            || matches!(self.command, GitFlowCommand::Finish) && self.push
+    }
+
+    pub fn requires_clean_worktree(&self) -> bool {
+        matches!(
+            self.command,
+            GitFlowCommand::Start
+                | GitFlowCommand::Checkout
+                | GitFlowCommand::Update
+                | GitFlowCommand::Track
+                | GitFlowCommand::Rename
+                | GitFlowCommand::Delete
+                | GitFlowCommand::Finish
+                | GitFlowCommand::Integrate
+        )
     }
 }
 
@@ -448,6 +579,8 @@ pub struct RepoSnapshot {
     pub behind: u64,
     pub entries: Vec<StatusEntry>,
     pub operation: OperationState,
+    #[serde(default)]
+    pub git_flow_operation: Option<String>,
     pub repo_generation: RepoGeneration,
     pub event_seq: EventSeq,
 }
@@ -623,6 +756,16 @@ pub struct BranchSummary {
     pub current: bool,
     pub remote: bool,
     pub upstream: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFlowOverview {
+    pub initialized: bool,
+    pub available: bool,
+    pub raw: serde_json::Value,
+    pub output: String,
+    pub repo_generation: RepoGeneration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1142,6 +1285,18 @@ mod tests {
                 "name": "topic",
                 "startPoint": "HEAD",
                 "checkout": true
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Action::CreateTag {
+                name: "v1.0.0".into(),
+                target: "HEAD".into(),
+            })
+            .unwrap(),
+            json!({
+                "kind": "createTag",
+                "name": "v1.0.0",
+                "target": "HEAD"
             })
         );
         assert_eq!(

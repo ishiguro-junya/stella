@@ -26,6 +26,7 @@ export type WireQuery =
   | { kind: 'diff'; target: WireDiffTarget; paths: string[] }
   | { kind: 'history'; limit: number; skip: number; search?: string }
   | { kind: 'branches' }
+  | { kind: 'gitFlowOverview' }
   | { kind: 'commitDetails'; oid: string }
   | { kind: 'conflict'; path: string }
   | {
@@ -41,6 +42,7 @@ export type WireQueryOutcome =
   | { kind: 'diff'; data: WireDiffResult }
   | { kind: 'history'; data: WireHistoryResult }
   | { kind: 'branches'; data: WireBranchResult }
+  | { kind: 'gitFlowOverview'; data: WireGitFlowOverview }
   | { kind: 'commitDetails'; data: WireCommitDetails }
   | { kind: 'conflict'; data: WireConflictDocument }
   | { kind: 'commitActivity'; data: WireCommitActivitySeries };
@@ -115,6 +117,8 @@ export type WireAction =
       setUpstream: boolean;
     }
   | { kind: 'createBranch'; name: string; startPoint: string; checkout: boolean }
+  | { kind: 'createTag'; name: string; target: string }
+  | { kind: 'gitFlow'; request: WireGitFlowRequest }
   | { kind: 'checkout'; branch: string }
   | { kind: 'merge'; source: string }
   | { kind: 'rebase'; onto: string }
@@ -188,6 +192,7 @@ export interface WireRepoSnapshot {
   behind: number;
   entries: WireStatusEntry[];
   operation: WireOperationState;
+  gitFlowOperation?: string | null;
   repoGeneration: number;
   eventSeq: number;
 }
@@ -262,6 +267,62 @@ export interface WireBranchResult {
     upstream: string | null;
   }>;
   repoGeneration: number;
+}
+
+export interface WireGitFlowOverview {
+  initialized: boolean;
+  available: boolean;
+  raw: unknown;
+  output: string;
+  repoGeneration: number;
+}
+
+export interface WireGitFlowRequest {
+  command:
+    | 'init'
+    | 'start'
+    | 'list'
+    | 'checkout'
+    | 'update'
+    | 'publish'
+    | 'track'
+    | 'rename'
+    | 'delete'
+    | 'finish'
+    | 'integrate'
+    | 'configList'
+    | 'configAddBase'
+    | 'configAddTopic'
+    | 'configEditBase'
+    | 'configEditTopic'
+    | 'configRenameBase'
+    | 'configRenameTopic'
+    | 'configDeleteBase'
+    | 'configDeleteTopic'
+    | 'configStatus'
+    | 'configSync'
+    | 'continue'
+    | 'abort';
+  topicType?: string;
+  name?: string;
+  secondaryName?: string;
+  parent?: string;
+  base?: string;
+  preset?: 'classic' | 'github' | 'gitlab' | 'custom';
+  shared?: boolean;
+  fetch?: boolean;
+  remote?: boolean;
+  tagName?: string;
+  tagMessage?: string;
+  sign?: boolean;
+  signingKey?: string;
+  keep?: boolean;
+  push?: boolean;
+  strategy?: 'merge' | 'rebase' | 'squash';
+  prefix?: string;
+  startingPoint?: string;
+  autoUpdate?: boolean;
+  tag?: boolean;
 }
 
 export interface WireCommitActivitySeries {

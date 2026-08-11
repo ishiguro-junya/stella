@@ -4,10 +4,12 @@ mod app_menu;
 mod commit;
 mod conflict;
 mod git;
+mod git_flow;
 mod journal;
 mod model;
 mod patch;
 mod repository_logo;
+mod toolchain;
 mod workspace;
 
 pub use model::*;
@@ -17,6 +19,7 @@ pub use workspace::{
 };
 
 use std::sync::Arc;
+use tauri::Manager;
 
 #[cfg(feature = "e2e")]
 fn with_e2e_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
@@ -31,12 +34,19 @@ fn with_e2e_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri
 }
 
 pub fn run() {
-    let workspace = Workspace::system()
-        .unwrap_or_else(|error| panic!("Stella backend initialization failed: {error}"));
-
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::new(workspace));
+        .setup(|app| {
+            let manager = toolchain::ToolchainManager::load(
+                app.path().app_config_dir()?,
+                app.path().resource_dir()?,
+            );
+            let workspace =
+                Workspace::with_git(manager.executor()).map_err(|error| error.to_string())?;
+            app.manage(Arc::new(workspace));
+            app.manage(manager);
+            Ok(())
+        });
     with_e2e_plugins(builder)
         .menu(app_menu::build)
         .on_menu_event(app_menu::handle_event)
@@ -47,7 +57,9 @@ pub fn run() {
             workspace_execute,
             workspace_cancel,
             repository_logo::repository_logo,
-            app_menu::set_app_language
+            app_menu::set_app_language,
+            toolchain::toolchain_status,
+            toolchain::toolchain_set_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stella");

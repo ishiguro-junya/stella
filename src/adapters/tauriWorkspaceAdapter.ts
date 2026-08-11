@@ -238,6 +238,12 @@ function operationLabel(
   throw new Error('Unknown operation kind');
 }
 
+function isGitFlowOperation(
+  value: string | null | undefined,
+): value is 'finish' | 'update' | 'integrate' {
+  return value === 'finish' || value === 'update' || value === 'integrate';
+}
+
 function mapRepoSnapshot(snapshot: WireRepoSnapshot, history: CommitSummary[]): RepoSnapshot {
   const changes = snapshot.entries.flatMap(statusEntry);
   const branchName = snapshot.head.kind === 'detached' ? null : snapshot.head.name;
@@ -266,6 +272,9 @@ function mapRepoSnapshot(snapshot: WireRepoSnapshot, history: CommitSummary[]): 
 
   const kind = snapshot.operation.kind;
   const unresolvedCount = changes.filter((entry) => entry.area === 'conflicted').length;
+  const gitFlowOperation = isGitFlowOperation(snapshot.gitFlowOperation)
+    ? snapshot.gitFlowOperation
+    : undefined;
   return {
     repoId: snapshot.repoId,
     name: repoName(snapshot.root),
@@ -275,11 +284,19 @@ function mapRepoSnapshot(snapshot: WireRepoSnapshot, history: CommitSummary[]): 
     branch,
     operation: {
       kind,
-      label: operationLabel(kind),
+      label: gitFlowOperation
+        ? { id: 'operationGitFlowInProgress', args: { operation: gitFlowOperation } }
+        : operationLabel(kind),
+      ...(gitFlowOperation ? { gitFlowOperation } : {}),
       unresolvedCount,
       canContinue:
-        unresolvedCount === 0 && (kind === 'rebase' || kind === 'cherryPick' || kind === 'revert'),
-      canSkip: kind === 'rebase' || kind === 'cherryPick' || kind === 'revert',
+        unresolvedCount === 0 &&
+        (Boolean(gitFlowOperation) ||
+          kind === 'rebase' ||
+          kind === 'cherryPick' ||
+          kind === 'revert'),
+      canSkip:
+        !gitFlowOperation && (kind === 'rebase' || kind === 'cherryPick' || kind === 'revert'),
       canAbort: kind !== 'unknown',
     },
     changes,
@@ -496,8 +513,12 @@ async function mapAction(
         kind: 'createBranch',
         name: action.name,
         startPoint: action.startOid,
-        checkout: false,
+        checkout: action.checkout ?? false,
       };
+    case 'createTag':
+      return { kind: 'createTag', name: action.name, target: action.targetOid };
+    case 'gitFlow':
+      return { kind: 'gitFlow', request: { ...action.request } };
     case 'checkoutBranch':
       return { kind: 'checkout', branch: action.name };
     case 'merge':
@@ -657,6 +678,10 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionPush');
     case 'createBranch':
       return localized('actionCreateBranch');
+    case 'createTag':
+      return localized('actionCreateTag');
+    case 'gitFlow':
+      return localized('actionGitFlow');
     case 'checkoutBranch':
       return localized('actionCheckoutBranch');
     case 'merge':
@@ -704,7 +729,9 @@ function actionMayChangeHistoryRefs(action: WireAction): boolean {
     action.kind === 'pull' ||
     action.kind === 'push' ||
     action.kind === 'createBranch' ||
-    action.kind === 'checkout'
+    action.kind === 'createTag' ||
+    action.kind === 'checkout' ||
+    action.kind === 'gitFlow'
   );
 }
 
@@ -960,6 +987,12 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
                   },
             ),
           };
+        }
+        case 'gitFlowOverview': {
+          const outcome = await queryWire(request.repoId, { kind: 'gitFlowOverview' });
+          if (outcome.kind !== 'gitFlowOverview')
+            throw new Error('Invalid Git Flow overview response.');
+          return { kind: 'gitFlowOverview', overview: { ...outcome.data } };
         }
         case 'conflict': {
           const outcome = await queryWire(request.repoId, { kind: 'conflict', path: request.path });

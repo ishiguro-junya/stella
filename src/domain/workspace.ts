@@ -75,6 +75,68 @@ export interface BranchSummary {
   upstream?: string;
 }
 
+export type GitFlowCommand =
+  | 'init'
+  | 'start'
+  | 'list'
+  | 'checkout'
+  | 'update'
+  | 'publish'
+  | 'track'
+  | 'rename'
+  | 'delete'
+  | 'finish'
+  | 'integrate'
+  | 'configList'
+  | 'configAddBase'
+  | 'configAddTopic'
+  | 'configEditBase'
+  | 'configEditTopic'
+  | 'configRenameBase'
+  | 'configRenameTopic'
+  | 'configDeleteBase'
+  | 'configDeleteTopic'
+  | 'configStatus'
+  | 'configSync'
+  | 'continue'
+  | 'abort';
+
+export type GitFlowPreset = 'classic' | 'github' | 'gitlab' | 'custom';
+export type GitFlowStrategy = 'merge' | 'rebase' | 'squash';
+
+export interface GitFlowRequest {
+  command: GitFlowCommand;
+  topicType?: string;
+  name?: string;
+  secondaryName?: string;
+  parent?: string;
+  base?: string;
+  preset?: GitFlowPreset;
+  shared?: boolean;
+  fetch?: boolean;
+  remote?: boolean;
+  tagName?: string;
+  tagMessage?: string;
+  sign?: boolean;
+  signingKey?: string;
+  keep?: boolean;
+  push?: boolean;
+  strategy?: GitFlowStrategy;
+  downstreamStrategy?: GitFlowStrategy;
+  prefix?: string;
+  startingPoint?: string;
+  autoUpdate?: boolean;
+  tag?: boolean;
+}
+
+export interface GitFlowOverview {
+  initialized: boolean;
+  available: boolean;
+  raw: unknown;
+  output: string;
+  repoGeneration: Generation;
+}
+
 export type OperationState =
   | { kind: 'none' }
   | {
@@ -87,6 +149,7 @@ export type OperationState =
         | 'pendingStructuredCommit'
         | 'structuredAbortRecovery';
       label: LocalizedMessage;
+      gitFlowOperation?: 'finish' | 'update' | 'integrate';
       unresolvedCount: number;
       canContinue: boolean;
       canSkip: boolean;
@@ -251,7 +314,9 @@ export type WorkspaceAction =
   | { kind: 'fetch' }
   | { kind: 'pullFastForward' }
   | { kind: 'push' }
-  | { kind: 'createBranch'; name: string; startOid: string }
+  | { kind: 'createBranch'; name: string; startOid: string; checkout?: boolean }
+  | { kind: 'createTag'; name: string; targetOid: string }
+  | { kind: 'gitFlow'; request: GitFlowRequest }
   | { kind: 'checkoutBranch'; name: string }
   | { kind: 'merge'; sourceRef: string }
   | { kind: 'rebase'; ontoRef: string }
@@ -305,6 +370,7 @@ export type WorkspaceQuery =
   | { kind: 'history'; repoId: RepoId; limit: number; skip: number; search?: string }
   | { kind: 'commitDetails'; repoId: RepoId; oid: string }
   | { kind: 'branches'; repoId: RepoId }
+  | { kind: 'gitFlowOverview'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }
   | { kind: 'activity'; repoId?: RepoId }
   | {
@@ -319,6 +385,7 @@ export type QueryResult =
   | { kind: 'history'; commits: CommitSummary[] }
   | { kind: 'commitDetails'; commit: CommitDetails }
   | { kind: 'branches'; branches: BranchSummary[] }
+  | { kind: 'gitFlowOverview'; overview: GitFlowOverview }
   | { kind: 'conflict'; document: ConflictDocument }
   | { kind: 'activity'; entries: ActivityEntry[] }
   | { kind: 'commitActivity'; series: CommitActivitySeries };

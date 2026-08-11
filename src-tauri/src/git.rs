@@ -18,6 +18,10 @@ const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub(crate) struct GitExecutor {
     executable: PathBuf,
+    lfs_executable: Option<PathBuf>,
+    flow_executable: Option<PathBuf>,
+    environment: Vec<(OsString, OsString)>,
+    unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +69,7 @@ pub(crate) enum GitCommand {
     CommonDir,
     IsBare,
     Status,
+    AttributeFiles,
     Diff {
         target: DiffTarget,
         paths: Vec<String>,
@@ -92,6 +97,7 @@ pub(crate) enum GitCommand {
         oid: String,
         parent: Option<String>,
     },
+    References,
     Branches,
     HeadOid,
     Resolve {
@@ -159,6 +165,10 @@ pub(crate) enum GitCommand {
         name: String,
         start_point: String,
     },
+    CreateTag {
+        name: String,
+        target: String,
+    },
     CreateAndSwitch {
         name: String,
         start_point: String,
@@ -205,11 +215,25 @@ pub(crate) enum GitCommand {
     CheckConflictAttributes {
         path: String,
     },
+    CheckLfsAttribute {
+        path: String,
+    },
     CatFileSize {
         oid: String,
     },
     CatFile {
         oid: String,
+    },
+    GitFlowConfigList {
+        file: Option<PathBuf>,
+    },
+    GitFlowConfigUnset {
+        key: String,
+    },
+    GitFlowConfigAdd {
+        file: Option<PathBuf>,
+        key: String,
+        value: String,
     },
 }
 
@@ -248,6 +272,16 @@ impl GitCommand {
                 "--branch",
                 "--untracked-files=all",
                 "-z",
+            ]),
+            Self::AttributeFiles => strings([
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                ".gitattributes",
+                ":(glob)**/.gitattributes",
             ]),
             Self::Diff { target, paths } => {
                 let mut args = strings([
@@ -313,7 +347,7 @@ impl GitCommand {
                 "show".into(),
                 "--no-patch".into(),
                 "--decorate=full".into(),
-                "--format=%H%x00%P%x00%D%x00%an%x00%ae%x00%aI%x00%s%x00%B".into(),
+                "--format=%H%x00%P%x00%D%x00%an%x00%ae%x00%aI%x00%s%x00%b".into(),
                 oid.into(),
             ],
             Self::CommitParents { oid } => vec![
@@ -350,6 +384,13 @@ impl GitCommand {
                 }
                 args
             }
+            Self::References => strings([
+                "for-each-ref",
+                "--format=%(refname)%00%(objectname)",
+                "refs/heads",
+                "refs/remotes",
+                "refs/tags",
+            ]),
             Self::Branches => strings([
                 "for-each-ref",
                 "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream)%00%(committerdate:unix)",
@@ -500,6 +541,13 @@ impl GitCommand {
                 name.into(),
                 start_point.into(),
             ],
+            Self::CreateTag { name, target } => vec![
+                "tag".into(),
+                "--no-sign".into(),
+                "--".into(),
+                name.into(),
+                target.into(),
+            ],
             Self::CreateAndSwitch { name, start_point } => vec![
                 "switch".into(),
                 "--no-guess".into(),
@@ -595,13 +643,50 @@ impl GitCommand {
                 "--".into(),
                 path.into(),
             ],
+            Self::CheckLfsAttribute { path } => vec![
+                "check-attr".into(),
+                "-z".into(),
+                "filter".into(),
+                "--".into(),
+                path.into(),
+            ],
             Self::CatFileSize { oid } => vec!["cat-file".into(), "-s".into(), oid.into()],
             Self::CatFile { oid } => vec!["cat-file".into(), "blob".into(), oid.into()],
+            Self::GitFlowConfigList { file } => {
+                let mut args = strings(["config"]);
+                if let Some(file) = file {
+                    args.push("--file".into());
+                    args.push(file.as_os_str().to_owned());
+                } else {
+                    args.push("--local".into());
+                }
+                args.extend(strings(["--null", "--get-regexp", "^gitflow\\."]));
+                args
+            }
+            Self::GitFlowConfigUnset { key } => vec![
+                "config".into(),
+                "--local".into(),
+                "--unset-all".into(),
+                key.into(),
+            ],
+            Self::GitFlowConfigAdd { file, key, value } => {
+                let mut args = strings(["config"]);
+                if let Some(file) = file {
+                    args.push("--file".into());
+                    args.push(file.as_os_str().to_owned());
+                } else {
+                    args.push("--local".into());
+                }
+                args.extend([OsString::from("--add"), key.into(), value.into()]);
+                args
+            }
         };
         // Gitは`--`より後のpath引数もpathspec式として解釈する。
         // 現在と将来の全commandで`*`、`[name]`、`:(glob)*`などの正当なfile名を安全に扱うため、
         // process全体の既定値をliteral matchにする。
-        args.insert(0, "--literal-pathspecs".into());
+        if !matches!(self, Self::AttributeFiles) {
+            args.insert(0, "--literal-pathspecs".into());
+        }
         args
     }
 
@@ -613,9 +698,11 @@ impl GitCommand {
                 | Self::CommonDir
                 | Self::IsBare
                 | Self::Status
+                | Self::AttributeFiles
                 | Self::CommitActivity { .. }
                 | Self::CommitMetadata { .. }
                 | Self::CommitParents { .. }
+                | Self::References
                 | Self::Branches
                 | Self::HeadOid
                 | Self::Resolve { .. }
@@ -628,7 +715,9 @@ impl GitCommand {
                 | Self::TreeEntries { .. }
                 | Self::Unmerged { .. }
                 | Self::CheckConflictAttributes { .. }
+                | Self::CheckLfsAttribute { .. }
                 | Self::CatFileSize { .. }
+                | Self::GitFlowConfigList { .. }
         )
     }
 }
@@ -712,12 +801,36 @@ impl GitExecutor {
                 "Git was not found at /usr/bin/git. Install Command Line Tools",
             ));
         }
-        Ok(Self { executable })
+        Ok(Self::configured(executable, None, None, Vec::new(), None))
     }
 
     #[cfg(test)]
     pub(crate) fn at(executable: PathBuf) -> Self {
-        Self { executable }
+        Self::configured(executable, None, None, Vec::new(), None)
+    }
+
+    pub(crate) fn configured(
+        executable: PathBuf,
+        lfs_executable: Option<PathBuf>,
+        flow_executable: Option<PathBuf>,
+        environment: Vec<(OsString, OsString)>,
+        unavailable_reason: Option<String>,
+    ) -> Self {
+        Self {
+            executable,
+            lfs_executable,
+            flow_executable,
+            environment,
+            unavailable_reason,
+        }
+    }
+
+    pub(crate) fn has_lfs(&self) -> bool {
+        self.lfs_executable.is_some()
+    }
+
+    pub(crate) fn has_flow(&self) -> bool {
+        self.flow_executable.is_some()
     }
 
     pub(crate) fn run(
@@ -727,11 +840,78 @@ impl GitExecutor {
         stdin: Option<&[u8]>,
         control: Option<&RunControl>,
     ) -> WorkspaceResult<GitOutput> {
+        if let Some(reason) = &self.unavailable_reason {
+            return Err(WorkspaceError::new(
+                crate::model::ErrorCode::Internal,
+                format!("Git toolchain is unavailable: {reason}"),
+            ));
+        }
         let complete_stdout_required = command.requires_complete_stdout();
         let args = command.args();
-        let argv = display_argv(&self.executable, &args);
         let hook_trace = matches!(command, GitCommand::Commit { .. }).then(HookTrace::new);
-        let mut process = Command::new(&self.executable);
+        self.run_process(
+            &self.executable,
+            cwd,
+            args,
+            stdin,
+            control,
+            complete_stdout_required,
+            hook_trace,
+        )
+    }
+
+    pub(crate) fn run_flow(
+        &self,
+        cwd: &Path,
+        args: Vec<OsString>,
+        control: Option<&RunControl>,
+        complete_stdout_required: bool,
+    ) -> WorkspaceResult<GitOutput> {
+        let executable = self.flow_executable.as_ref().ok_or_else(|| {
+            WorkspaceError::new(
+                crate::model::ErrorCode::UnsupportedRepository,
+                "Git Flow is not available in the selected toolchain",
+            )
+        })?;
+        self.run_process(
+            executable,
+            Some(cwd),
+            args,
+            None,
+            control,
+            complete_stdout_required,
+            None,
+        )
+    }
+
+    pub(crate) fn run_lfs(
+        &self,
+        cwd: &Path,
+        args: Vec<OsString>,
+        control: Option<&RunControl>,
+    ) -> WorkspaceResult<GitOutput> {
+        let executable = self.lfs_executable.as_ref().ok_or_else(|| {
+            WorkspaceError::new(
+                crate::model::ErrorCode::UnsupportedRepository,
+                "Git LFS is not available in the selected toolchain",
+            )
+        })?;
+        self.run_process(executable, Some(cwd), args, None, control, false, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_process(
+        &self,
+        executable: &Path,
+        cwd: Option<&Path>,
+        args: Vec<OsString>,
+        stdin: Option<&[u8]>,
+        control: Option<&RunControl>,
+        complete_stdout_required: bool,
+        hook_trace: Option<HookTrace>,
+    ) -> WorkspaceResult<GitOutput> {
+        let argv = display_argv(executable, &args);
+        let mut process = Command::new(executable);
         process
             .args(&args)
             .stdin(if stdin.is_some() {
@@ -748,7 +928,8 @@ impl GitExecutor {
             .env("GIT_EDITOR", "true")
             .env("GIT_SEQUENCE_EDITOR", "true")
             .env("GIT_MERGE_AUTOEDIT", "no")
-            .env("GIT_OPTIONAL_LOCKS", "0");
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            .envs(self.environment.iter().cloned());
         // userがキャンセルした後にhelperを残さないよう、Git、hook、credential helperと
         // その子processを1つのprocess groupにまとめる。
         process.process_group(0);
@@ -762,7 +943,7 @@ impl GitExecutor {
         let mut child = process.spawn().map_err(|error| {
             WorkspaceError::new(
                 crate::model::ErrorCode::Io,
-                format!("Failed to start Git: {error}"),
+                format!("Failed to start {}: {error}", executable.display()),
             )
         })?;
 
@@ -1085,6 +1266,25 @@ mod tests {
     }
 
     #[test]
+    fn lightweight_tag_creation_disables_signing_and_separates_options() {
+        assert_eq!(
+            GitCommand::CreateTag {
+                name: "v1.0.0".into(),
+                target: "abc123".into(),
+            }
+            .args(),
+            strings([
+                "--literal-pathspecs",
+                "tag",
+                "--no-sign",
+                "--",
+                "v1.0.0",
+                "abc123",
+            ])
+        );
+    }
+
+    #[test]
     fn structured_merge_commit_actions_pass_the_selected_mainline() {
         for args in [
             GitCommand::CherryPickNoCommit {
@@ -1163,6 +1363,21 @@ mod tests {
                 ),
                 OsString::from("refs/heads"),
                 OsString::from("refs/remotes"),
+            ]
+        );
+    }
+
+    #[test]
+    fn repository_reference_inventory_includes_tags() {
+        assert_eq!(
+            GitCommand::References.args(),
+            [
+                OsString::from("--literal-pathspecs"),
+                OsString::from("for-each-ref"),
+                OsString::from("--format=%(refname)%00%(objectname)"),
+                OsString::from("refs/heads"),
+                OsString::from("refs/remotes"),
+                OsString::from("refs/tags"),
             ]
         );
     }

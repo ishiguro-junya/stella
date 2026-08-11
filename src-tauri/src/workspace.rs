@@ -1,6 +1,7 @@
 use crate::commit::{MessageFile, build_message};
 use crate::conflict::{self, ConflictSession};
 use crate::git::{GitCommand, GitExecutor, GitOutput, RunControl, SequencerAction};
+use crate::git_flow;
 use crate::journal::{JournalPhase, JournalStore, OperationJournal, default_journal_directory};
 use crate::model::*;
 use crate::patch::build_line_patch;
@@ -182,6 +183,10 @@ impl Workspace {
         let git = GitExecutor::system()?;
         git.run(None, GitCommand::Version, None, None)?
             .ensure_success()?;
+        Self::with_git(git)
+    }
+
+    pub(crate) fn with_git(git: GitExecutor) -> WorkspaceResult<Self> {
         let journal = JournalStore::new(default_journal_directory()?)?;
         Ok(Self::new(git, journal))
     }
@@ -270,6 +275,7 @@ impl Workspace {
             }
             let git_dir = command_path(&self.git, &root, GitCommand::GitDir)?;
             let common_dir = command_path(&self.git, &root, GitCommand::CommonDir)?;
+            self.ensure_lfs_repository_supported(&root, clone_control.as_ref())?;
             let id = repo_id(&root, &git_dir);
             let mutation = self
                 .common_mutations
@@ -346,6 +352,60 @@ impl Workspace {
                 None,
             )?
             .ensure_success()?;
+        Ok(())
+    }
+
+    fn ensure_lfs_repository_supported(
+        &self,
+        root: &Path,
+        control: Option<&RunControl>,
+    ) -> WorkspaceResult<()> {
+        if self.git.has_lfs() {
+            return Ok(());
+        }
+        let output = self
+            .git
+            .run(Some(root), GitCommand::AttributeFiles, None, control)?
+            .ensure_success()?;
+        let mut paths = vec![".gitattributes".to_owned()];
+        paths.extend(
+            output
+                .stdout
+                .split(|byte| *byte == 0)
+                .filter(|path| !path.is_empty())
+                .map(|path| String::from_utf8_lossy(path).into_owned()),
+        );
+        paths.sort();
+        paths.dedup();
+        for relative_path in paths {
+            validate_path(&relative_path)?;
+            let path = root.join(&relative_path);
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if !metadata.file_type().is_file() {
+                continue;
+            }
+            let contents = fs::read_to_string(&path).map_err(|error| {
+                WorkspaceError::new(
+                    ErrorCode::Io,
+                    format!("{relative_path}を確認できませんでした: {error}"),
+                )
+            })?;
+            let uses_lfs = contents.lines().any(|line| {
+                let rule = line.split_once('#').map_or(line, |(rule, _)| rule);
+                rule.split_ascii_whitespace()
+                    .any(|attribute| attribute == "filter=lfs")
+            });
+            if uses_lfs {
+                return Err(WorkspaceError::new(
+                    ErrorCode::UnsupportedRepository,
+                    "このRepositoryはGit LFSを使用していますが、選択中のSystem toolchainにGit LFSがありません。",
+                )
+                .detail("path", relative_path)
+                .detail("requiredComponent", "git-lfs"));
+            }
+        }
         Ok(())
     }
 
@@ -656,6 +716,11 @@ impl Workspace {
                     repo_generation: snapshot.repo_generation,
                 }))
             }
+            Query::GitFlowOverview => {
+                let snapshot = self.snapshot(&repo)?;
+                git_flow::overview(&self.git, &repo.root, snapshot.repo_generation)
+                    .map(QueryOutcome::GitFlowOverview)
+            }
             Query::CommitDetails { oid } => {
                 validate_revision(&oid)?;
                 let snapshot = self.snapshot(&repo)?;
@@ -942,7 +1007,7 @@ impl Workspace {
         ensure_generation(request.expected_generation, snapshot.repo_generation)?;
         validate_action(&request.action)?;
         validate_action_targets(&snapshot, &request.action)?;
-        ensure_action_allowed(&snapshot, &request.action)?;
+        ensure_action_allowed(&repo, &snapshot, &request.action)?;
 
         let destructive = request.action.requires_confirmation();
         let target_binding = self.target_binding(&repo, &snapshot, &request.action, None)?;
@@ -954,7 +1019,7 @@ impl Workspace {
             || action_commits(&request.action),
             |value| value.affected_commits.clone(),
         );
-        let remote_effect = remote_effect(&request.action);
+        let remote_effect = remote_effect(&self.git, &repo.root, &request.action)?;
         let summary = preview_summary(&request.action);
         let (confirmation_token, expires_at_unix_ms) = if request.action.requires_preview_binding()
         {
@@ -1019,6 +1084,7 @@ impl Workspace {
             Action::Merge { source } => Some(source),
             Action::Rebase { onto } => Some(onto),
             Action::CreateBranch { start_point, .. } => Some(start_point),
+            Action::CreateTag { target, .. } => Some(target),
             _ => None,
         };
         let current_head = snapshot_head_oid(snapshot);
@@ -1200,7 +1266,7 @@ impl Workspace {
                     control,
                 )?;
             }
-            Action::CreateBranch { .. } => {}
+            Action::CreateBranch { .. } | Action::CreateTag { .. } => {}
             Action::Discard {
                 paths,
                 target: DiscardTarget::Unstaged,
@@ -1852,7 +1918,7 @@ impl Workspace {
         }
         let refs = self
             .git
-            .run(Some(&repo.root), GitCommand::Branches, None, None)?
+            .run(Some(&repo.root), GitCommand::References, None, None)?
             .ensure_success()?;
         let mut fingerprint = Sha256::new();
         fingerprint.update(state_fingerprint.as_bytes());
@@ -1874,6 +1940,7 @@ impl Workspace {
         parsed.repo_id = repo.id.clone();
         parsed.root = repo.root.display().to_string();
         parsed.operation = operation;
+        parsed.git_flow_operation = git_flow::pending_operation(&repo.git_dir).map(str::to_owned);
         parsed.repo_generation = generation;
         parsed.event_seq = repo.event_seq.load(Ordering::SeqCst);
         Ok(parsed)
@@ -2040,7 +2107,7 @@ impl Workspace {
         ensure_generation(request.expected_generation, before.repo_generation)?;
         validate_action(&request.action)?;
         validate_action_targets(&before, &request.action)?;
-        ensure_action_allowed(&before, &request.action)?;
+        ensure_action_allowed(repo, &before, &request.action)?;
 
         self.send_event(
             repo,
@@ -2353,9 +2420,29 @@ impl Workspace {
         target_binding: Option<&TargetBinding>,
         control: &RunControl,
     ) -> WorkspaceResult<(LocalizedMessage, GitOutput)> {
+        if matches!(
+            action,
+            Action::Stage { .. }
+                | Action::Commit { .. }
+                | Action::Pull { .. }
+                | Action::Push { .. }
+                | Action::Checkout { .. }
+                | Action::Merge { .. }
+                | Action::Rebase { .. }
+                | Action::CherryPick { .. }
+                | Action::Revert { .. }
+                | Action::Reset { .. }
+                | Action::GitFlow { .. }
+                | Action::Continue
+                | Action::Skip
+                | Action::CreateBranch { checkout: true, .. }
+        ) {
+            self.ensure_lfs_repository_supported(&repo.root, Some(control))?;
+        }
         match action {
             Action::Stage { paths, selection } => {
                 let output = if let Some(selection) = selection {
+                    self.reject_lfs_line_selection(repo, &selection.path, control)?;
                     let patch = self.selected_patch(
                         repo,
                         before,
@@ -2378,6 +2465,7 @@ impl Workspace {
             }
             Action::Unstage { paths, selection } => {
                 let output = if let Some(selection) = selection {
+                    self.reject_lfs_line_selection(repo, &selection.path, control)?;
                     let patch =
                         self.selected_patch(repo, before, DiffTarget::Staged, selection, control)?;
                     self.apply_patch(repo, &patch, true, true, control)?
@@ -2503,6 +2591,19 @@ impl Workspace {
                 remote_branch,
                 set_upstream,
             } => {
+                if self.git.has_lfs() {
+                    self.git
+                        .run_lfs(
+                            &repo.root,
+                            vec![
+                                "push".into(),
+                                remote.into(),
+                                format!("refs/heads/{local_branch}").into(),
+                            ],
+                            Some(control),
+                        )?
+                        .ensure_success()?;
+                }
                 let refspec = format!("refs/heads/{local_branch}:refs/heads/{remote_branch}");
                 let output = self.run_checked(
                     repo,
@@ -2547,6 +2648,45 @@ impl Workspace {
                     )?
                 };
                 Ok((LocalizedMessage::new("backendBranchCreated"), output))
+            }
+            Action::CreateTag { name, target } => {
+                let target = self.bound_target(repo, target, target_binding, control)?;
+                let output = self.run_checked(
+                    repo,
+                    GitCommand::CreateTag {
+                        name: name.clone(),
+                        target,
+                    },
+                    None,
+                    control,
+                )?;
+                Ok((LocalizedMessage::new("backendTagCreated"), output))
+            }
+            Action::GitFlow { request } => {
+                if request.requires_clean_worktree() {
+                    require_clean(before)?;
+                }
+                let output = if matches!(
+                    request.command,
+                    GitFlowCommand::Continue | GitFlowCommand::Abort
+                ) {
+                    git_flow::recover(
+                        &self.git,
+                        &repo.root,
+                        &repo.git_dir,
+                        request.command,
+                        Some(control),
+                    )?
+                    .ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::InvalidRequest,
+                            "No Git Flow operation can be recovered",
+                        )
+                    })?
+                } else {
+                    git_flow::execute(&self.git, &repo.root, request, Some(control))?
+                };
+                Ok((LocalizedMessage::new("backendGitFlowCompleted"), output))
             }
             Action::Checkout { branch } => {
                 require_clean(before)?;
@@ -3139,12 +3279,48 @@ impl Workspace {
             })
     }
 
+    fn reject_lfs_line_selection(
+        &self,
+        repo: &RepoContext,
+        path: &str,
+        control: &RunControl,
+    ) -> WorkspaceResult<()> {
+        let output = self
+            .git
+            .run(
+                Some(&repo.root),
+                GitCommand::CheckLfsAttribute { path: path.into() },
+                None,
+                Some(control),
+            )?
+            .ensure_success()?;
+        let fields = output.stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
+        if fields.len() >= 3 && fields[1] == b"filter" && fields[2] == b"lfs" {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "Git LFS対象fileは行単位でStageまたはUnstageできません。file全体を選択してください。",
+            )
+            .detail("path", path)
+            .detail("filter", "lfs"));
+        }
+        Ok(())
+    }
+
     fn continue_operation(
         &self,
         repo: &RepoContext,
         before: &RepoSnapshot,
         control: &RunControl,
     ) -> WorkspaceResult<(LocalizedMessage, GitOutput)> {
+        if let Some(output) = git_flow::recover(
+            &self.git,
+            &repo.root,
+            &repo.git_dir,
+            GitFlowCommand::Continue,
+            Some(control),
+        )? {
+            return Ok((LocalizedMessage::new("backendGitFlowCompleted"), output));
+        }
         match &before.operation {
             OperationState::Rebase => Ok((
                 LocalizedMessage::new("backendRebaseContinued"),
@@ -3416,6 +3592,17 @@ impl Workspace {
         before: &RepoSnapshot,
         control: &RunControl,
     ) -> WorkspaceResult<(LocalizedMessage, GitOutput)> {
+        if let Some(output) = git_flow::recover(
+            &self.git,
+            &repo.root,
+            &repo.git_dir,
+            GitFlowCommand::Abort,
+            Some(control),
+        )? {
+            self.journal.clear(&repo.id)?;
+            repo.conflicts.lock().expect("conflicts lock").clear();
+            return Ok((LocalizedMessage::new("backendGitFlowCompleted"), output));
+        }
         let output = match &before.operation {
             OperationState::Merge { .. } => self.run_checked(
                 repo,
@@ -4280,6 +4467,7 @@ fn parse_status(bytes: &[u8]) -> WorkspaceResult<RepoSnapshot> {
         behind,
         entries,
         operation: OperationState::None,
+        git_flow_operation: None,
         repo_generation: 0,
         event_seq: 0,
     })
@@ -4595,6 +4783,11 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
             validate_branch_name(name)?;
             validate_revision(start_point)?;
         }
+        Action::CreateTag { name, target } => {
+            validate_tag_name(name)?;
+            validate_revision(target)?;
+        }
+        Action::GitFlow { request } => git_flow::validate(request)?,
         Action::Checkout { branch } => validate_branch_name(branch)?,
         Action::Merge { source } => validate_revision(source)?,
         Action::Rebase { onto } => validate_revision(onto)?,
@@ -4781,6 +4974,31 @@ fn validate_branch_name(name: &str) -> WorkspaceResult<()> {
     Ok(())
 }
 
+fn validate_tag_name(name: &str) -> WorkspaceResult<()> {
+    let forbidden = [' ', '~', '^', ':', '?', '*', '[', '\\'];
+    if name.is_empty()
+        || name == "@"
+        || name.starts_with(['-', '/', '.'])
+        || name.starts_with("refs/")
+        || name.ends_with(['/', '.'])
+        || name.contains("..")
+        || name.contains("//")
+        || name.contains("@{")
+        || name.split('/').any(|component| {
+            component.is_empty() || component.starts_with('.') || component.ends_with(".lock")
+        })
+        || name
+            .chars()
+            .any(|ch| ch.is_control() || forbidden.contains(&ch))
+    {
+        return Err(WorkspaceError::new(
+            ErrorCode::InvalidRequest,
+            "Invalid tag name",
+        ));
+    }
+    Ok(())
+}
+
 fn ensure_generation(expected: RepoGeneration, actual: RepoGeneration) -> WorkspaceResult<()> {
     if expected != actual {
         return Err(WorkspaceError::new(
@@ -4793,8 +5011,24 @@ fn ensure_generation(expected: RepoGeneration, actual: RepoGeneration) -> Worksp
     Ok(())
 }
 
-fn ensure_action_allowed(snapshot: &RepoSnapshot, action: &Action) -> WorkspaceResult<()> {
-    if !action_allowed_during(&snapshot.operation, action) {
+fn ensure_action_allowed(
+    repo: &RepoContext,
+    snapshot: &RepoSnapshot,
+    action: &Action,
+) -> WorkspaceResult<()> {
+    let git_flow_recovery = git_flow::pending_operation(&repo.git_dir).is_some()
+        && matches!(
+            action,
+            Action::Continue
+                | Action::Abort
+                | Action::GitFlow {
+                    request: GitFlowRequest {
+                        command: GitFlowCommand::Continue | GitFlowCommand::Abort,
+                        ..
+                    }
+                }
+        );
+    if !git_flow_recovery && !action_allowed_during(&snapshot.operation, action) {
         return Err(WorkspaceError::new(
             ErrorCode::OperationInProgress,
             "Complete or abort the operation in progress",
@@ -4867,6 +5101,7 @@ fn action_paths(action: &Action) -> Vec<String> {
             output
         }
         Action::FileAction { paths, .. } => paths.clone(),
+        Action::GitFlow { request } if request.shared => vec![".gitflow".into()],
         _ => Vec::new(),
     }
 }
@@ -4874,6 +5109,7 @@ fn action_paths(action: &Action) -> Vec<String> {
 fn action_commits(action: &Action) -> Vec<String> {
     match action {
         Action::CreateBranch { start_point, .. } => vec![start_point.clone()],
+        Action::CreateTag { target, .. } => vec![target.clone()],
         Action::Merge { source } => vec![source.clone()],
         Action::Rebase { onto } => vec![onto.clone()],
         Action::CherryPick { commit, .. }
@@ -4883,8 +5119,12 @@ fn action_commits(action: &Action) -> Vec<String> {
     }
 }
 
-fn remote_effect(action: &Action) -> Option<LocalizedMessage> {
-    match action {
+fn remote_effect(
+    git: &GitExecutor,
+    root: &Path,
+    action: &Action,
+) -> WorkspaceResult<Option<LocalizedMessage>> {
+    let effect = match action {
         Action::Fetch { remote } => {
             Some(LocalizedMessage::new("previewFetchRemote").arg("remote", remote.clone()))
         }
@@ -4902,8 +5142,25 @@ fn remote_effect(action: &Action) -> Option<LocalizedMessage> {
                 .arg("localBranch", local_branch.clone())
                 .arg("remoteBranch", remote_branch.clone()),
         ),
+        Action::GitFlow { request }
+            if request.command == GitFlowCommand::Delete && request.remote =>
+        {
+            let branch = git_flow::topic_branch_name(git, root, request, None)?
+                .or_else(|| request.name.clone())
+                .unwrap_or_else(|| "current branch".into());
+            Some(LocalizedMessage::new("previewGitFlowRemoteDelete").arg("branch", branch))
+        }
+        Action::GitFlow { request } if request.remote_effect() => Some(
+            LocalizedMessage::new("previewGitFlowRemote")
+                .arg("command", format!("{:?}", request.command))
+                .arg(
+                    "branch",
+                    request.name.clone().unwrap_or_else(|| "HEAD".into()),
+                ),
+        ),
         _ => None,
-    }
+    };
+    Ok(effect)
 }
 
 fn preview_summary(action: &Action) -> LocalizedMessage {
@@ -4937,6 +5194,8 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::Pull { .. } => "actionPull",
         Action::Push { .. } => "actionPush",
         Action::CreateBranch { .. } => "actionCreateBranch",
+        Action::CreateTag { .. } => "actionCreateTag",
+        Action::GitFlow { .. } => "actionGitFlow",
         Action::Checkout { .. } => "actionCheckoutBranch",
         Action::Merge { .. } => "actionMergeBranch",
         Action::Rebase { .. } => "actionRebaseBranch",
@@ -5348,8 +5607,31 @@ mod tests {
                 start_point: "target".into(),
                 checkout: false,
             },
+            Action::CreateTag {
+                name: "v1.0.0".into(),
+                target: "target".into(),
+            },
         ];
         assert!(actions.iter().all(Action::requires_preview_binding));
+    }
+
+    #[test]
+    fn tag_names_use_short_safe_ref_names() {
+        for name in ["v1.0.0", "release/2026-08"] {
+            assert!(validate_tag_name(name).is_ok(), "{name}");
+        }
+        for name in [
+            "",
+            "-option",
+            "refs/tags/v1.0.0",
+            "release/.hidden",
+            "release/v1.lock",
+            "bad..tag",
+            "@",
+            "bad tag",
+        ] {
+            assert!(validate_tag_name(name).is_err(), "{name}");
+        }
     }
 
     #[test]
@@ -9555,6 +9837,74 @@ mod tests {
     }
 
     #[test]
+    fn creates_a_lightweight_tag_on_the_selected_commit() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "first\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: first"]);
+        let first_oid = fixture.git_output(&["rev-parse", "HEAD"]);
+        fixture.write("f.txt", "second\n");
+        fixture.git(&["commit", "-am", "feat: second"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::CreateTag {
+            name: "release/v1.0.0".into(),
+            target: first_oid.clone(),
+        };
+        let token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            attached.snapshot.repo_generation,
+            action.clone(),
+        );
+        let outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "create-tag".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: Some(token),
+            })
+            .unwrap();
+
+        assert_eq!(outcome.summary.id, "backendTagCreated");
+        assert!(outcome.repo_generation > attached.snapshot.repo_generation);
+        assert_eq!(
+            fixture.git_output(&["rev-parse", "refs/tags/release/v1.0.0"]),
+            first_oid
+        );
+        let history = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id,
+                query: Query::History {
+                    limit: 10,
+                    skip: 0,
+                    search: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::History(result) => result.commits,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(history.iter().any(|commit| {
+            commit.oid == first_oid
+                && commit
+                    .refs
+                    .iter()
+                    .any(|name| name.contains("refs/tags/release/v1.0.0"))
+        }));
+    }
+
+    #[test]
     fn commit_details_include_metadata_and_a_root_commit_patch() {
         let fixture = GitFixture::new();
         fixture.write("f.txt", "root\n");
@@ -9583,7 +9933,7 @@ mod tests {
         assert_eq!(details.author, "Stella Test");
         assert_eq!(details.author_email, "stella@example.test");
         assert_eq!(details.subject, "feat: root");
-        assert!(details.body.contains("body text"));
+        assert_eq!(details.body, "body text");
         assert!(details.patch.contains("new file mode"));
         assert!(details.patch.contains("+root"));
         assert!(!details.truncated);
@@ -10406,6 +10756,85 @@ mod tests {
                 .git_output(&["ls-files", "-u", "--", "f.txt"])
                 .is_empty(),
             "{label}"
+        );
+    }
+
+    #[test]
+    fn attaching_lfs_repository_without_lfs_is_rejected() {
+        let fixture = GitFixture::new();
+        fixture.write(
+            ".gitattributes",
+            "*.bin filter=lfs diff=lfs merge=lfs -text\n",
+        );
+        fixture.git(&["add", "--", ".gitattributes"]);
+        fixture.git(&["commit", "-m", "test: LFS属性を追加"]);
+        let error = fixture
+            .workspace()
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRepository);
+        assert_eq!(
+            error.details.get("requiredComponent").map(String::as_str),
+            Some("git-lfs")
+        );
+    }
+
+    #[test]
+    fn pushing_repository_that_started_using_lfs_after_attach_is_rejected_without_lfs() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "test: 初期Commit"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        fixture.write(
+            ".gitattributes",
+            "*.bin filter=lfs diff=lfs merge=lfs -text\n",
+        );
+        fixture.git(&["add", "--", ".gitattributes"]);
+        fixture.git(&["commit", "-m", "test: LFS属性を追加"]);
+        let status = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::Status,
+            })
+            .unwrap()
+        {
+            QueryOutcome::Status(status) => status,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "push-without-lfs".into(),
+                repo_id: attached.repo_id,
+                expected_generation: status.repo_generation,
+                action: Action::Push {
+                    remote: "origin".into(),
+                    local_branch: "main".into(),
+                    remote_branch: "main".into(),
+                    set_upstream: true,
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedRepository);
+        assert_eq!(
+            error.details.get("requiredComponent").map(String::as_str),
+            Some("git-lfs")
         );
     }
 

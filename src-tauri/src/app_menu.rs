@@ -2,6 +2,7 @@
 use std::process::Command;
 
 use serde::Deserialize;
+use tauri::image::Image;
 use tauri::menu::{
     AboutMetadata, Menu, MenuBuilder, MenuEvent, MenuId, MenuItemBuilder, Submenu, SubmenuBuilder,
 };
@@ -12,6 +13,7 @@ const SETTINGS_MENU_ACCELERATOR: &str = "Cmd+,";
 const SETTINGS_EVENT_TARGET: &str = "main";
 const OPEN_SETTINGS_EVENT: &str = "stella://open-settings";
 const LICENSE_NAME: &str = "Sustainable Use License 1.0";
+const ABOUT_ICON: Image<'static> = tauri::include_image!("./icons/about-icon.png");
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -106,12 +108,18 @@ fn labels(language: AppLanguage) -> &'static MenuLabels {
     }
 }
 
-fn about_metadata(name: &str, version: &str, copyright: Option<&str>) -> AboutMetadata<'static> {
+fn about_metadata(
+    name: &str,
+    version: &str,
+    copyright: Option<&str>,
+    icon: Option<Image<'static>>,
+) -> AboutMetadata<'static> {
     AboutMetadata {
         name: Some(name.to_owned()),
         short_version: Some(version.to_owned()),
         copyright: copyright.map(str::to_owned),
         credits: Some(LICENSE_NAME.to_owned()),
+        icon,
         ..Default::default()
     }
 }
@@ -130,6 +138,7 @@ fn build_for_language<R: Runtime>(
         &package.name,
         &package.version.to_string(),
         app.config().bundle.copyright.as_deref(),
+        Some(ABOUT_ICON.clone()),
     );
     let settings = MenuItemBuilder::with_id(SETTINGS_MENU_ID, text.settings)
         .accelerator(SETTINGS_MENU_ACCELERATOR)
@@ -272,12 +281,19 @@ mod tests {
 
     #[test]
     fn about_metadata_includes_the_app_name_version_and_license() {
-        let metadata = about_metadata("Stella", "1.2.3-alpha.4", Some("© Junya Ishiguro"));
+        let metadata = about_metadata(
+            "Stella",
+            "1.2.3-alpha.4",
+            Some("© Junya Ishiguro"),
+            Some(Image::new_owned(vec![0, 0, 0, 0], 1, 1)),
+        );
 
         assert_eq!(metadata.name.as_deref(), Some("Stella"));
         assert_eq!(metadata.version, None);
         assert_eq!(metadata.short_version.as_deref(), Some("1.2.3-alpha.4"));
         assert_eq!(metadata.copyright.as_deref(), Some("© Junya Ishiguro"));
         assert_eq!(metadata.credits.as_deref(), Some(LICENSE_NAME));
+        assert_eq!(metadata.icon.as_ref().map(Image::width), Some(1));
+        assert_eq!(metadata.icon.as_ref().map(Image::height), Some(1));
     }
 }
