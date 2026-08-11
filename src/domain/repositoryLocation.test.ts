@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isAbsoluteLocalPath,
   joinRepositoryPath,
+  repositoryNameFromPath,
   repositoryNameFromRemoteUrl,
 } from './repositoryLocation';
 
@@ -33,5 +34,9 @@ describe('repository location', () => {
       '/Users/example/project/stella',
     );
     expect(joinRepositoryPath('/', 'stella')).toBe('/stella');
+  });
+
+  it('derives a repository name from a local path', () => {
+    expect(repositoryNameFromPath('/Users/example/project/stella/')).toBe('stella');
   });
 });

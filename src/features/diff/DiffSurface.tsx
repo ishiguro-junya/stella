@@ -33,6 +33,13 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   --diffs-gap-block: 0px;
 }
 
+[data-diffs-header='default'] {
+  min-height: 32px;
+  padding-inline: 32px 16px;
+  border-block: 1px solid var(--border-subtle);
+  background-color: var(--surface-raised);
+}
+
 [data-line-type='change-addition'] {
   --diffs-computed-diff-line-bg: var(--diff-addition-surface);
 }

@@ -39,7 +39,7 @@ describe('RepositorySwitcherDialog', () => {
     render(
       <RepositorySwitcherDialog
         repos={[repoSnapshot()]}
-        registeredPaths={[]}
+        registeredRepositories={[]}
         onDismiss={onDismiss}
         onSelectOpen={() => undefined}
         onSelectRegistered={() => undefined}
@@ -69,7 +69,10 @@ describe('RepositorySwitcherDialog', () => {
     render(
       <RepositorySwitcherDialog
         repos={[first, second]}
-        registeredPaths={['/tmp/second', '/tmp/recent']}
+        registeredRepositories={[
+          { path: '/tmp/second', name: 'second' },
+          { path: '/tmp/recent', name: 'Saved Custom', logoUrl: 'asset://recent/logo.svg' },
+        ]}
         selectedRepoId={first.repoId}
         onDismiss={() => undefined}
         onSelectOpen={() => undefined}
@@ -87,6 +90,11 @@ describe('RepositorySwitcherDialog', () => {
     expect(within(dialog).getByRole('option', { name: /second.*topic.*Modified/u })).toBeVisible();
     expect(within(dialog).queryByText(/Open repositories|Recent/u)).not.toBeInTheDocument();
     expect(dialog).not.toHaveTextContent(/[⌘⇧]/u);
+    expect(
+      within(dialog)
+        .getByRole('option', { name: /Saved Custom/u })
+        .querySelector('img'),
+    ).toHaveAttribute('src', 'asset://recent/logo.svg');
 
     const search = within(dialog).getByRole('combobox', { name: 'Search repositories' });
     expect(search).toHaveFocus();
@@ -107,7 +115,7 @@ describe('RepositorySwitcherDialog', () => {
     render(
       <RepositorySwitcherDialog
         repos={repos}
-        registeredPaths={[]}
+        registeredRepositories={[]}
         selectedRepoId="repo-1"
         onDismiss={() => undefined}
         onSelectOpen={onSelectOpen}

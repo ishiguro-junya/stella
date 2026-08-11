@@ -51,6 +51,7 @@ export interface ChangesViewProps {
   onConflictDirtyChange?: ((dirty: boolean) => void) | undefined;
   onConflictLeaveHandleChange?: ((handle: ConflictLeaveHandle | null) => void) | undefined;
   paneWidths: PaneWidths;
+  splitStageView?: boolean | undefined;
   onPaneWidthsChange: (widths: PaneWidths) => void;
 }
 
@@ -92,6 +93,7 @@ export function ChangesView({
   onConflictDirtyChange,
   onConflictLeaveHandleChange,
   paneWidths,
+  splitStageView = true,
   onPaneWidthsChange,
 }: ChangesViewProps) {
   const { t, message } = useI18n();
@@ -470,8 +472,11 @@ export function ChangesView({
     }
   };
 
-  const runFileAction = async (entry: ChangeEntry, action: FileActionKind): Promise<void> => {
+  const runFileAction = async (entries: ChangeEntry[], action: FileActionKind): Promise<void> => {
     setFileActionNotice(undefined);
+    const paths = [...new Set(entries.map((entry) => entry.path))];
+    const entry = entries[0];
+    if (!entry || !paths.length) return;
     if (action === 'copyPath') {
       const absolutePath = repo.path.endsWith('/')
         ? `${repo.path}${entry.path}`
@@ -492,7 +497,11 @@ export function ChangesView({
       return;
     }
 
-    await onAction({ kind: 'fileAction', path: entry.path, operation: action });
+    if (action === 'discardChanges') {
+      await onAction({ kind: 'discardFiles', paths });
+      return;
+    }
+    await onAction({ kind: 'fileAction', paths, operation: action });
   };
 
   const pull = async (): Promise<void> => {
@@ -646,6 +655,7 @@ export function ChangesView({
             repoId={repo.repoId}
             generation={repo.generation}
             entries={repo.changes}
+            splitStageView={splitStageView}
             selectedKey={selected ? `${selected.area}:${selected.path}` : ''}
             disabled={stageActionsDisabled}
             disabledReasonId={stageActionDisabledReasonId}
@@ -716,14 +726,6 @@ export function ChangesView({
                     ))}
                   </fieldset>
                 ) : null}
-                <FileActions
-                  entry={selected}
-                  disabled={repositoryActionsDisabled}
-                  disabledReasonId={
-                    operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-                  }
-                  onAction={onAction}
-                />
               </div>
             </div>
           ) : null}
@@ -812,7 +814,7 @@ export function ChangesView({
       {commitDialogOpen ? (
         <Dialog
           labelledBy="commit-dialog-title"
-          className="commit-dialog"
+          className="form-dialog commit-dialog"
           onDismiss={() => {
             if (!busy) setCommitDialogOpen(false);
           }}
@@ -868,35 +870,5 @@ export function ChangesView({
         </Dialog>
       ) : null}
     </div>
-  );
-}
-
-function FileActions({
-  entry,
-  disabled,
-  disabledReasonId,
-  onAction,
-}: {
-  entry: ChangeEntry;
-  disabled: boolean;
-  disabledReasonId: string | undefined;
-  onAction: (action: WorkspaceAction) => Promise<void>;
-}) {
-  const { t } = useI18n();
-  if (entry.area === 'conflicted' || entry.area === 'staged') return null;
-  return (
-    <fieldset className="button-row compact" aria-label={t('fileActionsFor', { path: entry.path })}>
-      <button
-        type="button"
-        className="danger-quiet"
-        disabled={disabled}
-        aria-describedby={disabledReasonId}
-        onClick={() =>
-          settleAction(onAction({ kind: 'discardFile', path: entry.path, area: entry.area }))
-        }
-      >
-        <Trash2 aria-hidden="true" size={14} /> {t('discard')}
-      </button>
-    </fieldset>
   );
 }

@@ -109,7 +109,9 @@ describe('DiffSurface line selection', () => {
       expect.objectContaining({
         itemMetrics: { spacing: 0, paddingTop: 0, paddingBottom: 0 },
         layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
-        unsafeCSS: expect.stringContaining('--diffs-gap-block: 0px;'),
+        unsafeCSS: expect.stringContaining(
+          "[data-diffs-header='default'] {\n  min-height: 32px;\n  padding-inline: 32px 16px;\n  border-block: 1px solid var(--border-subtle);\n  background-color: var(--surface-raised);",
+        ),
       }),
     );
   });

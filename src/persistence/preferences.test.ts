@@ -23,7 +23,7 @@ describe('appearance preferences', () => {
       }),
     );
 
-    expect(readPreferences().appearance).toBe('system');
+    expect(readPreferences()).toMatchObject({ appearance: 'system', splitStageView: true });
   });
 
   it('fills a missing v1 language from macOS and defaults the screen-specific pane widths', () => {
@@ -46,6 +46,7 @@ describe('appearance preferences', () => {
       language: 'ja',
       appearance: 'dark',
       registeredRepoPaths: ['/tmp/stella'],
+      repositoryNames: {},
       openRepoPaths: ['/tmp/stella'],
       selectedRepoPath: '/tmp/stella',
       view: 'history',
@@ -81,6 +82,11 @@ describe('appearance preferences', () => {
     expect(readPreferences().appearance).toBe('dark');
   });
 
+  it('round-trips the combined Stage display preference', () => {
+    writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: false });
+    expect(readPreferences().splitStageView).toBe(false);
+  });
+
   it('migrates the existing recent repository list without classifying its entries', () => {
     localStorage.setItem(
       'stella.preferences.v1',
@@ -104,5 +110,16 @@ describe('appearance preferences', () => {
       '/tmp/second',
       '/tmp/first',
     ]);
+  });
+
+  it('stores a custom repository name without replacing it on an ordinary reopen', () => {
+    writePreferences(DEFAULT_PREFERENCES);
+
+    expect(rememberRepositoryPath('/tmp/stella', 'My Stella').repositoryNames).toEqual({
+      '/tmp/stella': 'My Stella',
+    });
+    expect(rememberRepositoryPath('/tmp/stella').repositoryNames).toEqual({
+      '/tmp/stella': 'My Stella',
+    });
   });
 });

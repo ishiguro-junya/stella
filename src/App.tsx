@@ -33,6 +33,7 @@ import { selectedRepo } from './domain/workspace';
 import {
   isAbsoluteLocalPath,
   joinRepositoryPath,
+  repositoryNameFromPath,
   repositoryNameFromRemoteUrl,
 } from './domain/repositoryLocation';
 import { ChangesView } from './features/changes/ChangesView';
@@ -42,7 +43,12 @@ import { HistoryView } from './features/history/HistoryView';
 import { SettingsView } from './features/settings/SettingsView';
 import { listenForOpenSettings } from './features/settings/settingsMenu';
 import { AddRepositoryDialog } from './features/repositories/AddRepositoryDialog';
+import type { RepositoryListItem } from './features/repositories/RepositoryLogo';
 import { RepositoryLanding } from './features/repositories/RepositoryLanding';
+import {
+  loadRepositoryLogo,
+  type RepositoryLogoLoader,
+} from './features/repositories/repositoryLogoLoader';
 import {
   applyDocumentLanguage,
   I18nProvider,
@@ -84,6 +90,7 @@ const ActivityView = lazy(async () => {
 export interface AppProps {
   adapter?: WorkspaceAdapter;
   directoryPicker?: DirectoryPicker;
+  repositoryLogoLoader?: RepositoryLogoLoader;
 }
 
 interface PendingAction {
@@ -96,6 +103,12 @@ interface PendingNavigation {
   view?: WorkspaceView;
   page?: AppPage;
   cloneRequest?: Extract<AttachRequest, { kind: 'clone' }>;
+  repositoryName?: string;
+}
+
+interface PendingClone {
+  request: Extract<AttachRequest, { kind: 'clone' }>;
+  repositoryName?: string;
 }
 
 type AppPage = 'workspace' | 'activity' | 'settings';
@@ -116,7 +129,10 @@ interface AppError extends WorkspaceErrorContent {
 }
 
 interface AddRepositoryState {
-  location: string;
+  source: 'url' | 'path';
+  url: string;
+  path: string;
+  name: string;
   error?: string;
 }
 
@@ -131,7 +147,7 @@ interface BranchDialogState {
 function actionNeedsPreview(action: WorkspaceAction): boolean {
   if (action.kind === 'fileAction') return action.operation === 'moveToTrash';
   return [
-    'discardFile',
+    'discardFiles',
     'discardSelection',
     'reset',
     'merge',
@@ -145,9 +161,9 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
 }
 
 function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): string {
-  return action.kind === 'fileAction' && action.operation === 'moveToTrash'
-    ? t('moveToTrash')
-    : t('run');
+  if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('deleteFiles');
+  if (action.kind === 'discardFiles') return t('discardFiles');
+  return t('run');
 }
 
 function repositoryState(
@@ -228,7 +244,11 @@ function settleUiAction(promise: Promise<unknown>): void {
   void promise.catch(() => undefined);
 }
 
-export function App({ adapter: providedAdapter, directoryPicker = pickDirectory }: AppProps) {
+export function App({
+  adapter: providedAdapter,
+  directoryPicker = pickDirectory,
+  repositoryLogoLoader,
+}: AppProps) {
   const defaultAdapterRef = useRef<WorkspaceAdapter | undefined>(undefined);
   if (!providedAdapter && !defaultAdapterRef.current) {
     defaultAdapterRef.current = createTauriWorkspaceAdapter();
@@ -240,6 +260,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [view, setView] = useState<WorkspaceView>(initialPreferences.view);
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
+  const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
   const t = useCallback<I18nValue['t']>((id, args) => translate(language, id, args), [language]);
   const message = useCallback<I18nValue['message']>(
     (value) => translate(language, value.id, value.args),
@@ -249,9 +270,11 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const [settingsFocusRequest, setSettingsFocusRequest] = useState(0);
   const [activityFocusRequest, setActivityFocusRequest] = useState(0);
   const [activityReady, setActivityReady] = useState(false);
-  const [cloneToStart, setCloneToStart] = useState<Extract<AttachRequest, { kind: 'clone' }>>();
+  const [cloneToStart, setCloneToStart] = useState<PendingClone>();
   const [paneWidths, setPaneWidths] = useState<PaneWidthPreferences>(initialPreferences.paneWidths);
   const [registeredPaths, setRegisteredPaths] = useState(initialPreferences.registeredRepoPaths);
+  const [repositoryNames, setRepositoryNames] = useState(initialPreferences.repositoryNames);
+  const [repositoryLogoUrls, setRepositoryLogoUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<AppNotice>();
   const [errors, setErrors] = useState<AppError[]>([]);
@@ -274,13 +297,29 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   const pageRef = useRef(page);
   const restorePromiseRef = useRef<Promise<RepoSnapshot[]> | undefined>(undefined);
   const pollingRef = useRef(false);
+  const pendingPollingRef = useRef(false);
   const requestNavigationRef = useRef<(navigation: PendingNavigation) => void>(() => undefined);
   const activityButtonRef = useRef<HTMLButtonElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusRepositoriesOnWorkspaceRef = useRef(false);
   const errorIdRef = useRef(0);
+  const logoRequestsRef = useRef(new Set<string>());
   const branchRequestIdRef = useRef(0);
   const repo = selectedRepo(workspace);
+  const effectiveRepositoryLogoLoader =
+    repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
+  const registeredRepositories = useMemo<RepositoryListItem[]>(
+    () =>
+      registeredPaths.map((path) => ({
+        path,
+        name: repositoryNames[path] ?? repositoryNameFromPath(path) ?? path,
+        ...(repositoryLogoUrls[path] ? { logoUrl: repositoryLogoUrls[path] } : {}),
+      })),
+    [registeredPaths, repositoryLogoUrls, repositoryNames],
+  );
+  const repoDisplayName = repo
+    ? (registeredRepositories.find((candidate) => candidate.path === repo.path)?.name ?? repo.name)
+    : undefined;
   pageRef.current = page;
   const handleConflictDirtyChange = useCallback((dirty: boolean): void => {
     conflictDirtyRef.current = dirty;
@@ -305,6 +344,19 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   }, [language]);
 
   useEffect(() => {
+    if (!effectiveRepositoryLogoLoader) return;
+    for (const path of registeredPaths) {
+      if (logoRequestsRef.current.has(path)) continue;
+      logoRequestsRef.current.add(path);
+      void effectiveRepositoryLogoLoader(path)
+        .then((logoUrl) => {
+          if (logoUrl) setRepositoryLogoUrls((current) => ({ ...current, [path]: logoUrl }));
+        })
+        .catch(() => undefined);
+    }
+  }, [effectiveRepositoryLogoLoader, registeredPaths]);
+
+  useEffect(() => {
     if (page === 'settings') settingsButtonRef.current?.focus();
     if (page === 'activity') activityButtonRef.current?.focus();
   }, [activityFocusRequest, page, settingsFocusRequest]);
@@ -322,12 +374,13 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
       ...current,
       appearance,
       language,
+      splitStageView,
       openRepoPaths: workspace.repos.map((candidate) => candidate.path),
       ...(repo ? { selectedRepoPath: repo.path } : {}),
       view,
       paneWidths,
     }));
-  }, [appearance, language, paneWidths, repo, restoringWorkspace, view, workspace]);
+  }, [appearance, language, paneWidths, repo, restoringWorkspace, splitStageView, view, workspace]);
 
   useEffect(() => {
     setLatestConflict((current) => {
@@ -429,8 +482,14 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   }, [notice]);
 
   useEffect(() => {
-    const poll = async (): Promise<void> => {
-      if (pollingRef.current || document.visibilityState === 'hidden') return;
+    let active = true;
+    const poll = async (force = false): Promise<void> => {
+      if (!active) return;
+      if (pollingRef.current) {
+        if (force) pendingPollingRef.current = true;
+        return;
+      }
+      if (!force && document.visibilityState === 'hidden') return;
       pollingRef.current = true;
       try {
         const current = workspaceRef.current;
@@ -456,20 +515,26 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
         );
       } finally {
         pollingRef.current = false;
+        if (active && pendingPollingRef.current) {
+          pendingPollingRef.current = false;
+          void poll(true);
+        }
       }
     };
     const interval = window.setInterval(() => {
       void poll();
     }, 2_000);
     const focus = () => {
-      void poll();
+      void poll(true);
     };
     const visibility = () => {
-      if (document.visibilityState === 'visible') void poll();
+      if (document.visibilityState === 'visible') void poll(true);
     };
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', visibility);
     return () => {
+      active = false;
+      pendingPollingRef.current = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', visibility);
@@ -477,7 +542,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
   }, [adapter]);
 
   const attach = useCallback(
-    async (request: AttachRequest): Promise<void> => {
+    async (request: AttachRequest, repositoryName?: string): Promise<void> => {
       setBusy(true);
       setNotice(undefined);
       try {
@@ -492,7 +557,9 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
         const attachedRepoId = attached.selectedRepoId ?? attached.repos[0]?.repoId;
         const attachedPath = attached.repos[0]?.path;
         if (attachedPath) {
-          setRegisteredPaths(rememberRepositoryPath(attachedPath).registeredRepoPaths);
+          const preferences = rememberRepositoryPath(attachedPath, repositoryName);
+          setRegisteredPaths(preferences.registeredRepoPaths);
+          setRepositoryNames(preferences.repositoryNames);
         }
         setAddRepositoryDialog(undefined);
         if (attachedRepoId) {
@@ -516,15 +583,15 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
 
   useEffect(() => {
     if (page !== 'activity' || !activityReady || !cloneToStart) return;
-    const request = cloneToStart;
+    const { request, repositoryName } = cloneToStart;
     setCloneToStart(undefined);
-    settleUiAction(attach(request));
+    settleUiAction(repositoryName ? attach(request, repositoryName) : attach(request));
   }, [activityReady, attach, cloneToStart, page]);
 
   const openAddRepositoryDialog = (): void => {
     setRepositorySwitcherOpen(false);
     setBranchDialog(undefined);
-    setAddRepositoryDialog({ location: '' });
+    setAddRepositoryDialog({ source: 'url', url: '', path: '', name: '' });
   };
 
   const chooseDirectory = async (title: string): Promise<string | null> => {
@@ -538,21 +605,35 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
 
   const chooseLocalRepository = async (): Promise<void> => {
     const path = await chooseDirectory(t('chooseRepositoryDirectory'));
-    if (path) await attach({ kind: 'open', path });
+    if (path) {
+      setAddRepositoryDialog((current) =>
+        current ? { source: 'path', url: current.url, path, name: current.name } : current,
+      );
+    }
   };
 
   const submitAddRepository = async (): Promise<void> => {
     if (!addRepositoryDialog) return;
-    const location = addRepositoryDialog.location.trim();
-    if (isAbsoluteLocalPath(location)) {
-      await attach({ kind: 'open', path: location });
+    const repositoryName = addRepositoryDialog.name.trim() || undefined;
+    if (addRepositoryDialog.source === 'path') {
+      const path = addRepositoryDialog.path.trim();
+      if (!isAbsoluteLocalPath(path)) {
+        setAddRepositoryDialog((current) =>
+          current ? { ...current, error: t('invalidRepositoryPath') } : current,
+        );
+        return;
+      }
+      await (repositoryName
+        ? attach({ kind: 'open', path }, repositoryName)
+        : attach({ kind: 'open', path }));
       return;
     }
 
-    const repositoryName = repositoryNameFromRemoteUrl(location);
-    if (!repositoryName) {
+    const remoteUrl = addRepositoryDialog.url.trim();
+    const inferredName = repositoryNameFromRemoteUrl(remoteUrl);
+    if (!inferredName) {
       setAddRepositoryDialog((current) =>
-        current ? { ...current, error: t('invalidRepositoryLocation') } : current,
+        current ? { ...current, error: t('invalidRepositoryUrl') } : current,
       );
       return;
     }
@@ -563,9 +644,10 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
       page: 'activity',
       cloneRequest: {
         kind: 'clone',
-        remoteUrl: location,
-        destination: joinRepositoryPath(parent, repositoryName),
+        remoteUrl,
+        destination: joinRepositoryPath(parent, inferredName),
       },
+      ...(repositoryName ? { repositoryName } : {}),
     });
   };
 
@@ -715,7 +797,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
 
   const performNavigation = useCallback(
     (
-      { repoId, view: nextView, page: nextPage, cloneRequest }: PendingNavigation,
+      { repoId, view: nextView, page: nextPage, cloneRequest, repositoryName }: PendingNavigation,
       discardConflict = false,
     ): void => {
       if (discardConflict) setWorkspaceViewRevision((current) => current + 1);
@@ -738,7 +820,12 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
       } else if (nextPage) {
         setCloneToStart(undefined);
       }
-      if (cloneRequest) setCloneToStart(cloneRequest);
+      if (cloneRequest) {
+        setCloneToStart({
+          request: cloneRequest,
+          ...(repositoryName ? { repositoryName } : {}),
+        });
+      }
       setPendingNavigation(undefined);
       conflictDirtyRef.current = false;
     },
@@ -838,7 +925,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                     type="button"
                     className="titlebar-context-toggle repository-toggle"
                     aria-label={t('switchRepositoryCurrent', {
-                      repository: repo.name,
+                      repository: repoDisplayName ?? repo.name,
                       state: currentRepositoryState
                         ? t('repositoryStateSuffix', { state: currentRepositoryState.label })
                         : '',
@@ -849,7 +936,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                     onClick={openRepositorySwitcher}
                   >
                     <FolderGit2 aria-hidden="true" focusable="false" />
-                    <span>{repo.name}</span>
+                    <span>{repoDisplayName ?? repo.name}</span>
                     {currentRepositoryState ? (
                       <i
                         className={`repository-status-dot ${currentRepositoryState.tone}`}
@@ -978,8 +1065,10 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
             <SettingsView
               appearance={appearance}
               language={language}
+              splitStageView={splitStageView}
               onAppearanceChange={changeAppearance}
               onLanguageChange={changeLanguage}
+              onSplitStageViewChange={setSplitStageView}
             />
           ) : null}
 
@@ -1068,6 +1157,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
                         leaveHandleRef.current = handle;
                       }}
                       paneWidths={paneWidths.changes}
+                      splitStageView={splitStageView}
                       onPaneWidthsChange={(changes) =>
                         setPaneWidths((current) => ({ ...current, changes }))
                       }
@@ -1090,7 +1180,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
               </>
             ) : (
               <RepositoryLanding
-                paths={registeredPaths}
+                repositories={registeredRepositories}
                 busy={busy}
                 onAdd={openAddRepositoryDialog}
                 onOpen={(path) => settleUiAction(attach({ kind: 'openExisting', path }))}
@@ -1101,7 +1191,7 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
           {repositorySwitcherOpen && repo ? (
             <RepositorySwitcherDialog
               repos={workspace.repos}
-              registeredPaths={registeredPaths}
+              registeredRepositories={registeredRepositories}
               selectedRepoId={repo.repoId}
               busy={busy}
               onDismiss={() => setRepositorySwitcherOpen(false)}
@@ -1296,10 +1386,36 @@ export function App({ adapter: providedAdapter, directoryPicker = pickDirectory 
 
           {addRepositoryDialog ? (
             <AddRepositoryDialog
-              location={addRepositoryDialog.location}
+              source={addRepositoryDialog.source}
+              url={addRepositoryDialog.url}
+              path={addRepositoryDialog.path}
+              name={addRepositoryDialog.name}
               {...(addRepositoryDialog.error ? { error: addRepositoryDialog.error } : {})}
               busy={busy}
-              onLocationChange={(location) => setAddRepositoryDialog({ location })}
+              onSourceChange={(source) =>
+                setAddRepositoryDialog((current) =>
+                  current
+                    ? { source, url: current.url, path: current.path, name: current.name }
+                    : current,
+                )
+              }
+              onUrlChange={(url) =>
+                setAddRepositoryDialog((current) =>
+                  current
+                    ? { source: current.source, url, path: current.path, name: current.name }
+                    : current,
+                )
+              }
+              onPathChange={(path) =>
+                setAddRepositoryDialog((current) =>
+                  current
+                    ? { source: current.source, url: current.url, path, name: current.name }
+                    : current,
+                )
+              }
+              onNameChange={(name) =>
+                setAddRepositoryDialog((current) => (current ? { ...current, name } : current))
+              }
               onChooseLocal={() => settleUiAction(chooseLocalRepository())}
               onDismiss={() => setAddRepositoryDialog(undefined)}
               onSubmit={() => settleUiAction(submitAddRepository())}

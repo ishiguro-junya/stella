@@ -7,6 +7,7 @@ mod git;
 mod journal;
 mod model;
 mod patch;
+mod repository_logo;
 mod workspace;
 
 pub use model::*;
@@ -45,6 +46,7 @@ pub fn run() {
             workspace_preview,
             workspace_execute,
             workspace_cancel,
+            repository_logo::repository_logo,
             app_menu::set_app_language
         ])
         .run(tauri::generate_context!())

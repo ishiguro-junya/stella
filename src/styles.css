@@ -340,6 +340,11 @@ kbd {
   width: 208px;
 }
 
+.settings-stage-display-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 208px;
+}
+
 .settings-segmented-option {
   position: relative;
   display: flex;
@@ -946,6 +951,13 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   overflow: hidden;
 }
 
+.change-groups.is-stage-combined {
+  grid-template-areas:
+    'conflicted'
+    'combined';
+  grid-template-rows: fit-content(33%) minmax(0, 1fr);
+}
+
 .change-group-conflicted {
   grid-area: conflicted;
 }
@@ -956,6 +968,11 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 
 .change-group-worktree {
   grid-area: worktree;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.change-group-combined {
+  grid-area: combined;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -1097,6 +1114,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
+.change-item.is-selected,
 .change-item.is-current {
   background: var(--selection-muted);
 }
@@ -1127,6 +1145,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 }
 
 .change-item:hover .file-action-trigger,
+.change-item.is-selected .file-action-trigger,
 .change-item.is-current .file-action-trigger,
 .change-item:focus-within .file-action-trigger,
 .file-action-trigger[aria-expanded='true'] {
@@ -1344,20 +1363,22 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.commit-form {
+.dialog-form {
   display: flex;
-  min-height: 100%;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
+}
+.commit-form {
+  min-height: 100%;
   padding-bottom: 0;
 }
-.commit-form > label,
+.dialog-form-field,
 .commit-meta-grid,
 .commit-breaking,
 .history-actions-dialog > form,
 .history-actions-dialog > .action-section {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 .commit-meta-grid {
   grid-template-columns: minmax(92px, 0.65fr) minmax(0, 1fr);
@@ -1367,11 +1388,11 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .commit-meta-grid > label {
   display: grid;
   align-content: start;
-  gap: 8px;
 }
 .commit-form label > span,
 .history-actions-dialog label > span,
-.confirmation-sheet label > span {
+.confirmation-sheet label > span,
+.dialog-form-field > label {
   font-size: 11px;
   font-weight: 600;
 }
@@ -1425,20 +1446,54 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .confirmation-sheet > .commit-form {
   min-height: 0;
 }
-.commit-dialog {
+.form-dialog {
   gap: 20px;
   width: min(580px, 100%);
   padding: 28px;
 }
-.commit-dialog > h2 {
+.form-dialog > h2 {
   margin-bottom: 0;
+}
+.form-dialog .commit-field-error.is-placeholder {
+  display: none;
+}
+.form-dialog .dialog-form-actions {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
 }
 .confirmation-sheet > .commit-form .commit-submit {
   position: static;
-  margin: 4px 0 0;
-  padding: 12px 0 0;
+  margin-right: 0;
+  margin-bottom: 0;
+  margin-left: 0;
   background: transparent;
   backdrop-filter: none;
+}
+.add-repository-source {
+  width: fit-content;
+}
+.add-repository-source > button {
+  min-width: 92px;
+}
+.repository-location-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.repository-location-control > input {
+  width: 100%;
+}
+.repository-path-picker {
+  width: 34px;
+  padding: 0;
+}
+.repository-path-picker > svg {
+  width: 15px;
+  height: 15px;
+}
+.dialog-form-error {
+  margin: 0;
 }
 .remote-action-hint {
   margin: 0;
@@ -2140,7 +2195,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 10px 12px 12px;
+  padding-top: 10px;
   overflow: hidden;
 }
 .activity-state {
@@ -2162,7 +2217,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   font-size: 11px;
 }
 .activity-coverage-note {
-  margin: 0 0 7px;
+  margin: 0 12px 7px;
   padding: 7px 9px;
   border-radius: 6px;
   background: var(--warning-muted);
@@ -2170,11 +2225,11 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   font-size: 10.5px;
 }
 .activity-chart {
-  width: 100%;
+  width: auto;
   height: 122px;
   min-height: 112px;
   flex: none;
-  margin: 0;
+  margin: 0 12px;
 }
 .activity-chart > p {
   display: grid;
@@ -2217,6 +2272,10 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   z-index: 1;
   top: 0;
   background: var(--surface-raised);
+  color: var(--text-tertiary);
+}
+.activity-chart-data tbody {
+  color: var(--text-secondary);
 }
 .activity-chart-data td,
 .activity-chart-data thead th:not(:first-child) {
@@ -2281,7 +2340,7 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 }
 .registered-repository-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 11px;
   width: 100%;
@@ -2296,9 +2355,18 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .registered-repository-row:hover {
   background: var(--surface-sunken);
 }
-.registered-repository-row > svg {
-  width: 18px;
-  height: 18px;
+.registered-repository-row > .repository-logo,
+.registered-repository-row > .repository-logo-fallback {
+  width: 32px;
+  height: 32px;
+}
+.repository-logo {
+  display: block;
+  object-fit: cover;
+  border-radius: 7px;
+}
+.repository-logo-fallback {
+  padding: 7px;
   color: var(--accent);
   stroke-width: 1.6;
 }
@@ -2469,6 +2537,11 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .switcher-option-icon > svg {
   width: 17px;
   height: 17px;
+}
+.switcher-option-icon > .repository-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
 }
 .switcher-option-copy {
   display: grid;

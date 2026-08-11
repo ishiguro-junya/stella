@@ -1,11 +1,10 @@
 <h1 align="center">Stella</h1>
 
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" alt="Stellaのアイコン">
+  <img src="src-tauri/icons/128x128.png" alt="Stellaのアイコン" width="128" height="128" style="border-radius: 22%;">
 </p>
 
-Stellaは、シンプルなGitクライアントアプリです。  
-日常的なGit操作をコンパクトな画面にまとめ、必要なGitの詳細だけを確認できるようにします。  
+<p align="center">シンプルなGitクライアントアプリ</p>
 
 > [!WARNING]
 > このアプリは現在アルファ版です。
@@ -30,7 +29,7 @@ Stellaは、シンプルなGitクライアントアプリです。
 └── docs/                   # ドキュメント
 ```
 
-## 🌱 クイックスタート
+## 🌱 はじめる
 
 ```sh
 mise install
@@ -63,9 +62,19 @@ mise run dev
 - 初回表示はmacOSの言語が日本語なら日本語、それ以外は英語です。  
   以後は設定画面で選んだ言語を保持します。
 - UIとStella由来の通知・エラーは日本語/英語に対応し、Git出力、path、Branch名、Commit本文は原文のまま表示します。
+- リポジトリ一覧では、リポジトリ直下の`logo.svg`、`logo.png`、`logo.webp`、`logo.jpg`、`logo.jpeg`をロゴとして表示します。
+  `.stella/`、`.github/`、`docs/`直下の`logo.svg`または`logo.png`と、`src-tauri/icons/128x128.png`にも対応します。
 - App Sandbox、Developer ID署名、公証、自動更新、Mac App Store配布を扱っていません。
 - GitHub/GitLab固有連携、認証管理、stash、tag、remote管理、interactive rebase、force push、submodule、LFS、worktree管理は対象外です。
 - GUIアプリはshellの初期化ファイルから`PATH`を継承しないため、Git backendは`/usr/bin/git`を利用します。
+
+## 🔗 参考リンク
+
+- [mise](https://mise.jdx.dev/)
+- [Tauri](https://github.com/tauri-apps/tauri)
+- [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
+- [Lychee](https://github.com/lycheeverse/lychee)
+- [Lefthook](https://lefthook.dev/)
 
 ## ライセンス
 

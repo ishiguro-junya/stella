@@ -7,8 +7,10 @@ import { APPEARANCE_OPTIONS, type Appearance } from '../../theme/appearance';
 export interface SettingsViewProps {
   appearance: Appearance;
   language: Language;
+  splitStageView: boolean;
   onAppearanceChange: (appearance: Appearance) => void;
   onLanguageChange: (language: Language) => void;
+  onSplitStageViewChange: (split: boolean) => void;
 }
 
 function handleSegmentedKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
@@ -38,8 +40,10 @@ function handleSegmentedKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): vo
 export function SettingsView({
   appearance,
   language,
+  splitStageView,
   onAppearanceChange,
   onLanguageChange,
+  onSplitStageViewChange,
 }: SettingsViewProps) {
   const { t } = useI18n();
 
@@ -111,6 +115,32 @@ export function SettingsView({
                   </label>
                 );
               })}
+            </fieldset>
+          </section>
+
+          <section className="settings-row" aria-labelledby="stage-display-title">
+            <div className="settings-row-copy">
+              <h2 id="stage-display-title">{t('stageDisplayTitle')}</h2>
+              <p id="stage-display-description">{t('stageDisplayDescription')}</p>
+            </div>
+            <fieldset
+              className="settings-segmented settings-stage-display-options"
+              aria-describedby="stage-display-description"
+            >
+              <legend className="sr-only">{t('stageDisplayTitle')}</legend>
+              {([true, false] as const).map((option) => (
+                <label key={String(option)} className="settings-segmented-option">
+                  <input
+                    type="radio"
+                    name="stage-display"
+                    value={option ? 'split' : 'combined'}
+                    checked={splitStageView === option}
+                    onChange={() => onSplitStageViewChange(option)}
+                    onKeyDown={handleSegmentedKeyDown}
+                  />
+                  <span>{t(option ? 'stageDisplaySplit' : 'stageDisplayCombined')}</span>
+                </label>
+              ))}
             </fieldset>
           </section>
         </div>

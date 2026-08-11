@@ -49,7 +49,7 @@ describe('App deferred Activity navigation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await user.type(
-      screen.getByRole('textbox', { name: 'Repository URL or path' }),
+      screen.getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/repository.git',
     );
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -60,7 +60,8 @@ describe('App deferred Activity navigation', () => {
     expect(screen.getByRole('heading', { name: 'Repositories' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
-    await user.type(screen.getByRole('textbox', { name: 'Repository URL or path' }), repo.path);
+    await user.click(screen.getByRole('tab', { name: 'Path' }));
+    await user.type(screen.getByRole('textbox', { name: 'Repository path' }), repo.path);
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(attach).toHaveBeenCalledOnce();

@@ -17,11 +17,14 @@ function Harness({
       <button type="button">Before</button>
       <FileActionMenu
         path="src/app.ts"
+        selectedPaths={['src/app.ts']}
         open={open}
         disabled={false}
         openDisabled={false}
-        trashDisabled={false}
+        discardDisabled={false}
+        deleteDisabled={false}
         onOpenChange={setOpen}
+        onTriggerOpen={() => undefined}
         onAction={onAction ?? (async () => undefined)}
         {...props}
       />
@@ -44,11 +47,11 @@ describe('FileActionMenu', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveFocus();
     await user.keyboard('{End}');
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
     await user.keyboard('{Home}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
@@ -69,7 +72,7 @@ describe('FileActionMenu', () => {
     trigger.focus();
 
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
     await user.tab();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Outside' })).toHaveFocus();
@@ -88,13 +91,13 @@ describe('FileActionMenu', () => {
   it('skips disabled actions and closes before routing an enabled action', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: FileActionKind) => Promise<void>>(async () => undefined);
-    render(<Harness openDisabled trashDisabled onAction={onAction} />);
+    render(<Harness openDisabled discardDisabled deleteDisabled onAction={onAction} />);
     const trigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
 
     trigger.focus();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveFocus();
 
     await user.click(screen.getByRole('menuitem', { name: 'Copy Path' }));

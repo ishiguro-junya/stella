@@ -38,6 +38,13 @@ export const MESSAGES = {
   appearanceLight: { en: 'Light', ja: 'ライト' },
   appearanceDark: { en: 'Dark', ja: 'ダーク' },
   languageTitle: { en: 'Language', ja: '言語' },
+  stageDisplayTitle: { en: 'Stage Display', ja: 'Stageの表示' },
+  stageDisplayDescription: {
+    en: 'Choose whether Staged and Unstaged files appear in separate lists.',
+    ja: 'StagedとUnstagedのファイルを分けて表示するか選択します。',
+  },
+  stageDisplaySplit: { en: 'Separate', ja: '分割' },
+  stageDisplayCombined: { en: 'Combined', ja: 'まとめる' },
   languageDescription: {
     en: 'Choose the interface language.',
     ja: '表示に使用する言語を選択します。',
@@ -63,9 +70,9 @@ export const MESSAGES = {
   discard: { en: 'Discard', ja: '破棄' },
   merge: { en: 'Merge', ja: 'Merge' },
   rebase: { en: 'Rebase', ja: 'Rebase' },
-  fetch: { en: 'Fetch', ja: 'Fetch' },
-  pull: { en: 'Pull', ja: 'Pull' },
-  push: { en: 'Push', ja: 'Push' },
+  fetch: { en: 'Fetch', ja: 'リモート情報を取得' },
+  pull: { en: 'Pull', ja: '変更を取り込む' },
+  push: { en: 'Push', ja: '変更を送信' },
   changeDragHelp: {
     en: 'Use the checkboxes to stage or unstage files. You can also drag file rows between Staged and Unstaged.',
     ja: 'チェックボックスでファイルをStageまたはUnstageできます。ファイル行をStagedとUnstagedの間でドラッグすることもできます。',
@@ -100,10 +107,15 @@ export const MESSAGES = {
     en: (args) => `${text(args, 'path')} actions`,
     ja: (args) => `${text(args, 'path')}の操作`,
   },
+  selectedFileActions: {
+    en: (args, { number }) => `${number(count(args, 'count'))} selected files actions`,
+    ja: (args, { number }) => `選択した${number(count(args, 'count'))}ファイルの操作`,
+  },
   openInDefaultApp: { en: 'Open in Default App', ja: 'デフォルトアプリで開く' },
   showInFinder: { en: 'Show in Finder', ja: 'Finderで表示' },
   copyPath: { en: 'Copy Path', ja: 'パスをコピー' },
-  moveToTrashEllipsis: { en: 'Move to Trash…', ja: 'ゴミ箱に入れる…' },
+  discardFilesEllipsis: { en: 'Discard Files…', ja: 'ファイルを破棄…' },
+  deleteFilesEllipsis: { en: 'Delete Files…', ja: 'ファイルを削除…' },
   resolveConflictsBeforeCommit: {
     en: 'Resolve all conflicts before committing.',
     ja: 'すべてのConflictを解決してからコミットしてください。',
@@ -150,12 +162,13 @@ export const MESSAGES = {
   },
   setUpstreamBeforePull: {
     en: 'Set an upstream branch before pulling.',
-    ja: 'Pullする前にupstream Branchを設定してください。',
+    ja: '変更を取り込む前にupstream Branchを設定してください。',
   },
   fastForwardUnavailable: { en: 'Fast-forward unavailable', ja: 'Fast-forwardできません' },
   fetchCompleteResolve: {
     en: (args) => `Fetch is complete. Merge or rebase ${text(args, 'target')}.`,
-    ja: (args) => `Fetchが完了しました。${text(args, 'target')}をMergeまたはRebaseしてください。`,
+    ja: (args) =>
+      `リモート情報を取得しました。${text(args, 'target')}をMergeまたはRebaseしてください。`,
   },
   changedFiles: { en: 'Changed files', ja: '変更されたファイル' },
   changesListWidth: { en: 'Changes list width', ja: '変更一覧の幅' },
@@ -336,14 +349,14 @@ export const MESSAGES = {
   actionGitOperation: { en: 'Git operation', ja: 'Git操作' },
   actionStageFiles: { en: 'Stage Files', ja: 'ファイルをStage' },
   actionUnstageFiles: { en: 'Unstage Files', ja: 'ファイルをUnstage' },
-  actionDiscardChanges: { en: 'Discard Changes', ja: '変更を破棄' },
+  actionDiscardChanges: { en: 'Discard Files', ja: 'ファイルを破棄' },
   actionStageSelectedLines: { en: 'Stage Selected Lines', ja: '選択行をStage' },
   actionUnstageSelectedLines: { en: 'Unstage Selected Lines', ja: '選択行をUnstage' },
   actionDiscardSelectedLines: { en: 'Discard Selected Lines', ja: '選択行を破棄' },
   actionCommit: { en: 'Commit', ja: 'Commit' },
-  actionFetch: { en: 'Fetch', ja: 'Fetch' },
-  actionPull: { en: 'Pull', ja: 'Pull' },
-  actionPush: { en: 'Push', ja: 'Push' },
+  actionFetch: { en: 'Fetch', ja: 'リモート情報を取得' },
+  actionPull: { en: 'Pull', ja: '変更を取り込む' },
+  actionPush: { en: 'Push', ja: '変更を送信' },
   actionCreateBranch: { en: 'Create Branch', ja: 'Branchを作成' },
   actionCheckoutBranch: { en: 'Checkout Branch', ja: 'BranchをCheckout' },
   actionMergeBranch: { en: 'Merge Branch', ja: 'BranchをMerge' },
@@ -371,7 +384,7 @@ export const MESSAGES = {
     en: 'Open Conflict Externally',
     ja: 'Conflictを外部で開く',
   },
-  actionMoveFileToTrash: { en: 'Move File to Trash', ja: 'ファイルをゴミ箱に入れる' },
+  actionMoveFileToTrash: { en: 'Delete Files', ja: 'ファイルを削除' },
   actionShowInFinder: { en: 'Show in Finder', ja: 'Finderで表示' },
   actionOpenInDefaultApp: {
     en: 'Open in Default App',
@@ -405,12 +418,12 @@ export const MESSAGES = {
     ja: 'Untrackedファイルをゴミ箱に入れました',
   },
   backendCommitCreated: { en: 'Commit created', ja: 'Commitを作成しました' },
-  backendFetchCompleted: { en: 'Fetch completed', ja: 'Fetchが完了しました' },
+  backendFetchCompleted: { en: 'Fetch completed', ja: 'リモート情報を取得しました' },
   backendPullCompleted: {
     en: 'Fast-forward pull completed',
-    ja: 'Fast-forward Pullが完了しました',
+    ja: 'Fast-forwardで変更を取り込みました',
   },
-  backendPushCompleted: { en: 'Push completed', ja: 'Pushが完了しました' },
+  backendPushCompleted: { en: 'Push completed', ja: '変更を送信しました' },
   backendBranchCreated: { en: 'Branch created', ja: 'Branchを作成しました' },
   backendBranchCheckedOut: {
     en: 'Branch checked out',
@@ -435,7 +448,10 @@ export const MESSAGES = {
     en: 'Opened external editor',
     ja: '外部エディタを開きました',
   },
-  backendFileTrashed: { en: 'File moved to Trash', ja: 'ファイルをゴミ箱に入れました' },
+  backendFilesDeleted: {
+    en: (args, { number }) => `${number(count(args, 'count'))} file(s) deleted`,
+    ja: (args, { number }) => `${number(count(args, 'count'))}ファイルを削除しました`,
+  },
   backendShownInFinder: { en: 'Shown in Finder', ja: 'Finderで表示しました' },
   backendOpenedInDefaultApp: {
     en: 'Opened in default app',
@@ -458,7 +474,8 @@ export const MESSAGES = {
   },
   previewPullRemote: {
     en: (args) => `Fetch from ${text(args, 'remote')}, then fast-forward the local branch`,
-    ja: (args) => `${text(args, 'remote')}からFetchし、ローカルBranchをfast-forwardします`,
+    ja: (args) =>
+      `${text(args, 'remote')}からリモート情報を取得し、ローカルBranchをfast-forwardします`,
   },
   previewPushRemote: {
     en: (args) =>
@@ -488,9 +505,11 @@ export const MESSAGES = {
     en: (args) => `Apply the ${text(args, 'choice')} side to the worktree`,
     ja: (args) => `${text(args, 'choice')}側をworktreeに適用します`,
   },
-  previewMovePathToTrash: {
-    en: (args) => `Move ${text(args, 'path')} to Trash`,
-    ja: (args) => `${text(args, 'path')}をゴミ箱に入れます`,
+  previewDeleteFiles: {
+    en: (args, { number }) =>
+      `Delete ${number(count(args, 'count'))} file(s). They can be restored from Trash.`,
+    ja: (args, { number }) =>
+      `${number(count(args, 'count'))}ファイルを削除します。削除後はゴミ箱から復元できます。`,
   },
   conflictCurrentBranch: { en: 'Current branch', ja: '現在のBranch' },
   conflictMergedBranch: { en: 'Merged branch', ja: 'MergeするBranch' },
@@ -633,28 +652,31 @@ export const MESSAGES = {
     ja: '追加済みのリポジトリはありません。',
   },
   addRepository: { en: 'Add Repository', ja: 'リポジトリを追加' },
-  addRepositoryDescription: {
-    en: 'Enter a remote URL or choose a local folder in Finder.',
-    ja: 'リモートURLを入力するか、Finderからローカルフォルダを選択します。',
+  repositorySource: { en: 'Repository source', ja: 'リポジトリの追加元' },
+  repositoryUrlTab: { en: 'URL', ja: 'URL' },
+  repositoryPathTab: { en: 'Path', ja: 'パス' },
+  repositoryUrl: { en: 'Repository URL', ja: 'リポジトリURL' },
+  repositoryPath: { en: 'Repository path', ja: 'リポジトリのパス' },
+  repositoryUrlPlaceholder: { en: 'https://…', ja: 'https://…' },
+  repositoryPathPlaceholder: { en: '/Users/…', ja: '/Users/…' },
+  repositoryDisplayName: { en: 'Repository name', ja: 'リポジトリ名' },
+  repositoryDisplayNamePlaceholder: {
+    en: 'Automatically set when left blank',
+    ja: '未入力の場合は自動設定',
   },
-  repositoryLocation: {
-    en: 'Repository URL or path',
-    ja: 'リポジトリURLまたはパス',
-  },
-  repositoryLocationPlaceholder: {
-    en: 'https://… or /Users/…',
-    ja: 'https://… または /Users/…',
-  },
-  chooseRepositoryInFinder: { en: 'Choose in Finder…', ja: 'Finderから選択…' },
   chooseRepositoryDirectory: { en: 'Choose Repository', ja: 'リポジトリを選択' },
   chooseCloneParentDirectory: { en: 'Choose Clone Location', ja: 'Clone先を選択' },
   chooseDirectoryFailed: {
     en: 'Could not open the folder picker.',
     ja: 'フォルダ選択を開けませんでした。',
   },
-  invalidRepositoryLocation: {
-    en: 'Enter a supported remote URL or an absolute local path.',
-    ja: '対応するリモートURLまたは絶対パスを入力してください。',
+  invalidRepositoryUrl: {
+    en: 'Enter a supported remote URL.',
+    ja: '対応するリモートURLを入力してください。',
+  },
+  invalidRepositoryPath: {
+    en: 'Enter an absolute local path.',
+    ja: '絶対パスを入力してください。',
   },
   add: { en: 'Add', ja: '追加' },
   hasChanges: { en: 'Has changes', ja: '変更あり' },
@@ -669,7 +691,8 @@ export const MESSAGES = {
     en: (args) => `Type “${text(args, 'value')}” to confirm`,
     ja: (args) => `確認のため「${text(args, 'value')}」と入力してください`,
   },
-  moveToTrash: { en: 'Move to Trash', ja: 'ゴミ箱に入れる' },
+  deleteFiles: { en: 'Delete Files', ja: 'ファイルを削除' },
+  discardFiles: { en: 'Discard Files', ja: 'ファイルを破棄' },
   run: { en: 'Run', ja: '実行' },
   unsavedResult: { en: 'Unsaved result', ja: '未保存の結果' },
   saveOrDiscardBeforeLeaving: {

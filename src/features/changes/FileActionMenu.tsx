@@ -8,19 +8,33 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { AppWindowMac, Copy, Ellipsis, FolderOpen, Trash2 } from 'lucide-react';
+import { AppWindowMac, Copy, Ellipsis, FolderOpen, Trash2, Undo2 } from 'lucide-react';
 
 import { useI18n } from '../../i18n/i18n';
 
-export type FileActionKind = 'openInDefaultApp' | 'revealInFinder' | 'copyPath' | 'moveToTrash';
+export type FileActionKind =
+  | 'openInDefaultApp'
+  | 'revealInFinder'
+  | 'copyPath'
+  | 'discardChanges'
+  | 'moveToTrash';
+
+export interface FileActionMenuPoint {
+  x: number;
+  y: number;
+}
 
 export interface FileActionMenuProps {
   path: string;
+  selectedPaths: string[];
   open: boolean;
   disabled: boolean;
   openDisabled: boolean;
-  trashDisabled: boolean;
+  discardDisabled: boolean;
+  deleteDisabled: boolean;
+  contextPoint?: FileActionMenuPoint | undefined;
   onOpenChange: (open: boolean) => void;
+  onTriggerOpen: () => void;
   onAction: (action: FileActionKind) => Promise<void>;
 }
 
@@ -48,11 +62,15 @@ function enabledItems(menu: HTMLElement): HTMLButtonElement[] {
 
 export function FileActionMenu({
   path,
+  selectedPaths,
   open,
   disabled,
   openDisabled,
-  trashDisabled,
+  discardDisabled,
+  deleteDisabled,
+  contextPoint,
   onOpenChange,
+  onTriggerOpen,
   onAction,
 }: FileActionMenuProps) {
   const { t } = useI18n();
@@ -66,17 +84,26 @@ export function FileActionMenu({
     const trigger = triggerRef.current;
     const menu = menuRef.current;
     if (!trigger || !menu) return;
-    const triggerRect = trigger.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
     const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - menuRect.width - VIEWPORT_MARGIN);
-    const left = Math.min(Math.max(VIEWPORT_MARGIN, triggerRect.right - menuRect.width), maxLeft);
-    const below = triggerRect.bottom + MENU_GAP;
+    const maxTop = Math.max(
+      VIEWPORT_MARGIN,
+      window.innerHeight - menuRect.height - VIEWPORT_MARGIN,
+    );
+    const triggerRect = trigger.getBoundingClientRect();
+    const left = contextPoint
+      ? Math.min(Math.max(VIEWPORT_MARGIN, contextPoint.x), maxLeft)
+      : Math.min(Math.max(VIEWPORT_MARGIN, triggerRect.right - menuRect.width), maxLeft);
+    const below = contextPoint ? contextPoint.y : triggerRect.bottom + MENU_GAP;
+    const above = contextPoint
+      ? contextPoint.y - menuRect.height
+      : triggerRect.top - menuRect.height - MENU_GAP;
     const top =
       below + menuRect.height <= window.innerHeight - VIEWPORT_MARGIN
-        ? below
-        : Math.max(VIEWPORT_MARGIN, triggerRect.top - menuRect.height - MENU_GAP);
+        ? Math.max(VIEWPORT_MARGIN, below)
+        : Math.min(Math.max(VIEWPORT_MARGIN, above), maxTop);
     setPosition({ left, top });
-  }, []);
+  }, [contextPoint]);
 
   const closeMenu = useCallback(
     (restoreFocus: boolean): void => {
@@ -197,14 +224,19 @@ export function FileActionMenu({
         disabled={disabled}
         onClick={() => {
           if (open) closeMenu(false);
-          else openMenu('first');
+          else {
+            onTriggerOpen();
+            openMenu('first');
+          }
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
             event.preventDefault();
+            onTriggerOpen();
             openMenu('first');
           } else if (event.key === 'ArrowUp') {
             event.preventDefault();
+            onTriggerOpen();
             openMenu('last');
           }
         }}
@@ -218,7 +250,11 @@ export function FileActionMenu({
               id={menuId}
               className="file-action-menu"
               role="menu"
-              aria-label={t('fileActionsFor', { path })}
+              aria-label={
+                selectedPaths.length === 1
+                  ? t('fileActionsFor', { path: selectedPaths[0] ?? path })
+                  : t('selectedFileActions', { count: selectedPaths.length })
+              }
               tabIndex={-1}
               style={menuStyle}
               onKeyDown={handleMenuKeyDown}
@@ -245,11 +281,21 @@ export function FileActionMenu({
                 type="button"
                 className="danger-menu-item"
                 role="menuitem"
-                disabled={trashDisabled}
+                disabled={discardDisabled}
+                onClick={() => runAction('discardChanges')}
+              >
+                <Undo2 aria-hidden="true" focusable="false" size={15} />
+                <span>{t('discardFilesEllipsis')}</span>
+              </button>
+              <button
+                type="button"
+                className="danger-menu-item"
+                role="menuitem"
+                disabled={deleteDisabled}
                 onClick={() => runAction('moveToTrash')}
               >
                 <Trash2 aria-hidden="true" focusable="false" size={15} />
-                <span>{t('moveToTrashEllipsis')}</span>
+                <span>{t('deleteFilesEllipsis')}</span>
               </button>
             </div>,
             document.body,

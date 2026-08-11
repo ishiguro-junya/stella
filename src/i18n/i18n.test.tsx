@@ -45,8 +45,8 @@ describe('Stella i18n', () => {
     expect(translate('en', 'changeAllAria', { action: 'Stage', count: 2, area: 'Unstaged' })).toBe(
       'Stage all 2 unstaged files',
     );
-    expect(translate('ja', 'previewMovePathToTrash', { path: 'src/app.ts' })).toBe(
-      'src/app.tsをゴミ箱に入れます',
+    expect(translate('ja', 'previewDeleteFiles', { count: 2 })).toBe(
+      '2ファイルを削除します。削除後はゴミ箱から復元できます。',
     );
     expect(translate('en', 'uncommittedFileCount', { count: 1 })).toBe('1 file');
     expect(translate('en', 'uncommittedFileCount', { count: 2 })).toBe('2 files');
@@ -70,6 +70,9 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitScopeInvalid')).toBe('スコープには括弧や改行を使用できません。');
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'stage')).toBe('Stage');
+    expect(translate('ja', 'pull')).toBe('変更を取り込む');
+    expect(translate('ja', 'push')).toBe('変更を送信');
+    expect(translate('ja', 'fetch')).toBe('リモート情報を取得');
   });
 
   it('uses the requested Japanese terms for Activity metrics', () => {

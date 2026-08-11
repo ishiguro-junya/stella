@@ -1249,12 +1249,14 @@ impl Workspace {
                 affected_paths = self.conflict_session(repo, session_id)?.related_paths;
             }
             Action::FileAction {
-                path,
+                paths,
                 operation: FileOperation::MoveToTrash,
             } => {
-                let absolute = checked_repo_path(&repo.root, path)?;
-                ensure_trashable_file(&absolute)?;
-                affected_paths.push(path.clone());
+                for path in paths {
+                    let absolute = checked_repo_path(&repo.root, path)?;
+                    ensure_trashable_file(&absolute)?;
+                    affected_paths.push(path.clone());
+                }
             }
             _ => return Ok(None),
         }
@@ -2760,39 +2762,59 @@ impl Workspace {
                     synthetic_output("external-editor"),
                 ))
             }
-            Action::FileAction { path, operation } => {
-                let absolute = checked_repo_path(&repo.root, path)?;
-                match operation {
-                    FileOperation::MoveToTrash => {
-                        ensure_trashable_file(&absolute)?;
-                        trash::delete(&absolute).map_err(|error| {
+            Action::FileAction { paths, operation } => match operation {
+                FileOperation::MoveToTrash => {
+                    let targets = paths
+                        .iter()
+                        .map(|path| checked_repo_path(&repo.root, path))
+                        .collect::<WorkspaceResult<Vec<_>>>()?;
+                    for target in &targets {
+                        ensure_trashable_file(target)?;
+                    }
+                    for target in targets {
+                        trash::delete(&target).map_err(|error| {
                             WorkspaceError::new(ErrorCode::Io, error.to_string())
                         })?;
-                        Ok((
-                            LocalizedMessage::new("backendFileTrashed"),
-                            synthetic_output("move-to-trash"),
-                        ))
                     }
-                    FileOperation::RevealInFinder => {
-                        launch_macos_open(&finder_reveal_arguments(&repo.root, &absolute)?)?;
-                        Ok((
-                            LocalizedMessage::new("backendShownInFinder"),
-                            synthetic_output("reveal-in-finder"),
-                        ))
-                    }
-                    FileOperation::OpenInDefaultApp => {
-                        ensure_openable_file(&absolute)?;
-                        launch_macos_open(&macos_open_arguments(
-                            FileOperation::OpenInDefaultApp,
-                            &absolute,
-                        )?)?;
-                        Ok((
-                            LocalizedMessage::new("backendOpenedInDefaultApp"),
-                            synthetic_output("open-in-default-app"),
-                        ))
-                    }
+                    Ok((
+                        LocalizedMessage::new("backendFilesDeleted")
+                            .number_arg("count", paths.len()),
+                        synthetic_output("move-to-trash"),
+                    ))
                 }
-            }
+                FileOperation::RevealInFinder => {
+                    let path = paths.first().ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::InvalidRequest,
+                            "A file action requires one path",
+                        )
+                    })?;
+                    let absolute = checked_repo_path(&repo.root, path)?;
+                    launch_macos_open(&finder_reveal_arguments(&repo.root, &absolute)?)?;
+                    Ok((
+                        LocalizedMessage::new("backendShownInFinder"),
+                        synthetic_output("reveal-in-finder"),
+                    ))
+                }
+                FileOperation::OpenInDefaultApp => {
+                    let path = paths.first().ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::InvalidRequest,
+                            "A file action requires one path",
+                        )
+                    })?;
+                    let absolute = checked_repo_path(&repo.root, path)?;
+                    ensure_openable_file(&absolute)?;
+                    launch_macos_open(&macos_open_arguments(
+                        FileOperation::OpenInDefaultApp,
+                        &absolute,
+                    )?)?;
+                    Ok((
+                        LocalizedMessage::new("backendOpenedInDefaultApp"),
+                        synthetic_output("open-in-default-app"),
+                    ))
+                }
+            },
         }
     }
 
@@ -4600,22 +4622,36 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
 }
 
 fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> WorkspaceResult<()> {
-    if let Action::FileAction { path, operation } = action {
-        let entry = snapshot
-            .entries
-            .iter()
-            .find(|entry| entry.path == *path)
-            .ok_or_else(|| {
-                WorkspaceError::new(
-                    ErrorCode::InvalidRequest,
-                    format!("The current snapshot has no file action target: {path}"),
-                )
-            })?;
-        if entry.conflict && *operation != FileOperation::RevealInFinder {
+    if let Action::FileAction { paths, operation } = action {
+        if paths.is_empty() {
             return Err(WorkspaceError::new(
                 ErrorCode::InvalidRequest,
-                "Conflicted files must be opened or deleted through the conflict workflow",
+                "At least one file action target is required",
             ));
+        }
+        if *operation != FileOperation::MoveToTrash && paths.len() != 1 {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "This file action requires exactly one target",
+            ));
+        }
+        for path in paths {
+            let entry = snapshot
+                .entries
+                .iter()
+                .find(|entry| entry.path == *path)
+                .ok_or_else(|| {
+                    WorkspaceError::new(
+                        ErrorCode::InvalidRequest,
+                        format!("The current snapshot has no file action target: {path}"),
+                    )
+                })?;
+            if entry.conflict && *operation != FileOperation::RevealInFinder {
+                return Err(WorkspaceError::new(
+                    ErrorCode::InvalidRequest,
+                    "Conflicted files must be opened or deleted through the conflict workflow",
+                ));
+            }
         }
         return Ok(());
     }
@@ -4830,7 +4866,7 @@ fn action_paths(action: &Action) -> Vec<String> {
             }
             output
         }
-        Action::FileAction { path, .. } => vec![path.clone()],
+        Action::FileAction { paths, .. } => paths.clone(),
         _ => Vec::new(),
     }
 }
@@ -4884,9 +4920,9 @@ fn preview_summary(action: &Action) -> LocalizedMessage {
             LocalizedMessage::new("previewApplyConflictSide").arg("choice", format!("{choice:?}"))
         }
         Action::FileAction {
-            path,
+            paths,
             operation: FileOperation::MoveToTrash,
-        } => LocalizedMessage::new("previewMovePathToTrash").arg("path", path.clone()),
+        } => LocalizedMessage::new("previewDeleteFiles").number_arg("count", paths.len()),
         _ => action_display_message(action),
     }
 }
@@ -5393,7 +5429,7 @@ mod tests {
             assert!(action_allowed_during(
                 &operation,
                 &Action::FileAction {
-                    path: "f.txt".into(),
+                    paths: vec!["f.txt".into()],
                     operation: FileOperation::RevealInFinder,
                 }
             ));
@@ -5401,7 +5437,7 @@ mod tests {
                 assert!(!action_allowed_during(
                     &operation,
                     &Action::FileAction {
-                        path: "f.txt".into(),
+                        paths: vec!["f.txt".into()],
                         operation: file_operation,
                     }
                 ));
@@ -5422,7 +5458,7 @@ mod tests {
     fn file_action_targets_must_be_visible_in_the_current_snapshot() {
         let snapshot = parse_status(b"? visible.txt\0").unwrap();
         let forged = Action::FileAction {
-            path: ".git/config".into(),
+            paths: vec![".git/config".into()],
             operation: FileOperation::OpenInDefaultApp,
         };
         assert_eq!(
@@ -5440,11 +5476,42 @@ mod tests {
             validate_action_targets(
                 &snapshot,
                 &Action::FileAction {
-                    path: "visible.txt".into(),
+                    paths: vec!["visible.txt".into()],
                     operation,
                 },
             )
             .unwrap();
+        }
+    }
+
+    #[test]
+    fn only_delete_accepts_multiple_file_action_targets() {
+        let snapshot = parse_status(b"? first.txt\0? second.txt\0").unwrap();
+        validate_action_targets(
+            &snapshot,
+            &Action::FileAction {
+                paths: vec!["first.txt".into(), "second.txt".into()],
+                operation: FileOperation::MoveToTrash,
+            },
+        )
+        .unwrap();
+
+        for operation in [
+            FileOperation::RevealInFinder,
+            FileOperation::OpenInDefaultApp,
+        ] {
+            assert_eq!(
+                validate_action_targets(
+                    &snapshot,
+                    &Action::FileAction {
+                        paths: vec!["first.txt".into(), "second.txt".into()],
+                        operation,
+                    },
+                )
+                .unwrap_err()
+                .code,
+                ErrorCode::InvalidRequest
+            );
         }
     }
 
@@ -5466,7 +5533,7 @@ mod tests {
                 repo_id: attached.repo_id,
                 expected_generation: attached.snapshot.repo_generation,
                 action: Action::FileAction {
-                    path: ".git/config".into(),
+                    paths: vec![".git/config".into()],
                     operation: FileOperation::MoveToTrash,
                 },
             })
@@ -5484,7 +5551,7 @@ mod tests {
                 validate_action_targets(
                     &snapshot,
                     &Action::FileAction {
-                        path: "conflict.txt".into(),
+                        paths: vec!["conflict.txt".into()],
                         operation,
                     },
                 )
@@ -5496,7 +5563,7 @@ mod tests {
         validate_action_targets(
             &snapshot,
             &Action::FileAction {
-                path: "conflict.txt".into(),
+                paths: vec!["conflict.txt".into()],
                 operation: FileOperation::RevealInFinder,
             },
         )
@@ -6368,7 +6435,7 @@ mod tests {
             )
             .unwrap();
         let action = Action::FileAction {
-            path: "target.txt".into(),
+            paths: vec!["target.txt".into()],
             operation: FileOperation::MoveToTrash,
         };
         let preview = workspace
@@ -6408,6 +6475,40 @@ mod tests {
     }
 
     #[test]
+    fn move_to_trash_preview_includes_every_selected_file() {
+        let fixture = GitFixture::new();
+        fixture.write("first.txt", "first\n");
+        fixture.write("second.txt", "second\n");
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let preview = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::FileAction {
+                    paths: vec!["first.txt".into(), "second.txt".into()],
+                    operation: FileOperation::MoveToTrash,
+                },
+            })
+            .unwrap();
+
+        assert!(preview.destructive);
+        assert_eq!(preview.affected_paths, ["first.txt", "second.txt"]);
+        assert_eq!(
+            preview.summary,
+            LocalizedMessage::new("previewDeleteFiles").number_arg("count", 2)
+        );
+        assert!(preview.confirmation_token.is_some());
+    }
+
+    #[test]
     fn move_to_trash_preview_token_cannot_be_reused_for_another_path() {
         let fixture = GitFixture::new();
         fixture.write("first.txt", "first\n");
@@ -6426,7 +6527,7 @@ mod tests {
                 repo_id: attached.repo_id.clone(),
                 expected_generation: attached.snapshot.repo_generation,
                 action: Action::FileAction {
-                    path: "first.txt".into(),
+                    paths: vec!["first.txt".into()],
                     operation: FileOperation::MoveToTrash,
                 },
             })
@@ -6441,7 +6542,7 @@ mod tests {
                     repo_id: attached.repo_id.clone(),
                     expected_generation: attached.snapshot.repo_generation,
                     action: Action::FileAction {
-                        path: "second.txt".into(),
+                        paths: vec!["second.txt".into()],
                         operation: FileOperation::MoveToTrash,
                     },
                     confirmation_token: preview.confirmation_token,

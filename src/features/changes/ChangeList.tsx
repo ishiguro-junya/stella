@@ -5,6 +5,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import {
   ArrowRight,
@@ -19,7 +20,7 @@ import {
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
-import { FileActionMenu, type FileActionKind } from './FileActionMenu';
+import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 
 const AREA_LABELS: Record<ChangeArea, MessageKey> = {
   conflicted: 'conflicted',
@@ -48,14 +49,15 @@ const DRAG_MIME = 'application/x-stella-change';
 
 type StageableArea = 'staged' | 'unstaged' | 'untracked';
 type DropArea = 'staged' | 'unstaged';
-type DisplayGroup = 'conflicted' | 'staged' | 'worktree';
+type DisplayGroup = 'conflicted' | 'staged' | 'worktree' | 'combined';
 type StageGroup = Exclude<DisplayGroup, 'conflicted'>;
 
 interface ChangeGroup {
   id: DisplayGroup;
   label: string;
-  targetArea: ChangeArea;
+  targetArea?: ChangeArea;
   entries: ChangeEntry[];
+  splitStageView?: boolean | undefined;
 }
 
 export interface StageTransitionRequest {
@@ -90,6 +92,7 @@ export interface ChangeListProps {
   repoId: RepoId;
   generation: number;
   entries: ChangeEntry[];
+  splitStageView?: boolean | undefined;
   selectedKey: string;
   disabled: boolean;
   disabledReasonId?: string | undefined;
@@ -98,7 +101,7 @@ export interface ChangeListProps {
   fileTrashDisabled: boolean;
   onSelect: (key: string) => void;
   onStageTransition: (request: StageTransitionRequest) => Promise<void>;
-  onFileAction: (entry: ChangeEntry, action: FileActionKind) => Promise<void>;
+  onFileAction: (entries: ChangeEntry[], action: FileActionKind) => Promise<void>;
 }
 
 function entryKey(entry: ChangeEntry): string {
@@ -121,8 +124,9 @@ function targetForTransition(kind: 'stage' | 'unstage'): PendingFocus['target'] 
   return kind === 'stage' ? 'staged' : 'worktree';
 }
 
-function displayGroupForArea(area: ChangeArea): DisplayGroup {
+function displayGroupForArea(area: ChangeArea, splitStageView: boolean): DisplayGroup {
   if (area === 'conflicted') return 'conflicted';
+  if (!splitStageView) return 'combined';
   return area === 'staged' ? 'staged' : 'worktree';
 }
 
@@ -145,6 +149,7 @@ export function ChangeList({
   repoId,
   generation,
   entries,
+  splitStageView = true,
   selectedKey,
   disabled,
   disabledReasonId,
@@ -161,9 +166,17 @@ export function ChangeList({
   const [dropTarget, setDropTarget] = useState<DropArea>();
   const [dragAnnouncement, setDragAnnouncement] = useState('');
   const [openMenuKey, setOpenMenuKey] = useState<string>();
+  const [contextMenu, setContextMenu] = useState<
+    { key: string; point: FileActionMenuPoint } | undefined
+  >();
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
+    () => new Set(selectedKey ? [selectedKey] : []),
+  );
   const activeDragRef = useRef<ActiveDrag | undefined>(undefined);
+  const selectionAnchorRef = useRef<string | undefined>(selectedKey || undefined);
   const pendingFocusRef = useRef<PendingFocus | undefined>(undefined);
   const pendingTrashFocusRef = useRef<PendingTrashFocus | undefined>(undefined);
+  const selectionRepoRef = useRef(repoId);
   const focusExpiryRef = useRef<number | undefined>(undefined);
   const checkboxRefs = useRef(new Map<string, HTMLInputElement>());
   const groupCheckboxRefs = useRef(new Map<StageGroup, HTMLInputElement>());
@@ -171,13 +184,14 @@ export function ChangeList({
   const groupFocusRefs = useRef(new Map<DisplayGroup, HTMLElement>());
   const interactionsDisabled = disabled || transferPending;
 
-  const groups: ChangeGroup[] = [
-    {
-      id: 'conflicted',
-      label: t(AREA_LABELS.conflicted),
-      targetArea: 'conflicted',
-      entries: entries.filter((entry) => entry.area === 'conflicted'),
-    },
+  const conflictGroup: ChangeGroup = {
+    id: 'conflicted',
+    label: t(AREA_LABELS.conflicted),
+    targetArea: 'conflicted',
+    entries: entries.filter((entry) => entry.area === 'conflicted'),
+  };
+  const splitGroups: ChangeGroup[] = [
+    conflictGroup,
     {
       id: 'staged',
       label: t(AREA_LABELS.staged),
@@ -191,21 +205,82 @@ export function ChangeList({
       entries: entries.filter((entry) => entry.area === 'unstaged' || entry.area === 'untracked'),
     },
   ];
+  const groups: ChangeGroup[] = splitStageView
+    ? splitGroups
+    : [
+        conflictGroup,
+        {
+          id: 'combined',
+          label: t('changes'),
+          entries: entries.filter((entry) => entry.area !== 'conflicted'),
+        },
+      ];
+  const orderedEntryKeys = groups.flatMap((group) => group.entries.map(entryKey));
+
+  const selectFile = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
+    const commandSelection = event.metaKey || event.ctrlKey;
+    if (event.shiftKey) {
+      const anchor = selectionAnchorRef.current ?? (selectedKey || key);
+      const anchorIndex = orderedEntryKeys.indexOf(anchor);
+      const targetIndex = orderedEntryKeys.indexOf(key);
+      if (anchorIndex >= 0 && targetIndex >= 0) {
+        const [start, end] =
+          anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        const range = orderedEntryKeys.slice(start, end + 1);
+        setSelectedKeys((current) => new Set(commandSelection ? [...current, ...range] : range));
+      }
+    } else if (commandSelection) {
+      setSelectedKeys((current) => {
+        const next = new Set(current);
+        if (next.has(key) && next.size > 1) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      selectionAnchorRef.current = key;
+    } else {
+      setSelectedKeys(new Set([key]));
+      selectionAnchorRef.current = key;
+    }
+    onSelect(key);
+  };
+
+  const openContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
+    event.preventDefault();
+    event.currentTarget.focus();
+    if (!selectedKeys.has(key)) {
+      setSelectedKeys(new Set([key]));
+      selectionAnchorRef.current = key;
+    }
+    onSelect(key);
+    setContextMenu({ key, point: { x: event.clientX, y: event.clientY } });
+    setOpenMenuKey(key);
+  };
+
+  const selectAllFiles = (event: ReactKeyboardEvent<HTMLFieldSetElement>): void => {
+    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
+    event.preventDefault();
+    setSelectedKeys(new Set(orderedEntryKeys));
+    const anchor = selectedKey || orderedEntryKeys[0];
+    selectionAnchorRef.current = anchor;
+    if (!selectedKey && anchor) onSelect(anchor);
+  };
   const moveFileSelection = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
     key: string,
     offset: -1 | 1,
   ): void => {
-    const orderedEntryKeys = groups
+    const groupEntryKeys = groups
       .find((group) => group.entries.some((entry) => entryKey(entry) === key))
       ?.entries.map(entryKey);
-    if (!orderedEntryKeys) return;
-    const currentIndex = orderedEntryKeys.indexOf(key);
+    if (!groupEntryKeys) return;
+    const currentIndex = groupEntryKeys.indexOf(key);
     if (currentIndex < 0) return;
     event.preventDefault();
-    const nextIndex = Math.min(Math.max(currentIndex + offset, 0), orderedEntryKeys.length - 1);
-    const nextKey = orderedEntryKeys[nextIndex];
+    const nextIndex = Math.min(Math.max(currentIndex + offset, 0), groupEntryKeys.length - 1);
+    const nextKey = groupEntryKeys[nextIndex];
     if (!nextKey || nextKey === key) return;
+    setSelectedKeys(new Set([nextKey]));
+    selectionAnchorRef.current = nextKey;
     onSelect(nextKey);
     rowRefs.current.get(nextKey)?.focus();
   };
@@ -221,11 +296,30 @@ export function ChangeList({
     setDraggingKey(undefined);
     setDropTarget(undefined);
     setOpenMenuKey(undefined);
+    setContextMenu(undefined);
   }, [generation, repoId]);
 
   useEffect(() => {
+    if (selectionRepoRef.current === repoId) return;
+    selectionRepoRef.current = repoId;
     pendingTrashFocusRef.current = undefined;
-  }, [repoId]);
+    const initial = selectedKey ? new Set([selectedKey]) : new Set<string>();
+    setSelectedKeys(initial);
+    selectionAnchorRef.current = selectedKey || undefined;
+  }, [repoId, selectedKey]);
+
+  useEffect(() => {
+    const available = new Set(entries.map(entryKey));
+    setSelectedKeys((current) => {
+      const next = new Set([...current].filter((key) => available.has(key)));
+      if (selectedKey && available.has(selectedKey)) next.add(selectedKey);
+      return next;
+    });
+    if (selectionAnchorRef.current && !available.has(selectionAnchorRef.current)) {
+      selectionAnchorRef.current =
+        selectedKey && available.has(selectedKey) ? selectedKey : undefined;
+    }
+  }, [entries, selectedKey]);
 
   useEffect(() => {
     if (fileActionsDisabled) setOpenMenuKey(undefined);
@@ -252,15 +346,15 @@ export function ChangeList({
             : entry.area === 'unstaged' || entry.area === 'untracked'),
       );
       if (nextEntry) {
-        const nextGroup = displayGroupForArea(nextEntry.area);
+        const nextGroup = displayGroupForArea(nextEntry.area, splitStageView);
         target =
           checkboxRefs.current.get(entryKey(nextEntry)) ??
           (nextGroup === 'conflicted' ? undefined : groupCheckboxRefs.current.get(nextGroup));
       }
     } else if (pending.target === 'staged') {
-      target = groupCheckboxRefs.current.get('staged');
+      target = groupCheckboxRefs.current.get(splitStageView ? 'staged' : 'combined');
     } else {
-      target = groupCheckboxRefs.current.get('worktree');
+      target = groupCheckboxRefs.current.get(splitStageView ? 'worktree' : 'combined');
     }
 
     if (!target || target.disabled) return;
@@ -268,7 +362,7 @@ export function ChangeList({
     pendingFocusRef.current = undefined;
     if (focusExpiryRef.current !== undefined) window.clearTimeout(focusExpiryRef.current);
     focusExpiryRef.current = undefined;
-  }, [entries, interactionsDisabled]);
+  }, [entries, interactionsDisabled, splitStageView]);
 
   useEffect(() => {
     const pending = pendingTrashFocusRef.current;
@@ -280,7 +374,7 @@ export function ChangeList({
     const focusEntry = (entry: ChangeEntry): void => {
       (
         rowRefs.current.get(entryKey(entry)) ??
-        groupFocusRefs.current.get(displayGroupForArea(entry.area))
+        groupFocusRefs.current.get(displayGroupForArea(entry.area, splitStageView))
       )?.focus();
     };
 
@@ -309,12 +403,14 @@ export function ChangeList({
       const nextEntry = entries.find((entry) => entryKey(entry) === nextRow);
       if (nextEntry) focusEntry(nextEntry);
     } else {
-      const sourceHeading = groupFocusRefs.current.get(displayGroupForArea(pending.sourceArea));
+      const sourceHeading = groupFocusRefs.current.get(
+        displayGroupForArea(pending.sourceArea, splitStageView),
+      );
       const fallbackHeading = groupFocusRefs.current.values().next().value;
       (sourceHeading ?? fallbackHeading)?.focus();
     }
     pendingTrashFocusRef.current = undefined;
-  }, [entries, generation]);
+  }, [entries, generation, splitStageView]);
 
   const runTransition = async (
     request: StageTransitionRequest,
@@ -429,7 +525,12 @@ export function ChangeList({
     );
   };
 
-  const runFileAction = async (entry: ChangeEntry, action: FileActionKind): Promise<void> => {
+  const runFileAction = async (
+    selectedEntries: ChangeEntry[],
+    action: FileActionKind,
+  ): Promise<void> => {
+    const entry = selectedEntries[0];
+    if (!entry) return;
     if (action === 'moveToTrash') {
       pendingTrashFocusRef.current = {
         generation,
@@ -440,7 +541,7 @@ export function ChangeList({
       };
     }
     try {
-      await onFileAction(entry, action);
+      await onFileAction(selectedEntries, action);
     } catch (cause) {
       if (action === 'moveToTrash') pendingTrashFocusRef.current = undefined;
       throw cause;
@@ -448,7 +549,11 @@ export function ChangeList({
   };
 
   return (
-    <div className="change-groups">
+    <fieldset
+      className={`change-groups${splitStageView ? '' : ' is-stage-combined'}`}
+      onKeyDown={selectAllFiles}
+    >
+      <legend className="sr-only">{t('changes')}</legend>
       <p id="changes-drag-help" className="sr-only">
         {t('changeDragHelp')}
       </p>
@@ -458,20 +563,34 @@ export function ChangeList({
       {groups.map(({ id, label, targetArea, entries: groupEntries }) => {
         const stageGroup = id === 'conflicted' ? undefined : id;
         const active = activeDragRef.current;
-        const compatibleDrop = Boolean(active && canDrop(active.sourceArea, targetArea));
+        const compatibleDrop = Boolean(
+          targetArea && active && canDrop(active.sourceArea, targetArea),
+        );
         if (id === 'conflicted' && !groupEntries.length) return null;
         const selectedGroupEntry = groupEntries.find((entry) => entryKey(entry) === selectedKey);
+        const allStaged =
+          groupEntries.length > 0 && groupEntries.every((entry) => entry.area === 'staged');
+        const combinedSourceEntry = groupEntries.find((entry) => entry.area !== 'staged');
         const sourceArea =
-          stageGroup === 'staged'
+          stageGroup === 'staged' || (stageGroup === 'combined' && allStaged)
             ? 'staged'
-            : selectedGroupEntry && isStageableArea(selectedGroupEntry.area)
-              ? selectedGroupEntry.area
-              : groupEntries.some((entry) => entry.area === 'unstaged')
-                ? 'unstaged'
-                : 'untracked';
+            : stageGroup === 'combined' &&
+                combinedSourceEntry &&
+                isStageableArea(combinedSourceEntry.area)
+              ? combinedSourceEntry.area
+              : selectedGroupEntry && isStageableArea(selectedGroupEntry.area)
+                ? selectedGroupEntry.area
+                : groupEntries.some((entry) => entry.area === 'unstaged')
+                  ? 'unstaged'
+                  : 'untracked';
         const action = stageGroup ? transitionForArea(sourceArea) : undefined;
         const actionLabel = stageGroup ? t(transitionLabel(sourceArea)) : undefined;
-        const isDropTarget = dropTarget === targetArea;
+        const actionableGroupEntries = action
+          ? groupEntries.filter(
+              (entry) => isStageableArea(entry.area) && transitionForArea(entry.area) === action,
+            )
+          : [];
+        const isDropTarget = targetArea !== undefined && dropTarget === targetArea;
         const title = compatibleDrop
           ? targetArea === 'staged'
             ? t('dropToStage')
@@ -484,25 +603,36 @@ export function ChangeList({
             key={id}
             className={`change-group change-group-${id}${compatibleDrop ? ' can-drop' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
             aria-labelledby={titleId}
-            onDragOver={(event) => dragOverGroup(event, targetArea)}
-            onDragLeave={(event) => leaveGroup(event, targetArea)}
-            onDrop={(event) => dropOnGroup(event, targetArea)}
+            onDragOver={(event) => {
+              if (targetArea) dragOverGroup(event, targetArea);
+            }}
+            onDragLeave={(event) => {
+              if (targetArea) leaveGroup(event, targetArea);
+            }}
+            onDrop={(event) => {
+              if (targetArea) dropOnGroup(event, targetArea);
+            }}
           >
             <div className="change-group-header">
               {stageGroup ? (
                 <label className="stage-toggle-hitbox">
                   <input
                     ref={(element) => {
-                      if (element) groupCheckboxRefs.current.set(stageGroup, element);
-                      else groupCheckboxRefs.current.delete(stageGroup);
+                      if (element) {
+                        groupCheckboxRefs.current.set(stageGroup, element);
+                        element.indeterminate =
+                          stageGroup === 'combined' &&
+                          groupEntries.some((entry) => entry.area === 'staged') &&
+                          !allStaged;
+                      } else groupCheckboxRefs.current.delete(stageGroup);
                     }}
                     className="stage-toggle"
                     type="checkbox"
-                    checked={stageGroup === 'staged' && groupEntries.length > 0}
-                    disabled={interactionsDisabled || !groupEntries.length}
+                    checked={groupEntries.length > 0 && (stageGroup === 'staged' || allStaged)}
+                    disabled={interactionsDisabled || !actionableGroupEntries.length}
                     aria-label={t('changeAllAria', {
                       action: actionLabel ?? '',
-                      count: groupEntries.length,
+                      count: actionableGroupEntries.length,
                       area: label,
                     })}
                     aria-describedby={disabledReasonId}
@@ -512,7 +642,7 @@ export function ChangeList({
                         runTransition(
                           {
                             kind: action,
-                            paths: groupEntries.map((entry) => entry.path),
+                            paths: actionableGroupEntries.map((entry) => entry.path),
                             sourceArea,
                           },
                           { target: targetForTransition(action) },
@@ -551,10 +681,26 @@ export function ChangeList({
                     const entryActionLabel = entryStageableArea
                       ? t(transitionLabel(entryStageableArea))
                       : undefined;
+                    const selectedEntries = selectedKeys.has(key)
+                      ? entries.filter((candidate) => selectedKeys.has(entryKey(candidate)))
+                      : [entry];
+                    const selectedPaths = [
+                      ...new Set(selectedEntries.map((candidate) => candidate.path)),
+                    ];
+                    const invalidFileActionEntry = selectedEntries.some(
+                      (candidate) =>
+                        candidate.area === 'conflicted' || candidate.status === 'deleted',
+                    );
+                    const discardDisabled =
+                      fileTrashDisabled ||
+                      selectedEntries.some(
+                        (candidate) =>
+                          candidate.area !== 'unstaged' || candidate.status === 'deleted',
+                      );
                     return (
                       <li
                         key={key}
-                        className={`change-item${selectedKey === key ? ' is-current' : ''}${draggingKey === key ? ' is-dragging' : ''}`}
+                        className={`change-item${selectedKeys.has(key) ? ' is-selected' : ''}${selectedKey === key ? ' is-current' : ''}${draggingKey === key ? ' is-dragging' : ''}`}
                       >
                         {entryStageableArea ? (
                           <label className="stage-toggle-hitbox">
@@ -602,12 +748,14 @@ export function ChangeList({
                             path: entry.path,
                           })}
                           aria-current={selectedKey === key ? 'true' : undefined}
+                          aria-pressed={selectedKeys.has(key)}
                           aria-describedby={entryStageableArea ? 'changes-drag-help' : undefined}
                           draggable={entryStageableArea && !interactionsDisabled ? true : undefined}
                           onClick={(event) => {
                             event.currentTarget.focus();
-                            onSelect(key);
+                            selectFile(event, key);
                           }}
+                          onContextMenu={(event) => openContextMenu(event, key)}
                           onKeyDown={(event) => {
                             if (event.key === 'ArrowUp') moveFileSelection(event, key, -1);
                             else if (event.key === 'ArrowDown') moveFileSelection(event, key, 1);
@@ -634,20 +782,28 @@ export function ChangeList({
                         </button>
                         <FileActionMenu
                           path={entry.path}
+                          selectedPaths={selectedPaths}
                           open={openMenuKey === key}
                           disabled={fileActionsDisabled}
                           openDisabled={
-                            fileOpenDisabled ||
-                            entry.area === 'conflicted' ||
-                            entry.status === 'deleted'
+                            fileOpenDisabled || selectedPaths.length !== 1 || invalidFileActionEntry
                           }
-                          trashDisabled={
-                            fileTrashDisabled ||
-                            entry.area === 'conflicted' ||
-                            entry.status === 'deleted'
-                          }
-                          onOpenChange={(open) => setOpenMenuKey(open ? key : undefined)}
-                          onAction={(fileAction) => runFileAction(entry, fileAction)}
+                          discardDisabled={discardDisabled}
+                          deleteDisabled={fileTrashDisabled || invalidFileActionEntry}
+                          contextPoint={contextMenu?.key === key ? contextMenu.point : undefined}
+                          onOpenChange={(open) => {
+                            setOpenMenuKey(open ? key : undefined);
+                            if (!open) setContextMenu(undefined);
+                          }}
+                          onTriggerOpen={() => {
+                            setContextMenu(undefined);
+                            if (!selectedKeys.has(key)) {
+                              setSelectedKeys(new Set([key]));
+                              selectionAnchorRef.current = key;
+                              onSelect(key);
+                            }
+                          }}
+                          onAction={(fileAction) => runFileAction(selectedEntries, fileAction)}
                         />
                       </li>
                     );
@@ -662,7 +818,7 @@ export function ChangeList({
           </section>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 

@@ -5,15 +5,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { AddRepositoryDialog } from './AddRepositoryDialog';
 
 describe('AddRepositoryDialog', () => {
-  it('offers URL input and Finder selection without an Open or Clone choice', async () => {
+  it('defaults to URL and switches to a path field with an adjacent picker button', async () => {
     const user = userEvent.setup();
     const onChooseLocal = vi.fn<() => void>();
-    const onLocationChange = vi.fn<(location: string) => void>();
+    const onSourceChange = vi.fn<(source: 'url' | 'path') => void>();
+    const onUrlChange = vi.fn<(url: string) => void>();
     render(
       <AddRepositoryDialog
-        location=""
+        source="url"
+        url=""
+        path=""
+        name=""
         busy={false}
-        onLocationChange={onLocationChange}
+        onSourceChange={onSourceChange}
+        onUrlChange={onUrlChange}
+        onPathChange={() => undefined}
+        onNameChange={() => undefined}
         onChooseLocal={onChooseLocal}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
@@ -21,35 +28,74 @@ describe('AddRepositoryDialog', () => {
     );
 
     const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+    expect(within(dialog).getByRole('tab', { name: 'URL' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await user.type(
-      within(dialog).getByRole('textbox', { name: 'Repository URL or path' }),
+      within(dialog).getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/stella.git',
     );
-    expect(onLocationChange).toHaveBeenCalled();
+    expect(onUrlChange).toHaveBeenCalled();
 
-    await user.click(within(dialog).getByRole('button', { name: 'Choose in Finder…' }));
-    expect(onChooseLocal).toHaveBeenCalledOnce();
-    expect(within(dialog).queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Clone' })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('tab', { name: 'Path' }));
+    expect(onSourceChange).toHaveBeenCalledWith('path');
   });
 
-  it('announces an invalid location next to the shared field', () => {
+  it('shows the icon-only path picker and a separate repository name field', async () => {
+    const user = userEvent.setup();
+    const onChooseLocal = vi.fn<() => void>();
+    const onNameChange = vi.fn<(name: string) => void>();
     render(
       <AddRepositoryDialog
-        location="invalid"
-        error="Enter a supported remote URL or an absolute local path."
+        source="path"
+        url=""
+        path="/Users/example/stella"
+        name=""
         busy={false}
-        onLocationChange={() => undefined}
+        onSourceChange={() => undefined}
+        onUrlChange={() => undefined}
+        onPathChange={() => undefined}
+        onNameChange={onNameChange}
+        onChooseLocal={onChooseLocal}
+        onDismiss={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    );
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+    const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
+    const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
+    expect(path.parentElement).toContainElement(picker);
+    expect(picker).not.toHaveTextContent(/Finder|Choose/u);
+    await user.click(picker);
+    expect(onChooseLocal).toHaveBeenCalledOnce();
+
+    await user.type(within(dialog).getByRole('textbox', { name: 'Repository name' }), 'Stella App');
+    expect(onNameChange).toHaveBeenCalled();
+  });
+
+  it('announces an invalid path next to the active field', () => {
+    render(
+      <AddRepositoryDialog
+        source="path"
+        url=""
+        path="invalid"
+        name=""
+        error="Enter an absolute local path."
+        busy={false}
+        onSourceChange={() => undefined}
+        onUrlChange={() => undefined}
+        onPathChange={() => undefined}
+        onNameChange={() => undefined}
         onChooseLocal={() => undefined}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
       />,
     );
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Enter a supported remote URL or an absolute local path.',
-    );
-    expect(screen.getByRole('textbox', { name: 'Repository URL or path' })).toHaveAttribute(
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter an absolute local path.');
+    expect(screen.getByRole('textbox', { name: 'Repository path' })).toHaveAttribute(
       'aria-invalid',
       'true',
     );

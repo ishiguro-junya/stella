@@ -20,7 +20,9 @@ export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
   language: Language;
+  splitStageView: boolean;
   registeredRepoPaths: string[];
+  repositoryNames: Record<string, string>;
   openRepoPaths: string[];
   selectedRepoPath?: string;
   view: WorkspaceView;
@@ -32,7 +34,9 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   version: STORAGE_VERSION,
   appearance: 'system',
   language: 'en',
+  splitStageView: true,
   registeredRepoPaths: [],
+  repositoryNames: {},
   openRepoPaths: [],
   view: 'changes',
   paneWidths: {
@@ -94,6 +98,16 @@ function stringArray(value: unknown, limit?: number): string[] {
   return limit === undefined ? strings : strings.slice(0, limit);
 }
 
+function repositoryNameRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([path, name]) => {
+      if (typeof name !== 'string' || !name.trim()) return [];
+      return [[path, name.trim()]];
+    }),
+  );
+}
+
 function boundedWidth(value: unknown, fallback: number, min = 180, max = 520): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(max, Math.max(min, value))
@@ -119,7 +133,12 @@ export function readPreferences(): StellaPreferences {
         ? value.appearance
         : DEFAULT_PREFERENCES.appearance,
       language: isLanguage(value.language) ? value.language : detectLanguage(),
+      splitStageView:
+        typeof value.splitStageView === 'boolean'
+          ? value.splitStageView
+          : DEFAULT_PREFERENCES.splitStageView,
       registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
+      repositoryNames: repositoryNameRecord(value.repositoryNames),
       openRepoPaths: stringArray(value.openRepoPaths, 12),
       ...(typeof value.selectedRepoPath === 'string'
         ? { selectedRepoPath: value.selectedRepoPath }
@@ -172,12 +191,15 @@ export function updatePreferences(
   return next;
 }
 
-export function rememberRepositoryPath(path: string): StellaPreferences {
+export function rememberRepositoryPath(path: string, name?: string): StellaPreferences {
   return updatePreferences((current) => ({
     ...current,
     registeredRepoPaths: [
       path,
       ...current.registeredRepoPaths.filter((candidate) => candidate !== path),
     ],
+    repositoryNames: name?.trim()
+      ? { ...current.repositoryNames, [path]: name.trim() }
+      : current.repositoryNames,
   }));
 }

@@ -168,7 +168,7 @@ export function CommitForm({
   return (
     <form
       ref={formRef}
-      className="commit-form"
+      className="commit-form dialog-form"
       aria-label={formLabelledBy ? undefined : t('commit')}
       aria-labelledby={formLabelledBy}
       onSubmit={(event) => void submit(event)}
@@ -181,7 +181,7 @@ export function CommitForm({
         </div>
       ) : null}
 
-      <label>
+      <label className="dialog-form-field">
         <span>{t('description')}</span>
         <input
           data-commit-field="description"
@@ -203,7 +203,7 @@ export function CommitForm({
       </label>
 
       <div className="commit-meta-grid">
-        <label>
+        <label className="dialog-form-field">
           <span>{t('type')}</span>
           <input
             data-commit-field="type"
@@ -229,7 +229,7 @@ export function CommitForm({
           </small>
         </label>
 
-        <label>
+        <label className="dialog-form-field">
           <span>{t('scope')}</span>
           <input
             data-commit-field="scope"
@@ -271,7 +271,7 @@ export function CommitForm({
         </output>
       ) : null}
 
-      <div className="commit-submit button-row end">
+      <div className="commit-submit dialog-form-actions button-row end">
         {onCancel ? (
           <button type="button" disabled={busy} onClick={onCancel}>
             {t('cancel')}

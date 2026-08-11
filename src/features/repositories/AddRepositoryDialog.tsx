@@ -3,21 +3,35 @@ import { FolderOpen } from 'lucide-react';
 import { useI18n } from '../../i18n/i18n';
 import { Dialog } from '../../ui/Dialog';
 
+export type RepositorySource = 'url' | 'path';
+
 export interface AddRepositoryDialogProps {
-  location: string;
+  source: RepositorySource;
+  url: string;
+  path: string;
+  name: string;
   error?: string;
   busy: boolean;
-  onLocationChange: (location: string) => void;
+  onSourceChange: (source: RepositorySource) => void;
+  onUrlChange: (url: string) => void;
+  onPathChange: (path: string) => void;
+  onNameChange: (name: string) => void;
   onChooseLocal: () => void;
   onDismiss: () => void;
   onSubmit: () => void;
 }
 
 export function AddRepositoryDialog({
-  location,
+  source,
+  url,
+  path,
+  name,
   error,
   busy,
-  onLocationChange,
+  onSourceChange,
+  onUrlChange,
+  onPathChange,
+  onNameChange,
   onChooseLocal,
   onDismiss,
   onSubmit,
@@ -27,47 +41,101 @@ export function AddRepositoryDialog({
   return (
     <Dialog
       labelledBy="add-repository-title"
-      describedBy="add-repository-description"
+      className="form-dialog add-repository-dialog"
       onDismiss={onDismiss}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
       }}
     >
-      <p className="eyebrow">{t('repository')}</p>
       <h2 id="add-repository-title">{t('addRepository')}</h2>
-      <p id="add-repository-description">{t('addRepositoryDescription')}</p>
+      <div className="dialog-form add-repository-form">
+        <div
+          className="segmented add-repository-source"
+          role="tablist"
+          aria-label={t('repositorySource')}
+        >
+          {(['url', 'path'] as const).map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              role="tab"
+              aria-selected={source === candidate}
+              onClick={() => onSourceChange(candidate)}
+            >
+              {t(candidate === 'url' ? 'repositoryUrlTab' : 'repositoryPathTab')}
+            </button>
+          ))}
+        </div>
 
-      <label>
-        <span>{t('repositoryLocation')}</span>
-        <input
-          value={location}
-          aria-invalid={Boolean(error) || undefined}
-          aria-describedby={error ? 'repository-location-error' : undefined}
-          autoComplete="off"
-          data-dialog-initial-focus
-          placeholder={t('repositoryLocationPlaceholder')}
-          onChange={(event) => onLocationChange(event.target.value)}
-        />
-      </label>
-      {error ? (
-        <p id="repository-location-error" className="field-error" role="alert">
-          {error}
-        </p>
-      ) : null}
+        <div className="dialog-form-field">
+          <label htmlFor="repository-location">
+            {t(source === 'url' ? 'repositoryUrl' : 'repositoryPath')}
+          </label>
+          <span className="repository-location-control">
+            <input
+              id="repository-location"
+              value={source === 'url' ? url : path}
+              aria-invalid={Boolean(error) || undefined}
+              aria-describedby={error ? 'repository-location-error' : undefined}
+              autoComplete="off"
+              data-dialog-initial-focus
+              placeholder={t(
+                source === 'url' ? 'repositoryUrlPlaceholder' : 'repositoryPathPlaceholder',
+              )}
+              onChange={(event) =>
+                source === 'url'
+                  ? onUrlChange(event.target.value)
+                  : onPathChange(event.target.value)
+              }
+            />
+            {source === 'path' ? (
+              <button
+                type="button"
+                className="repository-path-picker"
+                aria-label={t('chooseRepositoryDirectory')}
+                title={t('chooseRepositoryDirectory')}
+                disabled={busy}
+                onClick={onChooseLocal}
+              >
+                <FolderOpen aria-hidden="true" focusable="false" />
+              </button>
+            ) : null}
+          </span>
+          {error ? (
+            <small
+              id="repository-location-error"
+              className="field-error dialog-form-error"
+              role="alert"
+            >
+              {error}
+            </small>
+          ) : null}
+        </div>
 
-      <button type="button" className="full" disabled={busy} onClick={onChooseLocal}>
-        <FolderOpen aria-hidden="true" focusable="false" />
-        {t('chooseRepositoryInFinder')}
-      </button>
+        <label className="dialog-form-field" htmlFor="repository-display-name">
+          <span>{t('repositoryDisplayName')}</span>
+          <input
+            id="repository-display-name"
+            value={name}
+            autoComplete="off"
+            placeholder={t('repositoryDisplayNamePlaceholder')}
+            onChange={(event) => onNameChange(event.target.value)}
+          />
+        </label>
 
-      <div className="button-row end">
-        <button type="button" onClick={onDismiss}>
-          {t('cancel')}
-        </button>
-        <button type="submit" className="primary" disabled={busy || !location.trim()}>
-          {t('add')}
-        </button>
+        <div className="dialog-form-actions button-row end">
+          <button type="button" onClick={onDismiss}>
+            {t('cancel')}
+          </button>
+          <button
+            type="submit"
+            className="primary"
+            disabled={busy || !(source === 'url' ? url : path).trim()}
+          >
+            {t('add')}
+          </button>
+        </div>
       </div>
     </Dialog>
   );

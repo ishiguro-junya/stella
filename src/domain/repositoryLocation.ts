@@ -1,6 +1,6 @@
 const REMOTE_PROTOCOLS = new Set(['git:', 'http:', 'https:', 'ssh:']);
 
-function repositoryNameFromPath(path: string): string | undefined {
+export function repositoryNameFromPath(path: string): string | undefined {
   const trimmed = path.replace(/\/+$/u, '');
   const segment = trimmed.split('/').findLast((candidate) => candidate.length > 0);
   const name = segment?.replace(/\.git$/iu, '');

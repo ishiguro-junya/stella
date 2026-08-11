@@ -1,19 +1,16 @@
 import { FolderGit2, FolderPlus } from 'lucide-react';
 
 import { useI18n } from '../../i18n/i18n';
+import { RepositoryLogo, type RepositoryListItem } from './RepositoryLogo';
 
 export interface RepositoryLandingProps {
-  paths: readonly string[];
+  repositories: readonly RepositoryListItem[];
   busy: boolean;
   onAdd: () => void;
   onOpen: (path: string) => void;
 }
 
-function repositoryName(path: string): string {
-  return path.split('/').findLast((candidate) => candidate.length > 0) ?? path;
-}
-
-export function RepositoryLanding({ paths, busy, onAdd, onOpen }: RepositoryLandingProps) {
+export function RepositoryLanding({ repositories, busy, onAdd, onOpen }: RepositoryLandingProps) {
   const { t } = useI18n();
 
   return (
@@ -32,20 +29,20 @@ export function RepositoryLanding({ paths, busy, onAdd, onOpen }: RepositoryLand
           </button>
         </header>
 
-        {paths.length ? (
+        {repositories.length ? (
           <ul className="registered-repositories" aria-label={t('repositoriesTitle')}>
-            {paths.map((path) => (
-              <li key={path}>
+            {repositories.map((repository) => (
+              <li key={repository.path}>
                 <button
                   type="button"
                   className="registered-repository-row"
                   disabled={busy}
-                  onClick={() => onOpen(path)}
+                  onClick={() => onOpen(repository.path)}
                 >
-                  <FolderGit2 aria-hidden="true" focusable="false" />
+                  <RepositoryLogo logoUrl={repository.logoUrl} />
                   <span>
-                    <strong>{repositoryName(path)}</strong>
-                    <small>{path}</small>
+                    <strong>{repository.name}</strong>
+                    <small>{repository.path}</small>
                   </span>
                 </button>
               </li>

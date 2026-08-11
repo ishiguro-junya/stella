@@ -550,7 +550,7 @@ describe('tauriWorkspaceAdapter', () => {
         return {
           confirmationToken: 'private-confirmation',
           expiresAtUnixMs: 1,
-          summary: { id: 'previewMovePathToTrash' },
+          summary: { id: 'previewDeleteFiles', args: { count: 1 } },
           destructive: true,
           affectedPaths: ['src/app.ts'],
           affectedCommits: [],
@@ -560,7 +560,7 @@ describe('tauriWorkspaceAdapter', () => {
       if (command === 'workspace_execute') {
         return {
           operationId: 'file-action-1',
-          summary: { id: 'backendFileTrashed' },
+          summary: { id: 'backendFilesDeleted', args: { count: 1 } },
           repoGeneration: 2,
           eventSeq: 2,
           snapshot: { ...snapshot(), repoGeneration: 2, eventSeq: 2 },
@@ -579,7 +579,7 @@ describe('tauriWorkspaceAdapter', () => {
     await adapter.attach({ kind: 'open', path: '/tmp/stella' });
     const action = {
       kind: 'fileAction' as const,
-      path: 'src/app.ts',
+      paths: ['src/app.ts'],
       operation: 'moveToTrash' as const,
     };
 
@@ -669,14 +669,14 @@ describe('tauriWorkspaceAdapter', () => {
 
       await adapter.execute({
         repoId: 'repo-1',
-        action: { kind: 'fileAction', path: 'src/app.ts', operation },
+        action: { kind: 'fileAction', paths: ['src/app.ts'], operation },
       });
 
       expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
         request: expect.objectContaining({
           repoId: 'repo-1',
           expectedGeneration: 1,
-          action: { kind: 'fileAction', path: 'src/app.ts', operation },
+          action: { kind: 'fileAction', paths: ['src/app.ts'], operation },
         }),
       });
     },

@@ -19,7 +19,7 @@ function renderList(overrides: Partial<ChangeListProps> = {}) {
   const onStageTransition = vi.fn<(request: StageTransitionRequest) => Promise<void>>(
     async () => undefined,
   );
-  const onFileAction = vi.fn<(entry: ChangeEntry, action: FileActionKind) => Promise<void>>(
+  const onFileAction = vi.fn<(entries: ChangeEntry[], action: FileActionKind) => Promise<void>>(
     async () => undefined,
   );
   const result = render(
@@ -488,6 +488,59 @@ describe('ChangeList staging controls', () => {
 });
 
 describe('ChangeList file actions', () => {
+  it('selects a range and opens the selected files menu from a right-click', async () => {
+    const user = userEvent.setup();
+    const entries: ChangeEntry[] = [
+      { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+      { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+      { path: 'src/third.ts', area: 'unstaged', status: 'modified' },
+    ];
+    const { onFileAction } = renderList({
+      entries,
+      selectedKey: 'unstaged:src/first.ts',
+    });
+    const first = changeRow(/Modified src\/first\.ts/u);
+    const second = changeRow(/Modified src\/second\.ts/u);
+    const third = changeRow(/Modified src\/third\.ts/u);
+
+    await user.click(first);
+    fireEvent.click(third, { shiftKey: true });
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(third).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
+    expect(screen.getByRole('menu', { name: '3 selected files actions' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
+    await user.click(screen.getByRole('menuitem', { name: 'Discard Files…' }));
+    expect(onFileAction).toHaveBeenCalledWith(entries, 'discardChanges');
+  });
+
+  it('selects every visible file with Command+A and deletes them from the context menu', async () => {
+    const user = userEvent.setup();
+    const entries: ChangeEntry[] = [
+      { path: 'src/first.ts', area: 'untracked', status: 'added' },
+      { path: 'src/second.ts', area: 'untracked', status: 'added' },
+    ];
+    const { onFileAction } = renderList({
+      entries,
+      selectedKey: 'untracked:src/first.ts',
+    });
+    const first = changeRow(/Added src\/first\.ts/u);
+    const second = changeRow(/Added src\/second\.ts/u);
+
+    first.focus();
+    fireEvent.keyDown(first, { key: 'a', metaKey: true });
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.contextMenu(first, { clientX: 80, clientY: 100 });
+    expect(screen.getByRole('menu', { name: '2 selected files actions' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    expect(onFileAction).toHaveBeenCalledWith(entries, 'moveToTrash');
+  });
+
   it('renders a trailing menu for every row and routes actions without changing Diff selection', async () => {
     const user = userEvent.setup();
     const { onFileAction, onSelect } = renderList();
@@ -499,8 +552,8 @@ describe('ChangeList file actions', () => {
     await user.click(within(unstaged).getByRole('button', { name: 'More actions for src/new.ts' }));
     await user.click(screen.getByRole('menuitem', { name: 'Show in Finder' }));
 
-    expect(onFileAction).toHaveBeenCalledWith(changes[2], 'revealInFinder');
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onFileAction).toHaveBeenCalledWith([changes[2]], 'revealInFinder');
+    expect(onSelect).toHaveBeenCalledWith('untracked:src/new.ts');
     expect(changeRow(/new\.ts/u)).toHaveFocus();
   });
 
@@ -579,7 +632,8 @@ describe('ChangeList file actions', () => {
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
   });
 
   it('closes the open menu when repository generation or identity changes', async () => {
@@ -611,7 +665,7 @@ describe('ChangeList file actions', () => {
 
   it('moves focus to the next row when a trashed untracked file disappears', async () => {
     const user = userEvent.setup();
-    const onFileAction = vi.fn<(entry: ChangeEntry, action: FileActionKind) => Promise<void>>(
+    const onFileAction = vi.fn<(entries: ChangeEntry[], action: FileActionKind) => Promise<void>>(
       async () => undefined,
     );
     const props = {
@@ -636,7 +690,7 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/first.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
 
     rerender(
       <ChangeList
@@ -669,7 +723,7 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
     expect(changeRow(/app\.ts/u)).toHaveFocus();
 
     rerender(
@@ -703,11 +757,38 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/only.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
 
     rerender(<ChangeList {...props} generation={2} entries={[]} />);
     expect(screen.getByRole('region', { name: 'Staged' })).toBeVisible();
     expect(screen.getByRole('region', { name: 'Unstaged' })).toBeVisible();
     await waitFor(() => expect(screen.getByText('Unstaged')).toHaveFocus());
+  });
+});
+
+describe('ChangeList Stage display', () => {
+  it('combines Staged and Unstaged files and stages only the remaining files', async () => {
+    const entries: ChangeEntry[] = [
+      { path: 'src/staged.ts', area: 'staged', status: 'modified' },
+      { path: 'src/unstaged.ts', area: 'unstaged', status: 'modified' },
+    ];
+    const { onStageTransition } = renderList({
+      entries,
+      selectedKey: 'unstaged:src/unstaged.ts',
+      splitStageView: false,
+    });
+
+    expect(screen.queryByRole('region', { name: 'Staged' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Unstaged' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Changes' })).toBeVisible();
+    const toggle = screen.getByRole('checkbox', { name: 'Stage all 1 changes file' });
+    expect(toggle).toBePartiallyChecked();
+
+    fireEvent.click(toggle);
+    expect(onStageTransition).toHaveBeenCalledWith({
+      kind: 'stage',
+      paths: ['src/unstaged.ts'],
+      sourceArea: 'unstaged',
+    });
   });
 });

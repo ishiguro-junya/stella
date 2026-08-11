@@ -328,7 +328,7 @@ pub enum Action {
         editor: ExternalEditor,
     },
     FileAction {
-        path: String,
+        paths: Vec<String>,
         operation: FileOperation,
     },
 }
@@ -1158,13 +1158,13 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(Action::FileAction {
-                path: "src/app.ts".into(),
+                paths: vec!["src/app.ts".into()],
                 operation: FileOperation::RevealInFinder,
             })
             .unwrap(),
             json!({
                 "kind": "fileAction",
-                "path": "src/app.ts",
+                "paths": ["src/app.ts"],
                 "operation": "revealInFinder"
             })
         );

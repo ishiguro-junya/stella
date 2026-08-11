@@ -163,7 +163,7 @@ export type WireAction =
     }
   | {
       kind: 'fileAction';
-      path: string;
+      paths: string[];
       operation: 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
     };
 

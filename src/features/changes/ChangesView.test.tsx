@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -380,7 +380,8 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
     await user.keyboard('{Escape}');
     await user.click(changeRow(/other\.ts/u));
 
@@ -677,7 +678,6 @@ describe('ChangesView diff lifecycle', () => {
       ),
     ).toHaveClass('sr-only');
     expect(screen.getByRole('checkbox', { name: 'Stage src/app.ts' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled();
     await openCommit(user);
     expect(screen.getByRole('button', { name: 'Fetch' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled();
@@ -689,7 +689,8 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Move to Trash…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
     await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
@@ -923,7 +924,7 @@ describe('ChangesView diff lifecycle', () => {
   it.each([
     ['Open in Default App', 'openInDefaultApp'],
     ['Show in Finder', 'revealInFinder'],
-    ['Move to Trash…', 'moveToTrash'],
+    ['Delete Files…', 'moveToTrash'],
   ] as const)('routes %s through the typed file action', async (itemName, operation) => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
@@ -944,10 +945,40 @@ describe('ChangesView diff lifecycle', () => {
     await waitFor(() =>
       expect(onAction).toHaveBeenCalledWith({
         kind: 'fileAction',
-        path: 'src/app.ts',
+        paths: ['src/app.ts'],
         operation,
       }),
     );
+  });
+
+  it('routes multiple selected files through the discard action', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = changeRow(/first\.ts/u);
+    const second = changeRow(/second\.ts/u);
+    await user.click(first);
+    fireEvent.click(second, { shiftKey: true });
+    fireEvent.contextMenu(second, { clientX: 100, clientY: 100 });
+    await user.click(screen.getByRole('menuitem', { name: 'Discard Files…' }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      kind: 'discardFiles',
+      paths: ['src/first.ts', 'src/second.ts'],
+    });
   });
 
   it('copies an absolute path and announces the result visibly', async () => {

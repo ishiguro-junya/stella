@@ -243,7 +243,7 @@ export interface ConventionalCommitInput {
 export type WorkspaceAction =
   | { kind: 'stageFiles'; paths: string[] }
   | { kind: 'unstageFiles'; paths: string[] }
-  | { kind: 'discardFile'; path: string; area: ChangeArea }
+  | { kind: 'discardFiles'; paths: string[] }
   | { kind: 'stageSelection'; selection: DiffSelection }
   | { kind: 'unstageSelection'; selection: DiffSelection }
   | { kind: 'discardSelection'; selection: DiffSelection }
@@ -292,7 +292,7 @@ export type WorkspaceAction =
       choice: ConflictChoice;
     }
   | { kind: 'openExternal'; path: string }
-  | { kind: 'fileAction'; path: string; operation: FileOperation };
+  | { kind: 'fileAction'; paths: string[]; operation: FileOperation };
 
 export type AttachRequest =
   | { kind: 'open'; path: string }

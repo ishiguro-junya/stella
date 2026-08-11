@@ -8,7 +8,7 @@ describe('RepositoryLanding', () => {
   it('shows the empty state and the single add action', () => {
     render(
       <RepositoryLanding
-        paths={[]}
+        repositories={[]}
         busy={false}
         onAdd={() => undefined}
         onOpen={() => undefined}
@@ -25,7 +25,14 @@ describe('RepositoryLanding', () => {
     const onOpen = vi.fn<(path: string) => void>();
     render(
       <RepositoryLanding
-        paths={['/Users/stella/most-recent', '/Users/stella/older']}
+        repositories={[
+          {
+            path: '/Users/stella/most-recent',
+            name: 'Most Recent',
+            logoUrl: 'asset://recent/logo.svg',
+          },
+          { path: '/Users/stella/older', name: 'Older' },
+        ]}
         busy={false}
         onAdd={() => undefined}
         onOpen={onOpen}
@@ -34,9 +41,10 @@ describe('RepositoryLanding', () => {
 
     const list = screen.getByRole('list', { name: 'Repositories' });
     const rows = within(list).getAllByRole('button');
-    expect(rows[0]).toHaveTextContent('most-recent');
+    expect(rows[0]).toHaveTextContent('Most Recent');
     expect(rows[0]).toHaveTextContent('/Users/stella/most-recent');
-    expect(rows[1]).toHaveTextContent('older');
+    expect(rows[0]?.querySelector('img')).toHaveAttribute('src', 'asset://recent/logo.svg');
+    expect(rows[1]).toHaveTextContent('Older');
 
     const older = rows[1];
     if (!older) throw new Error('Expected the older repository row.');

@@ -433,11 +433,11 @@ async function mapAction(
       return { kind: 'stage', paths: action.paths, selection: null };
     case 'unstageFiles':
       return { kind: 'unstage', paths: action.paths, selection: null };
-    case 'discardFile':
+    case 'discardFiles':
       return {
         kind: 'discard',
-        paths: [action.path],
-        target: action.area === 'untracked' ? 'untracked' : 'unstaged',
+        paths: action.paths,
+        target: 'unstaged',
         selection: null,
       };
     case 'stageSelection':
@@ -576,7 +576,7 @@ async function mapAction(
       };
     }
     case 'fileAction':
-      return { kind: 'fileAction', path: action.path, operation: action.operation };
+      return { kind: 'fileAction', paths: action.paths, operation: action.operation };
   }
   const exhaustiveAction: never = action;
   throw new Error(`Unknown workspace action: ${String(exhaustiveAction)}`);
@@ -639,7 +639,7 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionStageFiles');
     case 'unstageFiles':
       return localized('actionUnstageFiles');
-    case 'discardFile':
+    case 'discardFiles':
       return localized('actionDiscardChanges');
     case 'stageSelection':
       return localized('actionStageSelectedLines');

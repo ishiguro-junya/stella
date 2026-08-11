@@ -1,23 +1,19 @@
-import { FolderGit2, FolderPlus } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
 
 import type { RepoSnapshot } from '../domain/workspace';
+import { RepositoryLogo, type RepositoryListItem } from '../features/repositories/RepositoryLogo';
 import { useI18n } from '../i18n/i18n';
 import { SwitcherDialog, type SwitcherDialogItem } from './SwitcherDialog';
 
 export interface RepositorySwitcherDialogProps {
   repos: readonly RepoSnapshot[];
-  registeredPaths: readonly string[];
+  registeredRepositories: readonly RepositoryListItem[];
   selectedRepoId?: string;
   busy?: boolean;
   onDismiss: () => void;
   onSelectOpen: (repoId: string) => void;
   onSelectRegistered: (path: string) => void;
   onAdd: () => void;
-}
-
-function repositoryName(path: string): string {
-  const segments = path.split('/').filter(Boolean);
-  return segments.at(-1) ?? path;
 }
 
 function repositoryStatus(
@@ -34,7 +30,7 @@ function repositoryStatus(
 
 export function RepositorySwitcherDialog({
   repos,
-  registeredPaths,
+  registeredRepositories,
   selectedRepoId,
   busy = false,
   onDismiss,
@@ -46,6 +42,8 @@ export function RepositorySwitcherDialog({
   const openPaths = new Set(repos.map((repo) => repo.path));
   const items: SwitcherDialogItem[] = [
     ...repos.map((repo) => {
+      const registration = registeredRepositories.find((candidate) => candidate.path === repo.path);
+      const displayName = registration?.name ?? repo.name;
       const branch = repo.branch.detached ? t('detachedHead') : repo.branch.name;
       const status = repositoryStatus(
         repo,
@@ -54,22 +52,22 @@ export function RepositorySwitcherDialog({
       );
       return {
         id: `open:${repo.repoId}`,
-        label: repo.name,
+        label: displayName,
         description: branch ? `${repo.path} · ${branch}` : repo.path,
-        searchText: `${repo.name}\n${repo.path}\n${branch ?? ''}`,
-        icon: <FolderGit2 />,
+        searchText: `${displayName}\n${repo.path}\n${branch ?? ''}`,
+        icon: <RepositoryLogo logoUrl={registration?.logoUrl} />,
         current: repo.repoId === selectedRepoId,
         ...(status ? { status } : {}),
       };
     }),
-    ...registeredPaths
-      .filter((path) => !openPaths.has(path))
-      .map((path) => ({
-        id: `registered:${path}`,
-        label: repositoryName(path),
-        description: path,
-        searchText: `${repositoryName(path)}\n${path}`,
-        icon: <FolderGit2 />,
+    ...registeredRepositories
+      .filter((repository) => !openPaths.has(repository.path))
+      .map((repository) => ({
+        id: `registered:${repository.path}`,
+        label: repository.name,
+        description: repository.path,
+        searchText: `${repository.name}\n${repository.path}`,
+        icon: <RepositoryLogo logoUrl={repository.logoUrl} />,
         disabled: busy,
       })),
   ];
@@ -87,8 +85,10 @@ export function RepositorySwitcherDialog({
           onSelectOpen(open.repoId);
           return;
         }
-        const registered = registeredPaths.find((path) => item.id === `registered:${path}`);
-        if (registered) onSelectRegistered(registered);
+        const registered = registeredRepositories.find(
+          (repository) => item.id === `registered:${repository.path}`,
+        );
+        if (registered) onSelectRegistered(registered.path);
       }}
       footer={
         <button type="button" disabled={busy} onClick={onAdd}>
