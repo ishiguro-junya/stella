@@ -9,15 +9,20 @@ taplo = "0.10.0"
 
 [tasks.setup]
 description = "依存packageをinstallしてGit hooksを有効にする"
-run = [ "pnpm install --frozen-lockfile", "lefthook install" ]
+run = [ "pnpm install --frozen-lockfile", "lefthook install", "node scripts/toolchain.mjs prepare" ]
 
 [tasks.dev]
 description = "Tauri applicationを開発modeで起動する"
-run = "pnpm exec tauri dev"
+run = "pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
 
 [tasks.build]
 description = "通常のTauri application bundleをbuildする"
 run = "pnpm exec tauri build"
+
+[tasks."install:app"]
+description = "ApplicationをbuildしてApplications folderへinstallする"
+depends = [ "build" ]
+run = "node scripts/install-app.mjs"
 
 [tasks.lint]
 description = "Frontend、Rust、設定、文書、Commit履歴をlintする"

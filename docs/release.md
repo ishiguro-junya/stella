@@ -30,6 +30,7 @@ STELLA_VERSION="1.0.0-alpha.5"
 STELLA_TAG="v${STELLA_VERSION}"
 STELLA_RELEASE_DIR=".tmp/release-${STELLA_VERSION}"
 STELLA_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_arm64.zip"
+STELLA_GIT_SOURCE="${STELLA_RELEASE_DIR}/git-2.55.0.tar.xz"
 ```
 
 既存のReleaseと重複していないことを確認します。  
@@ -104,9 +105,12 @@ mise run build
   -c 'Print :CFBundleIdentifier' \
   target/release/bundle/macos/Stella.app/Contents/Info.plist
 file target/release/bundle/macos/Stella.app/Contents/MacOS/stella
+node scripts/toolchain.mjs release-gate \
+  target/release/bundle/macos/Stella.app
 ```
 
 出力がそれぞれ`$STELLA_VERSION`、`com.emuni.stella`、`arm64`であることを確認します。  
+toolchainのrelease gateでは、Git 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0のversionとarm64 architecture、checksum、helper／template、動的link先を検証します。  
 
 ## 4. Release assetを作成する
 
@@ -117,8 +121,10 @@ mkdir -p "$STELLA_RELEASE_DIR"
 ditto -c -k --keepParent \
   target/release/bundle/macos/Stella.app \
   "$STELLA_ARCHIVE"
+cp .tmp/toolchain/downloads/git-2.55.0.tar.xz "$STELLA_GIT_SOURCE"
 STELLA_SHA256="$(shasum -a 256 "$STELLA_ARCHIVE" | awk '{print $1}')"
 shasum -a 256 "$STELLA_ARCHIVE"
+shasum -a 256 "$STELLA_GIT_SOURCE"
 ```
 
 `$STELLA_RELEASE_DIR/release-notes.md`へ、利用者向けのRelease noteを日本語で作成します。  
@@ -150,6 +156,7 @@ GitHub ReleaseをPrereleaseとして公開します。
 ```sh
 gh release create "$STELLA_TAG" \
   "$STELLA_ARCHIVE" \
+  "$STELLA_GIT_SOURCE" \
   --repo ishiguro-junya/stella \
   --title "Stella ${STELLA_VERSION}" \
   --notes-file "${STELLA_RELEASE_DIR}/release-notes.md" \

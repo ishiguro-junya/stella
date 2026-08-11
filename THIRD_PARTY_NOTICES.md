@@ -1,5 +1,23 @@
 # サードパーティーに関する通知
 
+## Git
+
+Stellaは、Git 2.55.0をGNU General Public License version 2に基づいて同梱しています。  
+license全文とbuild情報はApplication resourceの`toolchain/licenses/git-COPYING`および`toolchain/BUILD.md`に収録し、対応するsource archiveをStellaのGitHub Releaseへ併載します。  
+開発元projectは[Git](https://git-scm.com/)で公開されています。  
+
+## Git LFS
+
+Stellaは、Git LFS 3.7.1をMIT Licenseに基づいて同梱しています。  
+license全文はApplication resourceの`toolchain/licenses/gitLfs-LICENSE`に収録しています。  
+開発元projectは[Git LFS](https://github.com/git-lfs/git-lfs)で公開されています。  
+
+## git-flow-next
+
+Stellaは、git-flow-next 1.2.0をBSD 2-Clause Licenseに基づいて同梱しています。  
+license全文はApplication resourceの`toolchain/licenses/gitFlow-LICENSE`に収録しています。  
+開発元projectは[git-flow-next](https://github.com/gittower/git-flow-next)で公開されています。  
+
 ## Tauri Dialog plugin
 
 Stellaは、`@tauri-apps/plugin-dialog`および`tauri-plugin-dialog` 2.7.2をMIT LicenseまたはApache License 2.0に基づいて同梱しています。  

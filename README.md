@@ -5,8 +5,7 @@
 </p>
 
 <p align="center">
-  AIがコードを書く時代の<br>
-  差分を見るためのシンプルなGitクライアント
+  AIでコードを書く時代のシンプルなGitクライアント
 </p>
 
 > [!WARNING]
@@ -34,6 +33,7 @@ mise run dev
 | `mise run setup` | 開発環境をセットアップする。 |
 | `mise run dev` | アプリを開発モードで起動する。 |
 | `mise run build` | アプリをビルドする。 |
+| `mise run install:app` | アプリをビルドしてインストールする。 |
 | `mise run lint` | コードをリントチェックする。 |
 | `mise run format` | コードをフォーマットする。 |
 | `mise run typecheck` | コードの型チェックを実行する。 |
@@ -55,7 +55,7 @@ mise run dev
 │   └── ui/                 # 共通UIコンポーネント
 ├── src-tauri/              # Git操作とTauriの設定
 ├── tests/                  # E2Eテストのコード
-├── scripts/                # 検証用のスクリプト
+├── scripts/                # スクリプト
 └── docs/                   # ドキュメント
 ```
 
@@ -65,7 +65,7 @@ mise run dev
 - [アーキテクチャ](docs/architecture.md)
 - [デザイン](DESIGN.md)
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
-- - [リリース手順](docs/release.md)
+- [リリース手順](docs/release.md)
 
 ## 🔗 参考リンク
 

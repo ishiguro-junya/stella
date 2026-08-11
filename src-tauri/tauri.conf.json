@@ -4,8 +4,8 @@
   "version": "1.0.0-alpha.4",
   "identifier": "com.emuni.stella",
   "build": {
-    "beforeDevCommand": "pnpm exec vite",
-    "beforeBuildCommand": "pnpm exec tsc -b && pnpm exec vite build",
+    "beforeDevCommand": "node scripts/tauri-hook.mjs dev",
+    "beforeBuildCommand": "node scripts/tauri-hook.mjs build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -39,6 +39,7 @@
     "resources": {
       "../LICENSE": "LICENSE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../.tmp/toolchain/bundle/toolchain": "toolchain",
       "../node_modules/@pierre/diffs/LICENSE.md": "licenses/pierre-diffs-LICENSE.md",
       "../node_modules/@tauri-apps/plugin-dialog/LICENSE.spdx": "licenses/tauri-plugin-dialog-LICENSE.spdx",
       "../node_modules/lucide-react/LICENSE": "licenses/lucide-react-LICENSE",

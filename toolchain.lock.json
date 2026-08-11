@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin-arm64",
+  "components": {
+    "git": {
+      "version": "2.55.0",
+      "url": "https://www.kernel.org/pub/software/scm/git/git-2.55.0.tar.xz",
+      "archive": "git-2.55.0.tar.xz",
+      "sha256": "457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357",
+      "license": "GPL-2.0-only"
+    },
+    "gitLfs": {
+      "version": "3.7.1",
+      "url": "https://github.com/git-lfs/git-lfs/releases/download/v3.7.1/git-lfs-darwin-arm64-v3.7.1.zip",
+      "archive": "git-lfs-darwin-arm64-v3.7.1.zip",
+      "sha256": "76260fb34f4ee622ff0a66b857e5954aa49c7e343a92e57a1ec4a760618c94b2",
+      "licenseUrl": "https://raw.githubusercontent.com/git-lfs/git-lfs/v3.7.1/LICENSE.md",
+      "licenseFile": "git-lfs-LICENSE.md",
+      "licenseSha256": "4fae9062ab5cdd5fb15486b728534d8aded8b4ae9d84b6d66a956f5162c366b6",
+      "license": "MIT"
+    },
+    "gitFlow": {
+      "version": "1.2.0",
+      "url": "https://github.com/gittower/git-flow-next/releases/download/v1.2.0/git-flow-next-v1.2.0-darwin-arm64.tar.gz",
+      "archive": "git-flow-next-v1.2.0-darwin-arm64.tar.gz",
+      "sha256": "20456ff5820b4b3a6b287ef0ddad0463b2f6fb4295ab2791877f0288d0d6ec9e",
+      "licenseUrl": "https://raw.githubusercontent.com/gittower/git-flow-next/v1.2.0/LICENSE",
+      "licenseFile": "git-flow-next-LICENSE",
+      "licenseSha256": "ffce931e266741227d90ffde3eff4baca8d9739ccc149d0072de0410d9f6852b",
+      "license": "BSD-2-Clause"
+    }
+  }
+}

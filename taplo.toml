@@ -1,5 +1,5 @@
 include = [ "**/*.toml" ]
-exclude = [ "node_modules/**", "src-tauri/target/**", "target/**" ]
+exclude = [ ".tmp/**", "node_modules/**", "src-tauri/target/**", "target/**" ]
 
 [formatting]
 align_comments = true
