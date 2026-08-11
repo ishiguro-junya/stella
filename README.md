@@ -13,6 +13,33 @@
 > このアプリは現在アルファ版です。
 > 将来的に破壊的な変更が入る可能性があります。
 
+## 📦 インストール
+
+```sh
+brew install --cask ishiguro-junya/tap/stella
+```
+
+## 🌱 はじめる
+
+```sh
+mise install
+mise run setup
+mise run dev
+```
+
+## 🧰 コマンド
+
+| コマンド | 内容 |
+| --- | --- |
+| `mise run setup` | 開発環境をセットアップする。 |
+| `mise run dev` | アプリを開発モードで起動する。 |
+| `mise run build` | アプリをビルドする。 |
+| `mise run lint` | コードをリントチェックする。 |
+| `mise run format` | コードをフォーマットする。 |
+| `mise run typecheck` | コードの型チェックを実行する。 |
+| `mise run test` | ユニットテストを実行する。 |
+| `mise run test:e2e` | E2Eテストを実行する。 |
+
 ## 📁 ディレクトリ構成
 
 ```text
@@ -32,33 +59,13 @@
 └── docs/                   # ドキュメント
 ```
 
-## 🌱 はじめる
-
-```sh
-mise install
-mise run setup
-mise run dev
-```
-
-## 🧰 コマンド
-
-| Command | 内容 |
-| --- | --- |
-| `mise run setup` | 開発環境をセットアップする。 |
-| `mise run dev` | アプリを開発モードで起動する。 |
-| `mise run build` | アプリをビルドする。 |
-| `mise run lint` | TypeScript、Rust、Markdownのコードをリントチェックする。 |
-| `mise run format` | TypeScript、Rustのコードをフォーマットする。 |
-| `mise run typecheck` | 型チェックを実行する。 |
-| `mise run test` | ユニットテストを実行する。 |
-| `mise run test:e2e` | E2Eテストを実行する。 |
-
 ## 📚 ドキュメント
 
-- [仕様](docs/specification.md) — 対応環境、表示言語、リポジトリ表示、対象範囲
-- [アーキテクチャ](docs/architecture.md) — モジュール境界、Git操作、安全方針、品質ゲート
-- [デザインQA](DESIGN.md) — UI比較、操作確認、検証結果
-- [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md) — 利用ライブラリの著作権とライセンス
+- [仕様](docs/specification.md)
+- [アーキテクチャ](docs/architecture.md)
+- [デザイン](DESIGN.md)
+- [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
+- - [リリース手順](docs/release.md)
 
 ## 🔗 参考リンク
 
@@ -68,6 +75,7 @@ mise run dev
 - [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
 - [Lychee](https://github.com/lycheeverse/lychee)
 - [Lefthook](https://lefthook.dev/)
+- [Homebrew](https://brew.sh/ja/)
 
 ## ライセンス
 

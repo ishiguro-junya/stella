@@ -42,7 +42,7 @@ Open、登録済みRepositoryの再Open、Cloneに成功したRepositoryは、ca
 ### 外部変更の反映
 
 外部で行われたGit操作とファイル変更は、アプリへfocusが戻ったとき、および2秒間隔の更新で検出します。  
-HEADが変わらないBranch更新もHistoryへ反映します。  
+HEADが変わらないBranch更新とTag更新もHistoryへ反映します。  
 破壊操作のpreview後に対象が変更された場合は、statusやファイルsizeが同じでもexecuteを拒否します。  
 
 ## 差分表示
