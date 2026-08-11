@@ -1,4 +1,8 @@
-# JavaScript
+# Misc
+.DS_Store
+Thumbs.db
+
+# Node.js
 node_modules/
 .pnpm-store/
 dist/*
@@ -7,23 +11,30 @@ coverage/
 *.tsbuildinfo
 .vite/
 
-# Rust and Tauri
+# Tauri
 target/
 src-tauri/target/
 src-tauri/gen/schemas/
 
-# Test and quality-tool output
+# Test
 .lycheecache
 test-results/
 wdio-logs/
 
-# Local configuration and logs
+# Environment
 *.local
-*.log
 .env
 .env.*
 !.env.example
-.DS_Store
 
-# Temporary files
+# Logs
+*.log
+
+# AI Agents
+AGENTS.md
+CLAUDE.md
+.codex/
+.claude/
+
+# Temporary
 .tmp/
