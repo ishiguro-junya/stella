@@ -11,6 +11,7 @@ import type {
 } from '../../domain/workspace';
 import type { ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import { PaneResizer } from '../../ui/PaneResizer';
+import { SelectControl } from '../../ui/SelectControl';
 import { useI18n, type I18nValue, type Language } from '../../i18n/i18n';
 import {
   ACTIVITY_RANGE_DAYS,
@@ -376,7 +377,7 @@ function AnalyticsPanel({
           {t('activityAnalytics')}
         </h2>
         <div className="activity-analytics-controls">
-          <select
+          <SelectControl
             className="activity-metric-select"
             aria-label={t('activityMetric')}
             value={metric}
@@ -391,8 +392,8 @@ function AnalyticsPanel({
                 {activityMetricLabel(option, t)}
               </option>
             ))}
-          </select>
-          <select
+          </SelectControl>
+          <SelectControl
             className="activity-range-select"
             aria-label={t('activityRange')}
             value={range}
@@ -407,7 +408,7 @@ function AnalyticsPanel({
                 {activityRangeLabel(option, t)}
               </option>
             ))}
-          </select>
+          </SelectControl>
         </div>
       </header>
       <div className="activity-analytics-body" aria-live="polite">

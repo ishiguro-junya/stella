@@ -53,7 +53,7 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 - 階層: repository contextはtitlebarに置き、画面navigationとchange操作は左paneに置きます。
 - 密度: 通常状態ではchange group、file、選択中のpath、diffだけを表示します。
 - 操作性: Commit Dialogはfocus trap、focus復帰、IME変換中のEscape抑止を共通Dialogと揃えます。
-  StagedとUnstagedは固定見出しです。
+  StagedとUnstagedは固定見出しとし、件数は右端ではなく各ラベル直後のbadgeに表示します。
 - accessibility: status名、開閉状態、group選択、modalの詳細、focus復元を明示します。
 - 安全性: warningとrecovery状態は残し、実行時エラーはmodal、想定内の判断状態はinlineで表示します。
 - responsive対応: ChangesとHistoryは最小window sizeの860 x 560でも利用可能な高さ全体を使います。
@@ -85,7 +85,11 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
   開いているrepositoryは現在の順序を維持し、重複を除いた登録pathをMRU順で後ろに並べます。
 - Branch検索の対象はlocal branch名です。  
   変更中または処理中のrepositoryでは他のbranchを無効にして理由をDialog内に表示し、現在のbranchは選択可能なままにします。
-- HistoryのCommit Diffは各file headerにpathを表示し、省略した未変更行数の文言は表示しません。
+- Branch Dialogのfooterから、現在のCommitを起点にブランチを作成できます。  
+  影響previewを確認して作成し、そのブランチへ切り替えます。  
+  Git Flow導線は表示しません。
+- HistoryのCommit Diffは各file headerにpathを表示し、省略した未変更行数の文言は表示しません。  
+  変更差分と操作履歴の右paneでは、header左端の矢印からfile単位でDiffを開閉できます。
 - 画面名は日本語でChangesを「変更差分」、Historyを「操作履歴」と表示します。
 - 操作履歴はlocal Branchに加えてoriginを含むremote-tracking BranchのCommitを同じgraphに表示し、一覧末尾が近づくと次のpageを自動で読み込みます。
 - 手動の「さらに読み込む」は表示しません。
@@ -102,7 +106,7 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 選択した案3の参照画像と最終nativeの1180 x 760 Activity画面を、1つの比較画像として並べて確認しました。  
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
-- Settingsは言語を先頭、外観をその次に表示します。
+- Settingsは言語を先頭、外観をその次に表示し、すべての設定項目をselectで選択します。
 - 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。
@@ -112,6 +116,7 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
   指標select、期間selectの順で隣接して表示し、視覚的な見出しは表示しません。
 - chart data tableは常時表示して内部をscroll可能にし、開閉toggleは設けません。
   Period、Commits、Contributors、Branchesを固定列として単位付きで日別表示します。
+  table左右端のセルは14pxの余白を確保します。
   chartは90日を週単位、180日と1年を月単位で集約し、Contributorは重複加算を避けるため日単位で表示します。
 - nativeの860 x 560 captureでも2 columnの分割を維持します。  
   操作一覧と分析の間はpointerとkeyboardでresizeでき、各領域は内部でscrollします。
@@ -295,9 +300,14 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
   Commit nodeは伸縮するSVGの外へ分離し、可変行高でも10 x 10 CSS pixelの円を維持します。
 - ref表示: Historyは全refを常時表示し、表示切替は設けません。  
   Tag、local branch、remote branchを個別のchipとして表示し、Tagを専用iconとcolorで区別します。
-- toolbarと日時: 操作buttonは現在のbranch名と同じtoolbarの右端に配置します。  
-  操作内容は共通Dialogに表示し、Escapeまたは閉じるbuttonで閉じると操作buttonへfocusを戻します。
-  各Commitは日付に加えて時刻も表示します。
-- 自動検証: Historyの全ref、Tag表示、曲線pathを含むfrontend test、typecheck、lint、frontend 283件、Rust 142件のtestが合格しています。
+- 操作導線: History上部にはbranch名と共通操作buttonを表示せず、各Commit行の末尾にChangesと同じ3点リーダーを配置します。  
+  右クリックと3点リーダーは同じmenuを開き、操作別Dialogで入力した後に影響previewを表示します。  
+  menu項目は末尾に省略記号を付けず、Git用語をカタカナの操作表現へ統一します。  
+  Commit行のダブルクリックは、そのCommitを指す現在以外のローカルブランチが一意な場合にチェックアウトします。  
+  menuとDialogを閉じた場合は対象Commit行へfocusを戻します。
+  先頭の未コミットの変更を選択した場合はChangesへ切り替えます。
+  各Commitの日時は、AuthorとCommit IDを並べたメタ情報内でCommit IDの直後に表示します。
+- responsive: 1180 x 760と860 x 560で、日時、ref chip、graph、3点リーダーが重ならないことをnative E2Eで確認します。
+- 自動検証: Historyの全ref、Tag表示、曲線pathを含むfrontend test、typecheck、lint、frontend 334件、Rust 175件、native E2E 8件が合格しています。
 
 最終結果: 合格  

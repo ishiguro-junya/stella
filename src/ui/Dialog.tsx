@@ -23,6 +23,7 @@ const FOCUSABLE = [
 interface DialogStackEntry {
   id: symbol;
   element: HTMLElement;
+  returnFocus: HTMLElement | null;
 }
 
 const dialogStack: DialogStackEntry[] = [];
@@ -50,12 +51,12 @@ export function Dialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return () => undefined;
-    const entry = { id: Symbol(labelledBy), element: dialog };
     const previous = dialogStack.at(-1);
-    if (previous) setDialogInteractive(previous.element, false);
-    dialogStack.push(entry);
     const returnFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const entry = { id: Symbol(labelledBy), element: dialog, returnFocus };
+    if (previous) setDialogInteractive(previous.element, false);
+    dialogStack.push(entry);
     const initial =
       dialog.querySelector<HTMLElement>('[data-dialog-initial-focus]') ??
       dialog.querySelector<HTMLElement>(FOCUSABLE);
@@ -93,11 +94,16 @@ export function Dialog({
       document.removeEventListener('keydown', handleKeyDown);
       const index = dialogStack.findIndex((candidate) => candidate.id === entry.id);
       const wasTop = index === dialogStack.length - 1;
-      if (index >= 0) dialogStack.splice(index, 1);
+      const [removed] = index >= 0 ? dialogStack.splice(index, 1) : [];
       if (wasTop) {
         const next = dialogStack.at(-1);
         if (next) setDialogInteractive(next.element, true);
-        returnFocus?.focus();
+        entry.returnFocus?.focus();
+      } else {
+        const top = dialogStack.at(-1);
+        if (removed && top?.returnFocus && removed.element.contains(top.returnFocus)) {
+          top.returnFocus = removed.returnFocus;
+        }
       }
     };
   }, [labelledBy]);

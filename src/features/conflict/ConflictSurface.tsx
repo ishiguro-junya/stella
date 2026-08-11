@@ -21,7 +21,7 @@ import {
   type ConflictHistoryState,
 } from '../../domain/conflictSession';
 import { profileConflictDocument } from '../../domain/performance';
-import type { ConflictChoice, ConflictDocument } from '../../domain/workspace';
+import type { ConflictChoice, ConflictDocument, DiffStyle } from '../../domain/workspace';
 import { useI18n, type I18nValue, type LocalizedMessage } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
 import { Dialog } from '../../ui/Dialog';
@@ -60,6 +60,7 @@ export interface ConflictSurfaceActions {
 export interface ConflictSurfaceProps {
   document: ConflictDocument;
   actions: ConflictSurfaceActions;
+  diffStyle?: DiffStyle | undefined;
   externalStateChanged?: boolean | undefined;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   onResolved?: (() => void) | undefined;
@@ -74,11 +75,11 @@ export interface ConflictLeaveHandle {
 type ComparisonSide = 'current' | 'incoming';
 type BusyOperation = 'choice' | 'save' | 'mark' | 'reload' | 'materialize' | 'external' | null;
 
-const OPERATION_LABELS: Record<ConflictDocument['operation'], string> = {
-  merge: 'Merge',
-  rebase: 'Rebase',
-  cherryPick: 'Cherry-pick',
-  revert: 'Revert',
+const OPERATION_LABELS: Record<ConflictDocument['operation'], LocalizedMessage> = {
+  merge: { id: 'merge' },
+  rebase: { id: 'rebase' },
+  cherryPick: { id: 'cherryPick' },
+  revert: { id: 'revert' },
 };
 
 function cloneWorkingDocument(
@@ -125,6 +126,7 @@ function preferredBlockId(document: ConflictDocument): string | undefined {
 export function ConflictSurface({
   document,
   actions,
+  diffStyle = 'unified',
   externalStateChanged = false,
   onDirtyChange,
   onResolved,
@@ -490,7 +492,9 @@ export function ConflictSurface({
       <header className="conflict-header">
         <div>
           <p className="eyebrow">
-            {t('conflictEyebrow', { operation: OPERATION_LABELS[workingDocument.operation] })}
+            {t('conflictEyebrow', {
+              operation: message(OPERATION_LABELS[workingDocument.operation]),
+            })}
           </p>
           <h2 id="conflict-title">{workingDocument.path}</h2>
           <p className="conflict-labels">
@@ -625,7 +629,7 @@ export function ConflictSurface({
                 targetLabel: message(targetLabel),
                 cacheKey: `${workingDocument.sessionId}:${workingDocument.conflictGeneration}:${comparisonSide}`,
               }}
-              diffStyle="unified"
+              diffStyle={diffStyle}
               performanceMode={performance.mode === 'performance'}
               ariaLabel={t('conflictDiffAria', {
                 side: t(comparisonSide === 'current' ? 'conflictCurrent' : 'conflictIncoming'),

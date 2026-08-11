@@ -139,6 +139,7 @@ describe('BranchSwitcherDialog', () => {
         branches={BRANCHES}
         onDismiss={onDismiss}
         onCheckout={() => undefined}
+        onCreate={() => undefined}
       />,
     );
 
@@ -157,10 +158,15 @@ describe('BranchSwitcherDialog', () => {
         branches={[]}
         onDismiss={() => undefined}
         onCheckout={() => undefined}
+        onCreate={() => undefined}
       />,
     );
 
     expect(screen.getByRole('option', { name: 'main' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
+    expect(
+      screen.getByText('Create the first commit before creating another branch.'),
+    ).toBeVisible();
   });
 
   it('filters local branches and checks out the keyboard selection', async () => {
@@ -172,6 +178,7 @@ describe('BranchSwitcherDialog', () => {
         branches={BRANCHES}
         onDismiss={() => undefined}
         onCheckout={onCheckout}
+        onCreate={() => undefined}
       />,
     );
 
@@ -196,15 +203,44 @@ describe('BranchSwitcherDialog', () => {
         branches={BRANCHES}
         onDismiss={onDismiss}
         onCheckout={onCheckout}
+        onCreate={() => undefined}
       />,
     );
 
     expect(screen.getByText('Commit or discard changes before switching branches.')).toBeVisible();
     const feature = screen.getByRole('option', { name: 'feature/search' });
     expect(feature).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
     await user.click(feature);
     expect(onCheckout).not.toHaveBeenCalled();
     await user.click(screen.getByRole('option', { name: /main.*origin\/main/u }));
     expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it('opens branch creation instead of Git Flow and submits the current commit', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn<(branchName: string, startOid: string) => void>();
+    render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot()}
+        branches={BRANCHES}
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={onCreate}
+      />,
+    );
+
+    const switcher = screen.getByRole('dialog', { name: 'Switch Branch' });
+    expect(within(switcher).queryByText('Git Flow')).not.toBeInTheDocument();
+    await user.click(within(switcher).getByRole('button', { name: 'Create branch' }));
+
+    const creation = screen.getByRole('dialog', { name: 'Create branch' });
+    expect(creation).toHaveTextContent('Create a branch from the current commit and switch to it.');
+    const input = within(creation).getByRole('textbox', { name: 'Branch name' });
+    expect(input).toHaveFocus();
+    await user.type(input, 'feature/new-flow');
+    await user.click(within(creation).getByRole('button', { name: 'Review impact' }));
+
+    expect(onCreate).toHaveBeenCalledWith('feature/new-flow', 'main-oid');
   });
 });

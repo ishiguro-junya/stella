@@ -33,6 +33,9 @@ function StackedHarness() {
       <button type="button" onClick={() => setFirstOpen(true)}>
         Open first
       </button>
+      <button type="button" data-testid="remove-first" onClick={() => setFirstOpen(false)}>
+        Remove first
+      </button>
       {firstOpen ? (
         <Dialog labelledBy="first-title" onDismiss={() => setFirstOpen(false)}>
           <h2 id="first-title">First dialog</h2>
@@ -93,5 +96,20 @@ describe('Dialog', () => {
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('inherits a stable focus target when an underlying dialog is replaced', async () => {
+    const user = userEvent.setup();
+    render(<StackedHarness />);
+    const opener = screen.getByRole('button', { name: 'Open first' });
+
+    await user.click(opener);
+    await user.click(screen.getByRole('button', { name: 'Open second' }));
+    fireEvent.click(screen.getByTestId('remove-first'));
+    expect(screen.queryByRole('alertdialog', { name: 'First dialog' })).not.toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 });

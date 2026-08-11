@@ -23,7 +23,11 @@ describe('appearance preferences', () => {
       }),
     );
 
-    expect(readPreferences()).toMatchObject({ appearance: 'system', splitStageView: true });
+    expect(readPreferences()).toMatchObject({
+      appearance: 'system',
+      diffStyle: 'unified',
+      splitStageView: true,
+    });
   });
 
   it('fills a missing v1 language from macOS and defaults the screen-specific pane widths', () => {
@@ -58,14 +62,14 @@ describe('appearance preferences', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       paneWidths: {
-        changes: { left: 312, right: 408 },
+        changes: { left: 344, right: 408 },
         history: { left: 288 },
         activity: { left: 584 },
       },
     });
 
     expect(readPreferences().paneWidths).toEqual({
-      changes: { left: 312, right: 408 },
+      changes: { left: 344, right: 408 },
       history: { left: 288 },
       activity: { left: 584 },
     });
@@ -85,6 +89,11 @@ describe('appearance preferences', () => {
   it('round-trips the combined Stage display preference', () => {
     writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: false });
     expect(readPreferences().splitStageView).toBe(false);
+  });
+
+  it('round-trips the selected Diff layout', () => {
+    writePreferences({ ...DEFAULT_PREFERENCES, diffStyle: 'split' });
+    expect(readPreferences().diffStyle).toBe('split');
   });
 
   it('migrates the existing recent repository list without classifying its entries', () => {

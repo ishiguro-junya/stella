@@ -45,6 +45,28 @@ export const MESSAGES = {
   },
   stageDisplaySplit: { en: 'Separate', ja: '分割' },
   stageDisplayCombined: { en: 'Combined', ja: 'まとめる' },
+  toolchainTitle: { en: 'Git Toolchain', ja: 'Gitツールチェイン' },
+  toolchainDescription: {
+    en: 'Choose whether to use the bundled Git toolchain or one installed on this Mac.',
+    ja: 'Gitツールチェインが内蔵かこの端末にインストールされたもののどちらを使用するか選択します。',
+  },
+  toolchainBundled: { en: 'Bundled', ja: '内蔵' },
+  toolchainSystem: { en: 'System', ja: 'システム' },
+  toolchainCurrentSession: { en: 'Current session', ja: '現在のセッション' },
+  toolchainNextLaunch: { en: 'Next launch', ja: '次回起動' },
+  toolchainRestartRequired: {
+    en: 'Restart Stella to apply this change.',
+    ja: '変更を反映するにはStellaを再起動してください。',
+  },
+  toolchainUnavailable: { en: 'Unavailable', ja: '利用できません' },
+  toolchainLoadFailed: {
+    en: 'The Git toolchain status could not be loaded.',
+    ja: 'Gitツールチェインの状態を取得できませんでした。',
+  },
+  toolchainChangeFailed: {
+    en: 'The Git toolchain setting could not be changed.',
+    ja: 'Gitツールチェインの設定を変更できませんでした。',
+  },
   languageDescription: {
     en: 'Choose the interface language.',
     ja: '表示に使用する言語を選択します。',
@@ -58,8 +80,8 @@ export const MESSAGES = {
   changes: { en: 'Changes', ja: '変更差分' },
   history: { en: 'History', ja: '操作履歴' },
   conflicted: { en: 'Conflicted', ja: 'Conflict' },
-  staged: { en: 'Staged', ja: 'Staged' },
-  unstaged: { en: 'Unstaged', ja: 'Unstaged' },
+  staged: { en: 'Staged', ja: 'ステージ済み' },
+  unstaged: { en: 'Unstaged', ja: '未ステージ' },
   untracked: { en: 'Untracked', ja: 'Untracked' },
   added: { en: 'Added', ja: '追加' },
   deleted: { en: 'Deleted', ja: '削除' },
@@ -68,11 +90,13 @@ export const MESSAGES = {
   stage: { en: 'Stage', ja: 'Stage' },
   unstage: { en: 'Unstage', ja: 'Unstage' },
   discard: { en: 'Discard', ja: '破棄' },
-  merge: { en: 'Merge', ja: 'Merge' },
-  rebase: { en: 'Rebase', ja: 'Rebase' },
-  fetch: { en: 'Fetch', ja: 'リモート情報を取得' },
-  pull: { en: 'Pull', ja: '変更を取り込む' },
-  push: { en: 'Push', ja: '変更を送信' },
+  merge: { en: 'Merge', ja: 'マージ' },
+  rebase: { en: 'Rebase', ja: 'リベース' },
+  tag: { en: 'Tag', ja: 'タグ' },
+  squash: { en: 'Squash', ja: 'スカッシュ' },
+  fetch: { en: 'Fetch', ja: 'フェッチ' },
+  pull: { en: 'Pull', ja: 'プル' },
+  push: { en: 'Push', ja: 'プッシュ' },
   changeDragHelp: {
     en: 'Use the checkboxes to stage or unstage files. You can also drag file rows between Staged and Unstaged.',
     ja: 'チェックボックスでファイルをStageまたはUnstageできます。ファイル行をStagedとUnstagedの間でドラッグすることもできます。',
@@ -101,6 +125,10 @@ export const MESSAGES = {
   moreActionsFor: {
     en: (args) => `More actions for ${text(args, 'path')}`,
     ja: (args) => `${text(args, 'path')}のその他の操作`,
+  },
+  moreActionsForSelectedFile: {
+    en: (args) => `More actions for selected file ${text(args, 'path')}`,
+    ja: (args) => `選択中のファイル${text(args, 'path')}のその他の操作`,
   },
   moreActions: { en: 'More actions', ja: 'その他の操作' },
   fileActionsFor: {
@@ -162,17 +190,20 @@ export const MESSAGES = {
   },
   setUpstreamBeforePull: {
     en: 'Set an upstream branch before pulling.',
-    ja: '変更を取り込む前にupstream Branchを設定してください。',
+    ja: 'プルする前にupstreamブランチを設定してください。',
   },
   fastForwardUnavailable: { en: 'Fast-forward unavailable', ja: 'Fast-forwardできません' },
   fetchCompleteResolve: {
     en: (args) => `Fetch is complete. Merge or rebase ${text(args, 'target')}.`,
-    ja: (args) =>
-      `リモート情報を取得しました。${text(args, 'target')}をMergeまたはRebaseしてください。`,
+    ja: (args) => `フェッチしました。${text(args, 'target')}をマージまたはリベースしてください。`,
   },
   changedFiles: { en: 'Changed files', ja: '変更されたファイル' },
   changesListWidth: { en: 'Changes list width', ja: '変更一覧の幅' },
   diffLayout: { en: 'Diff layout', ja: 'Diffレイアウト' },
+  diffLayoutDescription: {
+    en: 'Choose whether file diffs use a unified or split layout.',
+    ja: 'ファイルのDiffを統合または分割のどちらで表示するか選択します。',
+  },
   unified: { en: 'Unified', ja: '統合' },
   split: { en: 'Split', ja: '分割' },
   binaryWholeFileOnly: {
@@ -186,6 +217,14 @@ export const MESSAGES = {
   fileDiffAria: {
     en: (args) => `${text(args, 'path')} diff`,
     ja: (args) => `${text(args, 'path')}のDiff`,
+  },
+  collapseFileDiff: {
+    en: (args) => `Collapse ${text(args, 'path')} diff`,
+    ja: (args) => `${text(args, 'path')}のDiffを折りたたむ`,
+  },
+  expandFileDiff: {
+    en: (args) => `Expand ${text(args, 'path')} diff`,
+    ja: (args) => `${text(args, 'path')}のDiffを展開する`,
   },
   selectedLines: { en: 'Selected lines', ja: '選択した行' },
   lineRange: {
@@ -243,7 +282,7 @@ export const MESSAGES = {
   },
   tagRefLabel: {
     en: (args) => `Tag ${text(args, 'name')}`,
-    ja: (args) => `Tag ${text(args, 'name')}`,
+    ja: (args) => `タグ ${text(args, 'name')}`,
   },
   commitParents: {
     en: (args) => `Parents ${text(args, 'parents')}`,
@@ -253,6 +292,7 @@ export const MESSAGES = {
   historyListWidth: { en: 'History list width', ja: '操作履歴一覧の幅' },
   author: { en: 'Author', ja: '作成者' },
   date: { en: 'Date', ja: '日時' },
+  commitId: { en: 'Commit ID', ja: 'コミットID' },
   binaryDiffUnavailable: {
     en: 'Binary diffs cannot be displayed as text.',
     ja: 'BinaryのDiffはテキストとして表示できません。',
@@ -274,12 +314,36 @@ export const MESSAGES = {
   selectCommit: { en: 'Select a commit.', ja: 'Commitを選択してください。' },
   createBranchFromSelected: {
     en: 'Create branch from selected commit',
-    ja: '選択したCommitからBranchを作成',
+    ja: '選択したCommitからブランチを作成',
   },
-  createBranch: { en: 'Create branch', ja: 'Branchを作成' },
+  createBranch: { en: 'Create branch', ja: 'ブランチを作成' },
+  createBranchMenu: { en: 'Create Branch', ja: 'ブランチを作成' },
+  createAndCheckoutBranchDescription: {
+    en: 'Create a branch from the current commit and switch to it.',
+    ja: '現在のCommitからブランチを作成し、そのブランチへ切り替えます。',
+  },
+  createBranchRequiresCommit: {
+    en: 'Create the first commit before creating another branch.',
+    ja: '別のブランチを作成する前に最初のCommitを作成してください。',
+  },
+  branchName: { en: 'Branch name', ja: 'ブランチ名' },
+  createTagFromSelected: {
+    en: 'Create Tag from selected commit',
+    ja: '選択したCommitからタグを作成',
+  },
+  createTag: { en: 'Create Tag', ja: 'タグを作成' },
+  createTagMenu: { en: 'Create Tag', ja: 'タグを作成' },
+  tagName: { en: 'Tag name', ja: 'タグ名' },
+  tagNamePlaceholder: { en: 'v1.0.0', ja: 'v1.0.0' },
+  localTagHelp: {
+    en: 'Creates a lightweight Tag locally. It is not pushed to a remote.',
+    ja: '軽量タグをローカルに作成します。RemoteへはPushしません。',
+  },
   sourceRef: { en: 'Source ref', ja: '元のref' },
   branchNamePlaceholder: { en: 'feature/name', ja: 'feature/name' },
   selectedCommit: { en: 'Selected commit', ja: '選択したCommit' },
+  targetCommit: { en: 'Target commit', ja: '対象Commit' },
+  reviewImpact: { en: 'Review impact', ja: '影響を確認' },
   mainlineParent: { en: 'Mainline parent', ja: 'メインラインのParent' },
   parentNumber: {
     en: (args) => `Parent ${text(args, 'number')}`,
@@ -287,18 +351,36 @@ export const MESSAGES = {
   },
   mainlineHelp: {
     en: 'Select the parent that was the mainline when the merge was created.',
-    ja: 'Mergeの作成時にメインラインだったParentを選択してください。',
+    ja: 'マージの作成時にメインラインだったParentを選択してください。',
   },
-  cherryPick: { en: 'Cherry-pick', ja: 'Cherry-pick' },
-  revert: { en: 'Revert', ja: 'Revert' },
-  reset: { en: 'Reset', ja: 'Reset' },
+  cherryPick: { en: 'Cherry-pick', ja: 'チェリーピック' },
+  cherryPickMenu: { en: 'Cherry-pick', ja: 'チェリーピックを実行' },
+  revert: { en: 'Revert', ja: 'リバート' },
+  revertMenu: { en: 'Revert', ja: 'リバートを実行' },
+  reset: { en: 'Reset', ja: 'リセット' },
+  resetMenu: { en: 'Reset', ja: 'リセットを実行' },
+  resetMode: { en: 'Reset mode', ja: 'リセット方法' },
+  mergeMenu: { en: 'Merge', ja: 'マージを実行' },
+  rebaseMenu: { en: 'Rebase', ja: 'リベースを実行' },
   soft: { en: 'Soft', ja: 'Soft' },
   mixed: { en: 'Mixed', ja: 'Mixed' },
   hard: { en: 'Hard', ja: 'Hard' },
   commitLowercase: { en: 'commit', ja: 'Commit' },
   resetToTarget: {
     en: (args) => `Reset to ${text(args, 'target')}`,
-    ja: (args) => `${text(args, 'target')}へReset`,
+    ja: (args) => `${text(args, 'target')}へリセット`,
+  },
+  moreActionsForCommit: {
+    en: (args) => `More actions for commit ${text(args, 'oid')}`,
+    ja: (args) => `Commit ${text(args, 'oid')}のその他の操作`,
+  },
+  moreActionsForSelectedCommit: {
+    en: (args) => `More actions for selected commit ${text(args, 'oid')}`,
+    ja: (args) => `選択中のCommit ${text(args, 'oid')}のその他の操作`,
+  },
+  commitActionsFor: {
+    en: (args) => `${text(args, 'subject')} ${text(args, 'oid')} actions`,
+    ja: (args) => `${text(args, 'subject')} ${text(args, 'oid')}の操作`,
   },
   switchRepository: { en: 'Switch Repository', ja: 'リポジトリを切り替える' },
   searchRepositories: { en: 'Search repositories', ja: 'リポジトリを検索' },
@@ -307,33 +389,89 @@ export const MESSAGES = {
     ja: '検索に一致するリポジトリはありません。',
   },
   addRepositoryEllipsis: { en: 'Add Repository…', ja: 'リポジトリを追加…' },
-  switchBranch: { en: 'Switch Branch', ja: 'Branchを切り替える' },
-  searchBranches: { en: 'Search branches', ja: 'Branchを検索' },
+  switchBranch: { en: 'Switch Branch', ja: 'ブランチを切り替える' },
+  searchBranches: { en: 'Search branches', ja: 'ブランチを検索' },
   noBranchSearchResults: {
     en: 'No local branches match your search.',
-    ja: '検索に一致するローカルBranchはありません。',
+    ja: '検索に一致するローカルブランチはありません。',
   },
   finishOperationBeforeSwitchingBranch: {
     en: (args) =>
       `${text(args, 'operation')}. Finish or abort the operation before switching branches.`,
     ja: (args) =>
-      `${text(args, 'operation')}。Branchを切り替える前に操作を完了またはAbortしてください。`,
+      `${text(args, 'operation')}。ブランチを切り替える前に操作を完了またはAbortしてください。`,
   },
   commitOrDiscardBeforeSwitchingBranch: {
     en: 'Commit or discard changes before switching branches.',
-    ja: 'Branchを切り替える前に変更をCommitまたは破棄してください。',
+    ja: 'ブランチを切り替える前に変更をCommitまたは破棄してください。',
   },
   waitBeforeSwitchingBranch: {
     en: 'Wait for the current operation to finish before switching branches.',
-    ja: '現在の操作が完了してからBranchを切り替えてください。',
+    ja: '現在の操作が完了してからブランチを切り替えてください。',
   },
-  operationResolvingMerge: { en: 'Resolving merge', ja: 'Mergeを解決中' },
-  operationResolvingRebase: { en: 'Resolving rebase', ja: 'Rebaseを解決中' },
+  reload: { en: 'Reload', ja: '再読み込み' },
+  available: { en: 'Available', ja: '利用可能' },
+  notInitialized: { en: 'Not initialized', ja: '未初期化' },
+  enabled: { en: 'Enabled', ja: '有効' },
+  disabled: { en: 'Disabled', ja: '無効' },
+  running: { en: 'Running…', ja: '実行中…' },
+  gitFlowTitle: { en: 'Git Flow', ja: 'Git Flow' },
+  gitFlowDescription: {
+    en: 'Inspect and operate the repository Git Flow model.',
+    ja: 'RepositoryのGit Flow構成を確認し、型付き操作を実行します。',
+  },
+  gitFlowOverview: { en: 'Repository overview', ja: 'Repository概要' },
+  gitFlowHealth: { en: 'Health', ja: '状態' },
+  gitFlowBaseBranch: { en: 'Base branch', ja: 'ベースブランチ' },
+  gitFlowTopicType: { en: 'Topic type', ja: 'Topic type' },
+  gitFlowActiveBranch: { en: 'Active branch', ja: 'アクティブブランチ' },
+  gitFlowUnavailable: {
+    en: 'Git Flow is unavailable in the active toolchain.',
+    ja: '現在のtoolchainではGit Flowを利用できません。',
+  },
+  gitFlowOperation: { en: 'Operation', ja: '操作' },
+  gitFlowCommand: { en: 'Command', ja: 'Command' },
+  gitFlowPreset: { en: 'Preset', ja: 'Preset' },
+  gitFlowSharedConfig: {
+    en: 'Share configuration in .gitflow',
+    ja: '設定を.gitflowで共有する',
+  },
+  gitFlowName: { en: 'Name', ja: '名前' },
+  gitFlowNewName: { en: 'New name', ja: '新しい名前' },
+  gitFlowParent: { en: 'Parent', ja: 'Parent' },
+  gitFlowPrefix: { en: 'Prefix', ja: 'Prefix' },
+  gitFlowStartingPoint: { en: 'Starting point', ja: 'Starting point' },
+  gitFlowAutoUpdate: { en: 'Auto update', ja: 'Auto update' },
+  gitFlowUseDefault: { en: 'Use default', ja: '既定値を使う' },
+  gitFlowDeleteRemote: {
+    en: 'Also delete the remote branch',
+    ja: 'Remoteブランチも削除する',
+  },
+  gitFlowStrategy: { en: 'Integration strategy', ja: '統合方式' },
+  gitFlowUpdateStrategy: { en: 'Update strategy', ja: '更新方式' },
+  gitFlowConfiguredStrategy: { en: 'Repository setting', ja: 'Repository設定' },
+  gitFlowDownstreamStrategy: { en: 'Update strategy', ja: '更新方式' },
+  gitFlowTagName: { en: 'Tag name (optional)', ja: 'タグ名（任意）' },
+  gitFlowTagMessage: { en: 'Tag message', ja: 'タグメッセージ' },
+  gitFlowSignTag: { en: 'Sign the tag', ja: 'タグへ署名する' },
+  gitFlowSigningKey: { en: 'Signing key (optional)', ja: '署名key（任意）' },
+  gitFlowKeepBranch: { en: 'Keep the topic branch', ja: 'Topicブランチを保持する' },
+  gitFlowPushAfterFinish: { en: 'Push after finishing', ja: 'Finish後にPushする' },
+  gitFlowGpgUnavailable: {
+    en: 'Signing is disabled because GPG is unavailable.',
+    ja: 'GPGを利用できないため署名は無効です。',
+  },
+  operationResolvingMerge: { en: 'Resolving merge', ja: 'マージを解決中' },
+  operationResolvingRebase: { en: 'Resolving rebase', ja: 'リベースを解決中' },
+  operationGitFlowInProgress: {
+    en: (args) => `Git Flow ${text(args, 'operation')} in progress`,
+    ja: (args) => `Git Flow ${text(args, 'operation')}を復旧中`,
+  },
   operationResolvingCherryPick: {
     en: 'Resolving cherry-pick',
-    ja: 'Cherry-pickを解決中',
+    ja: 'チェリーピックを解決中',
   },
-  operationResolvingRevert: { en: 'Resolving revert', ja: 'Revertを解決中' },
+  operationResolvingRevert: { en: 'Resolving revert', ja: 'リバートを解決中' },
   operationExternalInProgress: {
     en: 'External Git operation in progress',
     ja: '外部のGit操作が進行中',
@@ -354,16 +492,18 @@ export const MESSAGES = {
   actionUnstageSelectedLines: { en: 'Unstage Selected Lines', ja: '選択行をUnstage' },
   actionDiscardSelectedLines: { en: 'Discard Selected Lines', ja: '選択行を破棄' },
   actionCommit: { en: 'Commit', ja: 'Commit' },
-  actionFetch: { en: 'Fetch', ja: 'リモート情報を取得' },
-  actionPull: { en: 'Pull', ja: '変更を取り込む' },
-  actionPush: { en: 'Push', ja: '変更を送信' },
-  actionCreateBranch: { en: 'Create Branch', ja: 'Branchを作成' },
-  actionCheckoutBranch: { en: 'Checkout Branch', ja: 'BranchをCheckout' },
-  actionMergeBranch: { en: 'Merge Branch', ja: 'BranchをMerge' },
-  actionRebaseBranch: { en: 'Rebase Branch', ja: 'BranchをRebase' },
-  actionCherryPickCommit: { en: 'Cherry-pick Commit', ja: 'CommitをCherry-pick' },
-  actionRevertCommit: { en: 'Revert Commit', ja: 'CommitをRevert' },
-  actionResetToCommit: { en: 'Reset to Commit', ja: 'CommitへReset' },
+  actionFetch: { en: 'Fetch', ja: 'フェッチ' },
+  actionPull: { en: 'Pull', ja: 'プル' },
+  actionPush: { en: 'Push', ja: 'プッシュ' },
+  actionCreateBranch: { en: 'Create Branch', ja: 'ブランチを作成' },
+  actionCreateTag: { en: 'Create Tag', ja: 'タグを作成' },
+  actionGitFlow: { en: 'Git Flow Operation', ja: 'Git Flow操作' },
+  actionCheckoutBranch: { en: 'Checkout Branch', ja: 'ブランチをチェックアウト' },
+  actionMergeBranch: { en: 'Merge Branch', ja: 'ブランチをマージ' },
+  actionRebaseBranch: { en: 'Rebase Branch', ja: 'ブランチをリベース' },
+  actionCherryPickCommit: { en: 'Cherry-pick Commit', ja: 'Commitをチェリーピック' },
+  actionRevertCommit: { en: 'Revert Commit', ja: 'Commitをリバート' },
+  actionResetToCommit: { en: 'Reset to Commit', ja: 'Commitへリセット' },
   actionContinueOperation: { en: 'Continue Operation', ja: '操作をContinue' },
   actionSkipOperation: { en: 'Skip Operation', ja: '操作をSkip' },
   actionAbortOperation: { en: 'Abort Operation', ja: '操作をAbort' },
@@ -418,27 +558,29 @@ export const MESSAGES = {
     ja: 'Untrackedファイルをゴミ箱に入れました',
   },
   backendCommitCreated: { en: 'Commit created', ja: 'Commitを作成しました' },
-  backendFetchCompleted: { en: 'Fetch completed', ja: 'リモート情報を取得しました' },
+  backendFetchCompleted: { en: 'Fetch completed', ja: 'フェッチしました' },
   backendPullCompleted: {
     en: 'Fast-forward pull completed',
-    ja: 'Fast-forwardで変更を取り込みました',
+    ja: 'Fast-forwardでプルしました',
   },
-  backendPushCompleted: { en: 'Push completed', ja: '変更を送信しました' },
-  backendBranchCreated: { en: 'Branch created', ja: 'Branchを作成しました' },
+  backendPushCompleted: { en: 'Push completed', ja: 'プッシュしました' },
+  backendBranchCreated: { en: 'Branch created', ja: 'ブランチを作成しました' },
+  backendTagCreated: { en: 'Tag created', ja: 'タグを作成しました' },
+  backendGitFlowCompleted: { en: 'Git Flow operation completed', ja: 'Git Flow操作が完了しました' },
   backendBranchCheckedOut: {
     en: 'Branch checked out',
-    ja: 'BranchをCheckoutしました',
+    ja: 'ブランチをチェックアウトしました',
   },
-  backendMergeCreated: { en: 'Merge result created', ja: 'Merge結果を作成しました' },
-  backendRebaseCompleted: { en: 'Rebase completed', ja: 'Rebaseが完了しました' },
+  backendMergeCreated: { en: 'Merge result created', ja: 'マージ結果を作成しました' },
+  backendRebaseCompleted: { en: 'Rebase completed', ja: 'リベースが完了しました' },
   backendCherryPickCreated: {
     en: 'Cherry-pick changes created',
-    ja: 'Cherry-pickの変更を作成しました',
+    ja: 'チェリーピックの変更を作成しました',
   },
-  backendRevertCreated: { en: 'Revert changes created', ja: 'Revertの変更を作成しました' },
+  backendRevertCreated: { en: 'Revert changes created', ja: 'リバートの変更を作成しました' },
   backendResetCompleted: {
     en: (args) => `${text(args, 'mode')} reset completed`,
-    ja: (args) => `${text(args, 'mode')} Resetが完了しました`,
+    ja: (args) => `${text(args, 'mode')}リセットが完了しました`,
   },
   backendConflictResolved: {
     en: 'Conflict marked as resolved',
@@ -457,31 +599,42 @@ export const MESSAGES = {
     en: 'Opened in default app',
     ja: 'デフォルトアプリで開きました',
   },
-  backendRebaseContinued: { en: 'Rebase continued', ja: 'RebaseをContinueしました' },
+  backendRebaseContinued: { en: 'Rebase continued', ja: 'リベースをContinueしました' },
   backendCherryPickReadyToCommit: {
     en: 'Cherry-pick resolution is ready to commit',
-    ja: 'Cherry-pickの解決結果をCommitできます',
+    ja: 'チェリーピックの解決結果をCommitできます',
   },
   backendRevertReadyToCommit: {
     en: 'Revert resolution is ready to commit',
-    ja: 'Revertの解決結果をCommitできます',
+    ja: 'リバートの解決結果をCommitできます',
   },
   backendCommitSkipped: { en: 'Current commit skipped', ja: '現在のCommitをSkipしました' },
   backendOperationAborted: { en: 'Operation aborted', ja: '操作をAbortしました' },
   previewFetchRemote: {
     en: (args) => `Update remote-tracking refs from ${text(args, 'remote')}`,
-    ja: (args) => `${text(args, 'remote')}からremote-tracking refsを更新します`,
+    ja: (args) => `${text(args, 'remote')}からフェッチし、remote-tracking refsを更新します`,
   },
   previewPullRemote: {
     en: (args) => `Fetch from ${text(args, 'remote')}, then fast-forward the local branch`,
-    ja: (args) =>
-      `${text(args, 'remote')}からリモート情報を取得し、ローカルBranchをfast-forwardします`,
+    ja: (args) => `${text(args, 'remote')}からフェッチし、ローカルブランチをfast-forwardします`,
   },
   previewPushRemote: {
     en: (args) =>
       `${text(args, 'remote')}: ${text(args, 'localBranch')} → ${text(args, 'remoteBranch')}`,
     ja: (args) =>
       `${text(args, 'remote')}: ${text(args, 'localBranch')} → ${text(args, 'remoteBranch')}`,
+  },
+  previewGitFlowRemote: {
+    en: (args) =>
+      `Git Flow ${text(args, 'command')} changes remote state for ${text(args, 'branch')}`,
+    ja: (args) =>
+      `Git Flow ${text(args, 'command')}が${text(args, 'branch')}のRemote状態を変更します`,
+  },
+  previewGitFlowRemoteDelete: {
+    en: (args) =>
+      `Delete remote branch ${text(args, 'branch')}. Other users will no longer be able to fetch it.`,
+    ja: (args) =>
+      `Remoteブランチ ${text(args, 'branch')}を削除します。他の利用者はこのブランチを取得できなくなります。`,
   },
   previewDiscardPaths: {
     en: (args, { number }) =>
@@ -491,11 +644,11 @@ export const MESSAGES = {
   },
   previewReset: {
     en: (args) => `${text(args, 'mode')} reset HEAD to ${text(args, 'commit')}`,
-    ja: (args) => `HEADを${text(args, 'commit')}へ${text(args, 'mode')} Resetします`,
+    ja: (args) => `HEADを${text(args, 'commit')}へ${text(args, 'mode')}リセットします`,
   },
   previewRebase: {
     en: (args) => `Rebase the current branch onto ${text(args, 'onto')}`,
-    ja: (args) => `現在のBranchを${text(args, 'onto')}へRebaseします`,
+    ja: (args) => `現在のブランチを${text(args, 'onto')}へリベースします`,
   },
   previewAbort: {
     en: 'Restore the state from before the current operation',
@@ -511,12 +664,12 @@ export const MESSAGES = {
     ja: (args, { number }) =>
       `${number(count(args, 'count'))}ファイルを削除します。削除後はゴミ箱から復元できます。`,
   },
-  conflictCurrentBranch: { en: 'Current branch', ja: '現在のBranch' },
-  conflictMergedBranch: { en: 'Merged branch', ja: 'MergeするBranch' },
-  conflictRebaseDestination: { en: 'Rebase destination', ja: 'Rebase先' },
+  conflictCurrentBranch: { en: 'Current branch', ja: '現在のブランチ' },
+  conflictMergedBranch: { en: 'Merged branch', ja: 'マージするブランチ' },
+  conflictRebaseDestination: { en: 'Rebase destination', ja: 'リベース先' },
   conflictReplayedCommit: { en: 'Replayed commit', ja: '再適用されるCommit' },
-  conflictCherryPickedCommit: { en: 'Cherry-picked commit', ja: 'Cherry-pickするCommit' },
-  conflictRevertResult: { en: 'Revert result', ja: 'Revert結果' },
+  conflictCherryPickedCommit: { en: 'Cherry-picked commit', ja: 'チェリーピックするCommit' },
+  conflictRevertResult: { en: 'Revert result', ja: 'リバート結果' },
   activityNoRepository: { en: 'No repository selected', ja: 'リポジトリが選択されていません' },
   activityRange: { en: 'Activity range', ja: 'アクティビティの期間' },
   activityMetric: { en: 'Activity metric', ja: 'アクティビティの指標' },
@@ -596,7 +749,7 @@ export const MESSAGES = {
     en: (args, { number }) =>
       `The selected branch history has no commits in the last ${number(count(args, 'days'))} days.`,
     ja: (args, { number }) =>
-      `選択したBranchの履歴に、過去${number(count(args, 'days'))}日間のCommitはありません。`,
+      `選択したブランチの履歴に、過去${number(count(args, 'days'))}日間のCommitはありません。`,
   },
   activityResultsTruncated: {
     en: (args, { number }) =>
@@ -616,7 +769,7 @@ export const MESSAGES = {
   activityFailed: { en: 'Failed', ja: '失敗' },
   activityCancelled: { en: 'Cancelled', ja: 'キャンセル済み' },
   activityInProgress: { en: 'In progress', ja: '進行中' },
-  noBranch: { en: 'No branch', ja: 'Branchなし' },
+  noBranch: { en: 'No branch', ja: 'ブランチなし' },
   workspaceContext: { en: 'Workspace context', ja: 'ワークスペースの情報' },
   switchRepositoryCurrent: {
     en: (args) =>
@@ -630,7 +783,7 @@ export const MESSAGES = {
   },
   switchBranchCurrent: {
     en: (args) => `Switch branch. Current branch ${text(args, 'branch')}`,
-    ja: (args) => `Branchを切り替えます。現在のBranchは${text(args, 'branch')}`,
+    ja: (args) => `ブランチを切り替えます。現在のブランチは${text(args, 'branch')}`,
   },
   activityOperationRunning: { en: 'Operation running', ja: '操作を実行中' },
   loadingActivity: { en: 'Loading Activity…', ja: 'アクティビティを読み込み中…' },
@@ -685,7 +838,7 @@ export const MESSAGES = {
   affectedCommits: { en: 'Affected commits', ja: '影響を受けるCommit' },
   removedCommits: {
     en: 'Commits removed from the current branch',
-    ja: '現在のBranchから削除されるCommit',
+    ja: '現在のブランチから削除されるCommit',
   },
   typeToConfirm: {
     en: (args) => `Type “${text(args, 'value')}” to confirm`,
@@ -731,7 +884,7 @@ export const MESSAGES = {
     en: 'Could not open the repository.',
     ja: 'リポジトリを開けませんでした。',
   },
-  loadBranchesFailed: { en: 'Could not load branches.', ja: 'Branchを読み込めませんでした。' },
+  loadBranchesFailed: { en: 'Could not load branches.', ja: 'ブランチを読み込めませんでした。' },
   operationFailedTitle: { en: 'Operation failed', ja: '操作に失敗しました' },
   operationFailed: { en: 'The operation failed.', ja: '操作に失敗しました。' },
   previewFailedTitle: {
@@ -1034,7 +1187,7 @@ export const MESSAGES = {
   },
   errorPullDiverged: {
     en: 'The local and remote branches have diverged.',
-    ja: 'ローカルBranchとリモートBranchが分岐しています。',
+    ja: 'ローカルブランチとリモートブランチが分岐しています。',
   },
   errorHookFailed: {
     en: 'A Git hook rejected the operation.',

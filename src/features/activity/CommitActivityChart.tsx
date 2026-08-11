@@ -13,7 +13,7 @@ export interface CommitActivityChartProps {
 export default function CommitActivityChart({ data, metricLabel }: CommitActivityChartProps) {
   return (
     <ResponsiveContainer width="100%" height="100%" minHeight={112}>
-      <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 8, bottom: 4, left: -20 }}>
+      <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 8, bottom: 4, left: -8 }}>
         <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="2 4" vertical={false} />
         <XAxis
           dataKey="label"

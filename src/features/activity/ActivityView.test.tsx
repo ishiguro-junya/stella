@@ -118,7 +118,7 @@ describe('ActivityView', () => {
         <ActivityView {...props} />
       </I18nProvider>,
     );
-    expect(screen.getAllByText('リモート情報を取得しました').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('フェッチしました').length).toBeGreaterThan(0);
     expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
     expect(screen.getByRole('combobox', { name: 'アクティビティの指標' })).toBeVisible();
     expect(screen.getByRole('separator', { name: '操作一覧の幅' })).toBeVisible();

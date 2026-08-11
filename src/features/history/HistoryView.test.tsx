@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -150,13 +150,78 @@ function reachHistoryEnd(): void {
   });
 }
 
-async function openActionsDialog(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: 'Actions' }));
-  await screen.findByRole('dialog', { name: 'Actions' });
+async function openCommitMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  oid = 'head',
+): Promise<HTMLElement> {
+  await user.click(
+    await screen.findByRole('button', { name: `More actions for commit ${oid.slice(0, 7)}` }),
+  );
+  return screen.findByRole('menu');
+}
+
+async function openCommitAction(
+  user: ReturnType<typeof userEvent.setup>,
+  action: string,
+  dialogName: string,
+  oid = 'head',
+): Promise<HTMLElement> {
+  await openCommitMenu(user, oid);
+  await user.click(screen.getByRole('menuitem', { name: action }));
+  return screen.findByRole('dialog', { name: dialogName });
 }
 
 describe('HistoryView', () => {
-  it('shows uncommitted changes before the commit list and counts unique files', () => {
+  it('checks out an unambiguous local branch when its history item is double-clicked', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return {
+            kind: 'commitDetails' as const,
+            commit: { ...commitDetails(undefined), oid: request.oid, shortOid: request.oid },
+          };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: 'main-oid', detached: false, ahead: 0, behind: 0 },
+          history: [
+            commitSummary('main-oid', [], ['HEAD -> refs/heads/main']),
+            commitSummary('feature-oid', [], ['refs/heads/feature']),
+            commitSummary('ambiguous-oid', [], ['refs/heads/topic-a', 'refs/heads/topic-b']),
+            commitSummary('remote-oid', [], ['refs/remotes/origin/remote']),
+          ],
+        })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.dblClick(screen.getByRole('button', { name: /feature-oid/u }));
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'checkoutBranch', name: 'feature' });
+
+    onAction.mockClear();
+    await user.dblClick(screen.getByRole('button', { name: /main-oid/u }));
+    await user.dblClick(screen.getByRole('button', { name: /remote-oid/u }));
+    await user.dblClick(screen.getByRole('button', { name: /ambiguous-oid/u }));
+    expect(onAction).not.toHaveBeenCalled();
+
+    await user.dblClick(screen.getByText('topic-b'));
+    expect(onAction).toHaveBeenCalledWith({ kind: 'checkoutBranch', name: 'topic-b' });
+  });
+
+  it('shows uncommitted changes before the commit list and opens Changes when selected', async () => {
+    const user = userEvent.setup();
+    const onShowChanges = vi.fn<() => void>();
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) => {
         if (request.kind === 'commitDetails') {
@@ -178,6 +243,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={dirtyRepo}
         adapter={adapter}
+        onShowChanges={onShowChanges}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -187,9 +253,10 @@ describe('HistoryView', () => {
     const historyPane = screen.getByRole('complementary', { name: 'Commit history' });
     const historyList = within(historyPane).getByRole('list');
     expect(historyList.firstElementChild).toHaveClass('history-working-tree-item');
-    expect(historyList.firstElementChild?.querySelector('.commit-row')).toHaveClass(
-      'history-working-tree-entry',
-    );
+    const workingTreeButton = within(historyPane).getByRole('button', {
+      name: 'Uncommitted changes, 2 files',
+    });
+    expect(workingTreeButton).toHaveClass('commit-row', 'history-working-tree-entry');
     expect(within(historyPane).getByText('Uncommitted changes')).toBeVisible();
     expect(within(historyPane).getByText('2 files')).toBeVisible();
     const workingTreeGraph = within(historyPane).getByTestId('history-graph-working-tree');
@@ -200,11 +267,14 @@ describe('HistoryView', () => {
         .getByTestId('history-graph-head')
         .querySelector('[data-edge-kind="working-tree"]'),
     ).toBeInTheDocument();
+    await user.click(workingTreeButton);
+    expect(onShowChanges).toHaveBeenCalledOnce();
 
     rerender(
       <HistoryView
         repo={{ ...dirtyRepo, changes: [] }}
         adapter={adapter}
+        onShowChanges={onShowChanges}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -247,6 +317,7 @@ describe('HistoryView', () => {
           history: [commitSummary('local-head')],
         })}
         adapter={adapterWithQuery(query)}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -293,6 +364,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repoSnapshot({ history: [commitSummary('head')] })}
         adapter={adapterWithQuery(query)}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -319,6 +391,7 @@ describe('HistoryView', () => {
           }),
         )}
         onError={onError}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -335,7 +408,7 @@ describe('HistoryView', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('opens Actions in a dialog and restores focus when it closes', async () => {
+  it('moves History actions to each commit menu and restores focus through the focused dialog', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) => {
@@ -348,8 +421,9 @@ describe('HistoryView', () => {
 
     render(
       <HistoryView
-        repo={repoSnapshot()}
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -357,42 +431,73 @@ describe('HistoryView', () => {
     );
 
     const historyPane = screen.getByRole('complementary', { name: 'Commit history' });
-    expect(historyPane.firstElementChild).toHaveClass('history-list-toolbar');
+    expect(historyPane.firstElementChild).toHaveClass('history-search');
     expect(within(historyPane).queryByRole('tablist')).not.toBeInTheDocument();
     expect(within(historyPane).queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
-    expect(within(historyPane).getByText('main').closest('.history-branch-context')).toBeVisible();
+    expect(historyPane.querySelector('.history-branch-context')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
 
-    const toggle = await screen.findByRole('button', { name: 'Actions' });
-    expect(toggle.parentElement).toHaveClass('history-list-toolbar');
+    const toggle = await screen.findByRole('button', { name: 'More actions for commit head' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(toggle).toHaveAttribute('aria-controls', 'history-actions-dialog');
-    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-haspopup', 'menu');
 
-    await user.click(toggle);
-    const dialog = screen.getByRole('dialog', { name: 'Actions' });
+    const menu = await openCommitMenu(user);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(
-      within(dialog).getByRole('textbox', { name: 'Create branch from selected commit' }),
-    ).toHaveFocus();
-    expect(dialog.querySelector('#history-actions-dialog')).toBeInTheDocument();
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Create Branch', 'Create Tag', 'Merge', 'Rebase', 'Cherry-pick', 'Revert', 'Reset']);
+    expect(within(menu).getByRole('menuitem', { name: 'Create Branch' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(toggle).toHaveFocus();
 
-    await user.click(toggle);
-    await user.click(
-      within(screen.getByRole('dialog', { name: 'Actions' })).getByRole('button', {
-        name: 'Close',
-      }),
-    );
-    expect(screen.queryByRole('dialog', { name: 'Actions' })).not.toBeInTheDocument();
-    expect(toggle).toHaveFocus();
+    const dialog = await openCommitAction(user, 'Create Branch', 'Create branch');
+    expect(within(dialog).getByText('feat: current')).toBeVisible();
+    expect(within(dialog).getByText('head')).toBeVisible();
+    expect(within(dialog).getByRole('textbox', { name: 'Branch name' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Create branch' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /feat: current/u })).toHaveFocus();
   });
 
-  it('keeps branch checkout out of History Actions after moving it to the titlebar', async () => {
+  it('keeps the detail action trigger visible at the right edge of the commit title', async () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: commitDetails(undefined) };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const listTrigger = screen.getByRole('button', { name: 'More actions for commit head' });
+    const detailTrigger = await screen.findByRole('button', {
+      name: 'More actions for selected commit head',
+    });
+    expect(listTrigger).not.toHaveClass('is-persistent');
+    expect(detailTrigger).toHaveClass('is-persistent');
+    expect(detailTrigger.closest('.commit-detail-heading')).toContainElement(
+      screen.getByRole('heading', { name: 'feat: current' }),
+    );
+  });
+
+  it('selects a commit and opens the same menu at the pointer on right-click', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) => {
@@ -404,20 +509,68 @@ describe('HistoryView', () => {
 
     render(
       <HistoryView
-        repo={repoSnapshot()}
+        repo={repoSnapshot({ history: [commitSummary('first'), commitSummary('second')] })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
-    await openActionsDialog(user);
-    expect(screen.queryByRole('combobox', { name: 'Checkout branch' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Checkout' })).not.toBeInTheDocument();
+
+    const second = screen.getByRole('button', { name: /^second/u });
+    fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
+    const menu = screen.getByRole('menu', { name: 'second second actions' });
+    expect(second).toHaveAttribute('aria-current', 'true');
+    expect(within(menu).getByRole('menuitem', { name: 'Create Branch' })).toHaveFocus();
+    expect(menu).toBeVisible();
+    expect(menu).toHaveStyle({ left: '120px', top: '180px' });
+    expect(screen.queryByRole('menuitem', { name: 'Checkout' })).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Rebase' }));
+    expect(screen.getByRole('dialog', { name: 'Rebase' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Source ref' })).toHaveValue('second');
+  });
+
+  it('creates a local Tag from the selected commit', async () => {
+    const user = userEvent.setup();
+    const currentCommit = commitDetails(undefined);
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'commitDetails'
+          ? { kind: 'commitDetails' as const, commit: currentCommit }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [currentCommit] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const dialog = await openCommitAction(user, 'Create Tag', 'Create Tag');
+    const input = within(dialog).getByRole('textbox', { name: 'Tag name' });
     expect(
-      screen.getByRole('textbox', { name: 'Create branch from selected commit' }),
+      screen.getByText('Creates a lightweight Tag locally. It is not pushed to a remote.'),
     ).toBeVisible();
-    expect(screen.getByRole('textbox', { name: 'Source ref' })).toBeVisible();
+    await user.type(input, 'v1.0.0');
+    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      kind: 'createTag',
+      name: 'v1.0.0',
+      targetOid: currentCommit.oid,
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Create Tag' })).not.toBeInTheDocument(),
+    );
   });
 
   it('shows commits from every ref without a visibility toggle', () => {
@@ -466,6 +619,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repo}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -474,11 +628,57 @@ describe('HistoryView', () => {
 
     const currentHead = screen.getByRole('button', { name: /current head/u });
     expect(currentHead).toBeInTheDocument();
-    expect(currentHead.querySelector('time')).toHaveAttribute('datetime', '2026-08-08T00:00:00Z');
-    expect(currentHead.querySelector('time')?.textContent).toMatch(/\d{1,2}:\d{2}/u);
+    const commitMetadata = currentHead.querySelector('.commit-metadata');
+    const authoredAt = commitMetadata?.querySelector('time');
+    expect(commitMetadata?.querySelector('.commit-author')).toHaveTextContent('Stella');
+    expect(commitMetadata?.querySelector('.commit-oid')).toHaveTextContent('head');
+    expect(commitMetadata?.querySelector('.commit-metadata-separator')).not.toBeInTheDocument();
+    expect(commitMetadata).not.toHaveTextContent('·');
+    expect(authoredAt).toHaveAttribute('datetime', '2026-08-08T00:00:00Z');
+    expect(authoredAt?.textContent).toMatch(/\d{1,2}:\d{2}/u);
+    expect(currentHead.querySelector(':scope > time')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /shared base/u })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /other branch only/u })).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'All refs' })).not.toBeInTheDocument();
+  });
+
+  it('shows the Commit ID beside the date and suppresses a duplicated commit body', async () => {
+    const details = {
+      ...commitDetails(undefined),
+      subject: 'docs: update documentation',
+      body: 'docs: update documentation',
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: details };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [details] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const detailPane = await screen.findByRole('main', { name: details.subject });
+    expect(within(detailPane).getAllByText(details.subject)).toHaveLength(1);
+    expect(detailPane.querySelector('.commit-detail-heading .eyebrow')).not.toBeInTheDocument();
+    const commitIdGroup = within(detailPane)
+      .getByText('Commit ID', { selector: 'dt' })
+      .closest<HTMLElement>('div');
+    expect(commitIdGroup).toHaveTextContent('Commit ID');
+    if (!commitIdGroup) throw new Error('Commit ID metadata was not found.');
+    expect(within(commitIdGroup).getByText(details.shortOid, { selector: 'code' })).toBeVisible();
+    expect(commitIdGroup.nextElementSibling).toHaveTextContent('Date');
   });
 
   it('shows Tag and shortened branch decorations in the list and commit details', async () => {
@@ -501,6 +701,7 @@ describe('HistoryView', () => {
           history: [{ ...details, refs }],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -508,7 +709,7 @@ describe('HistoryView', () => {
     );
 
     await waitFor(() => expect(screen.getAllByLabelText('Tag v1.2.3')).toHaveLength(2));
-    expect(screen.getAllByText('main')).toHaveLength(3);
+    expect(screen.getAllByText('main')).toHaveLength(2);
     expect(screen.getAllByText('origin/main')).toHaveLength(2);
     expect(screen.getAllByTitle('tag: refs/tags/v1.2.3')).toHaveLength(2);
   });
@@ -534,6 +735,7 @@ describe('HistoryView', () => {
           ],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -572,6 +774,7 @@ describe('HistoryView', () => {
           ],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -620,6 +823,7 @@ describe('HistoryView', () => {
           history: initial,
         })}
         adapter={adapterWithQuery(query)}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -665,6 +869,7 @@ describe('HistoryView', () => {
           history: initial,
         })}
         adapter={adapterWithQuery(query)}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -695,6 +900,7 @@ describe('HistoryView', () => {
     });
     const props = {
       adapter: adapterWithQuery(query),
+      onShowChanges: () => undefined,
       onAction: async () => undefined,
       paneWidths: { left: 240, right: 330 },
       onPaneWidthsChange: () => undefined,
@@ -749,16 +955,25 @@ describe('HistoryView', () => {
           history: [mergeCommit],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
 
-    await openActionsDialog(user);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Mainline parent' }), '2');
-    await user.click(screen.getByRole('button', { name: 'Cherry-pick' }));
-    await user.click(screen.getByRole('button', { name: 'Revert' }));
+    let dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick');
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
+      '2',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    dialog = await openCommitAction(user, 'Revert', 'Revert');
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
+      '2',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
 
     expect(onAction).toHaveBeenNthCalledWith(1, {
       kind: 'cherryPick',
@@ -772,7 +987,7 @@ describe('HistoryView', () => {
     });
   });
 
-  it('clamps mainline selection when moving from an octopus to a two-parent merge', async () => {
+  it('binds each mainline dialog to its clicked commit and resets the default parent', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
     const octopus = {
@@ -804,16 +1019,23 @@ describe('HistoryView', () => {
           history: [octopus, twoParent],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
 
-    await openActionsDialog(user);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Mainline parent' }), '3');
+    let dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick', octopus.oid);
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
+      '3',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await user.click(screen.getByRole('button', { name: /two parent merge/u }));
-    await user.click(screen.getByRole('button', { name: 'Cherry-pick' }));
+    dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick', twoParent.oid);
+    expect(within(dialog).getByRole('combobox', { name: 'Mainline parent' })).toHaveValue('1');
+    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
 
     expect(onAction).toHaveBeenCalledWith({
       kind: 'cherryPick',
@@ -822,7 +1044,7 @@ describe('HistoryView', () => {
     });
   });
 
-  it('clears stale details and disables commit actions while the next commit loads', async () => {
+  it('binds commit actions to the clicked row while the next commit details load', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
     const first = commitSummary('first', ['second']);
@@ -852,6 +1074,7 @@ describe('HistoryView', () => {
           history: [first, second],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -859,21 +1082,55 @@ describe('HistoryView', () => {
     );
 
     expect(await screen.findByRole('heading', { name: first.subject })).toBeInTheDocument();
-    await openActionsDialog(user);
     await user.click(screen.getByTestId(`history-graph-${second.oid}`).closest('button')!);
 
     expect(screen.getByText('Loading commit details…')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cherry-pick' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Revert' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Reset to commit' })).toBeDisabled();
+    const dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick', second.oid);
+    expect(within(dialog).getByText(second.shortOid, { selector: 'code' })).toBeVisible();
+    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    expect(onAction).toHaveBeenCalledWith({ kind: 'cherryPick', oid: second.oid });
 
     resolveSecond({
       kind: 'commitDetails',
       commit: { ...commitDetails(undefined), ...second },
     });
     expect(await screen.findByRole('heading', { name: second.subject })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Cherry-pick' }));
-    expect(onAction).toHaveBeenCalledWith({ kind: 'cherryPick', oid: second.oid });
+  });
+
+  it('closes open menus and idle action dialogs when repository work becomes busy', async () => {
+    const user = userEvent.setup();
+    const currentCommit = commitDetails(undefined);
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'commitDetails'
+          ? { kind: 'commitDetails' as const, commit: currentCommit }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+    );
+    const view = (busy: boolean) => (
+      <HistoryView
+        repo={repoSnapshot({ history: [currentCommit] })}
+        adapter={adapter}
+        busy={busy}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />
+    );
+    const { rerender } = render(view(false));
+
+    await openCommitMenu(user);
+    rerender(view(true));
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'More actions for commit head' })).toBeDisabled();
+
+    rerender(view(false));
+    await openCommitAction(user, 'Create Tag', 'Create Tag');
+    rerender(view(true));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Create Tag' })).not.toBeInTheDocument(),
+    );
   });
 
   it('disables repository-changing History actions while a Git operation is in progress', async () => {
@@ -901,27 +1158,22 @@ describe('HistoryView', () => {
           history: [currentCommit],
         })}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
 
-    await openActionsDialog(user);
-    await user.type(
-      screen.getByRole('textbox', { name: 'Create branch from selected commit' }),
-      'topic',
-    );
-    await user.type(screen.getByRole('textbox', { name: 'Source ref' }), 'origin/main');
-
-    expect(
-      screen.getByText(
-        'Resolving rebase. Repository actions are unavailable in History until you finish or abort the operation.',
-      ),
-    ).toBeVisible();
-    for (const name of ['Create branch', 'Merge', 'Rebase', 'Cherry-pick', 'Revert'])
-      expect(screen.getByRole('button', { name })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Reset to/u })).toBeDisabled();
+    const trigger = await screen.findByRole('button', { name: 'More actions for commit head' });
+    expect(trigger).toBeDisabled();
+    await user.click(trigger);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByRole('button', { name: /feat: current/u }), {
+      clientX: 80,
+      clientY: 100,
+    });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
   it('does not pass a binary commit patch to DiffSurface', async () => {
@@ -952,6 +1204,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repo}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -964,8 +1217,7 @@ describe('HistoryView', () => {
     expect(diffSurfaceMock).not.toHaveBeenCalled();
   });
 
-  it('switches a normal commit diff between Unified and Split', async () => {
-    const user = userEvent.setup();
+  it('uses the Diff layout selected in Settings without showing a local switch', async () => {
     const textDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'text-revision',
       repoId: 'repo-1',
@@ -993,13 +1245,15 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repo}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
+        diffStyle="split"
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
     await screen.findByText('Diff');
-    await user.click(screen.getByRole('button', { name: 'Split' }));
+    expect(screen.queryByRole('group', { name: 'Diff layout' })).not.toBeInTheDocument();
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
       expect.objectContaining({ diffStyle: 'split' }),
     );
@@ -1034,6 +1288,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repo}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1073,6 +1328,7 @@ describe('HistoryView', () => {
       <HistoryView
         repo={repo}
         adapter={adapter}
+        onShowChanges={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1084,6 +1340,7 @@ describe('HistoryView', () => {
       expect.objectContaining({
         source: expect.objectContaining({ kind: 'codeView' }),
         showFileHeaders: true,
+        collapsibleFileHeaders: true,
         hunkSeparators: 'simple',
       }),
     );

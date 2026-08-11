@@ -1,11 +1,11 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
-  Columns2,
+  ChevronDown,
+  ChevronRight,
   Download,
   GitCommitHorizontal,
   RefreshCw,
-  Rows3,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -29,9 +29,10 @@ import {
   type ConflictSurfaceActions,
 } from '../conflict/ConflictSurface';
 import { DiffSurface, type SurfaceSelection } from '../diff/DiffSurface';
-import type { PaneWidths } from '../../persistence/preferences';
+import { CHANGES_PANE_MIN_WIDTH, type PaneWidths } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
 import { Dialog } from '../../ui/Dialog';
+import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import {
   describeWorkspaceError,
@@ -39,7 +40,7 @@ import {
   type WorkspaceErrorContent,
 } from '../../ui/WorkspaceErrorDetails';
 import { ChangeList, type StageTransitionRequest } from './ChangeList';
-import type { FileActionKind } from './FileActionMenu';
+import { FileActionMenu, type FileActionKind } from './FileActionMenu';
 
 export interface ChangesViewProps {
   repo: RepoSnapshot;
@@ -51,6 +52,7 @@ export interface ChangesViewProps {
   onConflictDirtyChange?: ((dirty: boolean) => void) | undefined;
   onConflictLeaveHandleChange?: ((handle: ConflictLeaveHandle | null) => void) | undefined;
   paneWidths: PaneWidths;
+  diffStyle?: DiffStyle | undefined;
   splitStageView?: boolean | undefined;
   onPaneWidthsChange: (widths: PaneWidths) => void;
 }
@@ -93,6 +95,7 @@ export function ChangesView({
   onConflictDirtyChange,
   onConflictLeaveHandleChange,
   paneWidths,
+  diffStyle = 'unified',
   splitStageView = true,
   onPaneWidthsChange,
 }: ChangesViewProps) {
@@ -103,13 +106,14 @@ export function ChangesView({
     return initial ? `${initial.area}:${initial.path}` : '';
   });
   const [diff, setDiff] = useState<DiffDocument>();
+  const [diffCollapsed, setDiffCollapsed] = useState(false);
   const [conflict, setConflict] = useState<ConflictDocument>();
   const [selection, setSelection] = useState<DiffSelection>();
   const [error, setError] = useState<WorkspaceErrorContent>();
   const [pullDiverged, setPullDiverged] = useState(false);
-  const [diffStyle, setDiffStyle] = useState<DiffStyle>('unified');
   const [conflictDirty, setConflictDirty] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [detailFileMenuOpen, setDetailFileMenuOpen] = useState(false);
   const [pendingSelectedKey, setPendingSelectedKey] = useState<string>();
   const [fileActionNotice, setFileActionNotice] = useState<
     { level: 'info' | 'error'; message: LocalizedMessage } | undefined
@@ -163,6 +167,15 @@ export function ChangesView({
     : conflictDirty
       ? 'changes-conflict-stage-action-reason'
       : undefined;
+  const selectedFileActionInvalid =
+    selected?.area === 'conflicted' || selected?.status === 'deleted';
+  const detailFileOpenDisabled =
+    Boolean(operationActionDisabledReason) || conflictDirty || selectedFileActionInvalid;
+  const detailFileDiscardDisabled =
+    Boolean(operationActionDisabledReason) ||
+    conflictDirty ||
+    selected?.area !== 'unstaged' ||
+    selected?.status === 'deleted';
   const diffContainsMultipleFiles = visibleDiff
     ? patchContainsMultipleFiles(visibleDiff.patch)
     : false;
@@ -185,6 +198,15 @@ export function ChangesView({
     },
     [onError],
   );
+
+  useEffect(() => {
+    setDetailFileMenuOpen(false);
+    setDiffCollapsed(false);
+  }, [selectedKey]);
+
+  useEffect(() => {
+    if (busy) setDetailFileMenuOpen(false);
+  }, [busy]);
 
   useEffect(() => {
     if (fileActionNotice?.level !== 'info') return undefined;
@@ -628,7 +650,7 @@ export function ChangesView({
   );
 
   const paneStyle: CSSProperties & { '--left-pane': string; '--right-pane': string } = {
-    '--left-pane': `${Math.max(240, paneWidths.left)}px`,
+    '--left-pane': `${Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.left)}px`,
     '--right-pane': `${paneWidths.right}px`,
   };
 
@@ -670,9 +692,9 @@ export function ChangesView({
       </aside>
       <PaneResizer
         label={t('changesListWidth')}
-        value={Math.max(240, paneWidths.left)}
+        value={Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.left)}
         direction="growRight"
-        min={240}
+        min={CHANGES_PANE_MIN_WIDTH}
         onChange={(left) => onPaneWidthsChange({ ...paneWidths, left })}
       />
 
@@ -686,6 +708,7 @@ export function ChangesView({
             onError={reportRuntimeError}
             onDirtyChange={handleConflictDirtyChange}
             onLeaveHandleChange={handleConflictLeaveHandleChange}
+            diffStyle={diffStyle}
             onResolved={() => {
               setConflict(undefined);
               handleConflictDirtyChange(false);
@@ -700,33 +723,43 @@ export function ChangesView({
         >
           {selected ? (
             <div className="pane-toolbar">
-              <div>
-                <h2 id="selected-file-title">{selected.path}</h2>
+              <div className="selected-file-heading">
+                <h2 id="selected-file-title" aria-label={selected.path}>
+                  <button
+                    type="button"
+                    className="selected-file-toggle"
+                    aria-expanded={!diffCollapsed}
+                    aria-label={t(diffCollapsed ? 'expandFileDiff' : 'collapseFileDiff', {
+                      path: selected.path,
+                    })}
+                    onClick={() => {
+                      setDiffCollapsed((current) => !current);
+                      setSelection(undefined);
+                    }}
+                  >
+                    {diffCollapsed ? (
+                      <ChevronRight aria-hidden="true" />
+                    ) : (
+                      <ChevronDown aria-hidden="true" />
+                    )}
+                    <FileStatusIcon status={selected.status} />
+                    <span>{selected.path}</span>
+                  </button>
+                </h2>
               </div>
-              <div className="pane-toolbar-actions">
-                {visibleDiff && !visibleDiff.binary && !visibleDiff.tooLarge ? (
-                  <fieldset className="segmented" aria-label={t('diffLayout')}>
-                    {(['unified', 'split'] as const).map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        aria-pressed={diffStyle === style}
-                        onClick={() => {
-                          setDiffStyle(style);
-                          setSelection(undefined);
-                        }}
-                      >
-                        {style === 'unified' ? (
-                          <Rows3 aria-hidden="true" size={14} />
-                        ) : (
-                          <Columns2 aria-hidden="true" size={14} />
-                        )}{' '}
-                        {t(style === 'unified' ? 'unified' : 'split')}
-                      </button>
-                    ))}
-                  </fieldset>
-                ) : null}
-              </div>
+              <FileActionMenu
+                path={selected.path}
+                selectedPaths={[selected.path]}
+                open={detailFileMenuOpen}
+                disabled={busy}
+                openDisabled={detailFileOpenDisabled}
+                discardDisabled={detailFileDiscardDisabled}
+                deleteDisabled={detailFileOpenDisabled}
+                persistentTrigger
+                onOpenChange={setDetailFileMenuOpen}
+                onTriggerOpen={() => undefined}
+                onAction={(fileAction) => runFileAction([selected], fileAction)}
+              />
             </div>
           ) : null}
           {operationActionDisabledReason ? (
@@ -739,10 +772,10 @@ export function ChangesView({
               <WorkspaceErrorDetails error={error} />
             </div>
           ) : null}
-          {visibleDiff?.binary ? (
+          {visibleDiff?.binary && !diffCollapsed ? (
             <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
           ) : null}
-          {visibleDiff?.truncated ? (
+          {visibleDiff?.truncated && !diffCollapsed ? (
             <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
           ) : null}
           {visibleDiff && !visibleDiff.binary ? (
@@ -764,11 +797,12 @@ export function ChangesView({
               selectable={lineSelectionEnabled}
               diffStyle={diffStyle}
               performanceMode={Boolean(visibleDiff.tooLarge)}
+              collapsed={diffCollapsed}
               onSelectionChange={handleSurfaceSelection}
               ariaLabel={t('fileDiffAria', { path: visibleDiff.path })}
             />
           ) : null}
-          {selection ? (
+          {selection && !diffCollapsed ? (
             <div className="selection-action-bar" role="toolbar" aria-label={t('selectedLines')}>
               <span>{t('lineRange', { start: selection.startLine, end: selection.endLine })}</span>
               {selected?.area === 'staged' ? (

@@ -58,6 +58,8 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
     expect(translate('ja', 'changes')).toBe('変更差分');
     expect(translate('ja', 'history')).toBe('操作履歴');
+    expect(translate('ja', 'staged')).toBe('ステージ済み');
+    expect(translate('ja', 'unstaged')).toBe('未ステージ');
     expect(translate('ja', 'uncommittedChanges')).toBe('未コミットの変更');
     expect(translate('ja', 'activityCommand')).toBe('コマンド');
     expect(translate('ja', 'unified')).toBe('統合');
@@ -70,9 +72,18 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitScopeInvalid')).toBe('スコープには括弧や改行を使用できません。');
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'stage')).toBe('Stage');
-    expect(translate('ja', 'pull')).toBe('変更を取り込む');
-    expect(translate('ja', 'push')).toBe('変更を送信');
-    expect(translate('ja', 'fetch')).toBe('リモート情報を取得');
+    expect(translate('ja', 'pull')).toBe('プル');
+    expect(translate('ja', 'push')).toBe('プッシュ');
+    expect(translate('ja', 'fetch')).toBe('フェッチ');
+    expect(translate('ja', 'createBranchMenu')).toBe('ブランチを作成');
+    expect(translate('ja', 'createTagMenu')).toBe('タグを作成');
+    expect(translate('ja', 'mergeMenu')).toBe('マージを実行');
+    expect(translate('ja', 'rebaseMenu')).toBe('リベースを実行');
+    expect(translate('ja', 'cherryPickMenu')).toBe('チェリーピックを実行');
+    expect(translate('ja', 'revertMenu')).toBe('リバートを実行');
+    expect(translate('ja', 'resetMenu')).toBe('リセットを実行');
+    expect(translate('ja', 'resetMode')).toBe('リセット方法');
+    expect(translate('ja', 'actionCheckoutBranch')).toBe('ブランチをチェックアウト');
   });
 
   it('uses the requested Japanese terms for Activity metrics', () => {
@@ -88,14 +99,23 @@ describe('Stella i18n', () => {
     const copy = [
       translate('en', 'appearanceDescription'),
       translate('en', 'languageDescription'),
+      translate('en', 'toolchainDescription'),
       translate('en', 'repositoriesDescription'),
       translate('en', 'errorInternal'),
       translate('ja', 'appearanceDescription'),
       translate('ja', 'languageDescription'),
+      translate('ja', 'toolchainDescription'),
       translate('ja', 'repositoriesDescription'),
       translate('ja', 'errorInternal'),
     ];
     for (const message of copy) expect(message).not.toContain('Stella');
+  });
+
+  it('uses the requested Japanese Git toolchain copy', () => {
+    expect(translate('ja', 'toolchainTitle')).toBe('Gitツールチェイン');
+    expect(translate('ja', 'toolchainDescription')).toBe(
+      'Gitツールチェインが内蔵かこの端末にインストールされたもののどちらを使用するか選択します。',
+    );
   });
 
   it('switches copy, locale formatters, and html lang without remounting', () => {

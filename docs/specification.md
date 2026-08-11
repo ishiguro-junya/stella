@@ -91,8 +91,22 @@ Merge commitをCherry-pickまたはRevertする場合は、Historyでmainline pa
 選択時はparent数と選択範囲を検証します。  
 previewの影響pathと書き戻し衝突は、選択したparentとの差分を基準にします。  
 
+HistoryのCommit操作は、対象行の右クリックまたは3点リーダーから選択します。  
+Commit行をダブルクリックした場合は、そのCommitを指すローカルブランチのうち、現在のブランチ以外が一意ならチェックアウトします。  
+候補が複数ある場合は、対象のブランチチップをダブルクリックします。  
+操作別Dialogで入力と対象Commitを確認し、影響previewを経て実行します。  
+各Commitの日時は、Commit IDの直後に表示します。  
+History先頭の未コミットの変更を選択すると、Changesへ切り替えます。  
+
 Historyで選択したCommitから、軽量Tagをローカルに作成できます。  
 同名のTagは上書きせず、作成したTagはRemoteへ自動でPushしません。  
+
+変更差分と操作履歴の右ペインでは、ファイル名と変更行数を表示するheaderの左端から、ファイル単位でDiffを折りたたみ、再展開できます。  
+
+ブランチ切り替え画面ではローカルブランチを選択でき、footerから現在のCommitを起点にブランチを作成できます。  
+ブランチ作成は影響previewを確認して実行し、作成後はそのブランチへ切り替えます。  
+未コミット変更または進行中のGit操作がある場合は、作成と切り替えを利用できません。  
+この画面にGit Flow導線は表示しません。  
 
 再起動時はmerge、rebase、cherry-pick、revertの進行状態を復元し、自動Continueやlock fileの自動削除は行いません。  
 Git操作の開始記録だけが残っている場合や、構造化Commitのhook失敗によってindex／worktreeが変更された場合は任意Commitを許可せず、Abortだけを受け付けます。  
@@ -112,14 +126,34 @@ status、index、ref、影響pathなど安全判定に使うGit出力が上限�
 UIおよびStellaが生成する通知とエラーは、日本語と英語に対応します。  
 初回起動時はmacOSの優先言語が日本語なら日本語を選び、それ以外の場合は英語を選びます。  
 設定画面で言語を変更した後は、選択した言語を保持します。  
+言語、外観、Stage表示、Gitツールチェインは、すべてselectで選択します。  
 
 Repository名、path、Branch名、Commit本文、Gitのstdout／stderrなど、Git、OSまたは利用者が生成した内容は翻訳せず原文のまま表示します。  
 日本語表示でもGit、Changes、Commit、Stage、Diff、Branch、HEADなどのGit用語は英語表記を維持します。  
 
 ## Git実行環境
 
-Git backendにはmacOS標準の`/usr/bin/git`を使用します。  
-GUIアプリはshellの初期化ファイルから`PATH`を継承しないため、利用者が追加した別のGit実行ファイルは自動検出しません。  
+既定ではApplicationに同梱したGit 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0を使用します。  
+設定で内蔵またはSystemを選択でき、変更は保存後の次回起動からRepository操作へ反映します。  
+設定には選択中と次回起動時のmode、各componentのversion、path、検証結果を表示します。  
+
+Systemは`/opt/homebrew/bin`、`/usr/local/bin`、`/usr/bin`の順でGit、Git LFS、Git Flowを個別に検出します。  
+Gitがないmodeは選択できません。  
+Git LFSまたはGit Flowだけがない場合は、そのcomponentを必要とする機能だけを停止します。  
+内蔵toolchainのchecksum不一致または欠損があってもApplicationは起動し、Repository操作を停止した状態でSystemへ切り替えられます。  
+
+### Git Flow
+
+Git Flow操作UIは現在公開しません。  
+
+### Git LFS
+
+`.gitattributes`の`filter=lfs`を検出し、Clone、Checkout、Merge、Rebase、Pull、Stage、Commitで選択中toolchainのGit LFS filterを透過的に使用します。  
+Git LFS対象fileのStage／Unstageはfilterを確実に適用するためfile全体で行い、行単位操作は利用できません。  
+通常Pushでは、Git refを送る前に対象refのLFS objectをuploadします。  
+利用者のglobal Git設定とhookは変更しません。  
+SystemにGit LFSがないLFS Repositoryはpointer fileのまま操作を続けず、必要componentを示して停止します。  
+track、untrack、lock、migrateの専用UIは設けません。  
 
 ## 対象外
 
@@ -133,7 +167,6 @@ GUIアプリはshellの初期化ファイルから`PATH`を継承しないため
 - interactive rebase
 - force push
 - submodule
-- Git LFS
 - worktree管理
 
 次の配布および運用機能は対象外です。  

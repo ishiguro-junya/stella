@@ -1,4 +1,3 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
 import {
   useCallback,
   useEffect,
@@ -6,22 +5,9 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
-import {
-  Columns2,
-  GitBranch,
-  GitCommitHorizontal,
-  GitMerge,
-  GitPullRequest,
-  LoaderCircle,
-  Ellipsis,
-  RotateCcw,
-  Rows3,
-  Search,
-  Tag,
-  Undo2,
-} from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, LoaderCircle, Search, Tag } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { patchContainsMultipleFiles } from '../../domain/diffProfile';
@@ -39,7 +25,6 @@ import type {
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
-import { Dialog } from '../../ui/Dialog';
 import { PaneResizer } from '../../ui/PaneResizer';
 import {
   describeWorkspaceError,
@@ -47,13 +32,22 @@ import {
   type WorkspaceErrorContent,
 } from '../../ui/WorkspaceErrorDetails';
 import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
+import { HistoryActionDialog, type HistoryActionDialogRequest } from './HistoryActionDialog';
+import {
+  HistoryActionMenu,
+  type HistoryActionKind,
+  type HistoryActionTarget,
+} from './HistoryActionMenu';
+import type { RowActionMenuPoint } from '../../ui/RowActionMenu';
 
 export interface HistoryViewProps {
   repo: RepoSnapshot;
   adapter: WorkspaceAdapter;
   busy?: boolean;
   onError?: ShowWorkspaceError | undefined;
+  onShowChanges: () => void;
   onAction: (action: WorkspaceAction) => Promise<void>;
+  diffStyle?: DiffStyle | undefined;
   paneWidths: { left: number; right?: number };
   onPaneWidthsChange: (widths: { left: number; right?: number }) => void;
 }
@@ -67,6 +61,7 @@ const GRAPH_HORIZONTAL_PADDING = 6;
 const HISTORY_LANE_COLOR_COUNT = 6;
 
 type HistoryLaneStyle = CSSProperties & { '--history-lane-color': string };
+type HistoryMenuSource = 'list' | 'detail';
 
 const WORKING_TREE_LANE_STYLE: HistoryLaneStyle = {
   '--history-lane-color': 'var(--text-muted)',
@@ -120,6 +115,32 @@ function historyRefLabel(raw: string): HistoryRefLabel {
   return { raw, kind: 'other', label: raw };
 }
 
+function localBranchNames(refs: readonly string[]): string[] {
+  return [
+    ...new Set(
+      refs
+        .map(historyRefLabel)
+        .filter((ref) => ref.kind === 'branch')
+        .map((ref) => ref.label),
+    ),
+  ];
+}
+
+function doubleClickBranch(
+  target: EventTarget,
+  refs: readonly string[],
+  currentBranch: string | null,
+): string | undefined {
+  const clickedBranch =
+    target instanceof Element
+      ? target.closest<HTMLElement>('[data-local-branch]')?.dataset.localBranch
+      : undefined;
+  if (clickedBranch) return clickedBranch === currentBranch ? undefined : clickedBranch;
+
+  const candidates = localBranchNames(refs).filter((branch) => branch !== currentBranch);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 const HISTORY_REF_ORDER: Record<HistoryRefKind, number> = {
   tag: 0,
   branch: 1,
@@ -142,6 +163,7 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
           key={ref.raw}
           className={`ref-chip ${ref.kind}`}
           title={ref.raw}
+          data-local-branch={ref.kind === 'branch' ? ref.label : undefined}
           aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
         >
           {ref.kind === 'tag' ? (
@@ -311,25 +333,35 @@ function appendUniqueCommits(
   ];
 }
 
+function actionTargetFor(commit: CommitSummary): HistoryActionTarget {
+  return {
+    oid: commit.oid,
+    shortOid: commit.shortOid,
+    subject: commit.subject,
+    parents: commit.parents,
+  };
+}
+
 export function HistoryView({
   repo,
   adapter,
   busy = false,
   onError,
+  onShowChanges,
   onAction,
+  diffStyle = 'unified',
   paneWidths,
   onPaneWidthsChange,
 }: HistoryViewProps) {
   const { t, message, formatDate } = useI18n();
   const [selectedOid, setSelectedOid] = useState(repo.selectedCommitOid ?? repo.history[0]?.oid);
   const [details, setDetails] = useState<CommitDetails>();
-  const [sourceRef, setSourceRef] = useState('');
-  const [branchName, setBranchName] = useState('');
-  const [resetMode, setResetMode] = useState<'soft' | 'mixed' | 'hard'>('mixed');
-  const [mainlineParent, setMainlineParent] = useState(1);
   const [error, setError] = useState<WorkspaceErrorContent>();
-  const [diffStyle, setDiffStyle] = useState<DiffStyle>('unified');
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<{ oid: string; source: HistoryMenuSource }>();
+  const [contextMenu, setContextMenu] = useState<
+    { oid: string; point: RowActionMenuPoint } | undefined
+  >();
+  const [actionDialog, setActionDialog] = useState<HistoryActionDialogRequest>();
   const [historyPage, setHistoryPage] = useState<HistoryPageState>(() =>
     initialHistoryPage(repo.history),
   );
@@ -340,20 +372,14 @@ export function HistoryView({
   const historySearchRef = useRef<HTMLInputElement>(null);
   const historyListRef = useRef<HTMLOListElement>(null);
   const historyEndRef = useRef<HTMLLIElement>(null);
+  const actionFocusOidRef = useRef<string | undefined>(undefined);
   const loadingMoreRef = useRef(false);
   const historyRequestIdRef = useRef(0);
   const visibleHistory = useMemo(
     () => assignHistoryLanes(historyPage.commits),
     [historyPage.commits],
   );
-  const selectedCommit = visibleHistory.find((commit) => commit.oid === selectedOid);
   const changedFileCount = new Set(repo.changes.map((change) => change.path)).size;
-  const selectedActionOid = details?.oid === selectedOid ? selectedOid : undefined;
-  const selectedCommitNeedsMainline = Boolean(selectedCommit && selectedCommit.parents.length > 1);
-  const selectedMainlineParent = Math.min(
-    Math.max(1, mainlineParent),
-    selectedCommit?.parents.length ?? 1,
-  );
   const operationActionDisabledReason =
     repo.operation.kind === 'none'
       ? undefined
@@ -496,8 +522,45 @@ export function HistoryView({
   }, [repo.selectedCommitOid, visibleHistory]);
 
   useEffect(() => {
-    setMainlineParent(1);
-  }, [selectedOid]);
+    setOpenMenu(undefined);
+    setContextMenu(undefined);
+    setActionDialog(undefined);
+    actionFocusOidRef.current = undefined;
+  }, [repo.repoId]);
+
+  useEffect(() => {
+    if (!busy) return;
+    setOpenMenu(undefined);
+    setContextMenu(undefined);
+  }, [busy]);
+
+  useEffect(() => {
+    if (repo.operation.kind === 'none') return;
+    setOpenMenu(undefined);
+    setContextMenu(undefined);
+    setActionDialog(undefined);
+  }, [repo.operation.kind]);
+
+  useEffect(() => {
+    const oid = actionFocusOidRef.current;
+    if (!oid || busy || actionDialog) return;
+    const active = document.activeElement;
+    if (active !== document.body) {
+      if (active instanceof HTMLElement && active.closest('.history-commit-item')) {
+        actionFocusOidRef.current = undefined;
+      }
+      return;
+    }
+    const rows = historyListRef.current?.querySelectorAll<HTMLButtonElement>(
+      '.history-commit-item > .commit-row',
+    );
+    const target = [...(rows ?? [])].find((row) => row.dataset.historyCommitOid === oid);
+    const fallback = historyListRef.current?.querySelector<HTMLButtonElement>(
+      '.history-commit-item.is-current > .commit-row, .history-commit-item > .commit-row',
+    );
+    (target ?? fallback)?.focus();
+    actionFocusOidRef.current = undefined;
+  });
 
   const loadMoreHistory = useCallback(async (): Promise<void> => {
     if (loadingMoreRef.current || historyPage.complete) return;
@@ -562,54 +625,47 @@ export function HistoryView({
     '--history-graph-width': `${graphWidth(graphLaneCount)}px`,
   };
 
-  const submitBranch = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    if (!selectedOid || !branchName.trim()) return;
-    await onAction({ kind: 'createBranch', name: branchName.trim(), startOid: selectedOid });
-    setBranchName('');
-  };
-
-  const runIntegration = async (kind: 'merge' | 'rebase'): Promise<void> => {
-    if (!sourceRef.trim()) return;
-    await onAction(
-      kind === 'merge'
-        ? { kind: 'merge', sourceRef: sourceRef.trim() }
-        : { kind: 'rebase', ontoRef: sourceRef.trim() },
-    );
-    setSourceRef('');
-  };
-
   const paneStyle: CSSProperties & { '--left-pane': string } = {
     '--left-pane': `${paneWidths.left}px`,
   };
+  const commitBody = details?.body?.trim();
 
-  const updateResetMode = (value: string): void => {
-    if (value === 'soft' || value === 'mixed' || value === 'hard') setResetMode(value);
+  const selectCommitForActions = (commit: CommitSummary): void => {
+    setSelectedOid(commit.oid);
+    setContextMenu(undefined);
   };
 
-  const actionsToggle = (
-    <button
-      type="button"
-      className="history-actions-toggle"
-      aria-expanded={actionsOpen}
-      aria-haspopup="dialog"
-      aria-controls="history-actions-dialog"
-      onClick={() => setActionsOpen(true)}
-    >
-      <Ellipsis aria-hidden="true" size={14} /> {t('actions')}
-    </button>
-  );
+  const openContextMenu = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    commit: CommitSummary,
+  ): void => {
+    event.preventDefault();
+    if (repositoryActionsDisabled) return;
+    event.currentTarget.focus();
+    setSelectedOid(commit.oid);
+    setContextMenu({ oid: commit.oid, point: { x: event.clientX, y: event.clientY } });
+    setOpenMenu({ oid: commit.oid, source: 'list' });
+  };
+
+  const openActionDialog = (kind: HistoryActionKind, target: HistoryActionTarget): void => {
+    setOpenMenu(undefined);
+    setContextMenu(undefined);
+    actionFocusOidRef.current = target.oid;
+    setActionDialog({ kind, target });
+  };
+
+  const checkoutCommitBranch = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    commit: CommitSummary,
+  ): void => {
+    if (repositoryActionsDisabled) return;
+    const branch = doubleClickBranch(event.target, commit.refs, repo.branch.name);
+    if (branch) settleAction(onAction({ kind: 'checkoutBranch', name: branch }));
+  };
 
   return (
     <div className="three-pane history-view" style={paneStyle}>
       <aside className="pane commit-list-pane" aria-label={t('commitHistory')}>
-        <div className="pane-toolbar history-list-toolbar">
-          <div className="history-branch-context" title={repo.branch.name ?? t('detachedHead')}>
-            <GitBranch aria-hidden="true" focusable="false" />
-            <span>{repo.branch.name ?? t('detachedHead')}</span>
-          </div>
-          {actionsToggle}
-        </div>
         <label className="history-search">
           <Search className="history-search-icon" aria-hidden="true" focusable="false" />
           <input
@@ -635,7 +691,14 @@ export function HistoryView({
         <ol ref={historyListRef} className="commit-list" style={historyListStyle}>
           {changedFileCount > 0 ? (
             <li className="history-working-tree-item">
-              <div className="commit-row history-working-tree-entry">
+              <button
+                type="button"
+                className="commit-row history-working-tree-entry"
+                aria-label={`${t('uncommittedChanges')}, ${t('uncommittedFileCount', {
+                  count: changedFileCount,
+                })}`}
+                onClick={onShowChanges}
+              >
                 <WorkingTreeGraph
                   laneCount={graphLaneCount}
                   connected={workingTreeConnectsToHistory}
@@ -644,43 +707,66 @@ export function HistoryView({
                   <strong>{t('uncommittedChanges')}</strong>
                   <small>{t('uncommittedFileCount', { count: changedFileCount })}</small>
                 </span>
-              </div>
-            </li>
-          ) : null}
-          {visibleHistory.map((commit, index) => (
-            <li key={commit.oid}>
-              <button
-                type="button"
-                className="commit-row"
-                aria-current={selectedOid === commit.oid ? 'true' : undefined}
-                onClick={() => setSelectedOid(commit.oid)}
-              >
-                <HistoryGraph
-                  commit={commit}
-                  laneCount={graphLaneCount}
-                  connectsFromWorkingTree={workingTreeConnectsToHistory && index === 0}
-                />
-                <span className="commit-copy">
-                  <strong>{commit.subject}</strong>
-                  <small>
-                    {commit.authorName} · {commit.shortOid}
-                  </small>
-                  <span className="sr-only">
-                    {commit.parents.length
-                      ? t('commitParents', { parents: commit.parents.join(', ') })
-                      : t('rootCommit')}
-                  </span>
-                  <HistoryRefs refs={commit.refs} />
-                </span>
-                <time dateTime={commit.authoredAt}>
-                  {formatDate(commit.authoredAt, {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                </time>
               </button>
             </li>
-          ))}
+          ) : null}
+          {visibleHistory.map((commit, index) => {
+            const target = actionTargetFor(commit);
+            const selected = selectedOid === commit.oid;
+            return (
+              <li
+                key={commit.oid}
+                className={`history-commit-item${selected ? ' is-current' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="commit-row"
+                  data-history-commit-oid={commit.oid}
+                  aria-current={selected ? 'true' : undefined}
+                  onClick={() => setSelectedOid(commit.oid)}
+                  onDoubleClick={(event) => checkoutCommitBranch(event, commit)}
+                  onContextMenu={(event) => openContextMenu(event, commit)}
+                >
+                  <HistoryGraph
+                    commit={commit}
+                    laneCount={graphLaneCount}
+                    connectsFromWorkingTree={workingTreeConnectsToHistory && index === 0}
+                  />
+                  <span className="commit-copy">
+                    <strong>{commit.subject}</strong>
+                    <small className="commit-metadata">
+                      <span className="commit-author">{commit.authorName}</span>
+                      <code className="commit-oid">{commit.shortOid}</code>
+                      <time dateTime={commit.authoredAt}>
+                        {formatDate(commit.authoredAt, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </time>
+                    </small>
+                    <span className="sr-only">
+                      {commit.parents.length
+                        ? t('commitParents', { parents: commit.parents.join(', ') })
+                        : t('rootCommit')}
+                    </span>
+                    <HistoryRefs refs={commit.refs} />
+                  </span>
+                </button>
+                <HistoryActionMenu
+                  target={target}
+                  open={openMenu?.source === 'list' && openMenu.oid === commit.oid}
+                  disabled={repositoryActionsDisabled}
+                  contextPoint={contextMenu?.oid === commit.oid ? contextMenu.point : undefined}
+                  onOpenChange={(open) => {
+                    setOpenMenu(open ? { oid: commit.oid, source: 'list' } : undefined);
+                    if (!open) setContextMenu(undefined);
+                  }}
+                  onTriggerOpen={() => selectCommitForActions(commit)}
+                  onAction={(kind) => openActionDialog(kind, target)}
+                />
+              </li>
+            );
+          })}
           {activeHistorySearch && !searchingHistory && visibleHistory.length === 0 ? (
             <li className="history-search-empty">{t('noHistorySearchResults')}</li>
           ) : null}
@@ -718,16 +804,36 @@ export function HistoryView({
             <header className="commit-detail-header">
               <div className="commit-detail-heading">
                 <div>
-                  <p className="eyebrow">{details.shortOid}</p>
                   <h2 id="commit-detail-title">{details.subject}</h2>
                   <HistoryRefs refs={details.refs} />
                 </div>
+                <HistoryActionMenu
+                  target={actionTargetFor(details)}
+                  open={openMenu?.source === 'detail' && openMenu.oid === details.oid}
+                  disabled={repositoryActionsDisabled}
+                  persistentTrigger
+                  onOpenChange={(open) => {
+                    setOpenMenu(open ? { oid: details.oid, source: 'detail' } : undefined);
+                    if (!open) setContextMenu(undefined);
+                  }}
+                  onTriggerOpen={() => {
+                    setContextMenu(undefined);
+                    setOpenMenu({ oid: details.oid, source: 'detail' });
+                  }}
+                  onAction={(kind) => openActionDialog(kind, actionTargetFor(details))}
+                />
               </div>
-              <p>{details.body}</p>
+              {commitBody && commitBody !== details.subject.trim() ? <p>{commitBody}</p> : null}
               <dl className="metadata-list inline">
                 <div>
                   <dt>{t('author')}</dt>
                   <dd>{details.authorName}</dd>
+                </div>
+                <div>
+                  <dt>{t('commitId')}</dt>
+                  <dd>
+                    <code>{details.shortOid}</code>
+                  </dd>
                 </div>
                 <div>
                   <dt>{t('date')}</dt>
@@ -740,27 +846,6 @@ export function HistoryView({
                 </div>
               </dl>
             </header>
-            {details.diff && !details.diff.tooLarge ? (
-              <div className="diff-display-controls">
-                <fieldset className="segmented" aria-label={t('diffLayout')}>
-                  {(['unified', 'split'] as const).map((style) => (
-                    <button
-                      key={style}
-                      type="button"
-                      aria-pressed={diffStyle === style}
-                      onClick={() => setDiffStyle(style)}
-                    >
-                      {style === 'unified' ? (
-                        <Rows3 aria-hidden="true" size={14} />
-                      ) : (
-                        <Columns2 aria-hidden="true" size={14} />
-                      )}{' '}
-                      {t(style === 'unified' ? 'unified' : 'split')}
-                    </button>
-                  ))}
-                </fieldset>
-              </div>
-            ) : null}
             {details.diff?.binary ? (
               <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>
             ) : details.diff ? (
@@ -786,6 +871,7 @@ export function HistoryView({
                   diffStyle={diffStyle}
                   performanceMode={Boolean(details.diff.tooLarge)}
                   showFileHeaders
+                  collapsibleFileHeaders
                   hunkSeparators="simple"
                   ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
                 />
@@ -807,178 +893,15 @@ export function HistoryView({
           </>
         )}
       </main>
-      {actionsOpen ? (
-        <Dialog
-          labelledBy="history-actions-title"
-          onDismiss={() => setActionsOpen(false)}
-          role="dialog"
-        >
-          <h2 id="history-actions-title">{t('actions')}</h2>
-          <div id="history-actions-dialog" className="history-actions-dialog">
-            {operationActionDisabledReason ? (
-              <p id="history-operation-action-reason" className="remote-action-hint">
-                {operationActionDisabledReason}
-              </p>
-            ) : null}
-            <form onSubmit={(event) => settleAction(submitBranch(event))}>
-              <label>
-                <span>{t('createBranchFromSelected')}</span>
-                <input
-                  data-dialog-initial-focus
-                  value={branchName}
-                  onChange={(event) => setBranchName(event.target.value)}
-                  placeholder={t('branchNamePlaceholder')}
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={!selectedOid || !branchName.trim() || repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason ? 'history-operation-action-reason' : undefined
-                }
-              >
-                <GitBranch aria-hidden="true" size={14} /> {t('createBranch')}
-              </button>
-            </form>
-
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                settleAction(runIntegration('merge'));
-              }}
-            >
-              <label>
-                <span>{t('sourceRef')}</span>
-                <input
-                  value={sourceRef}
-                  onChange={(event) => setSourceRef(event.target.value)}
-                  placeholder={t('branchNamePlaceholder')}
-                />
-              </label>
-              <div className="button-row">
-                <button
-                  type="submit"
-                  disabled={!sourceRef.trim() || repositoryActionsDisabled}
-                  aria-describedby={
-                    operationActionDisabledReason ? 'history-operation-action-reason' : undefined
-                  }
-                >
-                  <GitMerge aria-hidden="true" size={14} /> {t('merge')}
-                </button>
-                <button
-                  type="button"
-                  disabled={!sourceRef.trim() || repositoryActionsDisabled}
-                  aria-describedby={
-                    operationActionDisabledReason ? 'history-operation-action-reason' : undefined
-                  }
-                  onClick={() => settleAction(runIntegration('rebase'))}
-                >
-                  <GitPullRequest aria-hidden="true" size={14} /> {t('rebase')}
-                </button>
-              </div>
-            </form>
-
-            <div className="action-section">
-              <span>{t('selectedCommit')}</span>
-              {selectedCommitNeedsMainline ? (
-                <label>
-                  <span>{t('mainlineParent')}</span>
-                  <select
-                    aria-label={t('mainlineParent')}
-                    value={selectedMainlineParent}
-                    onChange={(event) => setMainlineParent(Number(event.target.value))}
-                  >
-                    {selectedCommit?.parents.map((parent, index) => (
-                      <option key={parent} value={index + 1}>
-                        {t('parentNumber', { number: index + 1 })} · {parent.slice(0, 7)}
-                      </option>
-                    ))}
-                  </select>
-                  <small id="merge-mainline-help">{t('mainlineHelp')}</small>
-                </label>
-              ) : null}
-              <button
-                type="button"
-                disabled={!selectedActionOid || repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason
-                    ? 'history-operation-action-reason'
-                    : selectedCommitNeedsMainline
-                      ? 'merge-mainline-help'
-                      : undefined
-                }
-                onClick={() =>
-                  selectedActionOid &&
-                  settleAction(
-                    onAction({
-                      kind: 'cherryPick',
-                      oid: selectedActionOid,
-                      ...(selectedCommitNeedsMainline ? { mainline: selectedMainlineParent } : {}),
-                    }),
-                  )
-                }
-              >
-                <GitCommitHorizontal aria-hidden="true" size={14} /> {t('cherryPick')}
-              </button>
-              <button
-                type="button"
-                disabled={!selectedActionOid || repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason
-                    ? 'history-operation-action-reason'
-                    : selectedCommitNeedsMainline
-                      ? 'merge-mainline-help'
-                      : undefined
-                }
-                onClick={() =>
-                  selectedActionOid &&
-                  settleAction(
-                    onAction({
-                      kind: 'revert',
-                      oid: selectedActionOid,
-                      ...(selectedCommitNeedsMainline ? { mainline: selectedMainlineParent } : {}),
-                    }),
-                  )
-                }
-              >
-                <Undo2 aria-hidden="true" size={14} /> {t('revert')}
-              </button>
-            </div>
-
-            <div className="action-section danger-zone">
-              <label>
-                <span>{t('reset')}</span>
-                <select value={resetMode} onChange={(event) => updateResetMode(event.target.value)}>
-                  <option value="soft">{t('soft')}</option>
-                  <option value="mixed">{t('mixed')}</option>
-                  <option value="hard">{t('hard')}</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className={resetMode === 'hard' ? 'danger' : undefined}
-                disabled={!selectedActionOid || repositoryActionsDisabled}
-                aria-describedby={
-                  operationActionDisabledReason ? 'history-operation-action-reason' : undefined
-                }
-                onClick={() =>
-                  selectedActionOid &&
-                  settleAction(onAction({ kind: 'reset', oid: selectedActionOid, mode: resetMode }))
-                }
-              >
-                <RotateCcw aria-hidden="true" size={14} />{' '}
-                {t('resetToTarget', {
-                  target: selectedActionOid ? selectedActionOid.slice(0, 7) : t('commitLowercase'),
-                })}
-              </button>
-            </div>
-          </div>
-          <div className="button-row end">
-            <button type="button" onClick={() => setActionsOpen(false)}>
-              {t('close')}
-            </button>
-          </div>
-        </Dialog>
+      {actionDialog ? (
+        <HistoryActionDialog
+          key={`${actionDialog.kind}:${actionDialog.target.oid}`}
+          request={actionDialog}
+          disabled={repositoryActionsDisabled}
+          disabledReason={operationActionDisabledReason}
+          onDismiss={() => setActionDialog(undefined)}
+          onAction={onAction}
+        />
       ) : null}
     </div>
   );

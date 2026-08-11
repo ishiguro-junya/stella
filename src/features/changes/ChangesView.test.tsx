@@ -16,6 +16,7 @@ interface MockConflictSurfaceProps {
 
 interface MockDiffSurfaceProps {
   selectable?: boolean;
+  collapsed?: boolean;
   onSelectionChange?: (selection: {
     side: 'additions' | 'deletions';
     startLine: number;
@@ -212,6 +213,14 @@ describe('ChangesView diff lifecycle', () => {
     expect(within(dialog).getByRole('textbox', { name: 'Message' })).toHaveFocus();
     expect(within(dialog).getByText('Stage changes to commit.')).toHaveClass('sr-only');
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toBeVisible();
+    expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
+      'aria-valuemin',
+      '240',
+    );
+    expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
+      'aria-valuenow',
+      '240',
+    );
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
     expect(screen.queryByText(/\d+ files/u)).not.toBeInTheDocument();
@@ -861,8 +870,7 @@ describe('ChangesView diff lifecycle', () => {
     });
   });
 
-  it('switches a normal working-tree diff between Unified and Split', async () => {
-    const user = userEvent.setup();
+  it('uses the Diff layout selected in Settings without showing a local switch', async () => {
     const adapter = adapterWithDiff();
     render(
       <ChangesView
@@ -871,12 +879,13 @@ describe('ChangesView diff lifecycle', () => {
         })}
         adapter={adapter}
         onAction={async () => undefined}
+        diffStyle="split"
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
     await screen.findByText('Diff');
-    await user.click(screen.getByRole('button', { name: 'Split' }));
+    expect(screen.queryByRole('group', { name: 'Diff layout' })).not.toBeInTheDocument();
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
       expect.objectContaining({ diffStyle: 'split' }),
     );
@@ -1008,6 +1017,60 @@ describe('ChangesView diff lifecycle', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('/tmp/stella/src/app.ts'));
     expect(screen.getByRole('status')).toHaveTextContent('Copied /tmp/stella/src/app.ts');
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('keeps the detail action trigger visible at the right edge of the file title', () => {
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const listTrigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
+    const detailTrigger = screen.getByRole('button', {
+      name: 'More actions for selected file src/app.ts',
+    });
+    expect(listTrigger).not.toHaveClass('is-persistent');
+    expect(detailTrigger).toHaveClass('is-persistent');
+    expect(detailTrigger.closest('.pane-toolbar')).toContainElement(
+      screen.getByRole('heading', { name: 'src/app.ts' }),
+    );
+    expect(
+      detailTrigger.closest('.pane-toolbar')?.querySelector('.selected-file-heading .file-status'),
+    ).toHaveClass('modified');
+  });
+
+  it('collapses and expands the selected file diff from the left edge of its title', async () => {
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    const collapse = screen.getByRole('button', { name: 'Collapse src/app.ts diff' });
+    expect(collapse.querySelector('.lucide')).toBe(collapse.firstElementChild);
+    fireEvent.click(collapse);
+
+    expect(screen.getByRole('button', { name: 'Expand src/app.ts diff' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({ collapsed: true }),
+    );
   });
 
   it('disables every file-action trigger while the app is globally busy', () => {

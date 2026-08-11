@@ -205,8 +205,18 @@ describe('ChangeList staging controls', () => {
   it('renders Staged and Unstaged as non-collapsible headings with visible rows', () => {
     renderList();
 
-    expect(screen.getByRole('heading', { name: 'Staged' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Unstaged' })).toBeVisible();
+    const stagedHeading = screen.getByRole('heading', { name: 'Staged' });
+    const unstagedHeading = screen.getByRole('heading', { name: 'Unstaged' });
+    expect(stagedHeading).toBeVisible();
+    expect(unstagedHeading).toBeVisible();
+    expect(within(stagedHeading).getByText('1')).toHaveClass('change-count');
+    expect(within(unstagedHeading).getByText('2')).toHaveClass('change-count');
+    expect(stagedHeading.querySelector('.change-group-title')?.nextElementSibling).toHaveClass(
+      'change-count',
+    );
+    expect(unstagedHeading.querySelector('.change-group-title')?.nextElementSibling).toHaveClass(
+      'change-count',
+    );
     expect(screen.queryByRole('button', { name: 'Staged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Unstaged' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Unstage src/app.ts' })).toBeVisible();

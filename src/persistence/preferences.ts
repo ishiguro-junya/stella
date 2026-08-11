@@ -1,9 +1,10 @@
-import type { ConventionalCommitInput, WorkspaceView } from '../domain/workspace';
+import type { ConventionalCommitInput, DiffStyle, WorkspaceView } from '../domain/workspace';
 import { detectLanguage, isLanguage, type Language } from '../i18n/i18n';
 import type { Appearance } from '../theme/appearance';
 
 const STORAGE_KEY = 'stella.preferences.v1';
 const STORAGE_VERSION = 1;
+export const CHANGES_PANE_MIN_WIDTH = 240;
 
 export interface PaneWidths {
   left: number;
@@ -20,6 +21,7 @@ export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
   language: Language;
+  diffStyle: DiffStyle;
   splitStageView: boolean;
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
@@ -34,13 +36,14 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   version: STORAGE_VERSION,
   appearance: 'system',
   language: 'en',
+  diffStyle: 'unified',
   splitStageView: true,
   registeredRepoPaths: [],
   repositoryNames: {},
   openRepoPaths: [],
   view: 'changes',
   paneWidths: {
-    changes: { left: 244, right: 336 },
+    changes: { left: 320, right: 336 },
     history: { left: 244 },
     activity: { left: 560 },
   },
@@ -53,6 +56,10 @@ function isAppearance(value: unknown): value is Appearance {
 
 function isView(value: unknown): value is WorkspaceView {
   return value === 'changes' || value === 'history';
+}
+
+function isDiffStyle(value: unknown): value is DiffStyle {
+  return value === 'unified' || value === 'split';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -133,6 +140,7 @@ export function readPreferences(): StellaPreferences {
         ? value.appearance
         : DEFAULT_PREFERENCES.appearance,
       language: isLanguage(value.language) ? value.language : detectLanguage(),
+      diffStyle: isDiffStyle(value.diffStyle) ? value.diffStyle : DEFAULT_PREFERENCES.diffStyle,
       splitStageView:
         typeof value.splitStageView === 'boolean'
           ? value.splitStageView
@@ -149,7 +157,7 @@ export function readPreferences(): StellaPreferences {
           left: boundedWidth(
             changesPaneWidths.left,
             DEFAULT_PREFERENCES.paneWidths.changes.left,
-            240,
+            CHANGES_PANE_MIN_WIDTH,
           ),
           right: boundedWidth(
             changesPaneWidths.right,

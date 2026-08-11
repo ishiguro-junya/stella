@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import {
   ChartNoAxesCombined,
   ChevronDown,
@@ -16,6 +25,12 @@ import {
   type WorkspaceAdapter,
 } from './adapters/workspaceAdapter';
 import { createTauriWorkspaceAdapter } from './adapters/tauriWorkspaceAdapter';
+import {
+  createTauriToolchainAdapter,
+  type ToolchainAdapter,
+  type ToolchainMode,
+  type ToolchainStatus,
+} from './adapters/toolchainAdapter';
 import type {
   ActionPreview,
   ActionRequest,
@@ -23,6 +38,7 @@ import type {
   AttachRequest,
   BranchSummary,
   ConflictDocument,
+  DiffStyle,
   RepoSnapshot,
   WorkspaceAction,
   WorkspaceEvent,
@@ -69,6 +85,7 @@ import {
 } from './ui/WorkspaceErrorDialog';
 import { describeWorkspaceError, type WorkspaceErrorContent } from './ui/WorkspaceErrorDetails';
 import {
+  CHANGES_PANE_MIN_WIDTH,
   readPreferences,
   rememberRepositoryPath,
   updatePreferences,
@@ -91,6 +108,7 @@ export interface AppProps {
   adapter?: WorkspaceAdapter;
   directoryPicker?: DirectoryPicker;
   repositoryLogoLoader?: RepositoryLogoLoader;
+  toolchainAdapter?: ToolchainAdapter;
 }
 
 interface PendingAction {
@@ -144,8 +162,22 @@ interface BranchDialogState {
   error?: string;
 }
 
+type WorkspaceViewTransitionStyle = CSSProperties & { '--left-pane': string };
+
 function actionNeedsPreview(action: WorkspaceAction): boolean {
   if (action.kind === 'fileAction') return action.operation === 'moveToTrash';
+  if (action.kind === 'gitFlow') {
+    return [
+      'delete',
+      'finish',
+      'integrate',
+      'configRenameBase',
+      'configRenameTopic',
+      'configDeleteBase',
+      'configDeleteTopic',
+      'abort',
+    ].includes(action.request.command);
+  }
   return [
     'discardFiles',
     'discardSelection',
@@ -155,6 +187,7 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
     'cherryPick',
     'revert',
     'createBranch',
+    'createTag',
     'abortOperation',
     'materializeConflict',
   ].includes(action.kind);
@@ -248,19 +281,28 @@ export function App({
   adapter: providedAdapter,
   directoryPicker = pickDirectory,
   repositoryLogoLoader,
+  toolchainAdapter: providedToolchainAdapter,
 }: AppProps) {
   const defaultAdapterRef = useRef<WorkspaceAdapter | undefined>(undefined);
+  const defaultToolchainAdapterRef = useRef<ToolchainAdapter | undefined>(undefined);
   if (!providedAdapter && !defaultAdapterRef.current) {
     defaultAdapterRef.current = createTauriWorkspaceAdapter();
   }
+  if (!providedToolchainAdapter && !providedAdapter && !defaultToolchainAdapterRef.current) {
+    defaultToolchainAdapterRef.current = createTauriToolchainAdapter();
+  }
   const adapter = providedAdapter ?? defaultAdapterRef.current;
   if (!adapter) throw new Error('Could not initialize the workspace adapter.');
+  const toolchainAdapter = providedToolchainAdapter ?? defaultToolchainAdapterRef.current;
   const initialPreferences = useMemo(readPreferences, []);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(EMPTY_WORKSPACE);
   const [view, setView] = useState<WorkspaceView>(initialPreferences.view);
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
+  const [diffStyle, setDiffStyle] = useState<DiffStyle>(initialPreferences.diffStyle);
   const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
+  const [toolchainStatus, setToolchainStatus] = useState<ToolchainStatus>();
+  const [toolchainBusy, setToolchainBusy] = useState(false);
   const t = useCallback<I18nValue['t']>((id, args) => translate(language, id, args), [language]);
   const message = useCallback<I18nValue['message']>(
     (value) => translate(language, value.id, value.args),
@@ -284,6 +326,7 @@ export function App({
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation>();
   const [pendingOperationAction, setPendingOperationAction] = useState<GuardedOperationAction>();
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
+  const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView>();
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
@@ -305,6 +348,7 @@ export function App({
   const errorIdRef = useRef(0);
   const logoRequestsRef = useRef(new Set<string>());
   const branchRequestIdRef = useRef(0);
+  const workspaceViewTransitionTimerRef = useRef<number | undefined>(undefined);
   const repo = selectedRepo(workspace);
   const effectiveRepositoryLogoLoader =
     repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
@@ -332,6 +376,37 @@ export function App({
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
   }, []);
+
+  useEffect(() => {
+    if (!toolchainAdapter) return () => undefined;
+    let alive = true;
+    void toolchainAdapter
+      .status()
+      .then((status) => {
+        if (alive) setToolchainStatus(status);
+      })
+      .catch((cause: unknown) => {
+        if (alive) showError(t('toolchainTitle'), cause, t('toolchainLoadFailed'));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [showError, t, toolchainAdapter]);
+
+  const changeToolchainMode = useCallback(
+    (mode: ToolchainMode): void => {
+      if (!toolchainAdapter || toolchainBusy) return;
+      setToolchainBusy(true);
+      void toolchainAdapter
+        .setMode(mode)
+        .then(setToolchainStatus)
+        .catch((cause: unknown) =>
+          showError(t('toolchainTitle'), cause, t('toolchainChangeFailed')),
+        )
+        .finally(() => setToolchainBusy(false));
+    },
+    [showError, t, toolchainAdapter, toolchainBusy],
+  );
 
   useEffect(() => {
     applyAppearance(appearance);
@@ -374,13 +449,24 @@ export function App({
       ...current,
       appearance,
       language,
+      diffStyle,
       splitStageView,
       openRepoPaths: workspace.repos.map((candidate) => candidate.path),
       ...(repo ? { selectedRepoPath: repo.path } : {}),
       view,
       paneWidths,
     }));
-  }, [appearance, language, paneWidths, repo, restoringWorkspace, splitStageView, view, workspace]);
+  }, [
+    appearance,
+    diffStyle,
+    language,
+    paneWidths,
+    repo,
+    restoringWorkspace,
+    splitStageView,
+    view,
+    workspace,
+  ]);
 
   useEffect(() => {
     setLatestConflict((current) => {
@@ -832,18 +918,49 @@ export function App({
     [],
   );
 
+  const cancelWorkspaceViewTransition = useCallback((): void => {
+    const timer = workspaceViewTransitionTimerRef.current;
+    if (timer !== undefined) window.clearTimeout(timer);
+    workspaceViewTransitionTimerRef.current = undefined;
+  }, []);
+
   const requestNavigation = useCallback(
     (navigation: PendingNavigation): void => {
       if (conflictDirtyRef.current) {
         setPendingNavigation(navigation);
         return;
       }
+      if (
+        pageRef.current === 'workspace' &&
+        navigation.page === 'workspace' &&
+        navigation.view &&
+        navigation.view !== view
+      ) {
+        cancelWorkspaceViewTransition();
+        setWorkspaceViewTransition(navigation.view);
+        // 非前面のWKWebViewでも遷移を完了できるtaskへ分け、旧画面の内容を先に破棄します。
+        workspaceViewTransitionTimerRef.current = window.setTimeout(() => {
+          workspaceViewTransitionTimerRef.current = undefined;
+          performNavigation(navigation);
+          setWorkspaceViewTransition(undefined);
+        });
+        return;
+      }
+      cancelWorkspaceViewTransition();
+      setWorkspaceViewTransition(undefined);
       performNavigation(navigation);
     },
-    [performNavigation],
+    [cancelWorkspaceViewTransition, performNavigation, view],
   );
 
   requestNavigationRef.current = requestNavigation;
+
+  useEffect(
+    () => () => {
+      cancelWorkspaceViewTransition();
+    },
+    [cancelWorkspaceViewTransition],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -893,6 +1010,17 @@ export function App({
   const currentRepositoryState = repo ? repositoryState(repo, t, message) : undefined;
   const showActivityMenu = Boolean(repo) || hasRunningActivity || page === 'activity';
   const showRepositoryMenu = !repo && page !== 'workspace';
+  const activeWorkspaceView = workspaceViewTransition ?? view;
+  const workspaceViewTransitionStyle: WorkspaceViewTransitionStyle | undefined =
+    workspaceViewTransition
+      ? {
+          '--left-pane': `${
+            workspaceViewTransition === 'changes'
+              ? Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.changes.left)
+              : paneWidths.history.left
+          }px`,
+        }
+      : undefined;
   const branchDialogRepo = branchDialog
     ? workspace.repos.find((candidate) => candidate.repoId === branchDialog.repoId)
     : undefined;
@@ -978,9 +1106,11 @@ export function App({
                     type="button"
                     className="titlebar-menu-button"
                     aria-label={t('changes')}
-                    aria-current={page === 'workspace' && view === 'changes' ? 'page' : undefined}
+                    aria-current={
+                      page === 'workspace' && activeWorkspaceView === 'changes' ? 'page' : undefined
+                    }
                     onClick={() => {
-                      if (page !== 'workspace' || view !== 'changes')
+                      if (page !== 'workspace' || activeWorkspaceView !== 'changes')
                         requestNavigation({ page: 'workspace', view: 'changes' });
                     }}
                   >
@@ -991,9 +1121,11 @@ export function App({
                     type="button"
                     className="titlebar-menu-button"
                     aria-label={t('history')}
-                    aria-current={page === 'workspace' && view === 'history' ? 'page' : undefined}
+                    aria-current={
+                      page === 'workspace' && activeWorkspaceView === 'history' ? 'page' : undefined
+                    }
                     onClick={() => {
-                      if (page !== 'workspace' || view !== 'history')
+                      if (page !== 'workspace' || activeWorkspaceView !== 'history')
                         requestNavigation({ page: 'workspace', view: 'history' });
                     }}
                   >
@@ -1065,10 +1197,15 @@ export function App({
             <SettingsView
               appearance={appearance}
               language={language}
+              diffStyle={diffStyle}
               splitStageView={splitStageView}
+              {...(toolchainStatus ? { toolchainStatus } : {})}
+              toolchainBusy={toolchainBusy}
               onAppearanceChange={changeAppearance}
               onLanguageChange={changeLanguage}
+              onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}
+              onToolchainModeChange={changeToolchainMode}
             />
           ) : null}
 
@@ -1143,7 +1280,18 @@ export function App({
                 ) : null}
 
                 <main className="workspace-main">
-                  {view === 'changes' ? (
+                  {workspaceViewTransition ? (
+                    <div
+                      className="workspace-view-transition"
+                      data-testid="workspace-view-transition"
+                      aria-busy="true"
+                      style={workspaceViewTransitionStyle}
+                    >
+                      <div className="workspace-view-transition-pane" />
+                      <div className="workspace-view-transition-divider" />
+                      <div className="workspace-view-transition-pane" />
+                    </div>
+                  ) : view === 'changes' ? (
                     <ChangesView
                       key={`changes:${repo.repoId}:${workspaceViewRevision}`}
                       repo={repo}
@@ -1157,6 +1305,7 @@ export function App({
                         leaveHandleRef.current = handle;
                       }}
                       paneWidths={paneWidths.changes}
+                      diffStyle={diffStyle}
                       splitStageView={splitStageView}
                       onPaneWidthsChange={(changes) =>
                         setPaneWidths((current) => ({ ...current, changes }))
@@ -1169,7 +1318,11 @@ export function App({
                       adapter={adapter}
                       busy={busy}
                       onError={showError}
+                      onShowChanges={() =>
+                        requestNavigation({ page: 'workspace', view: 'changes' })
+                      }
                       onAction={runAction}
+                      diffStyle={diffStyle}
                       paneWidths={paneWidths.history}
                       onPaneWidthsChange={({ left }) =>
                         setPaneWidths((current) => ({ ...current, history: { left } }))
@@ -1219,6 +1372,12 @@ export function App({
               onCheckout={(branchName) => {
                 setBranchDialog(undefined);
                 settleUiAction(runAction({ kind: 'checkoutBranch', name: branchName }));
+              }}
+              onCreate={(branchName, startOid) => {
+                setBranchDialog(undefined);
+                settleUiAction(
+                  runAction({ kind: 'createBranch', name: branchName, startOid, checkout: true }),
+                );
               }}
             />
           ) : null}

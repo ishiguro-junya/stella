@@ -10,7 +10,13 @@ import {
   type ReactNode,
 } from 'react';
 import { parseDiffFromFile, parsePatchFiles, registerCustomCSSVariableTheme } from '@pierre/diffs';
-import type { CodeViewLineSelection, SelectedLineRange } from '@pierre/diffs';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type {
+  CodeViewItem,
+  CodeViewLineSelection,
+  FileDiffMetadata,
+  SelectedLineRange,
+} from '@pierre/diffs';
 import { CodeView, FileDiff, PatchDiff, WorkerPoolContextProvider } from '@pierre/diffs/react';
 // oxlint-disable-next-line import/default -- Viteの?worker queryがdefaultのWorker constructorを生成する。
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
@@ -18,8 +24,10 @@ import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 import type { DiffStyle } from '../../domain/workspace';
 import { useAppearance } from '../../theme/appearance';
 import { useI18n } from '../../i18n/i18n';
+import { FileStatusIcon, type FileStatus } from '../../ui/FileStatusIcon';
 
 const STELLA_DIFF_THEME = 'stella-semantic';
+const STELLA_DIFF_FILE_HEADER_HEIGHT = 32;
 const STELLA_DIFF_THEMES = {
   light: STELLA_DIFF_THEME,
   dark: STELLA_DIFF_THEME,
@@ -31,13 +39,22 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);
   --diffs-bg-deletion-emphasis-override: var(--diff-deletion-emphasis);
   --diffs-gap-block: 0px;
+  overscroll-behavior: none;
+}
+
+[data-code] {
+  overscroll-behavior: none;
 }
 
 [data-diffs-header='default'] {
-  min-height: 32px;
-  padding-inline: 32px 16px;
+  min-height: ${STELLA_DIFF_FILE_HEADER_HEIGHT}px;
+  padding-inline: 8px 16px;
   border-block: 1px solid var(--border-subtle);
   background-color: var(--surface-raised);
+}
+
+[data-change-icon] {
+  display: none;
 }
 
 [data-line-type='change-addition'] {
@@ -119,9 +136,44 @@ export interface DiffSurfaceProps {
   selectable?: boolean;
   performanceMode?: boolean;
   showFileHeaders?: boolean;
+  collapsibleFileHeaders?: boolean;
+  collapsed?: boolean;
   hunkSeparators?: 'simple' | 'line-info-basic';
   ariaLabel?: string;
   onSelectionChange?: (selection: SurfaceSelection | null) => void;
+}
+
+interface DiffWorkerPoolProviderProps {
+  children: ReactNode;
+}
+
+export function DiffWorkerPoolProvider({ children }: DiffWorkerPoolProviderProps): ReactNode {
+  const canUseWorkers = typeof Worker !== 'undefined';
+  const poolOptions = useMemo(
+    () => ({
+      workerFactory: () => new DiffsWorker(),
+      poolSize: Math.min(
+        4,
+        typeof navigator === 'undefined' ? 2 : navigator.hardwareConcurrency || 2,
+      ),
+    }),
+    [],
+  );
+
+  if (!canUseWorkers) return children;
+
+  return (
+    <WorkerPoolContextProvider
+      poolOptions={poolOptions}
+      highlighterOptions={{
+        theme: STELLA_DIFF_THEMES,
+        lineDiffType: 'word-alt',
+        tokenizeMaxLineLength: 2_000,
+      }}
+    >
+      {children}
+    </WorkerPoolContextProvider>
+  );
 }
 
 interface DiffErrorBoundaryProps {
@@ -162,6 +214,21 @@ function toSurfaceSelection(
   };
 }
 
+function fileStatusForDiffType(type: FileDiffMetadata['type']): FileStatus {
+  switch (type) {
+    case 'new':
+      return 'added';
+    case 'deleted':
+      return 'deleted';
+    case 'rename-pure':
+    case 'rename-changed':
+      return 'renamed';
+    case 'change':
+      return 'modified';
+  }
+  return type satisfies never;
+}
+
 export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(function DiffSurface(
   {
     source,
@@ -169,6 +236,8 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     selectable = false,
     performanceMode = false,
     showFileHeaders = false,
+    collapsibleFileHeaders = false,
+    collapsed,
     hunkSeparators = 'line-info-basic',
     ariaLabel,
     onSelectionChange,
@@ -180,33 +249,82 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   const appearance = useAppearance();
   const [selection, setSelection] = useState<SelectedLineRange | null>(null);
   const [codeViewSelection, setCodeViewSelection] = useState<CodeViewLineSelection | null>(null);
+  const [singleFileCollapsed, setSingleFileCollapsed] = useState(false);
+  const [collapsedCodeViewItems, setCollapsedCodeViewItems] = useState<Set<string>>(
+    () => new Set(),
+  );
   const previousSourceKeyRef = useRef(source.cacheKey);
   useEffect(() => {
     if (previousSourceKeyRef.current === source.cacheKey) return;
     previousSourceKeyRef.current = source.cacheKey;
     setSelection(null);
     setCodeViewSelection(null);
+    setSingleFileCollapsed(false);
+    setCollapsedCodeViewItems(new Set());
     onSelectionChange?.(null);
   }, [onSelectionChange, source.cacheKey]);
   const canUseWorkers = typeof Worker !== 'undefined';
-  const poolOptions = useMemo(
-    () => ({
-      workerFactory: () => new DiffsWorker(),
-      poolSize: Math.min(4, navigator.hardwareConcurrency || 2),
-    }),
-    [],
+  const effectiveSingleFileCollapsed =
+    collapsed ?? (previousSourceKeyRef.current === source.cacheKey ? singleFileCollapsed : false);
+  const renderCollapseToggle = (path: string, isCollapsed: boolean, onToggle: () => void) => (
+    <button
+      type="button"
+      className="diff-file-collapse-toggle"
+      aria-expanded={!isCollapsed}
+      aria-label={t(isCollapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+      onClick={onToggle}
+    >
+      {isCollapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+    </button>
   );
+  const renderFileHeaderPrefix = (fileDiff: FileDiffMetadata) => (
+    <span className="diff-file-header-prefix">
+      {collapsibleFileHeaders
+        ? renderCollapseToggle(fileDiff.name, effectiveSingleFileCollapsed, () => {
+            setSingleFileCollapsed((current) => !current);
+          })
+        : null}
+      <FileStatusIcon status={fileStatusForDiffType(fileDiff.type)} />
+    </span>
+  );
+  const renderCodeViewHeaderPrefix = (item: CodeViewItem) => {
+    const path = item.type === 'diff' ? item.fileDiff.name : item.file.name;
+    const isCollapsed = collapsed === true || collapsedCodeViewItems.has(item.id);
+    return (
+      <span className="diff-file-header-prefix">
+        {collapsibleFileHeaders
+          ? renderCollapseToggle(path, isCollapsed, () => {
+              setCollapsedCodeViewItems((current) => {
+                const next = new Set(current);
+                if (next.has(item.id)) next.delete(item.id);
+                else next.add(item.id);
+                return next;
+              });
+            })
+          : null}
+        <FileStatusIcon
+          status={item.type === 'diff' ? fileStatusForDiffType(item.fileDiff.type) : 'modified'}
+        />
+      </span>
+    );
+  };
   const options = useMemo(
     () => ({
       theme: STELLA_DIFF_THEMES,
       themeType: appearance,
       diffStyle: performanceMode ? ('unified' as const) : diffStyle,
       diffIndicators: 'classic' as const,
+      collapsed: effectiveSingleFileCollapsed,
       disableFileHeader: !showFileHeaders,
       hunkSeparators,
       overflow: 'wrap' as const,
       layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
-      itemMetrics: { spacing: 0, paddingTop: 0, paddingBottom: 0 },
+      itemMetrics: {
+        diffHeaderHeight: STELLA_DIFF_FILE_HEADER_HEIGHT,
+        spacing: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+      },
       unsafeCSS: STELLA_DIFF_HIGHLIGHT_CSS,
       enableLineSelection: selectable,
       controlledSelection: selectable,
@@ -220,6 +338,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     [
       appearance,
       diffStyle,
+      effectiveSingleFileCollapsed,
       hunkSeparators,
       onSelectionChange,
       performanceMode,
@@ -298,19 +417,30 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     }
   }, [source]);
 
+  const codeViewItems = useMemo(
+    () =>
+      parsed.codeViewItems.map((item) => ({
+        ...item,
+        collapsed: collapsed === true || collapsedCodeViewItems.has(item.id),
+      })),
+    [collapsed, collapsedCodeViewItems, parsed.codeViewItems],
+  );
+
   const diff = !parsed.ok ? (
     fallback
   ) : source.kind === 'patch' ? (
     <PatchDiff
       patch={source.patch}
       options={options}
+      {...(showFileHeaders ? { renderHeaderPrefix: renderFileHeaderPrefix } : {})}
       selectedLines={selection}
       disableWorkerPool={!canUseWorkers}
     />
   ) : source.kind === 'codeView' ? (
     <CodeView
-      items={parsed.codeViewItems}
+      items={codeViewItems}
       options={options}
+      {...(showFileHeaders ? { renderHeaderPrefix: renderCodeViewHeaderPrefix } : {})}
       selectedLines={codeViewSelection}
       onSelectedLinesChange={(next) => {
         setCodeViewSelection(next);
@@ -322,6 +452,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     <FileDiff
       fileDiff={parsed.fileDiff}
       options={options}
+      {...(showFileHeaders ? { renderHeaderPrefix: renderFileHeaderPrefix } : {})}
       selectedLines={selection}
       disableWorkerPool={!canUseWorkers}
     />
@@ -329,25 +460,10 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     fallback
   );
 
-  const content = canUseWorkers ? (
-    <WorkerPoolContextProvider
-      poolOptions={poolOptions}
-      highlighterOptions={{
-        theme: STELLA_DIFF_THEMES,
-        lineDiffType: performanceMode ? 'none' : 'word-alt',
-        tokenizeMaxLineLength: performanceMode ? 0 : 2_000,
-      }}
-    >
-      {diff}
-    </WorkerPoolContextProvider>
-  ) : (
-    diff
-  );
-
   return (
-    <section className="diff-surface" aria-label={resolvedAriaLabel}>
+    <section className="diff-surface" aria-label={resolvedAriaLabel} hidden={collapsed === true}>
       <DiffErrorBoundary key={source.cacheKey} fallback={fallback}>
-        {content}
+        {diff}
       </DiffErrorBoundary>
     </section>
   );

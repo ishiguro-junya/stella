@@ -7,19 +7,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import {
-  ArrowRight,
-  Binary,
-  FilePenLine,
-  FilePlus2,
-  Trash2,
-  TriangleAlert,
-  type LucideIcon,
-} from 'lucide-react';
-
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
+import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 
 const AREA_LABELS: Record<ChangeArea, MessageKey> = {
@@ -36,14 +27,6 @@ const STATUS_LABELS: Record<ChangeEntry['status'], MessageKey> = {
   renamed: 'renamed',
   binary: 'binary',
   conflicted: 'conflicted',
-};
-const STATUS_ICONS: Record<ChangeEntry['status'], LucideIcon> = {
-  added: FilePlus2,
-  modified: FilePenLine,
-  deleted: Trash2,
-  renamed: ArrowRight,
-  binary: Binary,
-  conflicted: TriangleAlert,
 };
 const DRAG_MIME = 'application/x-stella-change';
 
@@ -665,15 +648,16 @@ export function ChangeList({
                 >
                   {title}
                 </span>
+                <span className="change-count" aria-hidden="true">
+                  {groupEntries.length}
+                </span>
               </h3>
-              <span className="change-count">{groupEntries.length}</span>
             </div>
             <div className="change-group-content">
               {groupEntries.length ? (
                 <ul className="change-list">
                   {groupEntries.map((entry) => {
                     const key = entryKey(entry);
-                    const StatusIcon = STATUS_ICONS[entry.status];
                     const entryStageableArea = isStageableArea(entry.area) ? entry.area : undefined;
                     const entryAction = entryStageableArea
                       ? transitionForArea(entryStageableArea)
@@ -766,9 +750,7 @@ export function ChangeList({
                             setDragAnnouncement('');
                           }}
                         >
-                          <span className={`file-status ${entry.status}`} aria-hidden="true">
-                            <StatusIcon />
-                          </span>
+                          <FileStatusIcon status={entry.status} />
                           <span className="file-path">
                             <strong>{fileName(entry.path)}</strong>
                             <small>{parentPath(entry.path)}</small>

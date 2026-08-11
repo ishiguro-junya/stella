@@ -148,10 +148,10 @@ describe('App repository attach', () => {
     expect(changes).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     const changesResizer = screen.getByRole('separator', { name: 'Changes list width' });
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '244');
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '320');
     changesResizer.focus();
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '268');
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '344');
 
     await user.click(activity);
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -176,13 +176,13 @@ describe('App repository attach', () => {
     expect(activity).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
       'aria-valuenow',
-      '268',
+      '344',
     );
 
     await user.click(history);
     expect(history).toHaveAttribute('aria-current', 'page');
     expect(history).toHaveFocus();
-    const historyResizer = screen.getByRole('separator', { name: 'History list width' });
+    const historyResizer = await screen.findByRole('separator', { name: 'History list width' });
     expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
     historyResizer.focus();
     await user.keyboard('{ArrowLeft}');
@@ -204,7 +204,7 @@ describe('App repository attach', () => {
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         paneWidths: {
-          changes: { left: 268, right: 336 },
+          changes: { left: 344, right: 336 },
           history: { left: 236 },
           activity: { left: 536 },
         },
@@ -215,6 +215,49 @@ describe('App repository attach', () => {
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(activity).toHaveAttribute('aria-current', 'page');
     expect(activity).toHaveFocus();
+  });
+
+  it('clears the selected Changes detail before History rendering begins', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot({
+      changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>((request) => {
+        if (request.kind === 'snapshot')
+          return Promise.resolve({ kind: 'snapshot', snapshot: repo });
+        if (request.kind === 'diff') return new Promise<QueryResult>(() => undefined);
+        return Promise.resolve({ kind: 'activity', entries: [] });
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByRole('heading', { name: 'src/app.ts' })).toBeVisible();
+
+    const history = screen.getByRole('button', { name: 'History' });
+    history.focus();
+    fireEvent.click(history);
+
+    expect(screen.getByTestId('workspace-view-transition')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'src/app.ts' })).not.toBeInTheDocument();
+    expect(history).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('separator', { name: 'History list width' })).toBeVisible();
   });
 
   it('hydrates persisted operation summaries before any repository is opened', async () => {
@@ -733,19 +776,57 @@ describe('App repository attach', () => {
     expect(dialog).not.toHaveTextContent(/[⌘⇧]/u);
   });
 
-  it('loads local branches from the separate titlebar toggle and checks out the selection', async () => {
+  it('loads local branches, checks out a selection, and creates the next branch', async () => {
     const user = userEvent.setup();
-    const repo = repoSnapshot();
+    const repo = repoSnapshot({
+      branch: {
+        name: 'main',
+        oid: 'main-oid',
+        detached: false,
+        upstream: 'origin/main',
+        ahead: 0,
+        behind: 0,
+      },
+    });
     const checkedOut = repoSnapshot({
       generation: 2,
       eventSeq: 2,
-      branch: { name: 'feature', detached: false, ahead: 0, behind: 0 },
+      branch: { name: 'feature', oid: 'feature-oid', detached: false, ahead: 0, behind: 0 },
     });
-    const execute = vi.fn<WorkspaceAdapter['execute']>(async () => ({
-      repoId: checkedOut.repoId,
-      generation: checkedOut.generation,
-      snapshot: checkedOut,
-      summary: { id: 'backendBranchCheckedOut' },
+    const created = repoSnapshot({
+      generation: 3,
+      eventSeq: 3,
+      branch: {
+        name: 'feature/new-flow',
+        oid: 'feature-oid',
+        detached: false,
+        ahead: 0,
+        behind: 0,
+      },
+    });
+    const execute = vi.fn<WorkspaceAdapter['execute']>(async (request) => {
+      const snapshot = request.action.kind === 'createBranch' ? created : checkedOut;
+      return {
+        repoId: snapshot.repoId,
+        generation: snapshot.generation,
+        snapshot,
+        summary: {
+          id:
+            request.action.kind === 'createBranch'
+              ? ('backendBranchCreated' as const)
+              : ('backendBranchCheckedOut' as const),
+        },
+      };
+    });
+    const preview = vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
+      repoId: request.repoId,
+      title: { id: 'actionCreateBranch' },
+      summary: { id: 'actionCreateBranch' },
+      affectedPaths: [],
+      affectedCommits: ['feature-oid'],
+      lostCommitOids: [],
+      resolvedTargets: [{ input: 'feature-oid', oid: 'feature-oid' }],
+      destructive: false,
     }));
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
@@ -777,9 +858,7 @@ describe('App repository attach', () => {
         if (request.kind === 'snapshot') return { kind: 'snapshot' as const, snapshot: repo };
         return { kind: 'activity' as const, entries: [] };
       }),
-      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
-        throw new Error('unused');
-      }),
+      preview,
       execute,
       cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
       subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
@@ -798,6 +877,42 @@ describe('App repository attach', () => {
       action: { kind: 'checkoutBranch', name: 'feature' },
     });
     expect(await screen.findByRole('button', { name: /Current branch feature/u })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: /Current branch feature/u }));
+    const reopened = await screen.findByRole('dialog', { name: 'Switch Branch' });
+    expect(within(reopened).queryByText('Git Flow')).not.toBeInTheDocument();
+    await user.click(within(reopened).getByRole('button', { name: 'Create branch' }));
+    const createDialog = screen.getByRole('dialog', { name: 'Create branch' });
+    await user.type(
+      within(createDialog).getByRole('textbox', { name: 'Branch name' }),
+      'feature/new-flow',
+    );
+    await user.click(within(createDialog).getByRole('button', { name: 'Review impact' }));
+
+    expect(preview).toHaveBeenCalledWith({
+      repoId: repo.repoId,
+      action: {
+        kind: 'createBranch',
+        name: 'feature/new-flow',
+        startOid: 'feature-oid',
+        checkout: true,
+      },
+    });
+    const confirmation = screen.getByRole('alertdialog', { name: 'Create Branch' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Run' }));
+    expect(execute).toHaveBeenLastCalledWith({
+      repoId: repo.repoId,
+      action: {
+        kind: 'createBranch',
+        name: 'feature/new-flow',
+        startOid: 'feature-oid',
+        checkout: true,
+      },
+      preview: expect.objectContaining({ repoId: repo.repoId }),
+    });
+    expect(
+      await screen.findByRole('button', { name: /Current branch feature\/new-flow/u }),
+    ).toBeVisible();
   });
 
   it('updates Stage state without showing a routine success notice', async () => {
@@ -1375,13 +1490,16 @@ describe('App repository attach', () => {
     expect(settings).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument();
     const repositories = screen.getByRole('button', { name: 'Repositories' });
-    expect(screen.getByRole('radio', { name: 'System' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Appearance' })).toHaveValue('system');
+    expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
 
-    await user.click(screen.getByRole('radio', { name: 'Dark' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         appearance: 'dark',
+        diffStyle: 'split',
       }),
     );
 
@@ -1424,15 +1542,15 @@ describe('App repository attach', () => {
     render(<App adapter={adapter} />);
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.click(screen.getByRole('radio', { name: 'Dark' }));
-    await user.click(screen.getByRole('radio', { name: '日本語' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'ja');
 
     expect(screen.getByRole('heading', { name: '設定' })).toBeVisible();
     expect(screen.getByRole('navigation', { name: 'アプリのナビゲーション' })).toBeVisible();
     expect(screen.getByRole('button', { name: '設定' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'リポジトリ' })).toBeVisible();
-    expect(screen.getByRole('radio', { name: '日本語' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'English' })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: '言語' })).toHaveValue('ja');
+    expect(screen.getByRole('option', { name: 'English' })).toBeVisible();
     expect(document.documentElement).toHaveAttribute('lang', 'ja');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     await waitFor(() =>
@@ -1442,7 +1560,7 @@ describe('App repository attach', () => {
       }),
     );
 
-    await user.click(screen.getByRole('radio', { name: 'English' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '言語' }), 'en');
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
     expect(document.documentElement).toHaveAttribute('lang', 'en');
   });

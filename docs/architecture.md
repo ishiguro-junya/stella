@@ -9,9 +9,17 @@ Tauri Core processの`Workspace`をGit操作の境界とします。
 Frontendは型付きのattach、query、preview、execute、cancelだけを利用し、Git command、path解決、出力parse、generation管理、確認token、operation復旧を知りません。  
 Repositoryを開く処理は、選択したpathを解決する`Open`、登録済みRepositoryを再接続する`OpenExisting`、Remoteから作成する`Clone`へ分けます。  
 
-`Workspace`内部にはsystem Git runner、status／patch parser、競合session、operation journalを置きます。  
+`Workspace`内部には起動時に固定したGit toolchain runner、status／patch parser、競合session、operation journalを置きます。  
 これらはFrontend interfaceへ公開せず、一時Repositoryとbare remoteを使った統合testを`Workspace` interface越しに行います。  
 同じRepositoryを再attachした場合はevent Channelを置き換え、古いwindow sessionへの重複通知を防ぎます。  
+
+`ToolchainManager`はFrontendの`localStorage`とは独立したnative設定をApplication config directoryへatomic保存します。  
+起動時に内蔵またはSystemを一度だけ解決し、`Workspace`はその`GitExecutor`だけを保持します。  
+内蔵modeはApplication resource内の`bin`、`libexec/git-core`、templateを`PATH`、`GIT_EXEC_PATH`、`GIT_TEMPLATE_DIR`へ固定し、埋め込んだlock manifestとbundle markerのSHA-256を照合します。  
+
+Git Flowは`git_flow` Module内で安全なrequestからargvを組み立てるInterfaceを持ち、任意optionやRepository外のconfig scopeを受け取りません。  
+git-flow-next 1.2.0はJSON overview flag導入前のため、JSON取得を試した後に同じoverviewのplain outputを型付き状態へ変換します。  
+共有`.gitflow`はlocal configとの比較とatomic exportを行い、sync失敗時はlocal値を復元します。  
 
 通常pollingのgeneration fingerprintはporcelain status、dirtyなtracked fileのindex OID／mode、worktreeのinode／mode／size／mtime／ctime、local／remote ref一覧で作り、regular file本文を開きません。  
 破壊操作のpreviewとexecuteでは対象本文をSHA-256で再計算し、operation journalも構造化Commit直前に記録済みの厳密digestと再照合します。  
@@ -61,12 +69,13 @@ Activity v2も同じ構造を保存するため、表示中または保存済み
 - 読取diffではexternal diffとtextconvを無効にします。
 - 確認tokenはRepository、generation、Action全体、preview digestへ結合し、短寿命・単回使用にします。
 - 書き戻し対象はtarget treeとcurrent indexから列挙し、未追跡内容も含めてpreview digestを作ります。
-- system Git runnerは全commandへglobal optionの`--literal-pathspecs`を指定します。
+- 利用者由来pathを受けるGit commandはglobal optionの`--literal-pathspecs`を指定します。
 - Activityの永続化境界でcommand出力をredact・truncateし、environmentとstdinを保存対象から外します。
 - Git出力のparserは安全判定に使う各結果へ上限を設け、上限超過をerrorとして扱います。
 - CSPはremote scriptを許可せず、Diff workerに必要な`worker-src 'self' blob:`だけを追加します。
 
 ## 品質gate
 
-Frontend、Rust、TOML、Markdown、link、Commit grammarを独立して確認し、pre-pushでは並列実行します。  
-Release確認ではE2E feature付きの非bundle release binaryをWebdriverIO embedded providerで操作した後、test pluginを含まない通常のTauri application bundleを作成します。  
+pre-pushではlint、test、test-e2eの3 laneを並列実行します。  
+test-e2e laneでは、E2E feature付きの非bundle release binaryをWebdriverIO embedded providerで操作します。  
+通常bundleでは3 componentのversion、arm64 architecture、checksum、HTTPS helper、template、credential helper、動的link先をrelease gateで確認します。  
