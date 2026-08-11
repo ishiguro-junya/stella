@@ -7,11 +7,17 @@ commit-msg:
       run: mise run lint:commit-message -- "{1}"
 
 pre-push:
-  parallel: true
-  commands:
-    lint:
-      run: mise run lint
-    test:
-      run: mise run test
-    build:
-      run: mise run build
+  jobs:
+    - name: quality-gates
+      group:
+        parallel: true
+        jobs:
+          - name: lint
+            run: mise run lint
+          - name: application
+            group:
+              jobs:
+                - name: test
+                  run: mise run test
+                - name: test-e2e
+                  run: mise run test:e2e

@@ -1,5 +1,12 @@
+const visualQaDirectory = process.env.STELLA_VISUAL_QA_DIR;
+if (visualQaDirectory) {
+  // capture先はtest workerだけへ渡し、native Appの起動環境からは分離します。
+  delete process.env.STELLA_VISUAL_QA_DIR;
+}
+
 export const config: WebdriverIO.Config = {
   runner: 'local',
+  ...(visualQaDirectory ? { runnerEnv: { VISUAL_QA_OUTPUT_DIR: visualQaDirectory } } : {}),
   specs: ['./tests/e2e/**/*.spec.ts'],
   maxInstances: 1,
   services: [
