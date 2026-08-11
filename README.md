@@ -4,7 +4,10 @@
   <img src="src-tauri/icons/128x128.png" alt="Stellaのアイコン" width="128" height="128" style="border-radius: 22%;">
 </p>
 
-<p align="center">シンプルなGitクライアントアプリ</p>
+<p align="center">
+  AIがコードを書く時代の<br>
+  差分を見るためのシンプルなGitクライアント
+</p>
 
 > [!WARNING]
 > このアプリは現在アルファ版です。
