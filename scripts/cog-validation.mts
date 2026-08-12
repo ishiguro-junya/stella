@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type StdioOptions } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,8 +18,13 @@ const DEFAULT_TYPES = new Set([
 ]);
 const HEADER = /^(?<type>[a-z]+)(?:\([^()\r\n]+\))?!?: .+$/u;
 
-function configuredTypes(messages) {
-  const customTypes = new Set();
+type TemporaryConfig = {
+  directory: string;
+  path: string;
+};
+
+function configuredTypes(messages: string[]) {
+  const customTypes = new Set<string>();
   for (const message of messages) {
     const header = message.split(/\r?\n/u, 1)[0] ?? '';
     const type = HEADER.exec(header)?.groups?.type;
@@ -28,7 +33,7 @@ function configuredTypes(messages) {
   return Array.from(customTypes).toSorted((left, right) => left.localeCompare(right));
 }
 
-async function temporaryConfig(messages) {
+async function temporaryConfig(messages: string[]): Promise<TemporaryConfig | undefined> {
   const customTypes = configuredTypes(messages);
   if (customTypes.length === 0) return undefined;
 
@@ -53,7 +58,7 @@ async function temporaryConfig(messages) {
   return { directory, path };
 }
 
-async function runCog(args, messages, stdio) {
+async function runCog(args: string[], messages: string[], stdio: StdioOptions) {
   const temporary = await temporaryConfig(messages);
   try {
     const configArgs = temporary ? ['--config', temporary.path] : [];
@@ -63,12 +68,12 @@ async function runCog(args, messages, stdio) {
   }
 }
 
-export async function verifyCommitFile(file, stdio = 'inherit') {
+export async function verifyCommitFile(file: string, stdio: StdioOptions = 'inherit') {
   const message = await readFile(file, 'utf8');
   return runCog(['verify', '--file', file], [message], stdio);
 }
 
-export async function checkCommitHistory(stdio = 'inherit') {
+export async function checkCommitHistory(stdio: StdioOptions = 'inherit') {
   const head = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { stdio: 'ignore' });
   if (head.status !== 0) return { status: 0 };
 

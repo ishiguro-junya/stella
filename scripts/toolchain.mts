@@ -28,19 +28,105 @@ const bundleDirectory = join(temporaryRoot, 'bundle', 'toolchain');
 const markerPath = join(bundleDirectory, '.stella-toolchain.json');
 const systemPath = '/usr/bin:/bin:/usr/sbin:/sbin';
 
-function executableDirectory(name) {
-  for (const directory of String(process.env.PATH ?? '').split(':')) {
+type RunOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  capture?: boolean;
+};
+
+type DownloadSource = {
+  archive: string;
+  url: string;
+  sha256: string;
+};
+
+type ToolchainComponent = DownloadSource & {
+  version: string;
+  license: string;
+  licenseUrl?: string;
+  licenseFile?: string;
+  licenseSha256?: string;
+};
+
+type LicensedComponent = ToolchainComponent & {
+  licenseUrl: string;
+  licenseFile: string;
+  licenseSha256: string;
+};
+
+type ComponentName = 'git' | 'gitLfs' | 'gitFlow';
+type ArchiveKind = Exclude<ComponentName, 'git'>;
+
+type ToolchainManifest = {
+  schemaVersion: number;
+  platform: string;
+  components: {
+    git: ToolchainComponent;
+    gitLfs: LicensedComponent;
+    gitFlow: LicensedComponent;
+  };
+};
+
+type ToolchainMarker = {
+  manifestSha256: string;
+  files: Record<string, string>;
+};
+
+function executableDirectory(name: string) {
+  for (const directory of (process.env.PATH ?? '').split(':')) {
     const candidate = join(directory, name);
     if (existsSync(candidate)) return directory;
   }
   return undefined;
 }
 
-function fail(message) {
+function fail(message: string): never {
   throw new Error(message);
 }
 
-function run(command, args, options = {}) {
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function jsonObject(value: unknown, label: string): Record<string, unknown> {
+  if (!isJsonObject(value)) {
+    fail(`${label}がobjectではありません。`);
+  }
+  return value;
+}
+
+function jsonString(value: unknown, label: string): string {
+  if (typeof value !== 'string') fail(`${label}がstringではありません。`);
+  return value;
+}
+
+function jsonNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number') fail(`${label}がnumberではありません。`);
+  return value;
+}
+
+function toolchainComponent(value: unknown, label: string): ToolchainComponent {
+  const component = jsonObject(value, label);
+  return {
+    version: jsonString(component.version, `${label}.version`),
+    url: jsonString(component.url, `${label}.url`),
+    archive: jsonString(component.archive, `${label}.archive`),
+    sha256: jsonString(component.sha256, `${label}.sha256`),
+    license: jsonString(component.license, `${label}.license`),
+  };
+}
+
+function licensedComponent(value: unknown, label: string): LicensedComponent {
+  const component = jsonObject(value, label);
+  return {
+    ...toolchainComponent(component, label),
+    licenseUrl: jsonString(component.licenseUrl, `${label}.licenseUrl`),
+    licenseFile: jsonString(component.licenseFile, `${label}.licenseFile`),
+    licenseSha256: jsonString(component.licenseSha256, `${label}.licenseSha256`),
+  };
+}
+
+function run(command: string, args: string[], options: RunOptions = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? repositoryRoot,
     env: options.env ?? process.env,
@@ -52,10 +138,10 @@ function run(command, args, options = {}) {
     const detail = options.capture ? `\n${result.stdout ?? ''}${result.stderr ?? ''}` : '';
     fail(`${command}が終了code ${String(result.status)}で失敗しました。${detail}`);
   }
-  return options.capture ? String(result.stdout ?? '').trim() : '';
+  return options.capture ? (result.stdout ?? '').trim() : '';
 }
 
-function runExpectFailure(command, args, options = {}) {
+function runExpectFailure(command: string, args: string[], options: RunOptions = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? repositoryRoot,
     env: options.env ?? process.env,
@@ -66,19 +152,30 @@ function runExpectFailure(command, args, options = {}) {
   if (result.status === 0) fail(`${command}が失敗すべき検証で成功しました。`);
 }
 
-function safeReset(path) {
+function safeReset(path: string) {
   const relativePath = relative(temporaryRoot, path);
   if (relativePath.startsWith('..') || relativePath === '') fail(`削除対象が不正です: ${path}`);
   rmSync(path, { recursive: true, force: true });
   mkdirSync(path, { recursive: true });
 }
 
-function sha256(path) {
+function sha256(path: string) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
-function manifest() {
-  return JSON.parse(readFileSync(manifestPath, 'utf8'));
+function manifest(): ToolchainManifest {
+  const value: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const lock = jsonObject(value, 'toolchain.lock.json');
+  const components = jsonObject(lock.components, 'toolchain.lock.json.components');
+  return {
+    schemaVersion: jsonNumber(lock.schemaVersion, 'toolchain.lock.json.schemaVersion'),
+    platform: jsonString(lock.platform, 'toolchain.lock.json.platform'),
+    components: {
+      git: toolchainComponent(components.git, 'toolchain.lock.json.components.git'),
+      gitLfs: licensedComponent(components.gitLfs, 'toolchain.lock.json.components.gitLfs'),
+      gitFlow: licensedComponent(components.gitFlow, 'toolchain.lock.json.components.gitFlow'),
+    },
+  };
 }
 
 function manifestDigest() {
@@ -91,7 +188,7 @@ function assertPlatform() {
   }
 }
 
-function download(component) {
+function download(component: DownloadSource) {
   mkdirSync(downloadsDirectory, { recursive: true });
   const destination = join(downloadsDirectory, component.archive);
   if (existsSync(destination) && sha256(destination) === component.sha256) return destination;
@@ -117,7 +214,7 @@ function download(component) {
   return destination;
 }
 
-function downloadLicense(component) {
+function downloadLicense(component: LicensedComponent) {
   return download({
     archive: component.licenseFile,
     url: component.licenseUrl,
@@ -125,17 +222,17 @@ function downloadLicense(component) {
   });
 }
 
-function extractTar(archive, destination) {
+function extractTar(archive: string, destination: string) {
   mkdirSync(destination, { recursive: true });
   run('/usr/bin/tar', ['-xf', archive, '-C', destination]);
 }
 
-function extractZip(archive, destination) {
+function extractZip(archive: string, destination: string) {
   mkdirSync(destination, { recursive: true });
   run('/usr/bin/ditto', ['-x', '-k', archive, destination]);
 }
 
-function findFile(root, names) {
+function findFile(root: string, names: string[]) {
   const pending = [root];
   while (pending.length) {
     const current = pending.pop();
@@ -149,13 +246,13 @@ function findFile(root, names) {
   return undefined;
 }
 
-function copyExecutable(source, destination) {
+function copyExecutable(source: string, destination: string) {
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(source, destination);
   chmodSync(destination, 0o755);
 }
 
-function buildGit(component, archive) {
+function buildGit(component: ToolchainComponent, archive: string) {
   const sourceRoot = join(sourcesDirectory, `git-${component.version}`);
   extractTar(archive, sourcesDirectory);
   if (!existsSync(join(sourceRoot, 'configure'))) fail('Git sourceを展開できませんでした。');
@@ -197,7 +294,12 @@ function buildGit(component, archive) {
   copyFileSync(join(sourceRoot, 'COPYING'), join(bundleDirectory, 'licenses', 'git-COPYING'));
 }
 
-function installArchiveComponent(component, archive, license, kind) {
+function installArchiveComponent(
+  component: LicensedComponent,
+  archive: string,
+  license: string,
+  kind: ArchiveKind,
+) {
   const destination = join(buildDirectory, kind);
   if (component.archive.endsWith('.zip')) extractZip(archive, destination);
   else extractTar(archive, destination);
@@ -210,7 +312,7 @@ function installArchiveComponent(component, archive, license, kind) {
   copyFileSync(license, join(bundleDirectory, 'licenses', `${kind}-LICENSE`));
 }
 
-function writeBuildInformation(lock, archives) {
+function writeBuildInformation(lock: ToolchainManifest, archives: Record<ComponentName, string>) {
   const lines = [
     '# Stella内蔵Git toolchain build情報',
     '',
@@ -222,7 +324,12 @@ function writeBuildInformation(lock, archives) {
     '## Sourceと配布asset',
     '',
   ];
-  for (const [name, component] of Object.entries(lock.components)) {
+  const components: [ComponentName, ToolchainComponent][] = [
+    ['git', lock.components.git],
+    ['gitLfs', lock.components.gitLfs],
+    ['gitFlow', lock.components.gitFlow],
+  ];
+  for (const [name, component] of components) {
     lines.push(`- ${name} ${component.version}: ${component.url}`);
     lines.push(`  - SHA-256: \`${component.sha256}\``);
     lines.push(`  - Local archive: \`${relative(repositoryRoot, archives[name])}\``);
@@ -260,9 +367,11 @@ function prepare() {
   safeReset(buildDirectory);
   safeReset(join(temporaryRoot, 'bundle'));
   mkdirSync(bundleDirectory, { recursive: true });
-  const archives = Object.fromEntries(
-    Object.entries(lock.components).map(([name, component]) => [name, download(component)]),
-  );
+  const archives: Record<ComponentName, string> = {
+    git: download(lock.components.git),
+    gitLfs: download(lock.components.gitLfs),
+    gitFlow: download(lock.components.gitFlow),
+  };
   const licenses = {
     gitLfs: downloadLicense(lock.components.gitLfs),
     gitFlow: downloadLicense(lock.components.gitFlow),
@@ -284,10 +393,20 @@ function prepare() {
   process.stdout.write('内蔵Git toolchainを準備しました。\n');
 }
 
-function verifyBundle(root, missingHint) {
+function verifyBundle(root: string, missingHint: string) {
   const bundleMarkerPath = join(root, '.stella-toolchain.json');
   if (!existsSync(bundleMarkerPath)) fail(missingHint);
-  const marker = JSON.parse(readFileSync(bundleMarkerPath, 'utf8'));
+  const value: unknown = JSON.parse(readFileSync(bundleMarkerPath, 'utf8'));
+  const markerValue = jsonObject(value, bundleMarkerPath);
+  const fileValues = jsonObject(markerValue.files, `${bundleMarkerPath}.files`);
+  const files: Record<string, string> = {};
+  for (const [path, checksum] of Object.entries(fileValues)) {
+    files[path] = jsonString(checksum, `${bundleMarkerPath}.files.${path}`);
+  }
+  const marker: ToolchainMarker = {
+    manifestSha256: jsonString(markerValue.manifestSha256, `${bundleMarkerPath}.manifestSha256`),
+    files,
+  };
   if (marker.manifestSha256 !== manifestDigest()) {
     fail('内蔵Git toolchainのlock manifestが一致しません。');
   }
@@ -310,7 +429,7 @@ function verify() {
   );
 }
 
-function toolchainEnvironment(root) {
+function toolchainEnvironment(root: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     PATH: `${join(root, 'bin')}:${systemPath}`,
@@ -333,7 +452,7 @@ function toolchainEnvironment(root) {
   };
 }
 
-function runReleaseSmoke(root) {
+function runReleaseSmoke(root: string) {
   const smokeRoot = join(temporaryRoot, 'release-smoke');
   safeReset(smokeRoot);
   const remote = join(smokeRoot, 'remote.git');
@@ -408,7 +527,8 @@ function runReleaseSmoke(root) {
     { cwd: source, env: environment },
   );
   const statePath = join(source, '.git', 'gitflow', 'state', 'merge.json');
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const stateValue: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = jsonObject(stateValue, statePath);
   if (state.action !== 'finish') fail('Git Flow finishの復旧stateが保存されていません。');
   writeFileSync(join(source, 'conflict.txt'), 'resolved\n');
   run(git, ['-C', source, 'add', 'conflict.txt'], options);
@@ -585,11 +705,11 @@ function runReleaseSmoke(root) {
   run(gitFlow, ['config', 'list'], { cwd: source, env: environment });
 }
 
-function releaseGate(applicationPath) {
+function releaseGate(applicationPath: string) {
   assertPlatform();
   const lock = manifest();
   const root = join(resolve(applicationPath), 'Contents', 'Resources', 'toolchain');
-  const commands = [
+  const commands: [name: string, args: string[], version: string][] = [
     ['git', ['--version'], lock.components.git.version],
     ['git-lfs', ['version'], lock.components.gitLfs.version],
     ['git-flow', ['version'], lock.components.gitFlow.version],
@@ -628,7 +748,11 @@ try {
   else if (mode === 'verify') verify();
   else if (mode === 'release-gate') {
     releaseGate(arguments_[0] ?? join(repositoryRoot, 'target/release/bundle/macos/Stella.app'));
-  } else fail('usage: node scripts/toolchain.mjs <prepare|verify|release-gate> [Stella.app]');
+  } else {
+    fail(
+      'usage: node --import tsx scripts/toolchain.mts <prepare|verify|release-gate> [Stella.app]',
+    );
+  }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;

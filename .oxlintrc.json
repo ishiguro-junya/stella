@@ -28,7 +28,7 @@
   ],
   "overrides": [
     {
-      "files": ["*.config.ts", "tests/e2e/**/*.ts"],
+      "files": ["*.config.ts", "scripts/**/*.mts", "tests/e2e/**/*.ts"],
       "env": {
         "browser": false,
         "node": true

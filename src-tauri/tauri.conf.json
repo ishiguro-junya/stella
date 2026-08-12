@@ -4,8 +4,8 @@
   "version": "1.0.0-alpha.4",
   "identifier": "com.emuni.stella",
   "build": {
-    "beforeDevCommand": "node scripts/tauri-hook.mjs dev",
-    "beforeBuildCommand": "node scripts/tauri-hook.mjs build",
+    "beforeDevCommand": "node --import tsx scripts/tauri-hook.mts dev",
+    "beforeBuildCommand": "node --import tsx scripts/tauri-hook.mts build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },

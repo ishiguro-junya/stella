@@ -70,6 +70,7 @@ mise run dev
 ## 🔗 参考リンク
 
 - [mise](https://mise.jdx.dev/)
+- [tsx](https://github.com/privatenumber/tsx)
 - [Tauri](https://github.com/tauri-apps/tauri)
 - [Oxc](https://oxc.rs/)
 - [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)

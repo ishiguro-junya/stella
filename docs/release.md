@@ -105,7 +105,7 @@ mise run build
   -c 'Print :CFBundleIdentifier' \
   target/release/bundle/macos/Stella.app/Contents/Info.plist
 file target/release/bundle/macos/Stella.app/Contents/MacOS/stella
-node scripts/toolchain.mjs release-gate \
+node --import tsx scripts/toolchain.mts release-gate \
   target/release/bundle/macos/Stella.app
 ```
 

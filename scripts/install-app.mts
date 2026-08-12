@@ -32,11 +32,30 @@ const previousApplication = join(installDirectory, 'Stella.previous.app');
 const failedApplication = join(installDirectory, 'Stella.failed.app');
 const plistBuddy = '/usr/libexec/PlistBuddy';
 
-function fail(message) {
+type RunOptions = {
+  capture?: boolean;
+};
+
+type BundleInfo = {
+  identifier: string;
+  version: string;
+  executable: string;
+  executableSha256: string;
+};
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
+function fail(message: string): never {
   throw new Error(message);
 }
 
-function run(command, args, options = {}) {
+function run(command: string, args: string[], options: RunOptions = {}) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -47,7 +66,7 @@ function run(command, args, options = {}) {
     const detail = options.capture ? `\n${result.stdout ?? ''}${result.stderr ?? ''}` : '';
     fail(`${command}が終了code ${String(result.status)}で失敗しました。${detail}`);
   }
-  return options.capture ? String(result.stdout ?? '').trim() : '';
+  return options.capture ? (result.stdout ?? '').trim() : '';
 }
 
 function resetInstallDirectory() {
@@ -59,17 +78,17 @@ function resetInstallDirectory() {
   mkdirSync(installDirectory, { recursive: true });
 }
 
-function sha256(path) {
+function sha256(path: string) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
-function bundleValue(application, key) {
+function bundleValue(application: string, key: string) {
   return run(plistBuddy, ['-c', `Print :${key}`, join(application, 'Contents', 'Info.plist')], {
     capture: true,
   });
 }
 
-function inspectBundle(application) {
+function inspectBundle(application: string): BundleInfo {
   if (!existsSync(application) || !statSync(application).isDirectory()) {
     fail(`Application bundleがありません: ${application}`);
   }
@@ -86,8 +105,9 @@ function inspectBundle(application) {
   };
 }
 
-function assertExpectedBundle(bundle, expected, application) {
-  for (const key of ['identifier', 'version', 'executable', 'executableSha256']) {
+function assertExpectedBundle(bundle: BundleInfo, expected: BundleInfo, application: string) {
+  const keys: (keyof BundleInfo)[] = ['identifier', 'version', 'executable', 'executableSha256'];
+  for (const key of keys) {
     if (bundle[key] !== expected[key]) {
       fail(`${application}の${key}がbuild成果物と一致しません。`);
     }
@@ -100,18 +120,20 @@ function installedApplicationPids() {
     .split('\n')
     .map((line) => line.trim().match(/^(\d+)\s+(.+)$/))
     .filter(
-      (match) =>
+      (match): match is RegExpMatchArray =>
         match !== null &&
+        match[1] !== undefined &&
+        match[2] !== undefined &&
         (match[2] === destinationExecutable || match[2].startsWith(`${destinationExecutable} `)),
     )
     .map((match) => Number(match[1]));
 }
 
-function delay(milliseconds) {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+function delay(milliseconds: number) {
+  return new Promise<void>((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
 
-async function waitForInstalledApplicationToExit(deadline) {
+async function waitForInstalledApplicationToExit(deadline: number) {
   if (installedApplicationPids().length === 0) return;
   if (Date.now() >= deadline) {
     fail('Stellaを10秒以内に終了できませんでした。Applicationは置き換えていません。');
@@ -129,7 +151,7 @@ async function terminateInstalledApplication() {
     try {
       process.kill(pid, 'SIGTERM');
     } catch (error) {
-      if (error.code !== 'ESRCH') throw error;
+      if (!isErrnoException(error) || error.code !== 'ESRCH') throw error;
     }
   }
 
@@ -142,20 +164,20 @@ function recoverInterruptedInstall() {
   }
 }
 
-function rollback(previousMoved, installedMoved) {
-  const errors = [];
+function rollback(previousMoved: boolean, installedMoved: boolean) {
+  const errors: string[] = [];
   if (installedMoved && existsSync(destinationApplication)) {
     try {
       renameSync(destinationApplication, failedApplication);
     } catch (error) {
-      errors.push(`新しいApplicationを退避できませんでした: ${error.message}`);
+      errors.push(`新しいApplicationを退避できませんでした: ${errorMessage(error)}`);
     }
   }
   if (previousMoved && existsSync(previousApplication) && !existsSync(destinationApplication)) {
     try {
       renameSync(previousApplication, destinationApplication);
     } catch (error) {
-      errors.push(`以前のApplicationを復元できませんでした: ${error.message}`);
+      errors.push(`以前のApplicationを復元できませんでした: ${errorMessage(error)}`);
     }
   }
   return errors;
@@ -198,7 +220,7 @@ async function install() {
   } catch (error) {
     const rollbackErrors = rollback(previousMoved, installedMoved);
     const rollbackDetail = rollbackErrors.length > 0 ? `\n${rollbackErrors.join('\n')}` : '';
-    fail(`Applicationの置き換えに失敗しました: ${error.message}${rollbackDetail}`);
+    fail(`Applicationの置き換えに失敗しました: ${errorMessage(error)}${rollbackDetail}`);
   }
 
   rmSync(installDirectory, { recursive: true, force: true });
@@ -208,6 +230,6 @@ async function install() {
 try {
   await install();
 } catch (error) {
-  console.error(error.message);
+  console.error(errorMessage(error));
   process.exitCode = 1;
 }

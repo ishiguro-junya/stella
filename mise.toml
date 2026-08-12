@@ -9,7 +9,11 @@ taplo = "0.10.0"
 
 [tasks.setup]
 description = "依存packageをinstallしてGit hooksを有効にする"
-run = [ "pnpm install --frozen-lockfile", "lefthook install", "node scripts/toolchain.mjs prepare" ]
+run = [
+  "pnpm install --frozen-lockfile",
+  "lefthook install",
+  "node --import tsx scripts/toolchain.mts prepare",
+]
 
 [tasks.dev]
 description = "Tauri applicationを開発modeで起動する"
@@ -22,12 +26,12 @@ run = "pnpm exec tauri build"
 [tasks."install:app"]
 description = "ApplicationをbuildしてApplications folderへinstallする"
 depends = [ "build" ]
-run = "node scripts/install-app.mjs"
+run = "node --import tsx scripts/install-app.mts"
 
 [tasks.lint]
 description = "Frontend、Rust、設定、文書、Commit履歴をlintする"
 depends = [ "lint:frontend", "lint:rust", "lint:config", "lint:docs" ]
-run = "node scripts/check-commits.mjs"
+run = "node --import tsx scripts/check-commits.mts"
 
 [tasks."lint:frontend"]
 description = "Frontendをformat検査してlintする"
@@ -53,7 +57,7 @@ run = [ "pnpm exec markdownlint-cli2", "lychee --files-from .lycheeinputs" ]
 
 [tasks."lint:commit-message"]
 description = "Commit messageをConventional Commitsとしてlintする"
-run = "node scripts/verify-commit-message.mjs"
+run = "node --import tsx scripts/verify-commit-message.mts"
 
 [tasks.format]
 description = "Frontend、Rust、TOML、Markdownを整形する"

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-function run(command, args) {
+function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
     env: process.env,
@@ -15,10 +15,10 @@ function run(command, args) {
 }
 
 const mode = process.argv[2];
-const executable = (name) => resolve(repositoryRoot, 'node_modules', '.bin', name);
-run(process.execPath, ['scripts/toolchain.mjs', 'verify']);
+const executable = (name: string) => resolve(repositoryRoot, 'node_modules', '.bin', name);
+run(process.execPath, ['--import', 'tsx', 'scripts/toolchain.mts', 'verify']);
 if (mode === 'dev') run(executable('vite'), []);
 else if (mode === 'build') {
   run(executable('tsc'), ['-b']);
   run(executable('vite'), ['build']);
-} else throw new Error('usage: node scripts/tauri-hook.mjs <dev|build>');
+} else throw new Error('usage: node --import tsx scripts/tauri-hook.mts <dev|build>');

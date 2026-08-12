@@ -83,7 +83,7 @@ importers:
         version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: 6.0.5
-        version: 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+        version: 6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@wdio/cli':
         specifier: 9.30.1
         version: 9.30.1(@types/node@24.13.3)(expect-webdriverio@5.7.0)(supports-color@8.1.1)
@@ -101,10 +101,10 @@ importers:
         version: 9.30.1
       '@wdio/tauri-plugin':
         specifier: 1.3.0
-        version: 1.3.0(supports-color@8.1.1)(tsx@4.23.11)
+        version: 1.3.0(supports-color@8.1.1)(tsx@4.23.12)
       '@wdio/tauri-service':
         specifier: 1.3.0
-        version: 1.3.0(expect-webdriverio@5.7.0)(supports-color@8.1.1)(tsx@4.23.11)(webdriverio@9.30.1(supports-color@8.1.1))
+        version: 1.3.0(expect-webdriverio@5.7.0)(supports-color@8.1.1)(tsx@4.23.12)(webdriverio@9.30.1(supports-color@8.1.1))
       '@wdio/types':
         specifier: 9.30.1
         version: 9.30.1
@@ -123,15 +123,18 @@ importers:
       oxlint-tsgolint:
         specifier: 7.0.2001
         version: 7.0.2001
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
       typescript:
         specifier: 7.0.2
         version: 7.0.2
       vite:
         specifier: 8.2.1
-        version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0)
+        version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       webdriverio:
         specifier: 9.30.1
         version: 9.30.1(supports-color@8.1.1)
@@ -3583,8 +3586,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  tsx@4.23.11:
-    resolution: {integrity: sha512-Ry2oTEUnhBdeEdWIztY8kf3/nBGnPnjMLVGL0YfdRXMORuPER5NlKmayqxtxRxwB1xBN+RivRaJfe7PM1rtiyw==}
+  tsx@4.23.12:
+    resolution: {integrity: sha512-FDf4L4sYzKtzWYhU/Xm0AQFdTjdIxNo9ElTf2mxXM6k8YMHXzYUe4yODVaXP4V9uMFbVg8c0qyBccK2OOxb45Q==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -5147,10 +5150,10 @@ snapshots:
 
   '@ungap/structured-clone@1.3.3': {}
 
-  '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))':
+  '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
 
   '@vitest/expect@4.1.10':
     dependencies:
@@ -5161,13 +5164,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
-  '@vitest/mocker@4.1.10(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.10(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
 
   '@vitest/pretty-format@2.1.9':
     dependencies:
@@ -5222,7 +5225,7 @@ snapshots:
       lodash.pickby: 4.6.0
       lodash.union: 4.6.0
       read-pkg-up: 10.1.0
-      tsx: 4.23.11
+      tsx: 4.23.12
       webdriverio: 9.30.1(supports-color@8.1.1)
       yargs: 17.7.3
     transitivePeerDependencies:
@@ -5314,11 +5317,11 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  '@wdio/native-core@1.1.0(supports-color@8.1.1)(tsx@4.23.11)':
+  '@wdio/native-core@1.1.0(supports-color@8.1.1)(tsx@4.23.12)':
     dependencies:
       '@wdio/logger': 9.29.1
       '@wdio/native-types': 2.4.0
-      '@wdio/native-utils': 2.5.0(supports-color@8.1.1)(tsx@4.23.11)
+      '@wdio/native-utils': 2.5.0(supports-color@8.1.1)(tsx@4.23.12)
       debug: 4.4.3(supports-color@8.1.1)
       get-port: 7.2.0
       tslib: 2.8.1
@@ -5332,7 +5335,7 @@ snapshots:
 
   '@wdio/native-types@2.5.0': {}
 
-  '@wdio/native-utils@2.5.0(supports-color@8.1.1)(tsx@4.23.11)':
+  '@wdio/native-utils@2.5.0(supports-color@8.1.1)(tsx@4.23.12)':
     dependencies:
       '@wdio/logger': 9.18.0
       debug: 4.4.3(supports-color@8.1.1)
@@ -5342,11 +5345,11 @@ snapshots:
       smol-toml: 1.7.1
       yaml: 2.9.0
     optionalDependencies:
-      tsx: 4.23.11
+      tsx: 4.23.12
     transitivePeerDependencies:
       - supports-color
 
-  '@wdio/native-utils@2.6.0(supports-color@8.1.1)(tsx@4.23.11)':
+  '@wdio/native-utils@2.6.0(supports-color@8.1.1)(tsx@4.23.12)':
     dependencies:
       '@wdio/logger': 9.29.1
       debug: 4.4.3(supports-color@8.1.1)
@@ -5356,7 +5359,7 @@ snapshots:
       smol-toml: 1.7.1
       yaml: 2.9.0
     optionalDependencies:
-      tsx: 4.23.11
+      tsx: 4.23.12
     transitivePeerDependencies:
       - supports-color
 
@@ -5419,24 +5422,24 @@ snapshots:
       easy-table: 1.2.0
       pretty-ms: 9.3.0
 
-  '@wdio/tauri-plugin@1.3.0(supports-color@8.1.1)(tsx@4.23.11)':
+  '@wdio/tauri-plugin@1.3.0(supports-color@8.1.1)(tsx@4.23.12)':
     dependencies:
       '@tauri-apps/api': 2.11.1
       '@tauri-apps/plugin-log': 2.9.0
       '@wdio/native-spy': 1.2.0
-      '@wdio/native-utils': 2.6.0(supports-color@8.1.1)(tsx@4.23.11)
+      '@wdio/native-utils': 2.6.0(supports-color@8.1.1)(tsx@4.23.12)
     transitivePeerDependencies:
       - supports-color
       - tsx
 
-  '@wdio/tauri-service@1.3.0(expect-webdriverio@5.7.0)(supports-color@8.1.1)(tsx@4.23.11)(webdriverio@9.30.1(supports-color@8.1.1))':
+  '@wdio/tauri-service@1.3.0(expect-webdriverio@5.7.0)(supports-color@8.1.1)(tsx@4.23.12)(webdriverio@9.30.1(supports-color@8.1.1))':
     dependencies:
       '@wdio/globals': 9.29.1(expect-webdriverio@5.7.0)(webdriverio@9.30.1(supports-color@8.1.1))
       '@wdio/logger': 9.29.1
-      '@wdio/native-core': 1.1.0(supports-color@8.1.1)(tsx@4.23.11)
+      '@wdio/native-core': 1.1.0(supports-color@8.1.1)(tsx@4.23.12)
       '@wdio/native-spy': 1.2.0
       '@wdio/native-types': 2.5.0
-      '@wdio/native-utils': 2.6.0(supports-color@8.1.1)(tsx@4.23.11)
+      '@wdio/native-utils': 2.6.0(supports-color@8.1.1)(tsx@4.23.12)
       '@wdio/spec-reporter': 9.29.1
       '@wdio/types': 9.29.1
       debug: 4.4.3(supports-color@8.1.1)
@@ -7563,7 +7566,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsx@4.23.11:
+  tsx@4.23.12:
     dependencies:
       esbuild: 0.28.1
     optionalDependencies:
@@ -7682,7 +7685,7 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0):
+  vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -7694,13 +7697,13 @@ snapshots:
       esbuild: 0.28.1
       fsevents: 2.3.3
       jiti: 2.7.0
-      tsx: 4.23.11
+      tsx: 4.23.12
       yaml: 2.9.0
 
-  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0)):
+  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.10(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -7717,7 +7720,7 @@ snapshots:
       tinyexec: 1.3.0
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.1
-      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.11)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.13.3

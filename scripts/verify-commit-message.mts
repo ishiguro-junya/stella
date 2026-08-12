@@ -1,4 +1,4 @@
-import { verifyCommitFile } from './cog-validation.mjs';
+import { verifyCommitFile } from './cog-validation.mts';
 
 const file = process.argv[2];
 if (!file) throw new Error('commit message file is required');
