@@ -1894,7 +1894,6 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
-  transition: background-color 100ms ease;
 }
 .history-commit-item:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
