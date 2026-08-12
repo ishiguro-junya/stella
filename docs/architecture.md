@@ -16,6 +16,10 @@ Repositoryを開く処理は、選択したpathを解決する`Open`、登録済
 `ToolchainManager`はFrontendの`localStorage`とは独立したnative設定をApplication config directoryへatomic保存します。  
 起動時に内蔵またはSystemを一度だけ解決し、`Workspace`はその`GitExecutor`だけを保持します。  
 内蔵modeはApplication resource内の`bin`、`libexec/git-core`、templateを`PATH`、`GIT_EXEC_PATH`、`GIT_TEMPLATE_DIR`へ固定し、埋め込んだlock manifestとbundle markerのSHA-256を照合します。  
+System modeは選択・検証済みのGit関連componentを優先し、loginかつinteractive modeで起動した利用者のshellから取得した`PATH`、OS標準directoryの順で実行pathを構成します。  
+shellのstdoutはmarker間の`PATH`だけを採用して環境変数全体を保持せず、取得が2秒以内に完了しない場合、起動に失敗した場合、または出力が不正な場合は固定のSystem pathへフォールバックします。  
+この`PATH`はApplication起動時に一度だけ確定し、すべてのGit操作とGit Hookへ共通して渡します。  
+内蔵modeでは利用者のshellを起動せず、Application resource外のtoolchainを混入させません。  
 
 Git Flowは`git_flow` Module内で安全なrequestからargvを組み立てるInterfaceを持ち、任意optionやRepository外のconfig scopeを受け取りません。  
 git-flow-next 1.2.0はJSON overview flag導入前のため、JSON取得を試した後に同じoverviewのplain outputを型付き状態へ変換します。  
@@ -24,13 +28,44 @@ git-flow-next 1.2.0はJSON overview flag導入前のため、JSON取得を試し
 通常pollingのgeneration fingerprintはporcelain status、dirtyなtracked fileのindex OID／mode、worktreeのinode／mode／size／mtime／ctime、local／remote ref一覧で作り、regular file本文を開きません。  
 破壊操作のpreviewとexecuteでは対象本文をSHA-256で再計算し、operation journalも構造化Commit直前に記録済みの厳密digestと再照合します。  
 
-## 差分表示と競合編集
+## Commit入力
+
+FrontendからRustへ渡すCommit入力は、1行の`plain`メッセージと構造化した`conventional`のtagged unionです。  
+Rustは`plain`の空文字、改行、NULと、`conventional`の型、スコープ、メッセージ、Footerを形式別に最終検証します。  
+検証後はどちらもRepository内の一時message fileへ書き込み、同じGit CommitとGit Hookの経路を使用します。  
+PreferencesはApplication全体の形式設定と、Repositoryごとに分離した両形式の下書きを保持します。  
+旧形式の構造化下書きはConventional側へ移行し、設定値がない場合は通常形式を選択します。  
+
+## 差分表示とファイル編集
 
 通常diffとBase↔Current／Base↔Incomingの比較表示には`@pierre/diffs@1.3.5`を使います。  
-競合Resultの編集にはCodeMirror 6を使い、双方をFrontendの`ConflictSurface` module内へ隠します。  
+通常fileと競合Resultの編集にはCodeMirror 6を使い、検索、行番号、syntax highlight、Undo／Redo、`Command-S`、大規模file用設定をFrontendの`TextEditor`へ集約します。  
+競合固有のChoice、Mark resolved、revision同期は`ConflictSurface`のwrapperに残します。  
 `@codemirror/merge`とDiffsのexperimental Edit／Conflict機能は使用しません。  
 
+Changesは左paneの選択keyを単一選択と複数選択で共有し、複数選択時は各path／areaのDiffを並列取得してRepository上の表示順で右paneへ並べます。  
+ChangesのHunk操作はDiffsの標準Hunk separatorへ配置し、左端へハンク番号と行範囲、右端へ操作buttonを追加して、`unmodified lines`の文言は表示しません。  
+差分行本体の左クリックまたは行番号の直接選択で行を選び、Shiftクリックで同じsideの範囲へ選択を広げます。  
+選択中の行は追加行の緑と区別できる青系の背景で表示します。  
+行操作は右クリックメニューへ集約します。  
+選択行の本文コピーも右クリックメニューから行い、Diff上のドラッグによる文字選択は無効にします。  
+FrontendからRustへ渡す部分選択は、連続行を表す`lines`とDiff内の順序を表す`hunk`のtagged unionです。  
+RustはRepository generationとDiff revisionを再検証し、選択したHunkのheaderと本文、または選択行から再構成したzero-context patchを`git apply --check`後にindexへ適用します。  
+HunkのUnstageは同じpatchをindexへreverse適用し、Hunkの破棄はworktreeへreverse適用します。  
+いずれも追加行と削除行を1つの操作として扱います。  
+ファイルheaderの追従設定はPreferencesに保存し、Changesでは外側のscroll container、HistoryではDiffsのsticky header機能へ反映します。  
+設定が無効な場合はheaderとDiff本文を同じscroll flowに置き、有効な場合だけheaderを上部へ固定します。  
+
 Git indexとworking treeをRust側の正とし、未保存draftだけをFrontendで管理します。  
+通常fileの読込には`FileContents` queryを使い、text、line ending、UTF-8 BOM、content hash、Repository generationを受け取ります。  
+`SaveFile` Actionは読込時のcontent hashを必須とし、保存直前に現在内容を再読込して外部変更を拒否します。  
+既存のline endingとUTF-8 BOM、file modeを維持し、Repository内pathの検証後に同じdirectoryの一時fileからatomic renameします。  
+通常fileと競合Resultは共通の`UnsavedChangesHandle`をAppへ公開し、画面、Branch、Repository、windowの離脱確認を同じ契約で処理します。  
+Repository generationの更新時は編集中fileのhashを再確認し、未編集なら再読込し、編集中ならdraftを置き換えず外部変更状態へ移します。  
+
+通常fileはChanges snapshotに存在するpathだけを対象とし、UTF-8、line ending、NUL、Git attributes、Git LFS、file type、size、行数、最長行をRustで検証します。  
+保存はworktreeだけを書き換えるため、Staged fileを編集してもindexは維持されます。  
+
 SaveとMark resolvedは`sessionId`、path単位の`conflictGeneration`、`contentHash`をRustで再検証します。  
 Choiceで検証した本文とblock状態はRust sessionにもbounded revisionとして保持します。  
 
@@ -44,6 +79,9 @@ Rustは既知revisionと本文が完全一致すれば本文とblock状態を一
 Repository mutationはRepository単位で直列化し、operation IDを付けます。  
 Cloneを含む長時間operationはChannel eventでstarted、progress、completed、failed、cancelledを通知し、FrontendのActivityへ反映します。  
 cancel時はGitのprocess groupを停止し、全mutation終了後はhookの成功・失敗にかかわらずGitの実状態を再取得します。  
+開発buildでは起動時のnative実行fileのdevice、inode、size、mtimeを保持し、executeの直前に現在の実行fileと照合します。  
+再buildによって実行fileが変わっている場合は古いCore processで操作を続けず、Applicationの再起動を求めます。  
+release buildにはこの照合を含めません。  
 
 merge、rebase、cherry-pick、revertの進行状態はGit markerと最小journalから再構成します。  
 Cherry-pick／RevertのjournalはGit実行前の`preparing`と適用結果を厳密digest付きで記録した`applied`をatomicに保存します。  

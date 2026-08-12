@@ -24,16 +24,25 @@ ChangesとHistoryはtitlebarではなく、左paneの階層の先頭に配置さ
 
 StagedとUnstagedは常に表示される独立したgroupとして残し、それぞれのfile listを個別にscrollできます。  
 
+## アプリ内の文言
+
+- 説明文、通知、エラーでは、製品名を主語にした「Stellaは〜」「Stellaが〜」ではなく、「アプリは〜」「アプリが〜」と表記します。
+  英語でも製品名を主語にせず、`The app`を使用します。
+- Window titleやApplication menuの「Stellaについて」「Stellaを隠す」「Stellaを終了」など、製品名そのものを示す表示は対象外です。
+- Dialogを含むformでは、表示labelのある入力欄にplaceholderを重ねません。
+  表示labelのない検索欄では、検索対象を示すplaceholderを使用できます。
+
 ## 操作検証
 
 - ChangesとHistoryでは、矢印、Home、End keyに対応したroving-tab keyboard patternを使用しています。
 - Historyは未コミットの変更がある場合、Commit一覧の先頭に対象ファイル数付きの履歴項目を表示し、graphをグレーにして未コミットであることを区別します。
-- StagedとUnstagedは折りたたみheaderを使わず、固定見出し、独立scroll、group checkbox、一括操作、drag and drop、keyboard操作を維持しています。
-- StagedとUnstagedが空でも件数0のgroupを表示し、有効な内部dropを引き続き受け付けます。
+- StagedとUnstagedは固定見出し、独立scroll、file／group checkbox、一括操作、keyboard操作を維持しています。
+- StagedとUnstagedが空でも件数0のgroupを表示します。
 - Commit DialogはMessageへ初期focusし、CancelまたはEscapeで閉じ、成功時だけ自動で閉じます。
-- Commit Dialogの日本語labelはコミット、メッセージ、型、スコープ、破壊的変更とし、validation messageが表示されても入力欄の位置を維持します。
+- Conventional Commitsを使用しない場合、Commit Dialogにはplaceholderのないメッセージ入力だけを表示します。
+- Conventional Commitsを使用する場合はメッセージ、型、スコープ、破壊的変更を表示し、validation messageが表示されても入力欄の位置を維持します。
 - Stageされた変更がない場合はDialog内のCommit buttonを無効にしますが、理由の帯は表示しません。
-- 入力途中の下書きはrepository単位で保持します。
+- 入力途中の下書きはrepositoryとCommit形式ごとに分けて保持します。
 - Commitできない状態でもDialogは開き、実行buttonを理由付きで無効にします。
 - 実行時エラーはqueueされたmodal dialogで表示し、詳細から元のGit出力と終了statusを確認できます。
 - 想定内のfast-forward divergenceはgenericなエラーDialogではなく、MergeまたはRebaseを選ぶinlineの判断として表示します。
@@ -127,22 +136,23 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 ## 比較履歴
 
 - 1回目: ChangesとHistoryを左pane上部へ移動し、Commitを初期状態で閉じたdisclosureにしました。
-- 2回目: checkboxやdragのworkflowを削除せず、StagedとUnstagedを分離しました。
+- 2回目: checkboxを維持し、StagedとUnstagedを分離しました。
 - 3回目: 重複したCommitとHistoryの見出しを削除し、disclosureの規則を揃え、compactなHistory gridを緩和しました。
 - 4回目: 実行時エラーを共通modal queueへ移し、重複または想定内のエラーDialogを削除しました。
-- 5回目: 保存していない競合状態からの遷移をguardし、native WebKitのprotected modeにおけるdrag処理を修正しました。
+- 5回目: 保存していない競合状態からの遷移をguardしました。
 - 6回目: Workspace Logを独立したActivity画面とCommit分析へ置き換えました。
 - 7回目: 操作行にあったWebKitのwindow全体を覆うhover overlayを削除し、keyboard focus可能なtable semanticsにしました。
 - 8回目: System appearanceをmacOS color-scheme media queryで明示的に解決するようにしました。
 - 9回目: repository tabを独立したRepository／Branch controlに置き換え、承認済みの参照画像に対して両方のswitcher Dialogを検証しました。
 - 10回目: 件数が0でもStagedとUnstagedを表示し、折りたたみcontrolを削除しました。
+- 11回目: file行のdrag and dropによるStage／Unstageを削除し、checkbox操作へ集約しました。
 
 ## 検証checklist
 
 - [x] 参照画像と最終native Changes画面を並べて比較する。
 - [x] nativeのChanges、History、Commit、エラーDialogの状態を確認する。
 - [x] Frontend、Rust、設定、文書、Commitに関する全品質gateを実行する。
-- [x] checkboxおよびdragによるStageを含む、4つのembedded WebKit workflowを実行する。
+- [x] checkboxによるStageを含む、embedded WebKit workflowを実行する。
 - [x] 最終的なApple Silicon用macOS application bundleをbuildする。
 - [x] 選択したActivity参照画像と最終native Activity画面を1つの比較画像で確認する。
 - [x] Activityを1180 x 760および最小window sizeの860 x 560で確認する。
@@ -170,7 +180,7 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 
 元画像と最終Unified controlを、1つの752 x 106の比較画像として並べました。  
 以前の元画像では非選択のSplit側が浮き出て見え、選択中のUnified側がoutlineまたはくぼんだ選択肢のように見えます。  
-最終controlでは視覚的な階層を逆転させ、選択中の項目に浮き上がったsurface、primary text、control shadowを使用し、非選択項目はくぼんだgroup surface上で背景を透明にしています。  
+最終controlでは選択中の項目に決定buttonと同じaccent blue、白い前景、control shadowを使用し、非選択項目はくぼんだgroup surface上で背景を透明にしています。  
 nativeの画面全体のcaptureから、Changes toolbarと左paneのrepository navigationでもcompactさとalignmentが維持されていることを確認できます。  
 
 この状態差は1180 x 760の画面全体だけでは確実に判断できないため、注目箇所の比較が必要でした。  
@@ -179,16 +189,17 @@ nativeの画面全体のcaptureから、Changes toolbarと左paneのrepository n
 ### Segmented controlで再現性が必要な要素
 
 - fontとtypography: 既存のsystem UI font、label size、weight、line height、icon scaleは変更していません。
-- spacingとlayout rhythm: compactな高さを維持したまま、groupに2 pixelのinset、外側に9 pixelのradius、segmentに6 pixelのradiusを追加しました。
-- colorとtoken: 選択中の項目は`--surface-raised`と`--text-primary`、非選択項目は`--surface-sunken`上で透明な背景と`--text-secondary`を使います。
+- spacingとlayout rhythm: compactな高さとgroupの2 pixel inset、外周の1 pixel border、9 pixel radiusを維持しています。  
+  各tabはgap 0で密着させ、group外側の角だけを6 pixel radiusにし、内側の角と仕切り線は設けません。
+- colorとtoken: 選択中の項目は`--interactive-selected-surface`と`--interactive-selected-foreground`、非選択項目は`--surface-sunken`上で透明な背景と`--text-secondary`を使います。
 - 画像品質とasset: 既存のLucide iconはvectorのまま描画し、変更していません。  
   新しい画像assetも追加していません。
 - 文言とcontent: Unified、Split、Changes、History、Current、Incoming、Open、Cloneのlabelは変更していません。
 
 ### 操作とconsoleの検証
 
-- native appでUnifiedとSplitを選択し、浮き上がったvisual状態とともに`aria-pressed`が移動することを確認しました。
-- native appでChangesとHistoryを選択し、同じ浮き上がったvisual状態とともに`aria-selected`が移動することを確認しました。
+- native appでsegmented controlを選択し、accent blueのvisual状態とともに`aria-selected`または`aria-pressed`が移動することを確認しました。
+- native appでChanges、History、Activity、Settingsを選択し、グレーの選択背景とともに`aria-current`が移動することを確認しました。
 - in-app browserでActivityの期間selectを30日から90日へ変更し、Commit分析が選択期間に追従することを確認しました。
 - Repository操作のOpenとCloneは同じ共通segmented containerを使っています。  
   OpenしたpathがGit Repositoryでなければ、そのpathに新しいRepositoryを作成します。  
@@ -204,9 +215,10 @@ P3の追加対応も不要です。
 ### Segmented controlの比較履歴
 
 - 1回目の検出事項: active stateと視覚的に浮き上がったstateが反対の選択肢に見え、tab状のcontrol間で選択表現が統一されていませんでした。
-- 修正: くぼんだsegmented group、透明な非選択button、浮き上がった選択buttonを共通化しました。  
-  既存のsemanticsを維持したまま、repository tabとActivityの期間controlへ適用しました。
-- 修正後の資料: nativeの両diff layout状態、native History状態、browser Activity状態、元画像との注目箇所比較のいずれでも、実際の選択値に浮き上がったsurfaceが追従しています。
+- 1回目の修正: くぼんだsegmented group、透明な非選択button、浮き上がった選択buttonを共通化しました。  
+  既存のsemanticsを維持したまま、同じ目的のsegmented controlへ適用しました。
+- 2回目の修正: 選択buttonの背景を決定buttonと同じaccent blueへ変更し、前景とfocus ringを白系へ統一しました。
+- 修正後の確認: native E2Eでprimary buttonと各選択stateのcomputed backgroundおよびforegroundが一致することを確認しました。
 
 ## 選択highlightの検証
 
@@ -219,27 +231,34 @@ P3の追加対応も不要です。
 
 元画像のcropとnative実装を、1つの比較画像として並べて確認しました。  
 元画像では、青いinset railが丸みのある選択背景の左端に沿っています。  
-修正後の実装では、同じradius、spacing、typography、icon、status color、muted blueの選択surfaceを維持しながら、accent railを削除しました。  
+修正後の実装では、同じradius、spacing、typographyを維持しながら、選択surfaceをaccent blueへ変更し、文字とiconを白系へ統一してaccent railを削除しました。  
 変更対象がその状態表現だけに限られるため、layoutの確認には画面全体のcaptureを使い、選択行を注目箇所として確認しました。  
 
 - fontとtypography: 既存のsystem UI font、weight、size、truncation、階層は変更していません。
 - spacingとlayout rhythm: 行の寸法、padding、icon alignment、radius、周囲のgroup spacingは変更していません。
-- colorとvisual token: 選択状態では引き続き`--selection-muted`を使い、選択中のchange、Commit、Activity、競合、titlebar destinationから装飾用の`--accent` inset shadowを削除しました。
+- colorとvisual token: Application操作の選択状態は`--interactive-selected-surface`と白系の前景を使います。  
+  Dark appearanceのaccent blueはLightより明度を抑え、白い前景とのcontrastを確保します。  
+  上部navigationはグレーの選択背景と通常の前景を維持します。  
+  Diff行選択用の`--diff-selection-surface`、未保存の黄色いdot、Repository logoは変更しません。  
+  History graphのlane colorは選択状態の前景色に置き換えません。  
+  History graphは選択中もlane colorを維持し、lane 0には選択背景でも識別できるvioletの`--history-lane-0`、未コミット区間には低彩度の`--history-working-tree`を使います。  
+  Darkのref chipには`--history-ref-foreground`を使います。
 - 画像品質とasset: rasterや独自の画像assetは対象外です。  
   既存のvector iconは変更していません。
 - 文言とcontent: 変更していません。
-- 操作検証: native E2Eで、選択中のchange行、選択中のHistory Commit、activeなActivity destinationのcomputed `box-shadow: none`を確認しました。  
-  残りの競合とActivity行の選択状態には共通CSSが適用されます。  
-  keyboard focus ringとdrag target borderは操作feedbackとして維持しています。
+- 操作検証: native E2Eで、選択中のchange、History Commit、Activity行、switcher、競合、segmented controlがprimary buttonと同じ背景を使うことを確認しました。  
+  titlebar destinationはprimary buttonと異なるグレー背景を使うことを確認しました。  
+  選択中の補助文字、状態icon、3点リーダーは白系へ切り替え、keyboard focus ringは白で表示します。  
+  Stage／Unstageはfile／group checkboxから行い、file行はdrag sourceにしません。
 
 対応が必要なP0、P1、P2、P3の検出事項は残っていません。  
 
 ### 選択highlightの比較履歴
 
 - 1回目の検出事項: 丸みのある選択surfaceの左端に青いinsetがあり、radiusと視覚的に競合していました。
-- 修正: 背景highlightを維持したまま、共通の左端selection railとtitlebar destinationのunderlineを削除しました。
-- 修正後の資料: native Changes captureでは、選択中のREADME行が途切れのない1つの丸いsurfaceとして表示されています。  
-  E2Eのcomputed style assertionから、他の共通選択状態でもshadowが表示されないことを確認できます。
+- 1回目の修正: 背景highlightを維持したまま、共通の左端selection railとtitlebar destinationのunderlineを削除しました。
+- 2回目の修正: 選択highlightを決定buttonと同じaccent blueへ変更し、選択中の前景とfocus ringを白系へ揃えました。
+- 修正後の確認: native E2Eで各選択stateとprimary buttonのcomputed colorを比較し、Diff行選択が別tokenのまま維持されることを確認しました。
 
 最終結果: 合格  
 
@@ -278,8 +297,10 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
 
 - fontとtypography: 既存のsystem font、weight、size、line height、truncation、日付formatは変更していません。
 - spacingとlayout rhythm: Commit contentのinsetは変更せず、選択行とhover行の背景を`border-radius: 0`で365 pixelのlist全幅へ広げました。
-- colorとvisual token: 選択行は引き続き`--selection-muted`、hoverは既存の6% text mixを使います。
+- colorとvisual token: 選択行は`--interactive-selected-surface`と白系の前景、選択中のhoverは`--interactive-selected-hover`を使います。  
+  非選択行のhoverは既存の6% text mixを維持します。
 - graphのlane 0は青、lane 1以降は紫・橙・緑・桃・青緑を循環させます。
+- lane 0のgraphは選択行をまたいでも同じblueを維持し、未コミット区間だけを低彩度のgrayへ切り替えます。
 - 画像品質とasset: rasterや生成assetは対象外です。  
   browser上の形状計測では、sampleしたすべてのSVG Commit nodeが8 x 8 CSS pixelで、以前の縦方向の伸びがなくなっています。
 - 文言とcontent: 変更していません。
@@ -306,7 +327,7 @@ node形状と行端の表現はapplication全体の画面では確実に判断�
   Commit行のダブルクリックは、そのCommitを指す現在以外のローカルブランチが一意な場合にチェックアウトします。  
   menuとDialogを閉じた場合は対象Commit行へfocusを戻します。
   先頭の未コミットの変更を選択した場合はChangesへ切り替えます。
-  各Commitの日時は、AuthorとCommit IDを並べたメタ情報内でCommit IDの直後に表示します。
+  各Commitのメタ情報は、左右paneともCommit ID、Author、日時の順に表示します。
 - responsive: 1180 x 760と860 x 560で、日時、ref chip、graph、3点リーダーが重ならないことをnative E2Eで確認します。
 - 自動検証: Historyの全ref、Tag表示、曲線pathを含むfrontend test、typecheck、lint、frontend 334件、Rust 175件、native E2E 8件が合格しています。
 
