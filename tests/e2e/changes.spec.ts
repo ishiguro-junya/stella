@@ -18,6 +18,54 @@ import {
   writeRepositoryFile,
 } from './support/fixtures.js';
 
+interface EditorPosition {
+  scrollTop: number;
+  activeLine: string;
+  focused: boolean;
+  viewportRatio: number;
+}
+
+async function readEditorPosition(): Promise<EditorPosition> {
+  return browser.execute(() => {
+    const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+    const activeLine = document.querySelector<HTMLElement>('.file-editor .cm-activeLine');
+    const scrollerRect = scroller?.getBoundingClientRect();
+    const activeLineRect = activeLine?.getBoundingClientRect();
+    return {
+      scrollTop: scroller?.scrollTop ?? 0,
+      activeLine: activeLine?.textContent ?? '',
+      focused: document.activeElement?.classList.contains('cm-content') ?? false,
+      viewportRatio:
+        scrollerRect && activeLineRect
+          ? (activeLineRect.top + activeLineRect.height / 2 - scrollerRect.top) /
+            scrollerRect.height
+          : 1,
+    };
+  });
+}
+
+async function waitForEditorPosition(expectedLine: string): Promise<EditorPosition> {
+  let position = await readEditorPosition();
+  await browser.waitUntil(
+    async () => {
+      position = await readEditorPosition();
+      return (
+        position.scrollTop > 0 &&
+        position.activeLine === expectedLine &&
+        position.focused &&
+        position.viewportRatio > 0.2 &&
+        position.viewportRatio < 0.3
+      );
+    },
+    {
+      timeout: 10_000,
+      interval: 50,
+      timeoutMsg: `The editor did not settle at ${expectedLine} above center with focus.`,
+    },
+  );
+  return position;
+}
+
 describe('Changes', () => {
   let repositoryPath = '';
 
@@ -572,22 +620,7 @@ describe('Changes', () => {
     });
     const editor = $('.file-editor-pane');
     await editor.waitForDisplayed({ timeout: 10_000 });
-    const hunkEditorPosition = await browser.execute(() => {
-      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
-      const activeLine = document.querySelector<HTMLElement>('.file-editor .cm-activeLine');
-      const scrollerRect = scroller?.getBoundingClientRect();
-      const activeLineRect = activeLine?.getBoundingClientRect();
-      return {
-        scrollTop: scroller?.scrollTop ?? 0,
-        activeLine: activeLine?.textContent ?? '',
-        focused: document.activeElement?.classList.contains('cm-content') ?? false,
-        viewportRatio:
-          scrollerRect && activeLineRect
-            ? (activeLineRect.top + activeLineRect.height / 2 - scrollerRect.top) /
-              scrollerRect.height
-            : 1,
-      };
-    });
+    const hunkEditorPosition = await waitForEditorPosition('line-117');
     expect(hunkEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(hunkEditorPosition.activeLine).toBe('line-117');
     expect(hunkEditorPosition.focused).toBe(true);
@@ -644,22 +677,7 @@ describe('Changes', () => {
     await $('button=選択した行を編集').waitForClickable({ timeout: 10_000 });
     await $('button=選択した行を編集').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
-    const lineEditorPosition = await browser.execute(() => {
-      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
-      const activeLine = document.querySelector<HTMLElement>('.file-editor .cm-activeLine');
-      const scrollerRect = scroller?.getBoundingClientRect();
-      const activeLineRect = activeLine?.getBoundingClientRect();
-      return {
-        scrollTop: scroller?.scrollTop ?? 0,
-        activeLine: activeLine?.textContent ?? '',
-        focused: document.activeElement?.classList.contains('cm-content') ?? false,
-        viewportRatio:
-          scrollerRect && activeLineRect
-            ? (activeLineRect.top + activeLineRect.height / 2 - scrollerRect.top) /
-              scrollerRect.height
-            : 1,
-      };
-    });
+    const lineEditorPosition = await waitForEditorPosition('changed-120');
     expect(lineEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(lineEditorPosition.activeLine).toBe('changed-120');
     expect(lineEditorPosition.focused).toBe(true);
