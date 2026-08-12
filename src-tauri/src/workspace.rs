@@ -2834,9 +2834,6 @@ impl Workspace {
                 start_point,
                 checkout,
             } => {
-                if *checkout {
-                    require_clean(before)?;
-                }
                 let start = self.bound_target(repo, start_point, target_binding, control)?;
                 let output = if *checkout {
                     self.run_checked(
@@ -2901,7 +2898,6 @@ impl Workspace {
                 Ok((LocalizedMessage::new("backendGitFlowCompleted"), output))
             }
             Action::Checkout { branch } => {
-                require_clean(before)?;
                 let output = self.run_checked(
                     repo,
                     GitCommand::Switch {
@@ -8636,6 +8632,129 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
         assert!(fixture.repo.join("obstacle/secret.txt").exists());
+    }
+
+    #[test]
+    fn switch_and_create_branch_keep_compatible_uncommitted_changes() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+        fixture.git(&["branch", "target"]);
+        fixture.write("tracked.txt", "staged\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.write("tracked.txt", "unstaged\n");
+        fixture.write("untracked.txt", "untracked\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let switched = workspace
+            .execute(ExecuteRequest {
+                operation_id: "switch-with-changes".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Checkout {
+                    branch: "target".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert_eq!(fixture.git_output(&["branch", "--show-current"]), "target");
+        assert_eq!(fixture.git_output(&["show", ":tracked.txt"]), "staged");
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("tracked.txt")).unwrap(),
+            "unstaged\n"
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("untracked.txt")).unwrap(),
+            "untracked\n"
+        );
+
+        let start_point = fixture.git_output(&["rev-parse", "HEAD"]);
+        let action = Action::CreateBranch {
+            name: "created-with-changes".into(),
+            start_point,
+            checkout: true,
+        };
+        let token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            switched.snapshot.repo_generation,
+            action.clone(),
+        );
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "create-with-changes".into(),
+                repo_id: attached.repo_id,
+                expected_generation: switched.snapshot.repo_generation,
+                action,
+                confirmation_token: Some(token),
+            })
+            .unwrap();
+
+        assert_eq!(
+            fixture.git_output(&["branch", "--show-current"]),
+            "created-with-changes"
+        );
+        assert_eq!(fixture.git_output(&["show", ":tracked.txt"]), "staged");
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("tracked.txt")).unwrap(),
+            "unstaged\n"
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("untracked.txt")).unwrap(),
+            "untracked\n"
+        );
+    }
+
+    #[test]
+    fn switch_rejects_conflicting_uncommitted_change_without_changing_branch() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+        fixture.git(&["switch", "-c", "target"]);
+        fixture.write("tracked.txt", "target\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを変更"]);
+        fixture.git(&["switch", "main"]);
+        fixture.write("tracked.txt", "local change\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "reject-conflicting-switch".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Checkout {
+                    branch: "target".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::GitFailed);
+        assert_eq!(fixture.git_output(&["branch", "--show-current"]), "main");
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("tracked.txt")).unwrap(),
+            "local change\n"
+        );
     }
 
     #[test]

@@ -599,10 +599,6 @@ export const MESSAGES = {
     ja: (args) =>
       `${text(args, 'operation')}。ブランチを切り替える前に操作を完了またはAbortしてください。`,
   },
-  commitOrDiscardBeforeSwitchingBranch: {
-    en: 'Commit or discard changes before switching branches.',
-    ja: 'ブランチを切り替える前に変更をCommitまたは破棄してください。',
-  },
   waitBeforeSwitchingBranch: {
     en: 'Wait for the current operation to finish before switching branches.',
     ja: '現在の操作が完了してからブランチを切り替えてください。',

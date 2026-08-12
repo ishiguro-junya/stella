@@ -8,7 +8,13 @@ import {
   resetApp,
   selectSetting,
 } from './support/app.js';
-import { createEmptyRepository, removeFixture, runGit } from './support/fixtures.js';
+import {
+  configureRepository,
+  createEmptyRepository,
+  removeFixture,
+  runGit,
+  writeRepositoryFile,
+} from './support/fixtures.js';
 
 describe('Repository and Branch navigation', () => {
   let repositoryPath = '';
@@ -108,6 +114,45 @@ describe('Repository and Branch navigation', () => {
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher.$('button=Create branch')).toBeDisplayed();
     await expect(switcher.$('button=Git Flow')).not.toExist();
+  });
+
+  it('keeps uncommitted changes when switching and creating compatible branches', async () => {
+    await configureRepository(repositoryPath);
+    await writeRepositoryFile(repositoryPath, 'tracked.txt', 'base\n');
+    await runGit(repositoryPath, ['add', '--', 'tracked.txt']);
+    await runGit(repositoryPath, ['commit', '-m', 'feat: 追跡対象ファイルを追加']);
+    await runGit(repositoryPath, ['branch', 'target']);
+    await writeRepositoryFile(repositoryPath, 'tracked.txt', 'staged\n');
+    await runGit(repositoryPath, ['add', '--', 'tracked.txt']);
+    await writeRepositoryFile(repositoryPath, 'tracked.txt', 'unstaged\n');
+    await writeRepositoryFile(repositoryPath, 'untracked.txt', 'untracked\n');
+    const expectedStatus = (await runGit(repositoryPath, ['status', '--short'])).trim();
+
+    await openRepository(repositoryPath, { language: 'ja' });
+    await $('.branch-toggle').click();
+    let switcher = $('[role="dialog"][aria-labelledby]');
+    await expect(switcher.$('[role="option"]*=target')).toBeEnabled();
+    await expect(switcher.$('button=ブランチを作成')).toBeEnabled();
+    await switcher.$('[role="option"]*=target').click();
+    await switcher.waitForDisplayed({ reverse: true });
+    await expect($('.branch-toggle')).toHaveText(expect.stringContaining('target'));
+    expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
+
+    await $('.branch-toggle').click();
+    switcher = $('[role="dialog"][aria-labelledby]');
+    await switcher.waitForDisplayed();
+    const createBranchButton = switcher.$('button=ブランチを作成');
+    await expect(createBranchButton).toBeEnabled();
+    await createBranchButton.click();
+    const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
+    await branchDialog.waitForDisplayed();
+    await branchDialog.$('input[aria-label="ブランチ名"]').setValue('created-with-changes');
+    await branchDialog.$('button=影響を確認').click();
+    const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
+    await expect(confirmation).toBeDisplayed();
+    await confirmation.$('button=実行').click();
+    await expect($('.branch-toggle')).toHaveText(expect.stringContaining('created-with-changes'));
+    expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
   });
 
   it('reconnects a repository after its local directory is moved', async () => {

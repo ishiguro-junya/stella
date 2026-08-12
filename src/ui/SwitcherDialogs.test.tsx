@@ -194,30 +194,71 @@ describe('BranchSwitcherDialog', () => {
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
   });
 
-  it('keeps the current branch reachable but blocks checkout while changes exist', async () => {
+  it('allows checkout and branch creation while changes exist', async () => {
     const user = userEvent.setup();
     const onCheckout = vi.fn<(branchName: string) => void>();
-    const onDismiss = vi.fn<() => void>();
     render(
       <BranchSwitcherDialog
         repo={repoSnapshot({
           changes: [{ path: 'README.md', area: 'unstaged', status: 'modified' }],
         })}
         branches={BRANCHES}
-        onDismiss={onDismiss}
+        onDismiss={() => undefined}
         onCheckout={onCheckout}
         onCreate={() => undefined}
       />,
     );
 
-    expect(screen.getByText('Commit or discard changes before switching branches.')).toBeVisible();
     const feature = screen.getByRole('option', { name: 'feature/search' });
-    expect(feature).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
+    expect(feature).not.toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Create branch' })).toBeEnabled();
     await user.click(feature);
-    expect(onCheckout).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('option', { name: /main.*origin\/main/u }));
-    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(onCheckout).toHaveBeenCalledWith('feature/search');
+
+    await user.click(screen.getByRole('button', { name: 'Create branch' }));
+    expect(screen.getByRole('textbox', { name: 'Branch name' })).toBeEnabled();
+  });
+
+  it('continues to block branch changes during another Git operation or busy state', () => {
+    const operation = {
+      kind: 'merge' as const,
+      label: { id: 'gitOperationInProgress' as const },
+      unresolvedCount: 0,
+      canContinue: false,
+      canSkip: false,
+      canAbort: true,
+    };
+    const { rerender } = render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot({ operation })}
+        branches={BRANCHES}
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('option', { name: 'feature/search' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
+
+    rerender(
+      <BranchSwitcherDialog
+        repo={repoSnapshot()}
+        branches={BRANCHES}
+        busy
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('option', { name: 'feature/search' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
   });
 
   it('opens branch creation instead of Git Flow and submits the current commit', async () => {

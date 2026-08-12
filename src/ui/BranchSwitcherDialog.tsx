@@ -29,7 +29,6 @@ function checkoutDisabledReason(
       operation: message(repo.operation.label),
     });
   }
-  if (repo.changes.length) return t('commitOrDiscardBeforeSwitchingBranch');
   if (busy) return t('waitBeforeSwitchingBranch');
   return undefined;
 }
