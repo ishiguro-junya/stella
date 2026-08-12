@@ -57,6 +57,7 @@ const STELLA_DIFF_THEMES = {
 } as const;
 const STELLA_DIFF_HIGHLIGHT_CSS = `
 :host {
+  --diffs-font-size: var(--code-font-size);
   --diffs-addition-color-override: var(--diff-addition-accent);
   --diffs-deletion-color-override: var(--diff-deletion-accent);
   --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);

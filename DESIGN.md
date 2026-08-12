@@ -61,6 +61,7 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 
 - 階層: repository contextはtitlebarに置き、画面navigationとchange操作は左paneに置きます。
 - 密度: 通常状態ではchange group、file、選択中のpath、diffだけを表示します。
+- typography: Diffと通常Editorのcode本文は共通の13pxを使用します。
 - 操作性: Commit Dialogはfocus trap、focus復帰、IME変換中のEscape抑止を共通Dialogと揃えます。
   StagedとUnstagedは固定見出しとし、件数は右端ではなく各ラベル直後のbadgeに表示します。
 - accessibility: status名、開閉状態、group選択、modalの詳細、focus復元を明示します。

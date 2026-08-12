@@ -749,6 +749,7 @@ describe('DiffSurface line selection', () => {
       'transform: translateX(calc(0px - var(--stella-hunk-left-offset, 0px)));',
     );
     expect(props?.options.unsafeCSS).toContain('padding: 0 8px 0 12px;');
+    expect(props?.options.unsafeCSS).toContain('--diffs-font-size: var(--code-font-size);');
     expect(props?.options.unsafeCSS).toContain('font-size: 11px;');
     expect(props?.options.unsafeCSS).not.toContain('[data-stella-hunk-toggle]');
   });

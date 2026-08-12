@@ -250,7 +250,7 @@ export function TextEditor({
           '.cm-content': {
             caretColor: 'var(--accent)',
             fontFamily: 'var(--font-mono)',
-            fontSize: '12px',
+            fontSize: 'var(--code-font-size)',
           },
           '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
           '.cm-gutters': {

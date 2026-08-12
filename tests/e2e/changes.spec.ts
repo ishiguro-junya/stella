@@ -503,6 +503,12 @@ describe('Changes', () => {
     await expectInteractiveSelectedColors(
       '.diff-file-toolbar [role="tab"][aria-label="表示"][aria-selected="true"]',
     );
+    const diffFontSize = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>('.diff-surface diffs-container')?.shadowRoot;
+      const line = root?.querySelector<HTMLElement>('[data-line]');
+      return line ? getComputedStyle(line).fontSize : '';
+    });
+    expect(diffFontSize).toBe('13px');
     await editTab.waitForClickable({ timeout: 10_000 });
     await expect(editTab).toHaveAttribute('title', '編集');
     await expect(editTab).toHaveText('');
@@ -522,6 +528,8 @@ describe('Changes', () => {
     await expect(editor.$('button=キャンセル')).not.toExist();
     const textbox = editor.$('[role="textbox"]');
     await expect(textbox).toHaveAttribute('aria-label', 'README.mdを編集');
+    const editorFontSize = await textbox.getCSSProperty('font-size');
+    expect(editorFontSize.value).toBe(diffFontSize);
     const editorMenu = editor.$('button[aria-haspopup="menu"]');
     await expect(editorMenu).toHaveAttribute(
       'aria-label',
