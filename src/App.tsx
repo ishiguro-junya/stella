@@ -53,7 +53,7 @@ import {
   repositoryNameFromRemoteUrl,
 } from './domain/repositoryLocation';
 import { ChangesView } from './features/changes/ChangesView';
-import type { ConflictLeaveHandle } from './features/conflict/ConflictSurface';
+import type { UnsavedChangesHandle } from './domain/unsavedChanges';
 import { mergeActivityEntries } from './features/activity/activityPersistence';
 import { HistoryView } from './features/history/HistoryView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -301,6 +301,14 @@ export function App({
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
   const [diffStyle, setDiffStyle] = useState<DiffStyle>(initialPreferences.diffStyle);
   const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
+  const [useConventionalCommits, setUseConventionalCommits] = useState(
+    initialPreferences.useConventionalCommits,
+  );
+  const [stickyFileHeaders, setStickyFileHeaders] = useState(initialPreferences.stickyFileHeaders);
+  const [editorLineWrapping, setEditorLineWrapping] = useState(
+    initialPreferences.editorLineWrapping,
+  );
+  const [editorWrapColumn, setEditorWrapColumn] = useState(initialPreferences.editorWrapColumn);
   const [toolchainStatus, setToolchainStatus] = useState<ToolchainStatus>();
   const [toolchainBusy, setToolchainBusy] = useState(false);
   const t = useCallback<I18nValue['t']>((id, args) => translate(language, id, args), [language]);
@@ -325,6 +333,8 @@ export function App({
   const [latestConflict, setLatestConflict] = useState<ConflictDocument>();
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation>();
   const [pendingOperationAction, setPendingOperationAction] = useState<GuardedOperationAction>();
+  const [pendingUnsavedAction, setPendingUnsavedAction] = useState<WorkspaceAction>();
+  const [pendingWindowClose, setPendingWindowClose] = useState(false);
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
   const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView>();
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
@@ -334,8 +344,8 @@ export function App({
   const [restoringWorkspace, setRestoringWorkspace] = useState(
     initialPreferences.openRepoPaths.length > 0,
   );
-  const leaveHandleRef = useRef<ConflictLeaveHandle | null>(null);
-  const conflictDirtyRef = useRef(false);
+  const leaveHandleRef = useRef<UnsavedChangesHandle | null>(null);
+  const unsavedDirtyRef = useRef(false);
   const workspaceRef = useRef(workspace);
   const pageRef = useRef(page);
   const restorePromiseRef = useRef<Promise<RepoSnapshot[]> | undefined>(undefined);
@@ -365,8 +375,8 @@ export function App({
     ? (registeredRepositories.find((candidate) => candidate.path === repo.path)?.name ?? repo.name)
     : undefined;
   pageRef.current = page;
-  const handleConflictDirtyChange = useCallback((dirty: boolean): void => {
-    conflictDirtyRef.current = dirty;
+  const handleUnsavedDirtyChange = useCallback((dirty: boolean): void => {
+    unsavedDirtyRef.current = dirty;
   }, []);
   const showError = useCallback<ShowWorkspaceError>((title, cause, fallback): void => {
     const content = describeWorkspaceError(cause, fallback);
@@ -375,6 +385,28 @@ export function App({
   }, []);
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
+  }, []);
+
+  useEffect(() => {
+    if (!Reflect.has(globalThis, '__TAURI_INTERNALS__')) return () => undefined;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
+      getCurrentWindow()
+        .onCloseRequested((event) => {
+          if (!unsavedDirtyRef.current) return;
+          event.preventDefault();
+          setPendingWindowClose(true);
+        })
+        .then((listener) => {
+          if (disposed) listener();
+          else unlisten = listener;
+        }),
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -451,6 +483,10 @@ export function App({
       language,
       diffStyle,
       splitStageView,
+      useConventionalCommits,
+      stickyFileHeaders,
+      editorLineWrapping,
+      editorWrapColumn,
       openRepoPaths: workspace.repos.map((candidate) => candidate.path),
       ...(repo ? { selectedRepoPath: repo.path } : {}),
       view,
@@ -459,11 +495,15 @@ export function App({
   }, [
     appearance,
     diffStyle,
+    editorLineWrapping,
+    editorWrapColumn,
     language,
     paneWidths,
     repo,
     restoringWorkspace,
     splitStageView,
+    useConventionalCommits,
+    stickyFileHeaders,
     view,
     workspace,
   ]);
@@ -855,11 +895,33 @@ export function App({
   };
 
   const requestOperationAction = (action: GuardedOperationAction): void => {
-    if (conflictDirtyRef.current) {
+    if (unsavedDirtyRef.current) {
       setPendingOperationAction(action);
       return;
     }
     settleUiAction(runAction(action));
+  };
+
+  const requestUnsavedGuardedAction = (action: WorkspaceAction): void => {
+    if (unsavedDirtyRef.current) {
+      setPendingUnsavedAction(action);
+      return;
+    }
+    settleUiAction(runAction(action));
+  };
+
+  const runPendingUnsavedAction = async (save: boolean): Promise<void> => {
+    if (!pendingUnsavedAction) return;
+    const action = pendingUnsavedAction;
+    if (save) {
+      const saved = await leaveHandleRef.current?.save();
+      if (!saved) return;
+    } else {
+      setWorkspaceViewRevision((current) => current + 1);
+    }
+    setPendingUnsavedAction(undefined);
+    unsavedDirtyRef.current = false;
+    await runAction(action);
   };
 
   const runPendingOperationAction = async (discardConflict: boolean): Promise<void> => {
@@ -867,7 +929,7 @@ export function App({
     const action = pendingOperationAction;
     setPendingOperationAction(undefined);
     if (discardConflict) setWorkspaceViewRevision((current) => current + 1);
-    conflictDirtyRef.current = false;
+    unsavedDirtyRef.current = false;
     await runAction(action);
   };
 
@@ -913,7 +975,7 @@ export function App({
         });
       }
       setPendingNavigation(undefined);
-      conflictDirtyRef.current = false;
+      unsavedDirtyRef.current = false;
     },
     [],
   );
@@ -926,7 +988,7 @@ export function App({
 
   const requestNavigation = useCallback(
     (navigation: PendingNavigation): void => {
-      if (conflictDirtyRef.current) {
+      if (unsavedDirtyRef.current) {
         setPendingNavigation(navigation);
         return;
       }
@@ -993,6 +1055,20 @@ export function App({
     if (!pendingNavigation) return;
     const saved = await leaveHandleRef.current?.save();
     if (saved) performNavigation(pendingNavigation);
+  };
+
+  const completeWindowClose = async (save: boolean): Promise<void> => {
+    if (save) {
+      const saved = await leaveHandleRef.current?.save();
+      if (!saved) return;
+    }
+    setPendingWindowClose(false);
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().destroy();
+    } catch (cause) {
+      showError(t('closeWindowFailedTitle'), cause, t('closeWindowFailed'));
+    }
   };
 
   const cancelActivity = async (entry: ActivityEntry): Promise<void> => {
@@ -1199,12 +1275,20 @@ export function App({
               language={language}
               diffStyle={diffStyle}
               splitStageView={splitStageView}
+              useConventionalCommits={useConventionalCommits}
+              stickyFileHeaders={stickyFileHeaders}
+              editorLineWrapping={editorLineWrapping}
+              editorWrapColumn={editorWrapColumn}
               {...(toolchainStatus ? { toolchainStatus } : {})}
               toolchainBusy={toolchainBusy}
               onAppearanceChange={changeAppearance}
               onLanguageChange={changeLanguage}
               onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}
+              onUseConventionalCommitsChange={setUseConventionalCommits}
+              onStickyFileHeadersChange={setStickyFileHeaders}
+              onEditorLineWrappingChange={setEditorLineWrapping}
+              onEditorWrapColumnChange={setEditorWrapColumn}
               onToolchainModeChange={changeToolchainMode}
             />
           ) : null}
@@ -1300,13 +1384,17 @@ export function App({
                       busy={busy}
                       onError={showError}
                       onAction={runAction}
-                      onConflictDirtyChange={handleConflictDirtyChange}
-                      onConflictLeaveHandleChange={(handle) => {
+                      onUnsavedDirtyChange={handleUnsavedDirtyChange}
+                      onUnsavedLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
                       paneWidths={paneWidths.changes}
                       diffStyle={diffStyle}
                       splitStageView={splitStageView}
+                      useConventionalCommits={useConventionalCommits}
+                      stickyFileHeaders={stickyFileHeaders}
+                      editorLineWrapping={editorLineWrapping}
+                      editorWrapColumn={editorWrapColumn}
                       onPaneWidthsChange={(changes) =>
                         setPaneWidths((current) => ({ ...current, changes }))
                       }
@@ -1323,6 +1411,9 @@ export function App({
                       }
                       onAction={runAction}
                       diffStyle={diffStyle}
+                      lineWrapping={editorLineWrapping}
+                      wrapColumn={editorWrapColumn}
+                      stickyFileHeaders={stickyFileHeaders}
                       paneWidths={paneWidths.history}
                       onPaneWidthsChange={({ left }) =>
                         setPaneWidths((current) => ({ ...current, history: { left } }))
@@ -1371,13 +1462,16 @@ export function App({
               onDismiss={() => setBranchDialog(undefined)}
               onCheckout={(branchName) => {
                 setBranchDialog(undefined);
-                settleUiAction(runAction({ kind: 'checkoutBranch', name: branchName }));
+                requestUnsavedGuardedAction({ kind: 'checkoutBranch', name: branchName });
               }}
               onCreate={(branchName, startOid) => {
                 setBranchDialog(undefined);
-                settleUiAction(
-                  runAction({ kind: 'createBranch', name: branchName, startOid, checkout: true }),
-                );
+                requestUnsavedGuardedAction({
+                  kind: 'createBranch',
+                  name: branchName,
+                  startOid,
+                  checkout: true,
+                });
               }}
             />
           ) : null}
@@ -1477,7 +1571,7 @@ export function App({
               labelledBy="leave-conflict-title"
               onDismiss={() => setPendingNavigation(undefined)}
             >
-              <h2 id="leave-conflict-title">{t('unsavedResult')}</h2>
+              <h2 id="leave-conflict-title">{t('unsavedChanges')}</h2>
               <p>{t('saveOrDiscardBeforeLeaving')}</p>
               <div className="button-row end">
                 <button
@@ -1538,6 +1632,69 @@ export function App({
                     : pendingOperationAction.kind === 'skipOperation'
                       ? t('discardAndSkip')
                       : t('discardAndAbort')}
+                </button>
+              </div>
+            </Dialog>
+          ) : null}
+
+          {pendingUnsavedAction ? (
+            <Dialog
+              labelledBy="unsaved-action-title"
+              onDismiss={() => setPendingUnsavedAction(undefined)}
+            >
+              <h2 id="unsaved-action-title">{t('unsavedChanges')}</h2>
+              <p>{t('saveOrDiscardBeforeAction')}</p>
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus
+                  onClick={() => setPendingUnsavedAction(undefined)}
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="danger-quiet"
+                  onClick={() => settleUiAction(runPendingUnsavedAction(false))}
+                >
+                  {t('leaveWithoutSaving')}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => settleUiAction(runPendingUnsavedAction(true))}
+                >
+                  {t('saveAndLeave')}
+                </button>
+              </div>
+            </Dialog>
+          ) : null}
+
+          {pendingWindowClose ? (
+            <Dialog labelledBy="unsaved-close-title" onDismiss={() => setPendingWindowClose(false)}>
+              <h2 id="unsaved-close-title">{t('unsavedChanges')}</h2>
+              <p>{t('saveOrDiscardBeforeClosing')}</p>
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus
+                  onClick={() => setPendingWindowClose(false)}
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="danger-quiet"
+                  onClick={() => settleUiAction(completeWindowClose(false))}
+                >
+                  {t('closeWithoutSaving')}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => settleUiAction(completeWindowClose(true))}
+                >
+                  {t('saveAndClose')}
                 </button>
               </div>
             </Dialog>

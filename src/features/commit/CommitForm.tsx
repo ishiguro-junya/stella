@@ -4,11 +4,16 @@ import {
   DEFAULT_COMMIT_TYPES,
   hasCommitErrors,
   validateCommitInput,
+  validatePlainCommitMessage,
   type CommitFieldErrors,
 } from '../../domain/commit';
-import type { ConventionalCommitInput } from '../../domain/workspace';
+import type { CommitInput, ConventionalCommitInput } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
-import { readPreferences, updatePreferences } from '../../persistence/preferences';
+import {
+  readPreferences,
+  updatePreferences,
+  type CommitDraft,
+} from '../../persistence/preferences';
 import {
   describeWorkspaceError,
   WorkspaceErrorDetails,
@@ -25,11 +30,12 @@ export interface CommitFormProps {
   headerActions?: ReactNode;
   showHeading?: boolean;
   labelledBy?: string | undefined;
+  useConventionalCommits?: boolean | undefined;
   onAttentionRequired?: (() => void) | undefined;
   onCancel?: (() => void) | undefined;
   onCommitted?: (() => void) | undefined;
   onError?: ShowWorkspaceError | undefined;
-  onCommit: (input: ConventionalCommitInput) => Promise<void>;
+  onCommit: (input: CommitInput) => Promise<void>;
 }
 
 const EMPTY_INPUT: ConventionalCommitInput = {
@@ -62,6 +68,13 @@ function editableCommitInput(draft?: ConventionalCommitInput): ConventionalCommi
   };
 }
 
+function editableCommitDraft(draft?: CommitDraft): CommitDraft {
+  return {
+    plainMessage: draft?.plainMessage ?? '',
+    conventional: editableCommitInput(draft?.conventional),
+  };
+}
+
 export function CommitForm({
   disabled = false,
   disabledReason,
@@ -71,6 +84,7 @@ export function CommitForm({
   headerActions,
   showHeading = true,
   labelledBy,
+  useConventionalCommits = false,
   onAttentionRequired,
   onCancel,
   onCommitted,
@@ -78,8 +92,8 @@ export function CommitForm({
   onCommit,
 }: CommitFormProps) {
   const { t } = useI18n();
-  const [input, setInput] = useState<ConventionalCommitInput>(() =>
-    draftKey ? editableCommitInput(readPreferences().commitDrafts[draftKey]) : { ...EMPTY_INPUT },
+  const [draft, setDraft] = useState<CommitDraft>(() =>
+    editableCommitDraft(draftKey ? readPreferences().commitDrafts[draftKey] : undefined),
   );
   const [submitted, setSubmitted] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<CommitField, boolean>>>({});
@@ -90,7 +104,13 @@ export function CommitForm({
   const [error, setError] = useState<WorkspaceErrorContent>();
   const formRef = useRef<HTMLFormElement>(null);
   const focusSequence = useRef(0);
-  const errors = useMemo(() => validateCommitInput(input), [input]);
+  const errors = useMemo(
+    () =>
+      useConventionalCommits
+        ? validateCommitInput(draft.conventional)
+        : validatePlainCommitMessage(draft.plainMessage),
+    [draft, useConventionalCommits],
+  );
   const formLabelledBy = labelledBy ?? (showHeading ? 'commit-title' : undefined);
 
   const showsError = (field: CommitField): boolean =>
@@ -100,9 +120,15 @@ export function CommitForm({
     if (!draftKey) return;
     updatePreferences((current) => ({
       ...current,
-      commitDrafts: { ...current.commitDrafts, [draftKey]: input },
+      commitDrafts: { ...current.commitDrafts, [draftKey]: draft },
     }));
-  }, [draftKey, input]);
+  }, [draft, draftKey]);
+
+  useEffect(() => {
+    setSubmitted(false);
+    setTouched({});
+    setError(undefined);
+  }, [useConventionalCommits]);
 
   useEffect(() => {
     if (!focusRequest) return;
@@ -115,10 +141,19 @@ export function CommitForm({
     key: Key,
     value: ConventionalCommitInput[Key],
   ): void => {
-    setInput((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({
+      ...current,
+      conventional: { ...current.conventional, [key]: value },
+    }));
     if (key !== 'breaking') {
       setTouched((current) => ({ ...current, [key]: true }));
     }
+    setError(undefined);
+  };
+
+  const updatePlainMessage = (value: string): void => {
+    setDraft((current) => ({ ...current, plainMessage: value }));
+    setTouched((current) => ({ ...current, description: true }));
     setError(undefined);
   };
 
@@ -128,7 +163,8 @@ export function CommitForm({
     setSubmitted(true);
     if (hasCommitErrors(errors)) {
       onAttentionRequired?.();
-      const firstInvalidField = COMMIT_FIELD_ORDER.find((field) => Boolean(errors[field]));
+      const fieldOrder = useConventionalCommits ? COMMIT_FIELD_ORDER : (['description'] as const);
+      const firstInvalidField = fieldOrder.find((field) => Boolean(errors[field]));
       if (firstInvalidField) {
         focusSequence.current += 1;
         setFocusRequest({ field: firstInvalidField, sequence: focusSequence.current });
@@ -137,20 +173,26 @@ export function CommitForm({
     }
     setError(undefined);
     try {
-      const normalized: ConventionalCommitInput = {
-        type: input.type.trim(),
-        breaking: input.breaking,
-        description: input.description.trim(),
-        ...(input.scope?.trim() ? { scope: input.scope.trim() } : {}),
-      };
+      const normalized: CommitInput = useConventionalCommits
+        ? {
+            format: 'conventional',
+            type: draft.conventional.type.trim(),
+            breaking: draft.conventional.breaking,
+            description: draft.conventional.description.trim(),
+            ...(draft.conventional.scope?.trim() ? { scope: draft.conventional.scope.trim() } : {}),
+          }
+        : { format: 'plain', message: draft.plainMessage.trim() };
       await onCommit(normalized);
+      const clearedDraft: CommitDraft = useConventionalCommits
+        ? { ...draft, conventional: { ...EMPTY_INPUT } }
+        : { ...draft, plainMessage: '' };
       if (draftKey) {
         updatePreferences((current) => ({
           ...current,
-          commitDrafts: { ...current.commitDrafts, [draftKey]: { ...EMPTY_INPUT } },
+          commitDrafts: { ...current.commitDrafts, [draftKey]: clearedDraft },
         }));
       }
-      setInput({ ...EMPTY_INPUT });
+      setDraft(clearedDraft);
       setSubmitted(false);
       setTouched({});
       onCommitted?.();
@@ -187,11 +229,14 @@ export function CommitForm({
           data-commit-field="description"
           data-dialog-initial-focus
           autoComplete="off"
-          value={input.description}
+          value={useConventionalCommits ? draft.conventional.description : draft.plainMessage}
           aria-invalid={showsError('description')}
           aria-describedby={showsError('description') ? ERROR_IDS.description : undefined}
-          onChange={(event) => update('description', event.target.value)}
-          placeholder={t('commitDescriptionPlaceholder')}
+          onChange={(event) =>
+            useConventionalCommits
+              ? update('description', event.target.value)
+              : updatePlainMessage(event.target.value)
+          }
         />
         <small
           id={ERROR_IDS.description}
@@ -202,60 +247,64 @@ export function CommitForm({
         </small>
       </label>
 
-      <div className="commit-meta-grid">
-        <label className="dialog-form-field">
-          <span>{t('type')}</span>
-          <input
-            data-commit-field="type"
-            list="commit-types"
-            value={input.type}
-            aria-invalid={showsError('type')}
-            aria-describedby={showsError('type') ? ERROR_IDS.type : undefined}
-            onChange={(event) => update('type', event.target.value)}
-          />
-          <datalist id="commit-types">
-            {DEFAULT_COMMIT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </datalist>
-          <small
-            id={ERROR_IDS.type}
-            className={`field-error commit-field-error${showsError('type') ? '' : ' is-placeholder'}`}
-            aria-hidden={!showsError('type')}
-          >
-            {showsError('type') && errors.type ? t(errors.type) : null}
-          </small>
-        </label>
+      {useConventionalCommits ? (
+        <div className="commit-meta-grid">
+          <label className="dialog-form-field">
+            <span>{t('type')}</span>
+            <input
+              data-commit-field="type"
+              list="commit-types"
+              value={draft.conventional.type}
+              aria-invalid={showsError('type')}
+              aria-describedby={showsError('type') ? ERROR_IDS.type : undefined}
+              onChange={(event) => update('type', event.target.value)}
+            />
+            <datalist id="commit-types">
+              {DEFAULT_COMMIT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </datalist>
+            <small
+              id={ERROR_IDS.type}
+              className={`field-error commit-field-error${showsError('type') ? '' : ' is-placeholder'}`}
+              aria-hidden={!showsError('type')}
+            >
+              {showsError('type') && errors.type ? t(errors.type) : null}
+            </small>
+          </label>
 
-        <label className="dialog-form-field">
-          <span>{t('scope')}</span>
-          <input
-            data-commit-field="scope"
-            value={input.scope ?? ''}
-            aria-invalid={showsError('scope')}
-            aria-describedby={showsError('scope') ? ERROR_IDS.scope : undefined}
-            onChange={(event) => update('scope', event.target.value)}
-          />
-          <small
-            id={ERROR_IDS.scope}
-            className={`field-error commit-field-error${showsError('scope') ? '' : ' is-placeholder'}`}
-            aria-hidden={!showsError('scope')}
-          >
-            {showsError('scope') && errors.scope ? t(errors.scope) : null}
-          </small>
-        </label>
-      </div>
+          <label className="dialog-form-field">
+            <span>{t('scope')}</span>
+            <input
+              data-commit-field="scope"
+              value={draft.conventional.scope ?? ''}
+              aria-invalid={showsError('scope')}
+              aria-describedby={showsError('scope') ? ERROR_IDS.scope : undefined}
+              onChange={(event) => update('scope', event.target.value)}
+            />
+            <small
+              id={ERROR_IDS.scope}
+              className={`field-error commit-field-error${showsError('scope') ? '' : ' is-placeholder'}`}
+              aria-hidden={!showsError('scope')}
+            >
+              {showsError('scope') && errors.scope ? t(errors.scope) : null}
+            </small>
+          </label>
+        </div>
+      ) : null}
 
-      <label className="checkbox-field commit-breaking">
-        <input
-          type="checkbox"
-          checked={input.breaking}
-          onChange={(event) => update('breaking', event.target.checked)}
-        />
-        <span>{t('breakingChange')}</span>
-      </label>
+      {useConventionalCommits ? (
+        <label className="checkbox-field commit-breaking">
+          <input
+            type="checkbox"
+            checked={draft.conventional.breaking}
+            onChange={(event) => update('breaking', event.target.checked)}
+          />
+          <span>{t('breakingChange')}</span>
+        </label>
+      ) : null}
 
       {error ? (
         <div className="inline-alert error" role="alert">

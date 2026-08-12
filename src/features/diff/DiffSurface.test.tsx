@@ -1,12 +1,25 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { CodeViewLineSelection, SelectedLineRange } from '@pierre/diffs';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface MockCodeViewProps {
   items?: MockCodeViewItem[];
+  options?: MockPatchDiffOptions;
   onSelectedLinesChange?: (selection: CodeViewLineSelection | null) => void;
-  renderHeaderPrefix?: (item: MockCodeViewItem) => ReactNode;
+  renderCustomHeader?: (item: MockCodeViewItem) => ReactNode;
+  renderAnnotation?: (annotation: MockAnnotation, item: MockCodeViewItem) => ReactNode;
+}
+
+interface MockAnnotation {
+  side: 'additions' | 'deletions';
+  lineNumber: number;
+  metadata: {
+    hunkIndex: number;
+    itemId?: string;
+    displayStart: number;
+    displayEnd: number;
+  };
 }
 
 interface MockCodeViewItem {
@@ -15,21 +28,48 @@ interface MockCodeViewItem {
   fileDiff: {
     name: string;
     type: 'change' | 'rename-pure' | 'rename-changed' | 'new' | 'deleted';
+    hunks?: Array<{
+      collapsedBefore?: number;
+      deletionStart: number;
+      deletionCount: number;
+      additionStart: number;
+      additionCount: number;
+      deletionLines: number;
+      additionLines: number;
+    }>;
   };
+  annotations?: MockAnnotation[];
   collapsed?: boolean;
+  version?: number;
 }
 
 interface MockPatchDiffOptions {
+  overflow?: 'scroll' | 'wrap';
   disableFileHeader?: boolean;
   hunkSeparators?: 'simple' | 'line-info-basic';
   collapsed?: boolean;
   onLineSelectionChange?: (range: SelectedLineRange | null) => void;
+  onLineClick?: (props: {
+    annotationSide: 'additions' | 'deletions';
+    event: PointerEvent;
+    lineNumber: number;
+    lineType: 'change-addition' | 'change-deletion';
+    numberColumn: boolean;
+  }) => void;
+  onPostRender?: (
+    node: HTMLElement,
+    instance: { fileDiff?: MockCodeViewItem['fileDiff'] },
+    phase: 'mount' | 'update' | 'unmount',
+  ) => void;
   unsafeCSS?: string;
 }
 
 interface MockPatchDiffProps {
   options: MockPatchDiffOptions;
-  renderHeaderPrefix?: (fileDiff: MockCodeViewItem['fileDiff']) => ReactNode;
+  selectedLines?: SelectedLineRange | null;
+  lineAnnotations?: MockAnnotation[];
+  renderAnnotation?: (annotation: MockAnnotation) => ReactNode;
+  renderCustomHeader?: (fileDiff: MockCodeViewItem['fileDiff']) => ReactNode;
 }
 
 const { codeViewPropsMock, parsePatchFilesMock, patchDiffPropsMock } = vi.hoisted(() => ({
@@ -44,6 +84,7 @@ vi.mock('@pierre/diffs', () => ({
   parsePatchFiles: parsePatchFilesMock,
 }));
 vi.mock('@pierre/diffs/react', () => ({
+  __esModule: true,
   CodeView: (props: MockCodeViewProps) => {
     codeViewPropsMock(props);
     return <div>CodeView</div>;
@@ -61,7 +102,9 @@ vi.mock('@pierre/diffs/worker/worker.js?worker', () => ({
   },
 }));
 
-import { DiffSurface, type SurfaceSelection } from './DiffSurface';
+import { DiffSurface, type SurfaceHunkSelection, type SurfaceSelection } from './DiffSurface';
+import { I18nProvider } from '../../i18n/i18n';
+import { MESSAGES } from '../../i18n/messages';
 import { AppearanceProvider } from '../../theme/appearance';
 
 const PATCH = `diff --git a/example.txt b/example.txt
@@ -78,6 +121,34 @@ beforeEach(() => {
   parsePatchFilesMock.mockReset();
   patchDiffPropsMock.mockReset();
 });
+
+function createDiffHost(): { host: HTMLElement; root: ShadowRoot } {
+  const host = document.createElement('diffs-container');
+  const root = host.attachShadow({ mode: 'open' });
+  root.innerHTML = `
+    <pre>
+      <code data-code data-unified>
+        <div data-gutter style="grid-row: span 2">
+          <div data-separator="line-info-basic">
+            <div data-separator-wrapper>
+              <div data-separator-content><span data-unmodified-lines>4 unmodified lines</span></div>
+            </div>
+          </div>
+          <div data-column-number data-line-index="0,0">1</div>
+        </div>
+        <div data-content style="grid-row: span 2">
+          <div data-separator="line-info-basic">
+            <div data-separator-wrapper>
+              <div data-separator-content><span data-unmodified-lines>4 unmodified lines</span></div>
+            </div>
+          </div>
+          <span data-line data-line-index="0,0">changed</span>
+        </div>
+      </code>
+    </pre>
+  `;
+  return { host, root };
+}
 
 describe('DiffSurface fallback', () => {
   it('falls back to plain text when a truncated CodeView patch cannot be parsed', () => {
@@ -101,7 +172,7 @@ describe('DiffSurface fallback', () => {
 });
 
 describe('DiffSurface line selection', () => {
-  it('uses classic plus and minus indicators so changes are not conveyed by color alone', () => {
+  it('hides plus/minus indicators and defines blue selected-line backgrounds', () => {
     render(
       <DiffSurface
         source={{
@@ -115,8 +186,8 @@ describe('DiffSurface line selection', () => {
 
     expect(patchDiffPropsMock.mock.lastCall?.[0].options).toEqual(
       expect.objectContaining({
-        diffIndicators: 'classic',
-        overflow: 'wrap',
+        diffIndicators: 'none',
+        overflow: 'scroll',
         theme: { light: 'stella-semantic', dark: 'stella-semantic' },
         themeType: 'system',
         unsafeCSS: expect.stringContaining(
@@ -132,14 +203,51 @@ describe('DiffSurface line selection', () => {
           paddingTop: 0,
           paddingBottom: 0,
         },
-        layout: { paddingTop: 0, paddingBottom: 0, gap: 8 },
+        layout: { paddingTop: 0, paddingBottom: 0, gap: 0 },
+        stickyHeader: false,
+        stickyHeaders: false,
         unsafeCSS: expect.stringContaining(
-          "[data-diffs-header='default'] {\n  min-height: 32px;\n  padding-inline: 8px 16px;\n  border-block: 1px solid var(--border-subtle);\n  background-color: var(--surface-raised);",
+          "[data-diffs-header='default'],\n[data-diffs-header='custom'] {\n  min-height: 32px;\n  padding-inline: 8px 16px;\n  border-top: 1px solid var(--border-strong);\n  border-bottom: 1px solid var(--border-subtle);\n  background-color: var(--diffs-bg-separator);",
         ),
       }),
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
-      '[data-code] {\n  overscroll-behavior: none;\n}',
+      '--diffs-scrollbar-gutter-override: 0px;',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '[data-code] {\n  overscroll-behavior: none;\n  -webkit-user-select: none;\n  user-select: none;\n}',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '[data-line][data-selected-line] {\n  --diffs-computed-selected-line-bg: var(--diff-selection-surface);',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '[data-unmodified-lines] {\n  display: none;\n}',
+    );
+  });
+
+  it('applies the shared wrapping preference and wrap column', () => {
+    const source = {
+      kind: 'patch' as const,
+      patch: PATCH,
+      path: 'example.txt',
+      cacheKey: 'revision-1',
+    };
+    const { rerender } = render(<DiffSurface source={source} />);
+
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options).toEqual(
+      expect.objectContaining({ overflow: 'scroll' }),
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).not.toContain(
+      "[data-overflow='wrap'] [data-line]",
+    );
+
+    rerender(<DiffSurface source={source} lineWrapping wrapColumn={96} />);
+
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options).toEqual(
+      expect.objectContaining({ overflow: 'wrap' }),
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      "[data-overflow='wrap'] [data-line] {\n  padding-inline-end: max(1ch, calc(100% - 96ch - 1ch));",
     );
   });
 
@@ -207,7 +315,7 @@ describe('DiffSurface line selection', () => {
     );
   });
 
-  it('collapses a single file from the left edge of its file header', () => {
+  it('collapses a single-file diff from its toggle', () => {
     render(
       <DiffSurface
         source={{
@@ -217,23 +325,31 @@ describe('DiffSurface line selection', () => {
           cacheKey: 'revision-1',
         }}
         showFileHeaders
-        collapsibleFileHeaders
       />,
     );
 
-    const renderHeaderPrefix = patchDiffPropsMock.mock.lastCall?.[0].renderHeaderPrefix;
-    expect(renderHeaderPrefix).toBeTypeOf('function');
-    render(renderHeaderPrefix?.({ name: 'example.txt', type: 'change' }));
+    const renderCustomHeader = patchDiffPropsMock.mock.lastCall?.[0].renderCustomHeader;
+    expect(renderCustomHeader).toBeTypeOf('function');
+    render(renderCustomHeader?.({ name: 'example.txt', type: 'change', hunks: [] }));
 
     const toggle = screen.getByRole('button', { name: 'Collapse example.txt diff' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle.style.width).toBe('22px');
+    expect(toggle.style.height).toBe('22px');
+    expect(toggle.style.minHeight).toBe('22px');
+    expect(toggle.style.maxHeight).toBe('22px');
+    expect(toggle.style.alignSelf).toBe('center');
+    expect(toggle?.querySelector('svg')).toHaveAttribute('viewBox', '0 0 24 24');
+    expect(toggle?.querySelector('path')).toHaveAttribute('d', 'm6 9 6 6 6-6');
     fireEvent.click(toggle);
 
     expect(patchDiffPropsMock.mock.lastCall?.[0].options).toEqual(
       expect.objectContaining({ collapsed: true }),
     );
-    const rerenderHeaderPrefix = patchDiffPropsMock.mock.lastCall?.[0].renderHeaderPrefix;
-    const { getByRole } = render(rerenderHeaderPrefix?.({ name: 'example.txt', type: 'change' }));
+    const rerenderCustomHeader = patchDiffPropsMock.mock.lastCall?.[0].renderCustomHeader;
+    const { getByRole } = render(
+      rerenderCustomHeader?.({ name: 'example.txt', type: 'change', hunks: [] }),
+    );
     expect(getByRole('button', { name: 'Expand example.txt diff' })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -241,7 +357,34 @@ describe('DiffSurface line selection', () => {
   });
 
   it('renders the shared file status icon in CodeView file headers', () => {
-    parsePatchFilesMock.mockReturnValue([{ files: [{ name: 'new.txt', type: 'new' }] }]);
+    parsePatchFilesMock.mockReturnValue([{ files: [{ name: 'new.txt', type: 'new', hunks: [] }] }]);
+    render(
+      <DiffSurface
+        source={{ kind: 'codeView', patch: PATCH, cacheKey: 'revision-1' }}
+        showFileHeaders
+        stickyFileHeaders
+      />,
+    );
+
+    const renderCustomHeader = codeViewPropsMock.mock.lastCall?.[0].renderCustomHeader;
+    expect(renderCustomHeader).toBeTypeOf('function');
+    expect(codeViewPropsMock.mock.lastCall?.[0].options).toEqual(
+      expect.objectContaining({ stickyHeader: true, stickyHeaders: true }),
+    );
+    const { container } = render(
+      renderCustomHeader?.({
+        id: 'revision-1:0:0',
+        type: 'diff',
+        fileDiff: { name: 'new.txt', type: 'new', hunks: [] },
+      }),
+    );
+    expect(container.querySelector('.file-status.added')).toBeInTheDocument();
+  });
+
+  it('keeps visible CodeView file headers non-sticky by default', () => {
+    parsePatchFilesMock.mockReturnValue([
+      { files: [{ name: 'example.txt', type: 'change', hunks: [] }] },
+    ]);
     render(
       <DiffSurface
         source={{ kind: 'codeView', patch: PATCH, cacheKey: 'revision-1' }}
@@ -249,24 +392,17 @@ describe('DiffSurface line selection', () => {
       />,
     );
 
-    const renderHeaderPrefix = codeViewPropsMock.mock.lastCall?.[0].renderHeaderPrefix;
-    expect(renderHeaderPrefix).toBeTypeOf('function');
-    const { container } = render(
-      renderHeaderPrefix?.({
-        id: 'revision-1:0:0',
-        type: 'diff',
-        fileDiff: { name: 'new.txt', type: 'new' },
-      }),
+    expect(codeViewPropsMock.mock.lastCall?.[0].options).toEqual(
+      expect.objectContaining({ stickyHeader: false, stickyHeaders: false }),
     );
-    expect(container.querySelector('.file-status.added')).toBeInTheDocument();
   });
 
-  it('collapses CodeView files independently', () => {
+  it('increments the CodeView item version when its toggle collapses the file', () => {
     parsePatchFilesMock.mockReturnValue([
       {
         files: [
-          { name: 'first.txt', type: 'change' },
-          { name: 'second.txt', type: 'change' },
+          { name: 'first.txt', type: 'change', hunks: [] },
+          { name: 'second.txt', type: 'change', hunks: [] },
         ],
       },
     ]);
@@ -274,23 +410,23 @@ describe('DiffSurface line selection', () => {
       <DiffSurface
         source={{ kind: 'codeView', patch: PATCH, cacheKey: 'revision-1' }}
         showFileHeaders
-        collapsibleFileHeaders
       />,
     );
 
-    const renderHeaderPrefix = codeViewPropsMock.mock.lastCall?.[0].renderHeaderPrefix;
+    const renderCustomHeader = codeViewPropsMock.mock.lastCall?.[0].renderCustomHeader;
+    expect(renderCustomHeader).toBeTypeOf('function');
     render(
-      renderHeaderPrefix?.({
+      renderCustomHeader?.({
         id: 'revision-1:0:0',
         type: 'diff',
-        fileDiff: { name: 'first.txt', type: 'change' },
+        fileDiff: { name: 'first.txt', type: 'change', hunks: [] },
       }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Collapse first.txt diff' }));
 
     expect(codeViewPropsMock.mock.lastCall?.[0].items).toEqual([
-      expect.objectContaining({ id: 'revision-1:0:0', collapsed: true }),
-      expect.objectContaining({ id: 'revision-1:0:1', collapsed: false }),
+      expect.objectContaining({ id: 'revision-1:0:0', collapsed: true, version: 2 }),
+      expect.objectContaining({ id: 'revision-1:0:1', collapsed: false, version: 1 }),
     ]);
   });
 
@@ -341,6 +477,146 @@ describe('DiffSurface line selection', () => {
     expect(onSelectionChange).toHaveBeenLastCalledWith(null);
   });
 
+  it('selects a changed row when its content is left-clicked', () => {
+    const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+    act(() => {
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event: new Event('click'),
+          lineNumber: 2,
+          lineType: 'change-addition',
+          numberColumn: false,
+        },
+      ]);
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      side: 'additions',
+      startLine: 2,
+      endLine: 2,
+    });
+    expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
+      start: 2,
+      end: 2,
+      side: 'additions',
+      endSide: 'additions',
+    });
+  });
+
+  it('extends a changed-row selection from its anchor with Shift-click', () => {
+    const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const clickLine = (lineNumber: number, shiftKey = false): void => {
+      const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event: new MouseEvent('click', { shiftKey }),
+          lineNumber,
+          lineType: 'change-addition',
+          numberColumn: false,
+        },
+      ]);
+    };
+
+    act(() => clickLine(2));
+    act(() => clickLine(5, true));
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      side: 'additions',
+      startLine: 2,
+      endLine: 5,
+    });
+    expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
+      start: 2,
+      end: 5,
+      side: 'additions',
+      endSide: 'additions',
+    });
+  });
+
+  it('returns selected line contents through the context menu without DOM text selection', () => {
+    const onSelectionContextMenu =
+      vi.fn<(selection: SurfaceSelection, point: { x: number; y: number }, text: string) => void>();
+    const { container } = render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionContextMenu={onSelectionContextMenu}
+      />,
+    );
+    const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+    act(() => {
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event: new MouseEvent('click'),
+          lineNumber: 2,
+          lineType: 'change-addition',
+          numberColumn: false,
+        },
+      ]);
+    });
+    const host = document.createElement('diffs-container');
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <span data-line data-selected-line>second line</span>
+      <span data-line data-selected-line>third line</span>
+    `;
+    container.querySelector('.diff-surface')?.append(host);
+    const selectedLine = root.querySelector<HTMLElement>('[data-line]')!;
+
+    act(() => {
+      selectedLine.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: 20,
+          clientY: 30,
+        }),
+      );
+    });
+
+    expect(onSelectionContextMenu).toHaveBeenCalledWith(
+      { side: 'additions', startLine: 2, endLine: 2 },
+      { x: 20, y: 30 },
+      'second line\nthird line',
+    );
+  });
+
   it('keeps direct selection available for a single-file performance CodeView', () => {
     const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
     parsePatchFilesMock.mockReturnValue([{ files: [{}] }]);
@@ -386,5 +662,351 @@ describe('DiffSurface line selection', () => {
       expect.objectContaining({ enableLineSelection: true, controlledSelection: true }),
     );
     expect(screen.queryByText('Select lines')).not.toBeInTheDocument();
+  });
+
+  it('renders only bordered Hunk action buttons in the separator', () => {
+    const onAction = vi.fn<(selection: SurfaceHunkSelection) => void>();
+    const onEdit = vi.fn<(selection: SurfaceHunkSelection) => void>();
+    const onDiscard = vi.fn<(selection: SurfaceHunkSelection) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        hunkAction={{ kind: 'stage', onEdit, onAction, onDiscard }}
+      />,
+    );
+
+    const props = patchDiffPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    vi.spyOn(
+      root.querySelector<HTMLElement>('[data-code]')!,
+      'getBoundingClientRect',
+    ).mockReturnValue(new DOMRect(10));
+    vi.spyOn(
+      root.querySelector<HTMLElement>('[data-content]')!,
+      'getBoundingClientRect',
+    ).mockReturnValue(new DOMRect(90));
+    props?.options.onPostRender?.(
+      host,
+      {
+        fileDiff: {
+          name: 'example.txt',
+          type: 'change',
+          hunks: [
+            {
+              collapsedBefore: 4,
+              deletionStart: 1,
+              deletionCount: 2,
+              additionStart: 1,
+              additionCount: 2,
+              deletionLines: 1,
+              additionLines: 1,
+            },
+          ],
+        },
+      },
+      'mount',
+    );
+    const edit = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Edit hunk 1, lines 1–2"]',
+    );
+    const stage = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Stage hunk 1, lines 1–2"]',
+    );
+    const discard = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Discard hunk 1, lines 1–2"]',
+    );
+    expect(edit?.textContent).toBe('Edit Hunk');
+    expect(stage?.textContent).toBe('Stage Hunk');
+    expect(discard?.textContent).toBe('Discard Hunk');
+    const controls = root.querySelector<HTMLElement>('[data-stella-hunk-controls]');
+    expect(controls).not.toBeNull();
+    expect(controls?.style.getPropertyValue('--stella-hunk-left-offset')).toBe('80px');
+    expect(controls?.querySelector('[data-stella-hunk-label]')).toHaveTextContent(
+      'Hunk 1 Lines 1–2',
+    );
+    expect(controls?.closest('[data-content]')).not.toBeNull();
+    expect(controls?.closest('[data-gutter]')).toBeNull();
+    expect(controls?.querySelector('[data-stella-hunk-toggle]')).toBeNull();
+    fireEvent.click(edit!);
+    fireEvent.click(stage!);
+    fireEvent.click(discard!);
+
+    expect(onEdit).toHaveBeenCalledWith({ hunkIndex: 0, startLine: 1 });
+    expect(onAction).toHaveBeenCalledWith({ hunkIndex: 0 });
+    expect(onDiscard).toHaveBeenCalledWith({ hunkIndex: 0 });
+    expect(props?.options.unsafeCSS).toContain(
+      '[data-stella-hunk-controls] button {\n  appearance: none;',
+    );
+    expect(props?.options.unsafeCSS).toContain(
+      '[data-stella-hunk-label] {\n  min-width: 0;\n  margin-right: auto;\n  overflow: hidden;',
+    );
+    expect(props?.options.unsafeCSS).toContain(
+      'transform: translateX(calc(0px - var(--stella-hunk-left-offset, 0px)));',
+    );
+    expect(props?.options.unsafeCSS).toContain('padding: 0 8px 0 12px;');
+    expect(props?.options.unsafeCSS).toContain('font-size: 11px;');
+    expect(props?.options.unsafeCSS).not.toContain('[data-stella-hunk-toggle]');
+  });
+
+  it('uses the worktree-side start line when editing a deletion-only Hunk', () => {
+    const onEdit = vi.fn<(selection: SurfaceHunkSelection & { startLine: number }) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        hunkAction={{ kind: 'stage', onEdit }}
+      />,
+    );
+
+    const props = patchDiffPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    props?.options.onPostRender?.(
+      host,
+      {
+        fileDiff: {
+          name: 'example.txt',
+          type: 'change',
+          hunks: [
+            {
+              collapsedBefore: 8,
+              deletionStart: 12,
+              deletionCount: 3,
+              additionStart: 10,
+              additionCount: 0,
+              deletionLines: 3,
+              additionLines: 0,
+            },
+          ],
+        },
+      },
+      'mount',
+    );
+    fireEvent.click(root.querySelector<HTMLButtonElement>('button[aria-label^="Edit hunk"]')!);
+
+    expect(onEdit).toHaveBeenCalledWith({ hunkIndex: 0, startLine: 10 });
+  });
+
+  it('keeps the Hunk label and discard action when the Stage action is hidden', () => {
+    const onDiscard = vi.fn<(selection: SurfaceHunkSelection) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        hunkAction={{ kind: 'stage', onDiscard }}
+      />,
+    );
+
+    const props = patchDiffPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    props?.options.onPostRender?.(
+      host,
+      {
+        fileDiff: {
+          name: 'example.txt',
+          type: 'change',
+          hunks: [
+            {
+              collapsedBefore: 4,
+              deletionStart: 1,
+              deletionCount: 2,
+              additionStart: 1,
+              additionCount: 2,
+              deletionLines: 1,
+              additionLines: 1,
+            },
+          ],
+        },
+      },
+      'mount',
+    );
+
+    expect(root.querySelector('button[aria-label^="Stage hunk"]')).toBeNull();
+    expect(root.querySelector('[data-stella-hunk-label]')).toHaveTextContent('Hunk 1 Lines 1–2');
+    const discard = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Discard hunk 1, lines 1–2"]',
+    );
+    expect(discard).toHaveTextContent('Discard Hunk');
+    fireEvent.click(discard!);
+    expect(onDiscard).toHaveBeenCalledWith({ hunkIndex: 0 });
+  });
+
+  it('retranslates mounted Hunk controls when the interface language changes', () => {
+    const hunkAction = {
+      kind: 'stage' as const,
+      onEdit: vi.fn<() => void>(),
+      onAction: vi.fn<() => void>(),
+      onDiscard: vi.fn<() => void>(),
+    };
+    const source = {
+      kind: 'patch' as const,
+      patch: PATCH,
+      path: 'example.txt',
+      cacheKey: 'revision-1',
+    };
+    const { rerender } = render(
+      <StrictMode>
+        <I18nProvider language="en">
+          <DiffSurface source={source} hunkAction={hunkAction} />
+        </I18nProvider>
+      </StrictMode>,
+    );
+    const props = patchDiffPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    props?.options.onPostRender?.(
+      host,
+      {
+        fileDiff: {
+          name: 'example.txt',
+          type: 'change',
+          hunks: [
+            {
+              collapsedBefore: 4,
+              deletionStart: 1,
+              deletionCount: 2,
+              additionStart: 1,
+              additionCount: 2,
+              deletionLines: 1,
+              additionLines: 1,
+            },
+          ],
+        },
+      },
+      'mount',
+    );
+    expect(root.querySelector('[data-stella-hunk-controls]')).toHaveTextContent(
+      'Hunk 1 Lines 1–2Edit HunkStage HunkDiscard Hunk',
+    );
+
+    rerender(
+      <StrictMode>
+        <I18nProvider language="ja">
+          <DiffSurface source={source} hunkAction={hunkAction} />
+        </I18nProvider>
+      </StrictMode>,
+    );
+
+    expect(root.querySelector('[data-stella-hunk-controls]')).toHaveTextContent(
+      'ハンク1 行1–2ハンクを編集ハンクをステージハンクを破棄',
+    );
+  });
+
+  it('retranslates mounted Hunk controls when HMR updates the catalog in the same language', () => {
+    const hunkAction = {
+      kind: 'stage' as const,
+      onEdit: vi.fn<() => void>(),
+      onAction: vi.fn<() => void>(),
+      onDiscard: vi.fn<() => void>(),
+    };
+    const source = {
+      kind: 'patch' as const,
+      patch: PATCH,
+      path: 'example.txt',
+      cacheKey: 'revision-1',
+    };
+    const { rerender } = render(
+      <I18nProvider language="ja">
+        <DiffSurface source={source} hunkAction={hunkAction} />
+      </I18nProvider>,
+    );
+    const props = patchDiffPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    props?.options.onPostRender?.(
+      host,
+      {
+        fileDiff: {
+          name: 'example.txt',
+          type: 'change',
+          hunks: [
+            {
+              collapsedBefore: 4,
+              deletionStart: 1,
+              deletionCount: 2,
+              additionStart: 1,
+              additionCount: 2,
+              deletionLines: 1,
+              additionLines: 1,
+            },
+          ],
+        },
+      },
+      'mount',
+    );
+    const descriptor = Object.getOwnPropertyDescriptor(MESSAGES.editHunk, 'ja');
+    if (!descriptor) throw new Error('The Japanese Hunk edit label is missing.');
+
+    try {
+      Object.defineProperty(MESSAGES.editHunk, 'ja', {
+        ...descriptor,
+        value: 'HMR後のハンクを編集',
+      });
+      rerender(
+        <I18nProvider language="ja">
+          <DiffSurface source={source} hunkAction={hunkAction} />
+        </I18nProvider>,
+      );
+
+      expect(root.querySelector('[data-stella-hunk-controls]')).toHaveTextContent(
+        'HMR後のハンクを編集',
+      );
+    } finally {
+      Object.defineProperty(MESSAGES.editHunk, 'ja', descriptor);
+    }
+  });
+
+  it('renders a CodeView Hunk action with the owning item id', () => {
+    const onAction = vi.fn<(selection: SurfaceHunkSelection) => void>();
+    const fileDiff = {
+      name: 'example.txt',
+      type: 'change' as const,
+      hunks: [
+        {
+          collapsedBefore: 4,
+          deletionStart: 4,
+          deletionCount: 2,
+          additionStart: 4,
+          additionCount: 3,
+          deletionLines: 1,
+          additionLines: 2,
+        },
+      ],
+    };
+    parsePatchFilesMock.mockReturnValue([
+      {
+        files: [fileDiff],
+      },
+    ]);
+    render(
+      <DiffSurface
+        source={{ kind: 'codeView', patch: PATCH, cacheKey: 'revision-1' }}
+        performanceMode
+        hunkAction={{ kind: 'unstage', onAction }}
+      />,
+    );
+
+    const props = codeViewPropsMock.mock.lastCall?.[0];
+    const { host, root } = createDiffHost();
+    props?.options?.onPostRender?.(host, { fileDiff }, 'mount');
+    const unstage = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Unstage hunk 1, lines 4–6"]',
+    );
+    fireEvent.click(unstage!);
+
+    expect(onAction).toHaveBeenCalledWith({
+      hunkIndex: 0,
+      itemId: 'revision-1:0:0',
+    });
   });
 });

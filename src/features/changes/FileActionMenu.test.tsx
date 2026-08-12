@@ -42,14 +42,14 @@ describe('FileActionMenu', () => {
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('menu', { name: 'src/app.ts actions' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
 
     await user.keyboard('{ArrowDown}');
-    expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
     await user.keyboard('{End}');
     expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
     await user.keyboard('{Home}');
-    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
     await user.keyboard('{ArrowUp}');
     expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
 
@@ -59,10 +59,10 @@ describe('FileActionMenu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     await user.keyboard('{Enter}');
-    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
     await user.keyboard('{Escape}');
     await user.keyboard(' ');
-    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
   });
 
   it('opens at the last enabled item with ArrowUp and closes on Tab or outside click', async () => {
@@ -91,7 +91,9 @@ describe('FileActionMenu', () => {
   it('skips disabled actions and closes before routing an enabled action', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: FileActionKind) => Promise<void>>(async () => undefined);
-    render(<Harness openDisabled discardDisabled deleteDisabled onAction={onAction} />);
+    render(
+      <Harness editDisabled openDisabled discardDisabled deleteDisabled onAction={onAction} />,
+    );
     const trigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
 
     trigger.focus();

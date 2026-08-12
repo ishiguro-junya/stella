@@ -39,14 +39,25 @@ export interface DiffDocument {
   truncated?: boolean;
 }
 
-export interface DiffSelection {
+interface DiffSelectionBase {
   diffId: string;
   path: string;
   generation: Generation;
+}
+
+export interface LineDiffSelection extends DiffSelectionBase {
+  kind: 'lines';
   side: 'additions' | 'deletions';
   startLine: number;
   endLine: number;
 }
+
+export interface HunkDiffSelection extends DiffSelectionBase {
+  kind: 'hunk';
+  hunkIndex: number;
+}
+
+export type DiffSelection = LineDiffSelection | HunkDiffSelection;
 
 export interface CommitSummary {
   oid: string;
@@ -291,6 +302,16 @@ export interface ConflictDocument {
   relatedPaths: string[];
 }
 
+export interface FileDocument {
+  repoId: RepoId;
+  path: string;
+  text: string;
+  lineEnding: 'lf' | 'crlf';
+  hasUtf8Bom: boolean;
+  contentHash: string;
+  generation: Generation;
+}
+
 export type ConflictChoice = 'current' | 'incoming' | 'both' | 'delete';
 export type FileOperation = 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
 
@@ -303,6 +324,10 @@ export interface ConventionalCommitInput {
   footer?: string;
 }
 
+export type CommitInput =
+  | { format: 'plain'; message: string }
+  | ({ format: 'conventional' } & ConventionalCommitInput);
+
 export type WorkspaceAction =
   | { kind: 'stageFiles'; paths: string[] }
   | { kind: 'unstageFiles'; paths: string[] }
@@ -310,7 +335,7 @@ export type WorkspaceAction =
   | { kind: 'stageSelection'; selection: DiffSelection }
   | { kind: 'unstageSelection'; selection: DiffSelection }
   | { kind: 'discardSelection'; selection: DiffSelection }
-  | { kind: 'commit'; input: ConventionalCommitInput }
+  | { kind: 'commit'; input: CommitInput }
   | { kind: 'fetch' }
   | { kind: 'pullFastForward' }
   | { kind: 'push' }
@@ -357,6 +382,7 @@ export type WorkspaceAction =
       choice: ConflictChoice;
     }
   | { kind: 'openExternal'; path: string }
+  | { kind: 'saveFile'; path: string; text: string; expectedContentHash: string }
   | { kind: 'fileAction'; paths: string[]; operation: FileOperation };
 
 export type AttachRequest =
@@ -372,6 +398,7 @@ export type WorkspaceQuery =
   | { kind: 'branches'; repoId: RepoId }
   | { kind: 'gitFlowOverview'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }
+  | { kind: 'fileContents'; repoId: RepoId; path: string }
   | { kind: 'activity'; repoId?: RepoId }
   | {
       kind: 'commitActivity';
@@ -387,6 +414,7 @@ export type QueryResult =
   | { kind: 'branches'; branches: BranchSummary[] }
   | { kind: 'gitFlowOverview'; overview: GitFlowOverview }
   | { kind: 'conflict'; document: ConflictDocument }
+  | { kind: 'fileContents'; document: FileDocument }
   | { kind: 'activity'; entries: ActivityEntry[] }
   | { kind: 'commitActivity'; series: CommitActivitySeries };
 

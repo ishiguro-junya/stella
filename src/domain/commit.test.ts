@@ -1,7 +1,24 @@
 import fixtures from '../../fixtures/conventional-commits.json';
 import { describe, expect, it } from 'vitest';
 
-import { isValidConventionalCommitMessage, validateCommitInput } from './commit';
+import {
+  isValidConventionalCommitMessage,
+  validateCommitInput,
+  validatePlainCommitMessage,
+} from './commit';
+
+describe('Plain Commit validation', () => {
+  it('accepts a single-line Unicode message', () => {
+    expect(validatePlainCommitMessage('通常形式でコミットする')).toEqual({});
+  });
+
+  it.each(['', '   ', 'first\nsecond', 'first\rsecond', 'first\0second'])(
+    'rejects an invalid message: %j',
+    (message) => {
+      expect(validatePlainCommitMessage(message).description).toBeDefined();
+    },
+  );
+});
 
 describe('Conventional Commit validation', () => {
   it.each(fixtures.valid)('accepts shared valid fixture: %s', (message) => {

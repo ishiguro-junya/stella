@@ -33,6 +33,7 @@ export interface RowActionMenuProps<Action extends string> {
   open: boolean;
   disabled: boolean;
   contextPoint?: RowActionMenuPoint | undefined;
+  contextOnly?: boolean | undefined;
   triggerClassName?: string | undefined;
   menuClassName?: string | undefined;
   onOpenChange: (open: boolean) => void;
@@ -73,6 +74,7 @@ export function RowActionMenu<Action extends string>({
   open,
   disabled,
   contextPoint,
+  contextOnly = false,
   triggerClassName,
   menuClassName,
   onOpenChange,
@@ -89,21 +91,26 @@ export function RowActionMenu<Action extends string>({
   const positionMenu = useCallback((): void => {
     const trigger = triggerRef.current;
     const menu = menuRef.current;
-    if (!trigger || !menu) return;
+    if (!menu || (!trigger && !contextPoint)) return;
     const menuRect = menu.getBoundingClientRect();
     const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - menuRect.width - VIEWPORT_MARGIN);
     const maxTop = Math.max(
       VIEWPORT_MARGIN,
       window.innerHeight - menuRect.height - VIEWPORT_MARGIN,
     );
-    const triggerRect = trigger.getBoundingClientRect();
+    const triggerRect = trigger?.getBoundingClientRect();
     const left = contextPoint
       ? Math.min(Math.max(VIEWPORT_MARGIN, contextPoint.x), maxLeft)
-      : Math.min(Math.max(VIEWPORT_MARGIN, triggerRect.right - menuRect.width), maxLeft);
-    const below = contextPoint ? contextPoint.y : triggerRect.bottom + MENU_GAP;
+      : Math.min(
+          Math.max(VIEWPORT_MARGIN, (triggerRect?.right ?? VIEWPORT_MARGIN) - menuRect.width),
+          maxLeft,
+        );
+    const below = contextPoint
+      ? contextPoint.y
+      : (triggerRect?.bottom ?? VIEWPORT_MARGIN) + MENU_GAP;
     const above = contextPoint
       ? contextPoint.y - menuRect.height
-      : triggerRect.top - menuRect.height - MENU_GAP;
+      : (triggerRect?.top ?? VIEWPORT_MARGIN) - menuRect.height - MENU_GAP;
     const top =
       below + menuRect.height <= window.innerHeight - VIEWPORT_MARGIN
         ? Math.max(VIEWPORT_MARGIN, below)
@@ -215,37 +222,39 @@ export function RowActionMenu<Action extends string>({
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`row-action-trigger quiet${triggerClassName ? ` ${triggerClassName}` : ''}`}
-        aria-label={triggerLabel}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        title={triggerTitle}
-        disabled={disabled}
-        onClick={() => {
-          if (open) closeMenu(false);
-          else {
-            onTriggerOpen();
-            openMenu('first');
-          }
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            onTriggerOpen();
-            openMenu('first');
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            onTriggerOpen();
-            openMenu('last');
-          }
-        }}
-      >
-        <Ellipsis aria-hidden="true" focusable="false" size={16} />
-      </button>
+      {contextOnly ? null : (
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`row-action-trigger quiet${triggerClassName ? ` ${triggerClassName}` : ''}`}
+          aria-label={triggerLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          title={triggerTitle}
+          disabled={disabled}
+          onClick={() => {
+            if (open) closeMenu(false);
+            else {
+              onTriggerOpen();
+              openMenu('first');
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              onTriggerOpen();
+              openMenu('first');
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              onTriggerOpen();
+              openMenu('last');
+            }
+          }}
+        >
+          <Ellipsis aria-hidden="true" focusable="false" size={16} />
+        </button>
+      )}
       {open
         ? createPortal(
             <div

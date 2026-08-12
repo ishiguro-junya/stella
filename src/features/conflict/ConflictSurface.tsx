@@ -22,6 +22,7 @@ import {
 } from '../../domain/conflictSession';
 import { profileConflictDocument } from '../../domain/performance';
 import type { ConflictChoice, ConflictDocument, DiffStyle } from '../../domain/workspace';
+import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import { useI18n, type I18nValue, type LocalizedMessage } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
 import { Dialog } from '../../ui/Dialog';
@@ -62,14 +63,12 @@ export interface ConflictSurfaceProps {
   actions: ConflictSurfaceActions;
   diffStyle?: DiffStyle | undefined;
   externalStateChanged?: boolean | undefined;
+  lineWrapping?: boolean | undefined;
+  wrapColumn?: number | undefined;
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   onResolved?: (() => void) | undefined;
-  onLeaveHandleChange?: ((handle: ConflictLeaveHandle | null) => void) | undefined;
+  onLeaveHandleChange?: ((handle: UnsavedChangesHandle | null) => void) | undefined;
   onError?: ShowWorkspaceError | undefined;
-}
-
-export interface ConflictLeaveHandle {
-  save: () => Promise<boolean>;
 }
 
 type ComparisonSide = 'current' | 'incoming';
@@ -128,6 +127,8 @@ export function ConflictSurface({
   actions,
   diffStyle = 'unified',
   externalStateChanged = false,
+  lineWrapping = false,
+  wrapColumn,
   onDirtyChange,
   onResolved,
   onLeaveHandleChange,
@@ -351,7 +352,7 @@ export function ConflictSurface({
 
   useEffect(() => {
     if (!onLeaveHandleChange) return () => undefined;
-    const handle: ConflictLeaveHandle = { save: () => saveRef.current() };
+    const handle: UnsavedChangesHandle = { save: () => saveRef.current() };
     onLeaveHandleChange(handle);
     return () => onLeaveHandleChange(null);
   }, [onLeaveHandleChange]);
@@ -630,6 +631,8 @@ export function ConflictSurface({
                 cacheKey: `${workingDocument.sessionId}:${workingDocument.conflictGeneration}:${comparisonSide}`,
               }}
               diffStyle={diffStyle}
+              lineWrapping={lineWrapping}
+              wrapColumn={wrapColumn}
               performanceMode={performance.mode === 'performance'}
               ariaLabel={t('conflictDiffAria', {
                 side: t(comparisonSide === 'current' ? 'conflictCurrent' : 'conflictIncoming'),
@@ -745,6 +748,8 @@ export function ConflictSurface({
               lineEnding={workingDocument.result.lineEnding}
               readOnly={Boolean(busy) || externalChangeDetected}
               performanceMode={performance.mode === 'performance'}
+              lineWrapping={lineWrapping}
+              wrapColumn={wrapColumn}
               selectedRange={selectedBlock?.rangeUtf16}
               onChange={(value) => updateHistory((current) => editConflictResult(current, value))}
               onUndo={() => updateHistory(undoConflictHistory)}

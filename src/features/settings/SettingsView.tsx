@@ -1,6 +1,13 @@
+import { useEffect, useState } from 'react';
+
 import type { ToolchainMode, ToolchainStatus } from '../../adapters/toolchainAdapter';
 import type { DiffStyle } from '../../domain/workspace';
 import { useI18n, type Language } from '../../i18n/i18n';
+import {
+  EDITOR_WRAP_COLUMN_MAX,
+  EDITOR_WRAP_COLUMN_MIN,
+  normalizeEditorWrapColumn,
+} from '../../persistence/preferences';
 import { APPEARANCE_OPTIONS, type Appearance } from '../../theme/appearance';
 import { SelectControl } from '../../ui/SelectControl';
 
@@ -9,12 +16,20 @@ export interface SettingsViewProps {
   language: Language;
   diffStyle: DiffStyle;
   splitStageView: boolean;
+  useConventionalCommits: boolean;
+  stickyFileHeaders: boolean;
+  editorLineWrapping: boolean;
+  editorWrapColumn: number;
   toolchainStatus?: ToolchainStatus;
   toolchainBusy?: boolean;
   onAppearanceChange: (appearance: Appearance) => void;
   onLanguageChange: (language: Language) => void;
   onDiffStyleChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
+  onUseConventionalCommitsChange: (enabled: boolean) => void;
+  onStickyFileHeadersChange: (sticky: boolean) => void;
+  onEditorLineWrappingChange: (enabled: boolean) => void;
+  onEditorWrapColumnChange: (column: number) => void;
   onToolchainModeChange: (mode: ToolchainMode) => void;
 }
 
@@ -39,17 +54,36 @@ export function SettingsView({
   language,
   diffStyle,
   splitStageView,
+  useConventionalCommits,
+  stickyFileHeaders,
+  editorLineWrapping,
+  editorWrapColumn,
   toolchainStatus,
   toolchainBusy = false,
   onAppearanceChange,
   onLanguageChange,
   onDiffStyleChange,
   onSplitStageViewChange,
+  onUseConventionalCommitsChange,
+  onStickyFileHeadersChange,
+  onEditorLineWrappingChange,
+  onEditorWrapColumnChange,
   onToolchainModeChange,
 }: SettingsViewProps) {
   const { t } = useI18n();
+  const [wrapColumnDraft, setWrapColumnDraft] = useState(String(editorWrapColumn));
   const toolchainModeLabel = (mode: ToolchainMode): string =>
     t(mode === 'bundled' ? 'toolchainBundled' : 'toolchainSystem');
+
+  useEffect(() => setWrapColumnDraft(String(editorWrapColumn)), [editorWrapColumn]);
+
+  const commitWrapColumn = (): void => {
+    const value = wrapColumnDraft.trim()
+      ? normalizeEditorWrapColumn(Number(wrapColumnDraft))
+      : editorWrapColumn;
+    setWrapColumnDraft(String(value));
+    onEditorWrapColumnChange(value);
+  };
 
   return (
     <main className="settings-view" aria-labelledby="settings-title">
@@ -144,17 +178,122 @@ export function SettingsView({
             <SelectControl
               className="settings-select"
               name="stage-display"
-              value={splitStageView ? 'split' : 'combined'}
+              value={splitStageView ? 'show' : 'hide'}
               aria-labelledby="stage-display-title"
               aria-describedby="stage-display-description"
-              onChange={(event) => onSplitStageViewChange(event.currentTarget.value === 'split')}
+              onChange={(event) => onSplitStageViewChange(event.currentTarget.value === 'show')}
             >
               {([true, false] as const).map((option) => (
-                <option key={String(option)} value={option ? 'split' : 'combined'}>
-                  {t(option ? 'stageDisplaySplit' : 'stageDisplayCombined')}
+                <option key={String(option)} value={option ? 'show' : 'hide'}>
+                  {t(option ? 'stageDisplayShow' : 'stageDisplayHide')}
                 </option>
               ))}
             </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="conventional-commits-title">
+            <div className="settings-row-copy">
+              <h2 id="conventional-commits-title">{t('conventionalCommitsTitle')}</h2>
+              <p id="conventional-commits-description">{t('conventionalCommitsDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="conventional-commits"
+              value={useConventionalCommits ? 'enabled' : 'disabled'}
+              aria-labelledby="conventional-commits-title"
+              aria-describedby="conventional-commits-description"
+              onChange={(event) =>
+                onUseConventionalCommitsChange(event.currentTarget.value === 'enabled')
+              }
+            >
+              {([true, false] as const).map((option) => (
+                <option key={String(option)} value={option ? 'enabled' : 'disabled'}>
+                  {t(option ? 'conventionalCommitsEnabled' : 'conventionalCommitsDisabled')}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="sticky-file-headers-title">
+            <div className="settings-row-copy">
+              <h2 id="sticky-file-headers-title">{t('stickyFileHeadersTitle')}</h2>
+              <p id="sticky-file-headers-description">{t('stickyFileHeadersDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="sticky-file-headers"
+              value={stickyFileHeaders ? 'enabled' : 'disabled'}
+              aria-labelledby="sticky-file-headers-title"
+              aria-describedby="sticky-file-headers-description"
+              onChange={(event) =>
+                onStickyFileHeadersChange(event.currentTarget.value === 'enabled')
+              }
+            >
+              {([true, false] as const).map((option) => (
+                <option key={String(option)} value={option ? 'enabled' : 'disabled'}>
+                  {t(option ? 'stickyFileHeadersEnabled' : 'stickyFileHeadersDisabled')}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="editor-line-wrapping-title">
+            <div className="settings-row-copy">
+              <h2 id="editor-line-wrapping-title">{t('editorLineWrappingTitle')}</h2>
+              <p id="editor-line-wrapping-description">{t('editorLineWrappingDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="editor-line-wrapping"
+              value={editorLineWrapping ? 'enabled' : 'disabled'}
+              aria-labelledby="editor-line-wrapping-title"
+              aria-describedby="editor-line-wrapping-description"
+              onChange={(event) =>
+                onEditorLineWrappingChange(event.currentTarget.value === 'enabled')
+              }
+            >
+              {([true, false] as const).map((option) => (
+                <option key={String(option)} value={option ? 'enabled' : 'disabled'}>
+                  {t(option ? 'editorLineWrappingEnabled' : 'editorLineWrappingDisabled')}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="editor-wrap-column-title">
+            <div className="settings-row-copy">
+              <h2 id="editor-wrap-column-title">{t('editorWrapColumnTitle')}</h2>
+              <p id="editor-wrap-column-description">{t('editorWrapColumnDescription')}</p>
+            </div>
+            <input
+              className="settings-number-input"
+              name="editor-wrap-column"
+              type="number"
+              inputMode="numeric"
+              min={EDITOR_WRAP_COLUMN_MIN}
+              max={EDITOR_WRAP_COLUMN_MAX}
+              step={1}
+              value={wrapColumnDraft}
+              disabled={!editorLineWrapping}
+              aria-labelledby="editor-wrap-column-title"
+              aria-describedby="editor-wrap-column-description"
+              onChange={(event) => {
+                const draft = event.currentTarget.value;
+                setWrapColumnDraft(draft);
+                const value = Number(draft);
+                if (
+                  Number.isInteger(value) &&
+                  value >= EDITOR_WRAP_COLUMN_MIN &&
+                  value <= EDITOR_WRAP_COLUMN_MAX
+                ) {
+                  onEditorWrapColumnChange(value);
+                }
+              }}
+              onBlur={commitWrapColumn}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+            />
           </section>
 
           <section
@@ -177,18 +316,6 @@ export function SettingsView({
                   }
                 : {})}
             >
-              {toolchainStatus ? (
-                <dl className="settings-toolchain-modes">
-                  <div>
-                    <dt>{t('toolchainCurrentSession')}</dt>
-                    <dd>{toolchainModeLabel(toolchainStatus.activeMode)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('toolchainNextLaunch')}</dt>
-                    <dd>{toolchainModeLabel(toolchainStatus.selectedMode)}</dd>
-                  </div>
-                </dl>
-              ) : null}
               <SelectControl
                 className="settings-select"
                 name="toolchain"
@@ -209,23 +336,37 @@ export function SettingsView({
               </SelectControl>
             </div>
             {toolchainStatus ? (
-              <dl className="settings-toolchain-components">
-                {(
-                  [
-                    ['Git', toolchainStatus.git],
-                    ['Git LFS', toolchainStatus.gitLfs],
-                    ['Git Flow', toolchainStatus.gitFlow],
-                  ] as const
-                ).map(([name, component]) => (
-                  <div key={name}>
-                    <dt>{name}</dt>
-                    <dd className={component.available ? undefined : 'is-unavailable'}>
-                      {component.version ?? component.error ?? t('toolchainUnavailable')}
-                      {component.path ? <code title={component.path}>{component.path}</code> : null}
-                    </dd>
+              <>
+                <dl className="settings-toolchain-modes">
+                  <div>
+                    <dt>{t('toolchainCurrentSession')}</dt>
+                    <dd>{toolchainModeLabel(toolchainStatus.activeMode)}</dd>
                   </div>
-                ))}
-              </dl>
+                  <div>
+                    <dt>{t('toolchainNextLaunch')}</dt>
+                    <dd>{toolchainModeLabel(toolchainStatus.selectedMode)}</dd>
+                  </div>
+                </dl>
+                <dl className="settings-toolchain-components">
+                  {(
+                    [
+                      ['Git', toolchainStatus.git],
+                      ['Git LFS', toolchainStatus.gitLfs],
+                      ['Git Flow', toolchainStatus.gitFlow],
+                    ] as const
+                  ).map(([name, component]) => (
+                    <div key={name}>
+                      <dt>{name}</dt>
+                      <dd className={component.available ? undefined : 'is-unavailable'}>
+                        {component.version ?? component.error ?? t('toolchainUnavailable')}
+                        {component.path ? (
+                          <code title={component.path}>{component.path}</code>
+                        ) : null}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
             ) : (
               <p className="settings-toolchain-loading">{t('loading')}</p>
             )}

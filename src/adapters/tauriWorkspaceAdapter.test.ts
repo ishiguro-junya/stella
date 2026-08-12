@@ -544,6 +544,72 @@ describe('tauriWorkspaceAdapter', () => {
     });
   });
 
+  it('maps plain and Conventional Commit inputs to tagged wire actions', async () => {
+    let generation = 1;
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_execute') {
+        generation += 1;
+        return {
+          operationId: `commit-${generation}`,
+          summary: { id: 'backendCommitCreated' },
+          repoGeneration: generation,
+          eventSeq: generation,
+          snapshot: { ...snapshot(), repoGeneration: generation, eventSeq: generation },
+          command: {
+            argv: ['git', 'commit'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: { kind: 'commit', input: { format: 'plain', message: 'ordinary message' } },
+    });
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'commit',
+        input: {
+          format: 'conventional',
+          type: 'feat',
+          scope: 'ui',
+          breaking: false,
+          description: 'structured message',
+          footer: 'Refs: #123',
+        },
+      },
+    });
+
+    const actions = invokeMock.mock.calls
+      .filter(([command]) => command === 'workspace_execute')
+      .map(([, args]) => args?.request)
+      .filter(isRecord)
+      .map((request) => request.action);
+    expect(actions).toEqual([
+      { kind: 'commit', input: { format: 'plain', message: 'ordinary message' } },
+      {
+        kind: 'commit',
+        input: {
+          format: 'conventional',
+          type: 'feat',
+          scope: 'ui',
+          breaking: false,
+          description: 'structured message',
+          body: null,
+          footers: [{ token: 'Refs', value: '#123' }],
+        },
+      },
+    ]);
+  });
+
   it('keeps preview generation and confirmation tokens inside the adapter boundary', async () => {
     invokeMock.mockImplementation(async (command, args) => {
       if (command === 'workspace_preview') {
@@ -642,6 +708,115 @@ describe('tauriWorkspaceAdapter', () => {
     ]);
   });
 
+  it('maps line and hunk selections to the tagged wire representation', async () => {
+    let operation = 0;
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_execute') {
+        operation += 1;
+        return {
+          operationId: `selection-${operation}`,
+          summary: { id: 'backendChangesStaged' },
+          repoGeneration: operation + 1,
+          eventSeq: operation + 1,
+          snapshot: { ...snapshot(), repoGeneration: operation + 1, eventSeq: operation + 1 },
+          command: {
+            argv: ['git', 'apply'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'stageSelection',
+        selection: {
+          kind: 'lines',
+          diffId: 'revision-1',
+          path: 'src/app.ts',
+          generation: 1,
+          side: 'additions',
+          startLine: 3,
+          endLine: 4,
+        },
+      },
+    });
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'unstageSelection',
+        selection: {
+          kind: 'hunk',
+          diffId: 'revision-2',
+          path: 'src/app.ts',
+          generation: 2,
+          hunkIndex: 1,
+        },
+      },
+    });
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'discardSelection',
+        selection: {
+          kind: 'hunk',
+          diffId: 'revision-3',
+          path: 'src/app.ts',
+          generation: 3,
+          hunkIndex: 0,
+        },
+      },
+    });
+
+    const actions = invokeMock.mock.calls
+      .filter(([command]) => command === 'workspace_execute')
+      .map(([, args]) => args?.request)
+      .filter(isRecord)
+      .map((request) => request.action);
+    expect(actions).toEqual([
+      {
+        kind: 'stage',
+        paths: [],
+        selection: {
+          kind: 'lines',
+          path: 'src/app.ts',
+          diffRevision: 'revision-1',
+          side: 'additions',
+          startLine: 3,
+          endLine: 4,
+        },
+      },
+      {
+        kind: 'unstage',
+        paths: [],
+        selection: {
+          kind: 'hunk',
+          path: 'src/app.ts',
+          diffRevision: 'revision-2',
+          hunkIndex: 1,
+        },
+      },
+      {
+        kind: 'discard',
+        paths: [],
+        target: 'unstaged',
+        selection: {
+          kind: 'hunk',
+          path: 'src/app.ts',
+          diffRevision: 'revision-3',
+          hunkIndex: 0,
+        },
+      },
+    ]);
+  });
+
   it.each(['moveToTrash', 'revealInFinder', 'openInDefaultApp'] as const)(
     'maps the typed %s file operation without exposing process arguments',
     async (operation) => {
@@ -681,6 +856,90 @@ describe('tauriWorkspaceAdapter', () => {
       });
     },
   );
+
+  it('maps FileContents and SaveFile without changing the explicit hash contract', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'fileContents') {
+        return {
+          kind: 'fileContents',
+          data: {
+            repoId: 'repo-1',
+            path: 'src/app.ts',
+            text: 'const value = 1;\r\n',
+            lineEnding: 'crlf',
+            hasUtf8Bom: true,
+            contentHash: 'hash-1',
+            repoGeneration: 1,
+          },
+        };
+      }
+      if (command === 'workspace_execute') {
+        return {
+          operationId: 'save-file-1',
+          summary: { id: 'backendFileSaved' },
+          repoGeneration: 2,
+          eventSeq: 2,
+          snapshot: { ...snapshot(), repoGeneration: 2, eventSeq: 2 },
+          command: {
+            argv: ['app:file-save'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    const result = await adapter.query({
+      kind: 'fileContents',
+      repoId: 'repo-1',
+      path: 'src/app.ts',
+    });
+    expect(result).toEqual({
+      kind: 'fileContents',
+      document: {
+        repoId: 'repo-1',
+        path: 'src/app.ts',
+        text: 'const value = 1;\r\n',
+        lineEnding: 'crlf',
+        hasUtf8Bom: true,
+        contentHash: 'hash-1',
+        generation: 1,
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_query', {
+      request: {
+        repoId: 'repo-1',
+        query: { kind: 'fileContents', path: 'src/app.ts' },
+      },
+    });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'saveFile',
+        path: 'src/app.ts',
+        text: 'const value = 2;\r\n',
+        expectedContentHash: 'hash-1',
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
+      request: expect.objectContaining({
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: {
+          kind: 'saveFile',
+          path: 'src/app.ts',
+          text: 'const value = 2;\r\n',
+          expectedContentHash: 'hash-1',
+        },
+      }),
+    });
+  });
 
   it('exposes typed History pages and preserves graph lanes across the page boundary', async () => {
     const firstPage = [wireCommit('tip-a', ['base']), wireCommit('tip-b', ['base'])];

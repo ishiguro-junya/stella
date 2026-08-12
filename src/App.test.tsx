@@ -9,6 +9,24 @@ import type { QueryResult, RepoSnapshot, WorkspaceSnapshot } from './domain/work
 import { DEFAULT_PREFERENCES, readPreferences, writePreferences } from './persistence/preferences';
 import { conflictDocument, repoSnapshot } from './test/fixtures';
 
+const tauriWindowMock = vi.hoisted(() => ({
+  destroy: vi.fn<() => Promise<void>>(async () => undefined),
+  handler: undefined as ((event: { preventDefault: () => void }) => void) | undefined,
+  onCloseRequested: vi.fn<
+    (handler: (event: { preventDefault: () => void }) => void) => Promise<() => void>
+  >(async (handler) => {
+    tauriWindowMock.handler = handler;
+    return () => undefined;
+  }),
+}));
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({
+    destroy: tauriWindowMock.destroy,
+    onCloseRequested: tauriWindowMock.onCloseRequested,
+  }),
+}));
+
 vi.mock('./features/diff/DiffSurface', () => ({ DiffSurface: () => <div>Diff</div> }));
 vi.mock('./features/conflict/ConflictResultEditor', () => ({
   ConflictResultEditor: ({ onChange }: { onChange: (value: string) => void }) => (
@@ -18,6 +36,26 @@ vi.mock('./features/conflict/ConflictResultEditor', () => ({
         Edit Result
       </button>
     </div>
+  ),
+}));
+vi.mock('./ui/TextEditor', () => ({
+  TextEditor: ({
+    value,
+    ariaLabel,
+    readOnly,
+    onChange,
+  }: {
+    value: string;
+    ariaLabel: string;
+    readOnly?: boolean;
+    onChange: (value: string) => void;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      value={value}
+      readOnly={readOnly}
+      onChange={(event) => onChange(event.target.value)}
+    />
   ),
 }));
 
@@ -917,6 +955,7 @@ describe('App repository attach', () => {
 
   it('updates Stage state without showing a routine success notice', async () => {
     const user = userEvent.setup();
+    writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: true });
     const repo = repoSnapshot({
       changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
     });
@@ -1086,7 +1125,7 @@ describe('App repository attach', () => {
     );
 
     const leaveDialog = await screen.findByRole('alertdialog', {
-      name: 'Unsaved result',
+      name: 'Unsaved changes',
     });
     expect(leaveDialog).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save and Leave' })).toBeVisible();
@@ -1174,7 +1213,7 @@ describe('App repository attach', () => {
       resolveAttach?.({ repos: [second], selectedRepoId: second.repoId, activities: [] });
     });
 
-    expect(await screen.findByRole('alertdialog', { name: 'Unsaved result' })).toBeVisible();
+    expect(await screen.findByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
     expect(screen.getByRole('button', { name: /Current repository first/u })).toBeVisible();
   });
 
@@ -1233,7 +1272,6 @@ describe('App repository attach', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Operation failed' })).toHaveTextContent(
       'Git operation failed.',
     );
-    await user.click(screen.getByText('Show Git output'));
     expect(screen.getByLabelText('stderr')).toHaveTextContent('policy denied this operation');
   });
 
@@ -1492,14 +1530,28 @@ describe('App repository attach', () => {
     const repositories = screen.getByRole('button', { name: 'Repositories' });
     expect(screen.getByRole('combobox', { name: 'Appearance' })).toHaveValue('system');
     expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
+    expect(screen.getByRole('combobox', { name: 'Conventional Commits' })).toHaveValue('disabled');
+    expect(screen.getByRole('combobox', { name: 'Line Wrapping' })).toHaveValue('disabled');
+    expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toHaveValue(120);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Conventional Commits' }),
+      'enabled',
+    );
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Line Wrapping' }), 'enabled');
+    const wrapColumn = screen.getByRole('spinbutton', { name: 'Wrap Length' });
+    await user.clear(wrapColumn);
+    await user.type(wrapColumn, '100');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         appearance: 'dark',
         diffStyle: 'split',
+        useConventionalCommits: true,
+        editorLineWrapping: true,
+        editorWrapColumn: 100,
       }),
     );
 
@@ -1728,12 +1780,12 @@ describe('App repository attach', () => {
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await user.click(screen.getByRole('button', { name: 'History' }));
-    expect(await screen.findByRole('alertdialog', { name: 'Unsaved result' })).toBeVisible();
+    expect(await screen.findByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await user.click(screen.getByRole('button', { name: 'Activity' }));
-    expect(await screen.findByRole('alertdialog', { name: 'Unsaved result' })).toBeVisible();
+    expect(await screen.findByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Activity' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -1744,7 +1796,7 @@ describe('App repository attach', () => {
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(await screen.findByRole('alertdialog', { name: 'Unsaved result' })).toBeVisible();
+    expect(await screen.findByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
@@ -1761,6 +1813,188 @@ describe('App repository attach', () => {
     expect(adapter.execute).toHaveBeenCalledWith(
       expect.objectContaining({ action: expect.objectContaining({ kind: 'saveConflict' }) }),
     );
+  });
+
+  it('uses the shared unsaved guard when leaving a normal file editor', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot({
+      changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+    });
+    let savedText = 'const value = 1;\n';
+    let savedHash = 'hash-1';
+    const execute = vi.fn<WorkspaceAdapter['execute']>(async (request) => {
+      if (request.action.kind === 'saveFile') {
+        savedText = request.action.text;
+        savedHash = 'hash-2';
+      }
+      return {
+        repoId: request.repoId,
+        generation: repo.generation,
+        summary: { id: 'backendFileSaved' },
+      };
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'snapshot') return { kind: 'snapshot', snapshot: repo };
+        if (request.kind === 'diff') {
+          return {
+            kind: 'diff',
+            diff: {
+              diffId: 'diff-1',
+              repoId: repo.repoId,
+              path: request.path,
+              area: request.area,
+              generation: repo.generation,
+              patch: 'diff --git a/src/app.ts b/src/app.ts\n',
+              binary: false,
+              tooLarge: false,
+            },
+          };
+        }
+        if (request.kind === 'fileContents') {
+          return {
+            kind: 'fileContents',
+            document: {
+              repoId: repo.repoId,
+              path: request.path,
+              text: savedText,
+              lineEnding: 'lf',
+              hasUtf8Bom: false,
+              contentHash: savedHash,
+              generation: repo.generation,
+            },
+          };
+        }
+        if (request.kind === 'commitActivity') {
+          return commitActivityResult(repo, request.bucketBoundariesUnixSeconds, 1);
+        }
+        return { kind: 'activity', entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute,
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
+      target: { value: 'const value = 2;\n' },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'History' }));
+    const unsavedDialog = await screen.findByRole('alertdialog', { name: 'Unsaved changes' });
+    expect(unsavedDialog).toBeVisible();
+    await user.click(within(unsavedDialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('textbox', { name: 'Edit src/app.ts' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'History' }));
+    await user.click(screen.getByRole('button', { name: 'Save and Leave' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: {
+          kind: 'saveFile',
+          path: 'src/app.ts',
+          text: 'const value = 2;\n',
+          expectedContentHash: 'hash-1',
+        },
+      }),
+    );
+  });
+
+  it('intercepts native window close while a file draft is unsaved', async () => {
+    Object.defineProperty(globalThis, '__TAURI_INTERNALS__', { configurable: true, value: {} });
+    tauriWindowMock.destroy.mockClear();
+    tauriWindowMock.handler = undefined;
+    const user = userEvent.setup();
+    const repo = repoSnapshot({
+      changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'snapshot') return { kind: 'snapshot', snapshot: repo };
+        if (request.kind === 'diff') {
+          return {
+            kind: 'diff',
+            diff: {
+              diffId: 'diff-close',
+              repoId: repo.repoId,
+              path: request.path,
+              area: request.area,
+              generation: repo.generation,
+              patch: 'diff --git a/src/app.ts b/src/app.ts\n',
+              binary: false,
+              tooLarge: false,
+            },
+          };
+        }
+        if (request.kind === 'fileContents') {
+          return {
+            kind: 'fileContents',
+            document: {
+              repoId: repo.repoId,
+              path: request.path,
+              text: 'original\n',
+              lineEnding: 'lf',
+              hasUtf8Bom: false,
+              contentHash: 'hash-close',
+              generation: repo.generation,
+            },
+          };
+        }
+        return { kind: 'activity', entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    const rendered = render(<App adapter={adapter} />);
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
+      target: { value: 'draft\n' },
+    });
+    await waitFor(() => expect(tauriWindowMock.handler).toBeTypeOf('function'));
+
+    const preventDefault = vi.fn<() => void>();
+    act(() => tauriWindowMock.handler?.({ preventDefault }));
+    expect(preventDefault).toHaveBeenCalledOnce();
+    const dialog = await screen.findByRole('alertdialog', { name: 'Unsaved changes' });
+    expect(within(dialog).getByRole('button', { name: 'Save and Close' })).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Close Without Saving' })).toBeVisible();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Close Without Saving' }));
+    await waitFor(() => expect(tauriWindowMock.destroy).toHaveBeenCalledOnce());
+    rendered.unmount();
+    Reflect.deleteProperty(globalThis, '__TAURI_INTERNALS__');
   });
 
   it.each([

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,25 +10,56 @@ import { ChangesView } from './ChangesView';
 
 interface MockConflictSurfaceProps {
   document: ConflictDocument;
+  lineWrapping?: boolean;
+  wrapColumn?: number;
   externalStateChanged?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onLeaveHandleChange?: (handle: { save: () => Promise<boolean> } | null) => void;
 }
 
 interface MockDiffSurfaceProps {
+  lineWrapping?: boolean;
+  wrapColumn?: number;
   selectable?: boolean;
   collapsed?: boolean;
+  showFileHeaders?: boolean;
+  source?: { cacheKey?: string; path?: string };
+  hunkAction?: {
+    kind: 'stage' | 'unstage';
+    editDisabled?: boolean;
+    onEdit?: (selection: { hunkIndex: number; startLine: number }) => void;
+    disabled?: boolean;
+    onAction?: (selection: { hunkIndex: number }) => void;
+    discardDisabled?: boolean;
+    onDiscard?: (selection: { hunkIndex: number }) => void;
+  };
   onSelectionChange?: (selection: {
     side: 'additions' | 'deletions';
     startLine: number;
     endLine: number;
   }) => void;
+  onSelectionContextMenu?: (
+    selection: { side: 'additions'; startLine: number; endLine: number },
+    point: { x: number; y: number },
+    text: string,
+  ) => void;
+}
+
+interface MockFileEditorSurfaceProps {
+  document: { path: string; text: string };
+  lineWrapping?: boolean;
+  wrapColumn?: number;
+  initialScrollLine?: number;
+  headerActions?: ReactNode;
+  onDisplay: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onLeaveHandleChange?: (handle: { save: () => Promise<boolean> } | null) => void;
 }
 
 const { conflictSaveMock, conflictSurfaceMock, diffSurfaceMock } = vi.hoisted(() => ({
   conflictSaveMock: vi.fn<() => void>(),
   conflictSurfaceMock: vi.fn<(props: MockConflictSurfaceProps) => void>(),
-  diffSurfaceMock: vi.fn<(props: unknown) => void>(),
+  diffSurfaceMock: vi.fn<(props: MockDiffSurfaceProps) => void>(),
 }));
 
 vi.mock('../diff/DiffSurface', () => ({
@@ -42,6 +74,49 @@ vi.mock('../diff/DiffSurface', () => ({
         >
           Select diff lines
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            props.onSelectionContextMenu?.(
+              { side: 'additions', startLine: 2, endLine: 3 },
+              { x: 120, y: 160 },
+              'second line\nthird line',
+            )
+          }
+        >
+          Open selection menu
+        </button>
+        {props.hunkAction ? (
+          <>
+            {props.hunkAction.onEdit ? (
+              <button
+                type="button"
+                disabled={props.hunkAction.editDisabled}
+                onClick={() => props.hunkAction?.onEdit?.({ hunkIndex: 1, startLine: 12 })}
+              >
+                Edit mock hunk
+              </button>
+            ) : null}
+            {props.hunkAction.onAction ? (
+              <button
+                type="button"
+                disabled={props.hunkAction.disabled}
+                onClick={() => props.hunkAction?.onAction?.({ hunkIndex: 1 })}
+              >
+                {props.hunkAction.kind === 'stage' ? 'Stage mock hunk' : 'Unstage mock hunk'}
+              </button>
+            ) : null}
+            {props.hunkAction.onDiscard ? (
+              <button
+                type="button"
+                disabled={props.hunkAction.discardDisabled}
+                onClick={() => props.hunkAction?.onDiscard?.({ hunkIndex: 1 })}
+              >
+                Discard mock hunk
+              </button>
+            ) : null}
+          </>
+        ) : null}
       </div>
     );
   },
@@ -74,6 +149,37 @@ vi.mock('../conflict/ConflictSurface', () => ({
       </div>
     );
   },
+}));
+vi.mock('./FileEditorSurface', () => ({
+  FileEditorSurface: (props: MockFileEditorSurfaceProps) => (
+    <main
+      data-initial-scroll-line={props.initialScrollLine}
+      data-line-wrapping={props.lineWrapping}
+      data-wrap-column={props.wrapColumn}
+    >
+      <header>
+        <button type="button" onClick={props.onDisplay}>
+          Display
+        </button>
+        {props.headerActions}
+      </header>
+      <textarea aria-label={`Edit ${props.document.path}`} value={props.document.text} readOnly />
+      <button
+        type="button"
+        onClick={() => {
+          props.onDirtyChange?.(true);
+          props.onLeaveHandleChange?.({
+            save: async () => {
+              props.onDirtyChange?.(false);
+              return true;
+            },
+          });
+        }}
+      >
+        Edit File Draft
+      </button>
+    </main>
+  ),
 }));
 
 function adapterWithDiff(
@@ -124,6 +230,40 @@ function adapterWithConflict(): WorkspaceAdapter {
           }
         : await queryDiff(request),
     ),
+  };
+}
+
+function adapterWithFile(text = 'const value = 1;\n'): WorkspaceAdapter {
+  const adapter = adapterWithDiff();
+  const queryDiff = adapter.query;
+  return {
+    ...adapter,
+    query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'fileContents') {
+        return {
+          kind: 'fileContents' as const,
+          document: {
+            repoId: request.repoId,
+            path: request.path,
+            text,
+            lineEnding: 'lf' as const,
+            hasUtf8Bom: false,
+            contentHash: 'file-hash-1',
+            generation: 1,
+          },
+        };
+      }
+      if (request.kind === 'snapshot') {
+        return {
+          kind: 'snapshot' as const,
+          snapshot: repoSnapshot({
+            repoId: request.repoId,
+            changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+          }),
+        };
+      }
+      return await queryDiff(request);
+    }),
   };
 }
 
@@ -224,10 +364,6 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
     expect(screen.queryByText(/\d+ files/u)).not.toBeInTheDocument();
-    expect(screen.queryByText('Check to stage · Drag rows to move')).not.toBeInTheDocument();
-    expect(screen.getByText(/Use the checkboxes to stage or unstage files/u)).toHaveClass(
-      'sr-only',
-    );
     expect(screen.queryByText('No selection')).not.toBeInTheDocument();
     expect(screen.queryByText('Select a change')).not.toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Diff' })).toBeVisible();
@@ -274,6 +410,7 @@ describe('ChangesView diff lifecycle', () => {
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
       expect.objectContaining({ selectable: false, performanceMode: true }),
     );
+    expect(diffSurfaceMock.mock.lastCall?.[0]).not.toHaveProperty('hunkAction');
   });
 
   it('keeps line selection enabled for a single-file performance diff', async () => {
@@ -294,6 +431,7 @@ describe('ChangesView diff lifecycle', () => {
       expect.objectContaining({
         selectable: true,
         performanceMode: true,
+        hunkAction: expect.objectContaining({ kind: 'stage', disabled: false }),
         source: expect.objectContaining({ kind: 'codeView' }),
       }),
     );
@@ -321,12 +459,13 @@ describe('ChangesView diff lifecycle', () => {
         source: expect.objectContaining({ kind: 'codeView' }),
       }),
     );
+    expect(diffSurfaceMock.mock.lastCall?.[0]).not.toHaveProperty('hunkAction');
   });
 
   it.each([
-    ['unstaged', 'Stage', 'stageSelection'],
-    ['unstaged', 'Discard', 'discardSelection'],
-    ['staged', 'Unstage', 'unstageSelection'],
+    ['unstaged', 'Stage Selected Lines', 'stageSelection'],
+    ['unstaged', 'Discard Selected Lines', 'discardSelection'],
+    ['staged', 'Unstage Selected Lines', 'unstageSelection'],
   ] as const)(
     'routes an %s direct diff selection to %s through the typed %s action',
     async (area, buttonName, actionKind) => {
@@ -345,12 +484,14 @@ describe('ChangesView diff lifecycle', () => {
       );
       await screen.findByText('Diff');
       await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
-      const toolbar = screen.getByRole('toolbar', { name: 'Selected lines' });
-      await user.click(within(toolbar).getByRole('button', { name: buttonName }));
+      await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+      const menu = screen.getByRole('menu', { name: 'Selected lines' });
+      await user.click(within(menu).getByRole('menuitem', { name: buttonName }));
 
       expect(onAction).toHaveBeenCalledWith({
         kind: actionKind,
         selection: {
+          kind: 'lines',
           diffId: 'revision-1',
           path: 'src/app.ts',
           generation: 1,
@@ -361,6 +502,149 @@ describe('ChangesView diff lifecycle', () => {
       });
     },
   );
+
+  it('copies the selected line contents from the context menu', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn<(value: string) => Promise<void>>(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
+    await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Copy Selected Lines' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('second line\nthird line'));
+    expect(screen.getByRole('status')).toHaveTextContent('Copied the selected lines.');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('hides line and Hunk staging actions when Stage display is hidden', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        splitStageView={false}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    expect(screen.getByRole('button', { name: 'Edit mock hunk' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Stage mock hunk' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard mock hunk' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
+    await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+
+    expect(
+      screen.queryByRole('menuitem', { name: 'Stage Selected Lines' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Edit Lines' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Copy Selected Lines' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Discard Selected Lines' })).toBeVisible();
+  });
+
+  it.each([
+    ['unstaged', 'Stage mock hunk', 'stageSelection'],
+    ['unstaged', 'Discard mock hunk', 'discardSelection'],
+    ['staged', 'Unstage mock hunk', 'unstageSelection'],
+  ] as const)('routes an %s hunk action through %s', async (area, buttonName, actionKind) => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area, status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: buttonName }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      kind: actionKind,
+      selection: {
+        kind: 'hunk',
+        diffId: 'revision-1',
+        path: 'src/app.ts',
+        generation: 1,
+        hunkIndex: 1,
+      },
+    });
+  });
+
+  it('keeps a partially staged path in its source area and follows it when the source disappears', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    const { rerender } = render(
+      <ChangesView
+        repo={repoSnapshot({
+          generation: 1,
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Stage mock hunk' }));
+
+    rerender(
+      <ChangesView
+        repo={repoSnapshot({
+          generation: 2,
+          changes: [
+            { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/app.ts', area: 'staged', status: 'modified' },
+          ],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: 'Stage mock hunk' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Stage mock hunk' }));
+    rerender(
+      <ChangesView
+        repo={repoSnapshot({
+          generation: 3,
+          changes: [{ path: 'src/app.ts', area: 'staged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: 'Unstage mock hunk' })).toBeVisible();
+  });
 
   it('guards a dirty conflict when selecting another file and supports Cancel or Save', async () => {
     const user = userEvent.setup();
@@ -644,9 +928,8 @@ describe('ChangesView diff lifecycle', () => {
     expect(onAction).toHaveBeenCalledWith({
       kind: 'commit',
       input: {
-        type: 'feat',
-        breaking: false,
-        description: 'preserve this draft',
+        format: 'plain',
+        message: 'preserve this draft',
       },
     });
 
@@ -703,10 +986,12 @@ describe('ChangesView diff lifecycle', () => {
     await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
-    for (const button of screen.getAllByRole('button', { name: 'Stage' }))
-      expect(button).toBeDisabled();
-    for (const button of screen.getAllByRole('button', { name: 'Discard' }))
-      expect(button).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+    expect(screen.getByRole('menuitem', { name: 'Stage Selected Lines' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Selected Lines' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Copy Selected Lines' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Stage mock hunk' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Discard mock hunk' })).toBeDisabled();
     expect(onAction).not.toHaveBeenCalled();
   });
 
@@ -880,6 +1165,8 @@ describe('ChangesView diff lifecycle', () => {
         adapter={adapter}
         onAction={async () => undefined}
         diffStyle="split"
+        editorLineWrapping
+        editorWrapColumn={96}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
@@ -887,8 +1174,261 @@ describe('ChangesView diff lifecycle', () => {
     await screen.findByText('Diff');
     expect(screen.queryByRole('group', { name: 'Diff layout' })).not.toBeInTheDocument();
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({ diffStyle: 'split' }),
+      expect.objectContaining({
+        diffStyle: 'split',
+        lineWrapping: true,
+        wrapColumn: 96,
+      }),
     );
+  });
+
+  it('opens a changed file from the Diff mode tabs and returns through Display', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile()}
+        onAction={async () => undefined}
+        editorLineWrapping
+        editorWrapColumn={96}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+
+    const displayTab = screen.getByRole('tab', { name: 'Display' });
+    const editButton = screen.getByRole('tab', { name: 'Edit' });
+    expect(displayTab).toHaveAttribute('aria-selected', 'true');
+    expect(editButton).toHaveAttribute('title', 'Edit');
+    expect(editButton).toHaveAttribute('aria-selected', 'false');
+    expect(editButton).not.toHaveTextContent('Edit');
+    await user.click(editButton);
+    expect(await screen.findByRole('textbox', { name: 'Edit src/app.ts' })).toBeVisible();
+    expect(
+      screen.getByRole('textbox', { name: 'Edit src/app.ts' }).closest('main'),
+    ).toHaveAttribute('data-line-wrapping', 'true');
+    expect(
+      screen.getByRole('textbox', { name: 'Edit src/app.ts' }).closest('main'),
+    ).toHaveAttribute('data-wrap-column', '96');
+    expect(screen.queryByText('Diff')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Display' }));
+    expect(await screen.findByText('Diff')).toBeVisible();
+  });
+
+  it('keeps the ellipsis file menu in the editor and restricts destructive actions while dirty', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+    await user.click(screen.getByRole('tab', { name: 'Edit' }));
+    await screen.findByRole('textbox', { name: 'Edit src/app.ts' });
+
+    const menuTrigger = screen.getByRole('button', {
+      name: 'More actions for selected file src/app.ts',
+    });
+    expect(menuTrigger).toBeVisible();
+    await user.click(menuTrigger);
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeEnabled();
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Edit File Draft' }));
+    await user.click(menuTrigger);
+    expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+  });
+
+  it('keeps the Diff visible until the editor document is ready', async () => {
+    const user = userEvent.setup();
+    const adapter = adapterWithFile();
+    const query = adapter.query;
+    let resolveFileQuery: ((result: QueryResult) => void) | undefined;
+    adapter.query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind !== 'fileContents') return await query(request);
+      return await new Promise<QueryResult>((resolve) => {
+        resolveFileQuery = resolve;
+      });
+    });
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+
+    await user.click(screen.getByRole('tab', { name: 'Edit' }));
+
+    expect(screen.getByText('Diff')).toBeVisible();
+    expect(document.querySelector('.loading-state')).not.toBeInTheDocument();
+    await act(async () => {
+      resolveFileQuery?.({
+        kind: 'fileContents',
+        document: {
+          repoId: 'repo-1',
+          path: 'src/app.ts',
+          text: 'const value = 1;\n',
+          lineEnding: 'lf',
+          hasUtf8Bom: false,
+          contentHash: 'file-hash-1',
+          generation: 1,
+        },
+      });
+    });
+    expect(await screen.findByRole('textbox', { name: 'Edit src/app.ts' })).toBeVisible();
+  });
+
+  it.each([
+    ['Hunk', 'Edit mock hunk'],
+    ['lines', 'Edit Lines'],
+  ] as const)('opens the whole-file editor from %s editing', async (source, actionName) => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+    if (source === 'lines') {
+      await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
+      await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+    }
+
+    await user.click(
+      screen.getByRole(source === 'lines' ? 'menuitem' : 'button', { name: actionName }),
+    );
+
+    const editor = await screen.findByRole('textbox', { name: 'Edit src/app.ts' });
+    expect(editor).toBeVisible();
+    expect(editor.closest('main')).toHaveAttribute(
+      'data-initial-scroll-line',
+      source === 'Hunk' ? '12' : '2',
+    );
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('narrows a multiple selection to the file whose row menu starts editing', async () => {
+    const user = userEvent.setup();
+    const adapter = adapterWithFile();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = changeRow(/first\.ts/u);
+    const second = changeRow(/second\.ts/u);
+    await user.click(first);
+    fireEvent.click(second, { shiftKey: true });
+    await waitFor(() => expect(screen.getAllByText('Diff')).toHaveLength(2));
+
+    const secondMenus = screen.getAllByRole('button', { name: 'More actions for src/second.ts' });
+    const secondMenu = secondMenus[0];
+    if (!secondMenu) throw new Error('Expected the row action menu.');
+    await user.click(secondMenu);
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Edit src/second.ts' })).toBeVisible();
+    expect(first).toHaveAttribute('aria-pressed', 'false');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows mode tabs for every selected Diff and edits the chosen file', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapterWithFile()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = changeRow(/first\.ts/u);
+    const second = changeRow(/second\.ts/u);
+    await user.click(first);
+    fireEvent.click(second, { shiftKey: true });
+    await waitFor(() => expect(screen.getAllByText('Diff')).toHaveLength(2));
+
+    const displayTabs = screen.getAllByRole('tab', { name: 'Display' });
+    const editTabs = screen.getAllByRole('tab', { name: 'Edit' });
+    expect(displayTabs).toHaveLength(2);
+    expect(displayTabs.every((tab) => tab.getAttribute('aria-selected') === 'true')).toBe(true);
+    expect(editTabs).toHaveLength(2);
+    await user.click(editTabs[1]!);
+
+    expect(await screen.findByRole('textbox', { name: 'Edit src/second.ts' })).toBeVisible();
+    expect(first).toHaveAttribute('aria-pressed', 'false');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('blocks repository mutations while a file editor is dirty', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+    await user.click(screen.getByRole('tab', { name: 'Edit' }));
+    await screen.findByRole('textbox', { name: 'Edit src/app.ts' });
+    await user.click(screen.getByRole('button', { name: 'Edit File Draft' }));
+    expect(screen.getByRole('button', { name: 'Commit' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Fetch' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Stage src/app.ts' })).toBeDisabled();
+    expect(screen.getByRole('status', { name: 'Unsaved' })).toBeVisible();
+
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('stages through the checkbox and keeps the same file selected after it moves', async () => {
@@ -990,6 +1530,136 @@ describe('ChangesView diff lifecycle', () => {
     });
   });
 
+  it('renders every file selected in the left pane in the right pane', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        stickyFileHeaders
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = changeRow(/first\.ts/u);
+    const second = changeRow(/second\.ts/u);
+
+    await user.click(first);
+    fireEvent.click(second, { shiftKey: true });
+
+    await waitFor(() => expect(screen.getAllByText('Diff')).toHaveLength(2));
+    const multiSources = diffSurfaceMock.mock.calls
+      .map(([props]) => props)
+      .filter((props) => props.source?.path)
+      .slice(-2);
+    expect(multiSources).toEqual([
+      expect.objectContaining({
+        collapsed: false,
+        hunkAction: expect.objectContaining({ kind: 'stage' }),
+        source: expect.objectContaining({ path: 'src/first.ts' }),
+      }),
+      expect.objectContaining({
+        collapsed: false,
+        hunkAction: expect.objectContaining({ kind: 'stage' }),
+        source: expect.objectContaining({ path: 'src/second.ts' }),
+      }),
+    ]);
+    expect(screen.getAllByRole('button', { name: 'Stage mock hunk' })).toHaveLength(2);
+
+    multiSources[0]?.hunkAction?.onAction?.({ hunkIndex: 1 });
+    await waitFor(() =>
+      expect(onAction).toHaveBeenCalledWith({
+        kind: 'stageSelection',
+        selection: {
+          kind: 'hunk',
+          diffId: multiSources[0]?.source?.cacheKey,
+          path: 'src/first.ts',
+          generation: expect.any(Number),
+          hunkIndex: 1,
+        },
+      }),
+    );
+
+    const firstHeading = screen.getByRole('heading', { name: 'src/first.ts' });
+    const firstToolbar = firstHeading.closest('.pane-toolbar');
+    expect(firstToolbar).toHaveClass('is-sticky');
+    expect(firstToolbar?.closest('.diff-pane')).not.toHaveClass('has-static-file-headers');
+    expect(firstToolbar).toContainElement(
+      screen.getByRole('button', { name: 'More actions for selected file src/first.ts' }),
+    );
+    expect(firstToolbar?.querySelector('.selected-file-heading .file-status')).toHaveClass(
+      'modified',
+    );
+    if (!firstToolbar) throw new Error('Expected the first selected file header.');
+    fireEvent.contextMenu(firstToolbar, { clientX: 160, clientY: 140 });
+    const firstMenu = screen.getByRole('menu', { name: 'src/first.ts actions' });
+    expect(firstMenu).toBeVisible();
+    fireEvent.keyDown(firstMenu, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'src/first.ts actions' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse src/first.ts diff' }));
+    expect(screen.getByRole('button', { name: 'Expand src/first.ts diff' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    const latestPropsFor = (path: string) =>
+      diffSurfaceMock.mock.calls.findLast(([props]) => props.source?.path === path)?.[0];
+    expect(latestPropsFor('src/first.ts')).toEqual(expect.objectContaining({ collapsed: true }));
+    expect(latestPropsFor('src/second.ts')).toEqual(expect.objectContaining({ collapsed: false }));
+  });
+
+  it('keeps file headers in the normal scroll flow by default', async () => {
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    const toolbar = screen.getByRole('heading', { name: 'src/app.ts' }).closest('.pane-toolbar');
+    expect(toolbar).not.toHaveClass('is-sticky');
+    expect(toolbar?.closest('.diff-pane')).toHaveClass('has-static-file-headers');
+  });
+
+  it('opens the ellipsis file menu from a right-click on the file header', async () => {
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    const toolbar = screen.getByRole('heading', { name: 'src/app.ts' }).closest('.pane-toolbar');
+    if (!toolbar) throw new Error('Expected a file header toolbar.');
+    fireEvent.contextMenu(toolbar, { clientX: 240, clientY: 180 });
+
+    const menu = screen.getByRole('menu', { name: 'src/app.ts actions' });
+    expect(menu).toBeVisible();
+    expect(menu).toHaveStyle({ left: '240px', top: '180px' });
+    expect(
+      screen.getByRole('button', { name: 'More actions for selected file src/app.ts' }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('copies an absolute path and announces the result visibly', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn<(value: string) => Promise<void>>(async () => undefined);
@@ -1046,7 +1716,7 @@ describe('ChangesView diff lifecycle', () => {
     ).toHaveClass('modified');
   });
 
-  it('collapses and expands the selected file diff from the left edge of its title', async () => {
+  it('does not show a collapse toggle for a single selected file', async () => {
     render(
       <ChangesView
         repo={repoSnapshot({
@@ -1060,17 +1730,10 @@ describe('ChangesView diff lifecycle', () => {
     );
 
     await screen.findByText('Diff');
-    const collapse = screen.getByRole('button', { name: 'Collapse src/app.ts diff' });
-    expect(collapse.querySelector('.lucide')).toBe(collapse.firstElementChild);
-    fireEvent.click(collapse);
-
-    expect(screen.getByRole('button', { name: 'Expand src/app.ts diff' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({ collapsed: true }),
-    );
+    expect(
+      screen.queryByRole('button', { name: 'Collapse src/app.ts diff' }),
+    ).not.toBeInTheDocument();
+    expect(diffSurfaceMock.mock.lastCall?.[0]).not.toHaveProperty('collapsed');
   });
 
   it('disables every file-action trigger while the app is globally busy', () => {

@@ -26,7 +26,11 @@ describe('appearance preferences', () => {
     expect(readPreferences()).toMatchObject({
       appearance: 'system',
       diffStyle: 'unified',
-      splitStageView: true,
+      splitStageView: false,
+      useConventionalCommits: false,
+      stickyFileHeaders: false,
+      editorLineWrapping: false,
+      editorWrapColumn: 120,
     });
   });
 
@@ -86,9 +90,75 @@ describe('appearance preferences', () => {
     expect(readPreferences().appearance).toBe('dark');
   });
 
-  it('round-trips the combined Stage display preference', () => {
-    writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: false });
-    expect(readPreferences().splitStageView).toBe(false);
+  it('defaults Stage display to Hide and round-trips the Show preference', () => {
+    expect(DEFAULT_PREFERENCES.splitStageView).toBe(false);
+    writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: true });
+    expect(readPreferences().splitStageView).toBe(true);
+  });
+
+  it('defaults Conventional Commits to off and round-trips the enabled preference', () => {
+    expect(DEFAULT_PREFERENCES.useConventionalCommits).toBe(false);
+    writePreferences({ ...DEFAULT_PREFERENCES, useConventionalCommits: true });
+    expect(readPreferences().useConventionalCommits).toBe(true);
+  });
+
+  it('migrates existing structured Commit drafts to the Conventional format', () => {
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...DEFAULT_PREFERENCES,
+        useConventionalCommits: undefined,
+        commitDrafts: {
+          repo: {
+            type: 'fix',
+            scope: 'ui',
+            breaking: false,
+            description: 'keep the draft',
+          },
+        },
+      }),
+    );
+
+    expect(readPreferences()).toMatchObject({
+      useConventionalCommits: false,
+      commitDrafts: {
+        repo: {
+          plainMessage: '',
+          conventional: {
+            type: 'fix',
+            scope: 'ui',
+            breaking: false,
+            description: 'keep the draft',
+          },
+        },
+      },
+    });
+  });
+
+  it('defaults file header following to off and round-trips an enabled preference', () => {
+    expect(DEFAULT_PREFERENCES.stickyFileHeaders).toBe(false);
+    writePreferences({ ...DEFAULT_PREFERENCES, stickyFileHeaders: true });
+    expect(readPreferences().stickyFileHeaders).toBe(true);
+  });
+
+  it('defaults editor wrapping to off with 120 characters and bounds saved lengths', () => {
+    expect(DEFAULT_PREFERENCES.editorLineWrapping).toBe(false);
+    expect(DEFAULT_PREFERENCES.editorWrapColumn).toBe(120);
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      editorLineWrapping: true,
+      editorWrapColumn: 96,
+    });
+    expect(readPreferences()).toMatchObject({
+      editorLineWrapping: true,
+      editorWrapColumn: 96,
+    });
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({ ...DEFAULT_PREFERENCES, editorWrapColumn: 999 }),
+    );
+    expect(readPreferences().editorWrapColumn).toBe(400);
   });
 
   it('round-trips the selected Diff layout', () => {

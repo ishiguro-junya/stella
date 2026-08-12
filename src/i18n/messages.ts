@@ -25,7 +25,6 @@ export const MESSAGES = {
   appActivity: { en: 'Activity', ja: 'アクティビティ' },
   appSettings: { en: 'Settings', ja: '設定' },
   appNavigation: { en: 'App navigation', ja: 'アプリのナビゲーション' },
-  appError: { en: 'Error', ja: 'エラー' },
   back: { en: 'Back', ja: '戻る' },
   preferences: { en: 'Preferences', ja: '環境設定' },
   settingsTitle: { en: 'Settings', ja: '設定' },
@@ -38,13 +37,39 @@ export const MESSAGES = {
   appearanceLight: { en: 'Light', ja: 'ライト' },
   appearanceDark: { en: 'Dark', ja: 'ダーク' },
   languageTitle: { en: 'Language', ja: '言語' },
-  stageDisplayTitle: { en: 'Stage Display', ja: 'Stageの表示' },
+  stageDisplayTitle: { en: 'Stage Display', ja: 'ステージの表示' },
   stageDisplayDescription: {
-    en: 'Choose whether Staged and Unstaged files appear in separate lists.',
-    ja: 'StagedとUnstagedのファイルを分けて表示するか選択します。',
+    en: 'Choose whether Staged and Unstaged files are shown separately.',
+    ja: 'ステージ済みと未ステージのファイルを分けて表示するか選択します。',
   },
-  stageDisplaySplit: { en: 'Separate', ja: '分割' },
-  stageDisplayCombined: { en: 'Combined', ja: 'まとめる' },
+  stageDisplayShow: { en: 'Show', ja: '表示する' },
+  stageDisplayHide: { en: 'Hide', ja: '表示しない' },
+  conventionalCommitsTitle: { en: 'Conventional Commits', ja: 'Conventional Commits' },
+  conventionalCommitsDescription: {
+    en: 'Choose whether to compose commit messages in Conventional Commits format. Repository Git Hooks continue to run.',
+    ja: 'コミットメッセージをConventional Commits形式で作成するか選択します。RepositoryのGit Hookによる検証は変更しません。',
+  },
+  conventionalCommitsEnabled: { en: 'Use', ja: '使用する' },
+  conventionalCommitsDisabled: { en: "Don't Use", ja: '使用しない' },
+  stickyFileHeadersTitle: { en: 'Sticky File Headers', ja: 'ファイルヘッダーの追従' },
+  stickyFileHeadersDescription: {
+    en: 'Keep file headers visible at the top while scrolling a Diff.',
+    ja: 'Diffをスクロールしたときにファイルヘッダーを上部へ固定するか選択します。',
+  },
+  stickyFileHeadersEnabled: { en: 'On', ja: '追従する' },
+  stickyFileHeadersDisabled: { en: 'Off', ja: '追従しない' },
+  editorLineWrappingTitle: { en: 'Line Wrapping', ja: '行の折り返し' },
+  editorLineWrappingDescription: {
+    en: 'Choose whether to wrap long lines.',
+    ja: '長い行を折り返して表示するか選択します。',
+  },
+  editorLineWrappingEnabled: { en: 'Wrap', ja: '折り返す' },
+  editorLineWrappingDisabled: { en: "Don't Wrap", ja: '折り返さない' },
+  editorWrapColumnTitle: { en: 'Wrap Length', ja: '折り返す文字数' },
+  editorWrapColumnDescription: {
+    en: 'When line wrapping is enabled, wrap at the specified length.',
+    ja: '行の折り返す場合、指定した文字数で折り返します。',
+  },
   toolchainTitle: { en: 'Git Toolchain', ja: 'Gitツールチェイン' },
   toolchainDescription: {
     en: 'Choose whether to use the bundled Git toolchain or one installed on this Mac.',
@@ -55,8 +80,8 @@ export const MESSAGES = {
   toolchainCurrentSession: { en: 'Current session', ja: '現在のセッション' },
   toolchainNextLaunch: { en: 'Next launch', ja: '次回起動' },
   toolchainRestartRequired: {
-    en: 'Restart Stella to apply this change.',
-    ja: '変更を反映するにはStellaを再起動してください。',
+    en: 'Restart the app to apply this change.',
+    ja: '変更を反映するにはアプリを再起動してください。',
   },
   toolchainUnavailable: { en: 'Unavailable', ja: '利用できません' },
   toolchainLoadFailed: {
@@ -97,19 +122,6 @@ export const MESSAGES = {
   fetch: { en: 'Fetch', ja: 'フェッチ' },
   pull: { en: 'Pull', ja: 'プル' },
   push: { en: 'Push', ja: 'プッシュ' },
-  changeDragHelp: {
-    en: 'Use the checkboxes to stage or unstage files. You can also drag file rows between Staged and Unstaged.',
-    ja: 'チェックボックスでファイルをStageまたはUnstageできます。ファイル行をStagedとUnstagedの間でドラッグすることもできます。',
-  },
-  changeDragAnnouncement: {
-    en: (args) => `${text(args, 'path')} is being moved. Drop it in ${text(args, 'destination')}.`,
-    ja: (args) =>
-      `${text(args, 'path')}を移動中です。${text(args, 'destination')}にドロップしてください。`,
-  },
-  dropToStage: { en: 'Drop to Stage', ja: 'ドロップしてStage' },
-  dropToUnstage: { en: 'Drop to Unstage', ja: 'ドロップしてUnstage' },
-  dropHereToStage: { en: 'Drop here to stage', ja: 'ここにドロップしてStage' },
-  dropHereToUnstage: { en: 'Drop here to unstage', ja: 'ここにドロップしてUnstage' },
   changeAllAria: {
     en: (args, { number }) => {
       const total = count(args, 'count');
@@ -140,6 +152,9 @@ export const MESSAGES = {
     ja: (args, { number }) => `選択した${number(count(args, 'count'))}ファイルの操作`,
   },
   openInDefaultApp: { en: 'Open in Default App', ja: 'デフォルトアプリで開く' },
+  editFile: { en: 'Edit', ja: '編集' },
+  displayFile: { en: 'Display', ja: '表示' },
+  fileViewMode: { en: 'File view mode', ja: 'ファイル表示モード' },
   showInFinder: { en: 'Show in Finder', ja: 'Finderで表示' },
   copyPath: { en: 'Copy Path', ja: 'パスをコピー' },
   discardFilesEllipsis: { en: 'Discard Files…', ja: 'ファイルを破棄…' },
@@ -173,6 +188,147 @@ export const MESSAGES = {
   stageUnavailableUnsavedConflict: {
     en: 'Staging cannot change while the conflict result has unsaved edits.',
     ja: 'Conflict結果に未保存の編集がある間はStage状態を変更できません。',
+  },
+  stageUnavailableUnsavedChanges: {
+    en: 'Save or discard the current edits before running Git actions.',
+    ja: '現在の編集内容を保存または破棄してからGit操作を実行してください。',
+  },
+  unsaved: { en: 'Unsaved', ja: '未保存' },
+  unsavedChanges: { en: 'Unsaved changes', ja: '未保存の変更' },
+  saveOrDiscardBeforeDisplay: {
+    en: 'Save or discard the edits before returning to the Diff.',
+    ja: 'Diffの表示へ戻る前に、編集内容を保存または破棄してください。',
+  },
+  displayWithoutSaving: { en: 'Display Without Saving', ja: '保存せずに表示' },
+  saveAndDisplay: { en: 'Save and Display', ja: '保存して表示' },
+  saveOrDiscardBeforeAction: {
+    en: 'Save or discard the edits before running this operation.',
+    ja: 'この操作を実行する前に、編集内容を保存または破棄してください。',
+  },
+  saveOrDiscardBeforeClosing: {
+    en: 'Save or discard the edits before closing this window.',
+    ja: 'ウインドウを閉じる前に、編集内容を保存または破棄してください。',
+  },
+  saveAndClose: { en: 'Save and Close', ja: '保存して閉じる' },
+  closeWithoutSaving: { en: 'Close Without Saving', ja: '破棄して閉じる' },
+  closeWindowFailedTitle: {
+    en: 'Could not close the window',
+    ja: 'ウインドウを閉じられませんでした',
+  },
+  closeWindowFailed: {
+    en: 'The window could not be closed.',
+    ja: 'ウインドウを閉じられませんでした。',
+  },
+  fileEditorAria: {
+    en: (args) => `Edit ${text(args, 'path')}`,
+    ja: (args) => `${text(args, 'path')}を編集`,
+  },
+  fileEditStagedNotice: {
+    en: 'Saving creates an Unstaged change. The index is not changed.',
+    ja: '保存内容はUnstaged changesになります。Stage済みの内容は変更しません。',
+  },
+  fileEditExternalTitle: {
+    en: 'This file changed outside the editor',
+    ja: 'ファイルが外部で変更されました',
+  },
+  fileEditExternalDescription: {
+    en: 'The current draft is preserved. Copy it before reloading if you need to keep it.',
+    ja: '現在の下書きは保持されています。必要な場合は再読み込み前にコピーしてください。',
+  },
+  fileEditExternalDetected: {
+    en: 'An external file change was detected. The draft was not overwritten.',
+    ja: '外部の変更を検出しました。下書きは上書きされていません。',
+  },
+  fileEditExternalReloaded: {
+    en: 'The external file contents were reloaded.',
+    ja: '外部のファイル内容を再読み込みしました。',
+  },
+  fileEditSaved: {
+    en: 'The file was saved to the worktree.',
+    ja: 'ファイルをworktreeに保存しました。',
+  },
+  fileEditSaveFailed: {
+    en: 'The file could not be saved.',
+    ja: 'ファイルを保存できませんでした。',
+  },
+  fileEditReloadFailed: {
+    en: 'The file could not be reloaded.',
+    ja: 'ファイルを再読み込みできませんでした。',
+  },
+  fileEditDraftCopied: {
+    en: 'The draft was copied.',
+    ja: '下書きをコピーしました。',
+  },
+  fileEditCopyFailed: {
+    en: 'The draft could not be copied.',
+    ja: '下書きをコピーできませんでした。',
+  },
+  fileEditDiscardTitle: {
+    en: 'Discard the current draft?',
+    ja: '現在の下書きを破棄しますか？',
+  },
+  fileEditDiscardDescription: {
+    en: 'Reloading discards the current draft and undo history.',
+    ja: '再読み込みすると、現在の下書きと取り消し履歴が破棄されます。',
+  },
+  copyDraft: { en: 'Copy Draft', ja: '下書きをコピー' },
+  discardAndReload: { en: 'Discard and Reload', ja: '破棄して再読み込み' },
+  externalChange: { en: 'External change', ja: '外部の変更' },
+  fileEditLoadFailedTitle: {
+    en: 'Could not open the editor',
+    ja: 'エディタを開けませんでした',
+  },
+  fileEditLoadFailed: {
+    en: 'The file could not be loaded for editing.',
+    ja: 'ファイルを編集用に読み込めませんでした。',
+  },
+  fileEditUnsupported: {
+    en: (args) => {
+      const reason = text(args, 'reason');
+      const descriptions: Record<string, string> = {
+        binary: 'It is marked as binary.',
+        conflict: 'Use the conflict editor for this file.',
+        deleted: 'It has been deleted from the worktree.',
+        gitLfs: 'Git LFS files are not supported.',
+        lineEndings: 'It has mixed or unsupported line endings.',
+        nonUtf8: 'It is not UTF-8 text.',
+        notRegularFile: 'It is not a regular file.',
+        nul: 'It contains binary NUL bytes.',
+        submodule: 'Submodules are not supported.',
+        symlink: 'Symbolic links are not supported.',
+        tooLarge: 'It exceeds the size, line count, or line length limit.',
+      };
+      return descriptions[reason]
+        ? `This file cannot be edited in the built-in editor. ${descriptions[reason]}`
+        : 'This file cannot be edited in the built-in editor.';
+    },
+    ja: (args) => {
+      const reason = text(args, 'reason');
+      const descriptions: Record<string, string> = {
+        binary: 'binaryに指定されています。',
+        conflict: 'このファイルは競合Editorを使用してください。',
+        deleted: 'worktreeから削除されています。',
+        gitLfs: 'Git LFS対象fileは対応していません。',
+        lineEndings: '改行形式が混在しているか対応外です。',
+        nonUtf8: 'UTF-8 textではありません。',
+        notRegularFile: '通常fileではありません。',
+        nul: 'binaryのNUL byteを含んでいます。',
+        submodule: 'submoduleは対応していません。',
+        symlink: 'symlinkは対応していません。',
+        tooLarge: 'size、行数、または最長行の上限を超えています。',
+      };
+      return descriptions[reason]
+        ? `このファイルは内蔵エディタで編集できません。${descriptions[reason]}`
+        : 'このファイルは内蔵エディタで編集できません。';
+    },
+  },
+  fileEditUnavailable: {
+    en: 'Only files currently shown in Changes can be edited.',
+    ja: '現在Changesに表示されているファイルだけ編集できます。',
+  },
+  fileEditExternalChange: {
+    en: 'The file changed after it was opened. Reload it before saving.',
+    ja: 'ファイルを開いた後に外部で変更されました。再読み込みしてから保存してください。',
   },
   loadChangesFailedTitle: { en: 'Could not load changes', ja: '変更を読み込めませんでした' },
   loadChangesFailed: { en: 'Could not load changes.', ja: '変更を読み込めませんでした。' },
@@ -222,11 +378,55 @@ export const MESSAGES = {
     en: (args) => `Collapse ${text(args, 'path')} diff`,
     ja: (args) => `${text(args, 'path')}のDiffを折りたたむ`,
   },
+  collapseChangeGroup: {
+    en: (args) => `Collapse ${text(args, 'area')}`,
+    ja: (args) => `${text(args, 'area')}を折りたたむ`,
+  },
   expandFileDiff: {
     en: (args) => `Expand ${text(args, 'path')} diff`,
     ja: (args) => `${text(args, 'path')}のDiffを展開する`,
   },
+  expandChangeGroup: {
+    en: (args) => `Expand ${text(args, 'area')}`,
+    ja: (args) => `${text(args, 'area')}を展開する`,
+  },
   selectedLines: { en: 'Selected lines', ja: '選択した行' },
+  hunkNumber: {
+    en: (args) => `Hunk ${text(args, 'number')}`,
+    ja: (args) => `Hunk ${text(args, 'number')}`,
+  },
+  hunkRangeLabel: {
+    en: (args) => `Hunk ${text(args, 'number')} Lines ${text(args, 'start')}–${text(args, 'end')}`,
+    ja: (args) => `ハンク${text(args, 'number')} 行${text(args, 'start')}–${text(args, 'end')}`,
+  },
+  stageHunk: { en: 'Stage Hunk', ja: 'ハンクをステージ' },
+  unstageHunk: { en: 'Unstage Hunk', ja: 'ハンクをアンステージ' },
+  discardHunk: { en: 'Discard Hunk', ja: 'ハンクを破棄' },
+  editHunk: { en: 'Edit Hunk', ja: 'ハンクを編集' },
+  editHunkAria: {
+    en: (args) =>
+      `Edit hunk ${text(args, 'number')}, lines ${text(args, 'start')}–${text(args, 'end')}`,
+    ja: (args) =>
+      `ハンク${text(args, 'number')}（${text(args, 'start')}–${text(args, 'end')}行）を編集`,
+  },
+  stageHunkAria: {
+    en: (args) =>
+      `Stage hunk ${text(args, 'number')}, lines ${text(args, 'start')}–${text(args, 'end')}`,
+    ja: (args) =>
+      `Hunk ${text(args, 'number')}（${text(args, 'start')}–${text(args, 'end')}行）をStage`,
+  },
+  unstageHunkAria: {
+    en: (args) =>
+      `Unstage hunk ${text(args, 'number')}, lines ${text(args, 'start')}–${text(args, 'end')}`,
+    ja: (args) =>
+      `Hunk ${text(args, 'number')}（${text(args, 'start')}–${text(args, 'end')}行）をUnstage`,
+  },
+  discardHunkAria: {
+    en: (args) =>
+      `Discard hunk ${text(args, 'number')}, lines ${text(args, 'start')}–${text(args, 'end')}`,
+    ja: (args) =>
+      `ハンク${text(args, 'number')}（${text(args, 'start')}–${text(args, 'end')}行）を破棄`,
+  },
   lineRange: {
     en: (args) => `Lines ${text(args, 'start')}–${text(args, 'end')}`,
     ja: (args) => `${text(args, 'start')}–${text(args, 'end')}行`,
@@ -334,13 +534,11 @@ export const MESSAGES = {
   createTag: { en: 'Create Tag', ja: 'タグを作成' },
   createTagMenu: { en: 'Create Tag', ja: 'タグを作成' },
   tagName: { en: 'Tag name', ja: 'タグ名' },
-  tagNamePlaceholder: { en: 'v1.0.0', ja: 'v1.0.0' },
   localTagHelp: {
     en: 'Creates a lightweight Tag locally. It is not pushed to a remote.',
     ja: '軽量タグをローカルに作成します。RemoteへはPushしません。',
   },
   sourceRef: { en: 'Source ref', ja: '元のref' },
-  branchNamePlaceholder: { en: 'feature/name', ja: 'feature/name' },
   selectedCommit: { en: 'Selected commit', ja: '選択したCommit' },
   targetCommit: { en: 'Target commit', ja: '対象Commit' },
   reviewImpact: { en: 'Review impact', ja: '影響を確認' },
@@ -488,9 +686,26 @@ export const MESSAGES = {
   actionStageFiles: { en: 'Stage Files', ja: 'ファイルをStage' },
   actionUnstageFiles: { en: 'Unstage Files', ja: 'ファイルをUnstage' },
   actionDiscardChanges: { en: 'Discard Files', ja: 'ファイルを破棄' },
-  actionStageSelectedLines: { en: 'Stage Selected Lines', ja: '選択行をStage' },
-  actionUnstageSelectedLines: { en: 'Unstage Selected Lines', ja: '選択行をUnstage' },
+  actionCopySelectedLines: { en: 'Copy Selected Lines', ja: '選択した行をコピー' },
+  actionEditLines: { en: 'Edit Lines', ja: '選択した行を編集' },
+  actionStageSelectedLines: { en: 'Stage Selected Lines', ja: '選択した行をステージ' },
+  actionUnstageSelectedLines: { en: 'Unstage Selected Lines', ja: '選択行をアンステージ' },
+  actionStageHunk: { en: 'Stage Hunk', ja: 'ハンクをステージ' },
+  actionUnstageHunk: { en: 'Unstage Hunk', ja: 'ハンクをアンステージ' },
+  actionDiscardHunk: { en: 'Discard Hunk', ja: 'ハンクを破棄' },
   actionDiscardSelectedLines: { en: 'Discard Selected Lines', ja: '選択行を破棄' },
+  copiedSelectedLines: {
+    en: 'Copied the selected lines.',
+    ja: '選択行をコピーしました。',
+  },
+  copySelectedLinesFailedTitle: {
+    en: 'Could not copy selected lines',
+    ja: '選択行をコピーできませんでした',
+  },
+  copySelectedLinesFailed: {
+    en: 'Could not copy the selected lines.',
+    ja: '選択行をコピーできませんでした。',
+  },
   actionCommit: { en: 'Commit', ja: 'Commit' },
   actionFetch: { en: 'Fetch', ja: 'フェッチ' },
   actionPull: { en: 'Pull', ja: 'プル' },
@@ -530,6 +745,7 @@ export const MESSAGES = {
     en: 'Open in Default App',
     ja: 'デフォルトアプリで開く',
   },
+  actionSaveFile: { en: 'Save File', ja: 'ファイルを保存' },
   actionCloneRepository: { en: 'Clone Repository', ja: 'リポジトリをClone' },
   backendCloneStarted: { en: 'Clone started', ja: 'Cloneを開始しました' },
   backendCloningRepository: { en: 'Cloning repository', ja: 'リポジトリをClone中' },
@@ -538,6 +754,10 @@ export const MESSAGES = {
   backendConflictResultSaved: {
     en: 'Conflict result saved',
     ja: 'Conflict結果を保存しました',
+  },
+  backendFileSaved: {
+    en: (args) => `Saved ${text(args, 'path')}`,
+    ja: (args) => `${text(args, 'path')}を保存しました`,
   },
   backendConflictChoiceApplied: {
     en: 'Choice applied to conflict block',
@@ -810,13 +1030,7 @@ export const MESSAGES = {
   repositoryPathTab: { en: 'Path', ja: 'パス' },
   repositoryUrl: { en: 'Repository URL', ja: 'リポジトリURL' },
   repositoryPath: { en: 'Repository path', ja: 'リポジトリのパス' },
-  repositoryUrlPlaceholder: { en: 'https://…', ja: 'https://…' },
-  repositoryPathPlaceholder: { en: '/Users/…', ja: '/Users/…' },
   repositoryDisplayName: { en: 'Repository name', ja: 'リポジトリ名' },
-  repositoryDisplayNamePlaceholder: {
-    en: 'Automatically set when left blank',
-    ja: '未入力の場合は自動設定',
-  },
   chooseRepositoryDirectory: { en: 'Choose Repository', ja: 'リポジトリを選択' },
   chooseCloneParentDirectory: { en: 'Choose Clone Location', ja: 'Clone先を選択' },
   chooseDirectoryFailed: {
@@ -1101,10 +1315,6 @@ export const MESSAGES = {
   commitFailed: { en: 'Commit failed', ja: 'コミットに失敗しました' },
   commitFailedDescription: { en: 'Commit failed.', ja: 'コミットに失敗しました。' },
   description: { en: 'Message', ja: 'メッセージ' },
-  commitDescriptionPlaceholder: {
-    en: 'Briefly describe your changes',
-    ja: '変更内容を簡潔に入力',
-  },
   type: { en: 'Type', ja: '型' },
   scope: { en: 'Scope', ja: 'スコープ' },
   breakingChange: { en: 'Breaking Change', ja: '破壊的変更' },
@@ -1118,6 +1328,10 @@ export const MESSAGES = {
     ja: 'スコープには括弧や改行を使用できません。',
   },
   commitDescriptionRequired: { en: 'Enter a message.', ja: 'メッセージを入力してください。' },
+  commitMessageSingleLine: {
+    en: 'The message must be a single line.',
+    ja: 'メッセージは1行で入力してください。',
+  },
   commitBodyLf: {
     en: 'Body must use LF line endings.',
     ja: 'Bodyの改行コードにはLFを使用してください。',
@@ -1136,7 +1350,6 @@ export const MESSAGES = {
     ja: '整形されたDiffを読み込めなかったため、プレーンテキストで表示します。',
   },
   close: { en: 'Close', ja: '閉じる' },
-  showGitOutput: { en: 'Show Git output', ja: 'Git出力を表示' },
   exitCode: {
     en: (args) => `Exit code: ${text(args, 'code')}`,
     ja: (args) => `終了コード: ${text(args, 'code')}`,
@@ -1144,6 +1357,10 @@ export const MESSAGES = {
   errorInvalidRequest: {
     en: 'The request could not be completed because it is not valid.',
     ja: 'リクエストの内容が正しくないため、操作を完了できませんでした。',
+  },
+  developmentBuildUpdated: {
+    en: 'An update is available. Restart the app.',
+    ja: '更新があります。アプリを再起動してください。',
   },
   errorRepoNotFound: {
     en: 'The repository is no longer available in this workspace.',
@@ -1190,8 +1407,8 @@ export const MESSAGES = {
     ja: 'ローカルブランチとリモートブランチが分岐しています。',
   },
   errorHookFailed: {
-    en: 'A Git hook rejected the operation.',
-    ja: 'Git hookによって操作が拒否されました。',
+    en: 'A Git Hook rejected the operation.',
+    ja: 'Git Hookによって操作が拒否されました。',
   },
   errorAuthenticationFailed: {
     en: 'Git authentication failed.',

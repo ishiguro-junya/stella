@@ -58,6 +58,7 @@ describe('CommitForm validation', () => {
     const commit = screen.getByRole('button', { name: 'Commit' });
 
     expect(commit).toBeEnabled();
+    expect(description).not.toHaveAttribute('placeholder');
     expect(description).toHaveAttribute('aria-invalid', 'false');
 
     await user.click(commit);
@@ -130,7 +131,12 @@ describe('CommitForm validation', () => {
 
   it('reports type and scope errors while their fields are edited', async () => {
     const user = userEvent.setup();
-    render(<CommitForm onCommit={vi.fn<() => Promise<void>>(async () => undefined)} />);
+    render(
+      <CommitForm
+        useConventionalCommits
+        onCommit={vi.fn<() => Promise<void>>(async () => undefined)}
+      />,
+    );
     const type = screen.getByRole('combobox', { name: 'Type' });
     const scope = screen.getByRole('textbox', { name: 'Scope' });
     expect(screen.queryByText('Optional')).not.toBeInTheDocument();
@@ -155,16 +161,19 @@ describe('CommitForm validation', () => {
       ...DEFAULT_PREFERENCES,
       commitDrafts: {
         repo: {
-          type: 'feat',
-          scope: '',
-          breaking: false,
-          description: 'restore draft',
-          body: 'first line\r\nsecond line',
-          footer: 'Refs: #123',
+          plainMessage: '',
+          conventional: {
+            type: 'feat',
+            scope: '',
+            breaking: false,
+            description: 'restore draft',
+            body: 'first line\r\nsecond line',
+            footer: 'Refs: #123',
+          },
         },
       },
     });
-    render(<CommitForm draftKey="repo" onCommit={onCommit} />);
+    render(<CommitForm useConventionalCommits draftKey="repo" onCommit={onCommit} />);
 
     expect(screen.queryByText('Ready to commit')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Body')).not.toBeInTheDocument();
@@ -175,10 +184,46 @@ describe('CommitForm validation', () => {
     await user.click(screen.getByRole('button', { name: 'Commit' }));
 
     expect(onCommit).toHaveBeenCalledWith({
+      format: 'conventional',
       type: 'feat',
       breaking: false,
       description: 'restore draft',
     });
+  });
+
+  it('shows only Message by default and submits a plain one-line message', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn<() => Promise<void>>(async () => undefined);
+    render(<CommitForm onCommit={onCommit} />);
+
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    expect(message).not.toHaveAttribute('placeholder');
+    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Scope' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Breaking Change' })).not.toBeInTheDocument();
+
+    await user.type(message, '  ordinary commit message  ');
+    await user.click(screen.getByRole('button', { name: 'Commit' }));
+    expect(onCommit).toHaveBeenCalledWith({
+      format: 'plain',
+      message: 'ordinary commit message',
+    });
+  });
+
+  it('keeps plain and Conventional drafts separate for the same repository', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn<() => Promise<void>>(async () => undefined);
+    const { rerender } = render(<CommitForm draftKey="repo" onCommit={onCommit} />);
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'plain draft');
+    rerender(<CommitForm useConventionalCommits draftKey="repo" onCommit={onCommit} />);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'conventional draft');
+
+    rerender(<CommitForm draftKey="repo" onCommit={onCommit} />);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('plain draft');
+    rerender(<CommitForm useConventionalCommits draftKey="repo" onCommit={onCommit} />);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('conventional draft');
   });
 
   it('shows and exposes a disabled reason', () => {

@@ -16,6 +16,7 @@ const changes: ChangeEntry[] = [
 
 function renderList(overrides: Partial<ChangeListProps> = {}) {
   const onSelect = vi.fn<(key: string) => void>();
+  const onSelectedKeysChange = vi.fn<(keys: string[]) => void>();
   const onStageTransition = vi.fn<(request: StageTransitionRequest) => Promise<void>>(
     async () => undefined,
   );
@@ -33,12 +34,13 @@ function renderList(overrides: Partial<ChangeListProps> = {}) {
       fileOpenDisabled={false}
       fileTrashDisabled={false}
       onSelect={onSelect}
+      onSelectedKeysChange={onSelectedKeysChange}
       onStageTransition={onStageTransition}
       onFileAction={onFileAction}
       {...overrides}
     />,
   );
-  return { ...result, onSelect, onStageTransition, onFileAction };
+  return { ...result, onSelect, onSelectedKeysChange, onStageTransition, onFileAction };
 }
 
 function changeRows(name: RegExp, container: HTMLElement = document.body): HTMLButtonElement[] {
@@ -53,36 +55,6 @@ function changeRow(name: RegExp, container?: HTMLElement): HTMLButtonElement {
   const row = changeRows(name, container)[0];
   if (!row) throw new Error(`Expected change row matching ${name.source}`);
   return row;
-}
-
-interface TestDataTransfer {
-  clearData: (format?: string) => void;
-  dropEffect: 'none' | 'move';
-  effectAllowed: 'uninitialized' | 'move';
-  getData: (format: string) => string;
-  setData: (format: string, value: string) => void;
-  readonly types: string[];
-}
-
-function dataTransfer(initial: Record<string, string> = {}): TestDataTransfer {
-  const values = new Map(Object.entries(initial));
-  return {
-    clearData(format?: string) {
-      if (format) values.delete(format);
-      else values.clear();
-    },
-    dropEffect: 'none',
-    effectAllowed: 'uninitialized',
-    getData(format: string) {
-      return values.get(format) ?? '';
-    },
-    setData(format: string, value: string) {
-      values.set(format, value);
-    },
-    get types() {
-      return [...values.keys()];
-    },
-  };
 }
 
 function BusyAfterFileActionHarness() {
@@ -202,7 +174,8 @@ describe('ChangeList staging controls', () => {
     expect(screen.queryByRole('region', { name: 'Conflicted' })).not.toBeInTheDocument();
   });
 
-  it('renders Staged and Unstaged as non-collapsible headings with visible rows', () => {
+  it('collapses and expands Staged and Unstaged independently from right-edge toggles', async () => {
+    const user = userEvent.setup();
     renderList();
 
     const stagedHeading = screen.getByRole('heading', { name: 'Staged' });
@@ -217,10 +190,36 @@ describe('ChangeList staging controls', () => {
     expect(unstagedHeading.querySelector('.change-group-title')?.nextElementSibling).toHaveClass(
       'change-count',
     );
-    expect(screen.queryByRole('button', { name: 'Staged' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Unstaged' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Unstage src/app.ts' })).toBeVisible();
     expect(screen.getByRole('checkbox', { name: 'Stage src/new.ts' })).toBeVisible();
+
+    const collapseStaged = screen.getByRole('button', { name: 'Collapse Staged' });
+    const collapseUnstaged = screen.getByRole('button', { name: 'Collapse Unstaged' });
+    expect(collapseStaged).toHaveAttribute('aria-expanded', 'true');
+    expect(collapseUnstaged).toHaveAttribute('aria-expanded', 'true');
+    expect(collapseStaged).toHaveClass('change-group-collapse-toggle');
+
+    await user.click(collapseStaged);
+    expect(screen.getByRole('button', { name: 'Expand Staged' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByRole('checkbox', { name: 'Unstage src/app.ts' })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Stage src/new.ts' })).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Changes' })).toHaveClass('is-staged-collapsed');
+
+    await user.click(collapseUnstaged);
+    expect(screen.getByRole('button', { name: 'Expand Unstaged' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('group', { name: 'Changes' })).toHaveClass(
+      'is-staged-collapsed',
+      'is-worktree-collapsed',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Expand Staged' }));
+    expect(screen.getByRole('checkbox', { name: 'Unstage src/app.ts' })).toBeVisible();
   });
 
   it('uses checked state for Staged and routes each checkbox without changing the Diff selection', async () => {
@@ -246,6 +245,20 @@ describe('ChangeList staging controls', () => {
       paths: ['src/app.ts'],
       sourceArea: 'staged',
     });
+  });
+
+  it('expands a collapsed destination before moving a file into it', async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByRole('button', { name: 'Collapse Staged' }));
+    expect(screen.getByRole('button', { name: 'Expand Staged' })).toBeVisible();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Stage src/new.ts' }));
+    expect(screen.getByRole('button', { name: 'Collapse Staged' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 
   it('stages a whole group through one typed multi-path action', async () => {
@@ -301,7 +314,7 @@ describe('ChangeList staging controls', () => {
     });
   });
 
-  it('keeps conflicts out of staging and disables checkbox and drag together', async () => {
+  it('keeps conflicts out of staging and disables Stage checkboxes while unavailable', async () => {
     const user = userEvent.setup();
     const { onStageTransition } = renderList({
       disabled: true,
@@ -319,147 +332,14 @@ describe('ChangeList staging controls', () => {
     expect(
       within(conflicted).queryByRole('button', { name: 'Conflicted' }),
     ).not.toBeInTheDocument();
-    expect(changeRow(/conflict\.ts/u, conflicted)).not.toHaveAttribute('draggable');
-    for (const row of changeRows(/app\.ts/u)) expect(row).not.toHaveAttribute('draggable');
   });
 
-  it('uses an opaque internal token and stages a valid row dropped on Staged', async () => {
-    const { onStageTransition } = renderList({
-      entries: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
-    });
-    const transfer = dataTransfer();
-    const row = changeRow(/app\.ts/u);
-    expect(screen.getByRole('region', { name: 'Staged' })).toBeVisible();
+  it('does not expose file rows as a Stage or Unstage drag source', () => {
+    renderList();
 
-    fireEvent.dragStart(row, { dataTransfer: transfer });
-    const stagedTarget = screen.getByRole('region', { name: 'Drop to Stage' });
-    expect(transfer.types).toEqual(['application/x-stella-change']);
-    expect(transfer.getData('application/x-stella-change')).not.toContain('src/app.ts');
-    expect(transfer.getData('text/plain')).toBe('');
-
-    fireEvent.dragOver(stagedTarget, { dataTransfer: transfer });
-    expect(screen.getByText('Drop to Stage')).toBeVisible();
-    fireEvent.drop(stagedTarget, { dataTransfer: transfer });
-
-    await waitFor(() =>
-      expect(onStageTransition).toHaveBeenCalledWith({
-        kind: 'stage',
-        paths: ['src/app.ts'],
-        sourceArea: 'unstaged',
-      }),
-    );
-  });
-
-  it('accepts protected-mode dragover without reading the token before drop', async () => {
-    const { onStageTransition } = renderList({
-      entries: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
-    });
-    const transfer = dataTransfer();
-    const row = changeRow(/app\.ts/u);
-    fireEvent.dragStart(row, { dataTransfer: transfer });
-    const stagedTarget = screen.getByRole('region', { name: 'Drop to Stage' });
-    const protectedGetData = vi.spyOn(transfer, 'getData').mockReturnValue('');
-
-    const dragOverAccepted = fireEvent.dragOver(stagedTarget, { dataTransfer: transfer });
-
-    expect(dragOverAccepted).toBe(false);
-    expect(protectedGetData).not.toHaveBeenCalled();
-    protectedGetData.mockRestore();
-    fireEvent.drop(stagedTarget, { dataTransfer: transfer });
-    await waitFor(() =>
-      expect(onStageTransition).toHaveBeenCalledWith({
-        kind: 'stage',
-        paths: ['src/app.ts'],
-        sourceArea: 'unstaged',
-      }),
-    );
-  });
-
-  it('keeps destination rows visible while marking a compatible drop target', () => {
-    renderList({
-      entries: [
-        { path: 'src/source.ts', area: 'unstaged', status: 'modified' },
-        { path: 'src/destination.ts', area: 'staged', status: 'modified' },
-      ],
-      selectedKey: 'unstaged:src/source.ts',
-    });
-
-    expect(screen.getByRole('button', { name: 'Modified src/destination.ts' })).toBeVisible();
-
-    const source = screen.getByRole('button', { name: 'Modified src/source.ts' });
-    const transfer = dataTransfer();
-    fireEvent.dragStart(source, { dataTransfer: transfer });
-
-    expect(screen.getByRole('heading', { name: 'Drop to Stage' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Modified src/destination.ts' })).toBeVisible();
-
-    fireEvent.dragEnd(source, { dataTransfer: transfer });
-    expect(screen.getByRole('heading', { name: 'Staged' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Modified src/destination.ts' })).toBeVisible();
-  });
-
-  it('unstages a Staged row dropped on Unstaged', async () => {
-    const { onStageTransition } = renderList({
-      entries: [{ path: 'src/app.ts', area: 'staged', status: 'modified' }],
-      selectedKey: 'staged:src/app.ts',
-    });
-    const transfer = dataTransfer();
-    const row = changeRow(/app\.ts/u);
-    expect(screen.getByRole('region', { name: 'Unstaged' })).toBeVisible();
-
-    fireEvent.dragStart(row, { dataTransfer: transfer });
-    const unstagedTarget = screen.getByRole('region', { name: 'Drop to Unstage' });
-    fireEvent.dragOver(unstagedTarget, { dataTransfer: transfer });
-    expect(screen.getByText('Drop to Unstage')).toBeVisible();
-    fireEvent.drop(unstagedTarget, { dataTransfer: transfer });
-
-    await waitFor(() =>
-      expect(onStageTransition).toHaveBeenCalledWith({
-        kind: 'unstage',
-        paths: ['src/app.ts'],
-        sourceArea: 'staged',
-      }),
-    );
-  });
-
-  it('ignores external and stale drag payloads', () => {
-    const { onStageTransition, rerender } = renderList({
-      entries: [
-        { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
-        { path: 'src/already-staged.ts', area: 'staged', status: 'modified' },
-      ],
-    });
-    const stagedTarget = screen.getByRole('region', { name: 'Staged' });
-
-    fireEvent.drop(stagedTarget, {
-      dataTransfer: dataTransfer({ 'application/x-stella-change': 'external-token' }),
-    });
-    expect(onStageTransition).not.toHaveBeenCalled();
-
-    const transfer = dataTransfer();
-    fireEvent.dragStart(changeRow(/app\.ts/u), {
-      dataTransfer: transfer,
-    });
-    rerender(
-      <ChangeList
-        repoId="repo-1"
-        generation={2}
-        entries={[
-          { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
-          { path: 'src/already-staged.ts', area: 'staged', status: 'modified' },
-        ]}
-        selectedKey="unstaged:src/app.ts"
-        disabled={false}
-        fileActionsDisabled={false}
-        fileOpenDisabled={false}
-        fileTrashDisabled={false}
-        onSelect={() => undefined}
-        onStageTransition={onStageTransition}
-        onFileAction={async () => undefined}
-      />,
-    );
-    fireEvent.drop(screen.getByRole('region', { name: 'Staged' }), { dataTransfer: transfer });
-    expect(onStageTransition).not.toHaveBeenCalled();
+    const rows = document.querySelectorAll('.change-row');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row).not.toHaveAttribute('draggable');
   });
 
   it('restores focus to the same path after it moves to the destination group', async () => {
@@ -505,7 +385,7 @@ describe('ChangeList file actions', () => {
       { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
       { path: 'src/third.ts', area: 'unstaged', status: 'modified' },
     ];
-    const { onFileAction } = renderList({
+    const { onFileAction, onSelectedKeysChange } = renderList({
       entries,
       selectedKey: 'unstaged:src/first.ts',
     });
@@ -518,6 +398,11 @@ describe('ChangeList file actions', () => {
     expect(first).toHaveAttribute('aria-pressed', 'true');
     expect(second).toHaveAttribute('aria-pressed', 'true');
     expect(third).toHaveAttribute('aria-pressed', 'true');
+    expect(onSelectedKeysChange).toHaveBeenLastCalledWith([
+      'unstaged:src/first.ts',
+      'unstaged:src/second.ts',
+      'unstaged:src/third.ts',
+    ]);
 
     fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
     expect(screen.getByRole('menu', { name: '3 selected files actions' })).toBeVisible();
@@ -549,6 +434,26 @@ describe('ChangeList file actions', () => {
     expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
     await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'moveToTrash');
+  });
+
+  it('keeps the remaining file active when Command-click removes the current file', () => {
+    const entries: ChangeEntry[] = [
+      { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+      { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+    ];
+    const { onSelect } = renderList({
+      entries,
+      selectedKey: 'unstaged:src/first.ts',
+    });
+    const first = changeRow(/Modified src\/first\.ts/u);
+    const second = changeRow(/Modified src\/second\.ts/u);
+
+    fireEvent.click(second, { metaKey: true });
+    fireEvent.click(second, { metaKey: true });
+
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'false');
+    expect(onSelect).toHaveBeenLastCalledWith('unstaged:src/first.ts');
   });
 
   it('renders a trailing menu for every row and routes actions without changing Diff selection', async () => {
@@ -777,7 +682,7 @@ describe('ChangeList file actions', () => {
 });
 
 describe('ChangeList Stage display', () => {
-  it('combines Staged and Unstaged files and stages only the remaining files', async () => {
+  it('shows one Changes group without staging controls when Stage display is hidden', () => {
     const entries: ChangeEntry[] = [
       { path: 'src/staged.ts', area: 'staged', status: 'modified' },
       { path: 'src/unstaged.ts', area: 'unstaged', status: 'modified' },
@@ -791,14 +696,8 @@ describe('ChangeList Stage display', () => {
     expect(screen.queryByRole('region', { name: 'Staged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Unstaged' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Changes' })).toBeVisible();
-    const toggle = screen.getByRole('checkbox', { name: 'Stage all 1 changes file' });
-    expect(toggle).toBePartiallyChecked();
-
-    fireEvent.click(toggle);
-    expect(onStageTransition).toHaveBeenCalledWith({
-      kind: 'stage',
-      paths: ['src/unstaged.ts'],
-      sourceArea: 'unstaged',
-    });
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(document.querySelector('.change-groups')).toHaveClass('is-stage-hidden');
+    expect(onStageTransition).not.toHaveBeenCalled();
   });
 });

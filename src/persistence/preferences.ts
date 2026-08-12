@@ -5,6 +5,9 @@ import type { Appearance } from '../theme/appearance';
 const STORAGE_KEY = 'stella.preferences.v1';
 const STORAGE_VERSION = 1;
 export const CHANGES_PANE_MIN_WIDTH = 240;
+export const EDITOR_WRAP_COLUMN_MIN = 40;
+export const EDITOR_WRAP_COLUMN_MAX = 400;
+export const DEFAULT_EDITOR_WRAP_COLUMN = 120;
 
 export interface PaneWidths {
   left: number;
@@ -17,19 +20,28 @@ export interface PaneWidthPreferences {
   activity: { left: number };
 }
 
+export interface CommitDraft {
+  plainMessage: string;
+  conventional: ConventionalCommitInput;
+}
+
 export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
   language: Language;
   diffStyle: DiffStyle;
   splitStageView: boolean;
+  useConventionalCommits: boolean;
+  stickyFileHeaders: boolean;
+  editorLineWrapping: boolean;
+  editorWrapColumn: number;
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
   openRepoPaths: string[];
   selectedRepoPath?: string;
   view: WorkspaceView;
   paneWidths: PaneWidthPreferences;
-  commitDrafts: Record<string, ConventionalCommitInput>;
+  commitDrafts: Record<string, CommitDraft>;
 }
 
 export const DEFAULT_PREFERENCES: StellaPreferences = {
@@ -37,7 +49,11 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   appearance: 'system',
   language: 'en',
   diffStyle: 'unified',
-  splitStageView: true,
+  splitStageView: false,
+  useConventionalCommits: false,
+  stickyFileHeaders: false,
+  editorLineWrapping: false,
+  editorWrapColumn: DEFAULT_EDITOR_WRAP_COLUMN,
   registeredRepoPaths: [],
   repositoryNames: {},
   openRepoPaths: [],
@@ -66,7 +82,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function commitDraft(value: unknown): ConventionalCommitInput | undefined {
+function conventionalCommitDraft(value: unknown): ConventionalCommitInput | undefined {
   if (
     !isRecord(value) ||
     typeof value.type !== 'string' ||
@@ -88,9 +104,26 @@ function commitDraft(value: unknown): ConventionalCommitInput | undefined {
   };
 }
 
-function commitDraftRecord(value: unknown): Record<string, ConventionalCommitInput> {
+function emptyConventionalCommitDraft(): ConventionalCommitInput {
+  return { type: 'feat', scope: '', breaking: false, description: '', body: '', footer: '' };
+}
+
+function commitDraft(value: unknown): CommitDraft | undefined {
+  const legacyDraft = conventionalCommitDraft(value);
+  if (legacyDraft) return { plainMessage: '', conventional: legacyDraft };
+  if (!isRecord(value)) return undefined;
+  const conventional = conventionalCommitDraft(value.conventional);
+  const plainMessage = typeof value.plainMessage === 'string' ? value.plainMessage : undefined;
+  if (!conventional && plainMessage === undefined) return undefined;
+  return {
+    plainMessage: plainMessage ?? '',
+    conventional: conventional ?? emptyConventionalCommitDraft(),
+  };
+}
+
+function commitDraftRecord(value: unknown): Record<string, CommitDraft> {
   if (!isRecord(value)) return {};
-  const drafts: Record<string, ConventionalCommitInput> = {};
+  const drafts: Record<string, CommitDraft> = {};
   for (const [key, candidate] of Object.entries(value)) {
     const draft = commitDraft(candidate);
     if (draft) drafts[key] = draft;
@@ -121,6 +154,12 @@ function boundedWidth(value: unknown, fallback: number, min = 180, max = 520): n
     : fallback;
 }
 
+export function normalizeEditorWrapColumn(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(EDITOR_WRAP_COLUMN_MAX, Math.max(EDITOR_WRAP_COLUMN_MIN, Math.round(value)))
+    : DEFAULT_EDITOR_WRAP_COLUMN;
+}
+
 export function readPreferences(): StellaPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -145,6 +184,19 @@ export function readPreferences(): StellaPreferences {
         typeof value.splitStageView === 'boolean'
           ? value.splitStageView
           : DEFAULT_PREFERENCES.splitStageView,
+      useConventionalCommits:
+        typeof value.useConventionalCommits === 'boolean'
+          ? value.useConventionalCommits
+          : DEFAULT_PREFERENCES.useConventionalCommits,
+      stickyFileHeaders:
+        typeof value.stickyFileHeaders === 'boolean'
+          ? value.stickyFileHeaders
+          : DEFAULT_PREFERENCES.stickyFileHeaders,
+      editorLineWrapping:
+        typeof value.editorLineWrapping === 'boolean'
+          ? value.editorLineWrapping
+          : DEFAULT_PREFERENCES.editorLineWrapping,
+      editorWrapColumn: normalizeEditorWrapColumn(value.editorWrapColumn),
       registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
       repositoryNames: repositoryNameRecord(value.repositoryNames),
       openRepoPaths: stringArray(value.openRepoPaths, 12),

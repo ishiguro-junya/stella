@@ -57,6 +57,16 @@ export function hasCommitErrors(errors: CommitFieldErrors): boolean {
   return Object.keys(errors).length > 0;
 }
 
+export function validatePlainCommitMessage(message: string): CommitFieldErrors {
+  const errors: CommitFieldErrors = {};
+  if (!message.trim()) {
+    errors.description = 'commitDescriptionRequired';
+  } else if (/[\0\r\n]/u.test(message)) {
+    errors.description = 'commitMessageSingleLine';
+  }
+  return errors;
+}
+
 export function composeCommitMessage(input: ConventionalCommitInput): string {
   const type = input.type.trim();
   const scope = input.scope?.trim();

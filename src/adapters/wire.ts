@@ -29,6 +29,7 @@ export type WireQuery =
   | { kind: 'gitFlowOverview' }
   | { kind: 'commitDetails'; oid: string }
   | { kind: 'conflict'; path: string }
+  | { kind: 'fileContents'; path: string }
   | {
       kind: 'commitActivity';
       operationId: string;
@@ -45,6 +46,7 @@ export type WireQueryOutcome =
   | { kind: 'gitFlowOverview'; data: WireGitFlowOverview }
   | { kind: 'commitDetails'; data: WireCommitDetails }
   | { kind: 'conflict'; data: WireConflictDocument }
+  | { kind: 'fileContents'; data: WireFileDocument }
   | { kind: 'commitActivity'; data: WireCommitActivitySeries };
 
 export interface WirePreviewRequest {
@@ -89,24 +91,35 @@ export interface WireActionOutcome {
   conflictDocument?: WireConflictDocument;
 }
 
-export interface WireLineSelection {
+interface WireSelectionBase {
   path: string;
   diffRevision: string;
+}
+
+export interface WireLineSelection extends WireSelectionBase {
+  kind: 'lines';
   side: 'additions' | 'deletions';
   startLine: number;
   endLine: number;
 }
 
+export interface WireHunkSelection extends WireSelectionBase {
+  kind: 'hunk';
+  hunkIndex: number;
+}
+
+export type WirePatchSelection = WireLineSelection | WireHunkSelection;
+
 export type WireAction =
-  | { kind: 'stage'; paths: string[]; selection: WireLineSelection | null }
-  | { kind: 'unstage'; paths: string[]; selection: WireLineSelection | null }
+  | { kind: 'stage'; paths: string[]; selection: WirePatchSelection | null }
+  | { kind: 'unstage'; paths: string[]; selection: WirePatchSelection | null }
   | {
       kind: 'discard';
       paths: string[];
       target: 'unstaged' | 'untracked';
-      selection: WireLineSelection | null;
+      selection: WirePatchSelection | null;
     }
-  | { kind: 'commit'; input: WireConventionalCommitInput }
+  | { kind: 'commit'; input: WireCommitInput }
   | { kind: 'fetch'; remote: string }
   | { kind: 'pull'; remote: string; remoteBranch: string }
   | {
@@ -165,20 +178,24 @@ export type WireAction =
       conflictGeneration: string;
       editor: { kind: 'systemDefault' };
     }
+  | { kind: 'saveFile'; path: string; text: string; expectedContentHash: string }
   | {
       kind: 'fileAction';
       paths: string[];
       operation: 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
     };
 
-export interface WireConventionalCommitInput {
-  type: string;
-  scope: string | null;
-  breaking: boolean;
-  description: string;
-  body: string | null;
-  footers: Array<{ token: string; value: string }>;
-}
+export type WireCommitInput =
+  | { format: 'plain'; message: string }
+  | {
+      format: 'conventional';
+      type: string;
+      scope: string | null;
+      breaking: boolean;
+      description: string;
+      body: string | null;
+      footers: Array<{ token: string; value: string }>;
+    };
 
 export interface WireRepoSnapshot {
   repoId: string;
@@ -205,6 +222,16 @@ export interface WireStatusEntry {
   conflict: boolean;
   untracked: boolean;
   submodule: string;
+}
+
+export interface WireFileDocument {
+  repoId: string;
+  path: string;
+  text: string;
+  lineEnding: 'lf' | 'crlf';
+  hasUtf8Bom: boolean;
+  contentHash: string;
+  repoGeneration: number;
 }
 
 export type WireOperationState =

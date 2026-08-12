@@ -1,12 +1,12 @@
-/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- native drop targetにはkeyboard操作用の同等なcheckboxがある。 */
+/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- change listのfieldsetでCommand-Aによる全file選択を処理する。 */
 import {
   useEffect,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
@@ -28,33 +28,20 @@ const STATUS_LABELS: Record<ChangeEntry['status'], MessageKey> = {
   binary: 'binary',
   conflicted: 'conflicted',
 };
-const DRAG_MIME = 'application/x-stella-change';
-
 type StageableArea = 'staged' | 'unstaged' | 'untracked';
-type DropArea = 'staged' | 'unstaged';
 type DisplayGroup = 'conflicted' | 'staged' | 'worktree' | 'combined';
 type StageGroup = Exclude<DisplayGroup, 'conflicted'>;
+type CollapsibleGroup = Extract<DisplayGroup, 'staged' | 'worktree'>;
 
 interface ChangeGroup {
   id: DisplayGroup;
   label: string;
-  targetArea?: ChangeArea;
   entries: ChangeEntry[];
-  splitStageView?: boolean | undefined;
 }
 
 export interface StageTransitionRequest {
   kind: 'stage' | 'unstage';
   paths: string[];
-  sourceArea: StageableArea;
-}
-
-interface ActiveDrag {
-  token: string;
-  repoId: RepoId;
-  generation: number;
-  key: string;
-  path: string;
   sourceArea: StageableArea;
 }
 
@@ -77,12 +64,16 @@ export interface ChangeListProps {
   entries: ChangeEntry[];
   splitStageView?: boolean | undefined;
   selectedKey: string;
+  selectionKeys?: readonly string[] | undefined;
+  unsavedFileKey?: string | undefined;
   disabled: boolean;
   disabledReasonId?: string | undefined;
   fileActionsDisabled: boolean;
+  fileEditDisabled?: boolean | undefined;
   fileOpenDisabled: boolean;
   fileTrashDisabled: boolean;
   onSelect: (key: string) => void;
+  onSelectedKeysChange?: ((keys: string[]) => void) | undefined;
   onStageTransition: (request: StageTransitionRequest) => Promise<void>;
   onFileAction: (entries: ChangeEntry[], action: FileActionKind) => Promise<void>;
 }
@@ -113,17 +104,6 @@ function displayGroupForArea(area: ChangeArea, splitStageView: boolean): Display
   return area === 'staged' ? 'staged' : 'worktree';
 }
 
-function canDrop(sourceArea: StageableArea, targetArea: ChangeArea): targetArea is DropArea {
-  return (
-    (targetArea === 'staged' && sourceArea !== 'staged') ||
-    (targetArea === 'unstaged' && sourceArea === 'staged')
-  );
-}
-
-function makeDragToken(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `stella-drag-${Date.now().toString(36)}`;
-}
-
 function settleTransition(promise: Promise<unknown>): void {
   void promise.catch(() => undefined);
 }
@@ -134,28 +114,29 @@ export function ChangeList({
   entries,
   splitStageView = true,
   selectedKey,
+  selectionKeys,
+  unsavedFileKey,
   disabled,
   disabledReasonId,
   fileActionsDisabled,
+  fileEditDisabled = false,
   fileOpenDisabled,
   fileTrashDisabled,
   onSelect,
+  onSelectedKeysChange,
   onStageTransition,
   onFileAction,
 }: ChangeListProps) {
   const { t } = useI18n();
   const [transferPending, setTransferPending] = useState(false);
-  const [draggingKey, setDraggingKey] = useState<string>();
-  const [dropTarget, setDropTarget] = useState<DropArea>();
-  const [dragAnnouncement, setDragAnnouncement] = useState('');
   const [openMenuKey, setOpenMenuKey] = useState<string>();
   const [contextMenu, setContextMenu] = useState<
     { key: string; point: FileActionMenuPoint } | undefined
   >();
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<CollapsibleGroup>>(() => new Set());
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(selectedKey ? [selectedKey] : []),
   );
-  const activeDragRef = useRef<ActiveDrag | undefined>(undefined);
   const selectionAnchorRef = useRef<string | undefined>(selectedKey || undefined);
   const pendingFocusRef = useRef<PendingFocus | undefined>(undefined);
   const pendingTrashFocusRef = useRef<PendingTrashFocus | undefined>(undefined);
@@ -166,11 +147,21 @@ export function ChangeList({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const groupFocusRefs = useRef(new Map<DisplayGroup, HTMLElement>());
   const interactionsDisabled = disabled || transferPending;
+  const controlledSelectionSignature = selectionKeys?.join('\0');
+
+  const updateSelectedKeys = (next: Set<string>): void => {
+    if (!selectionKeys) setSelectedKeys(next);
+    onSelectedKeysChange?.([...next]);
+  };
+
+  useEffect(() => {
+    if (!selectionKeys) return;
+    setSelectedKeys(new Set(selectionKeys));
+  }, [controlledSelectionSignature, selectionKeys]);
 
   const conflictGroup: ChangeGroup = {
     id: 'conflicted',
     label: t(AREA_LABELS.conflicted),
-    targetArea: 'conflicted',
     entries: entries.filter((entry) => entry.area === 'conflicted'),
   };
   const splitGroups: ChangeGroup[] = [
@@ -178,13 +169,11 @@ export function ChangeList({
     {
       id: 'staged',
       label: t(AREA_LABELS.staged),
-      targetArea: 'staged',
       entries: entries.filter((entry) => entry.area === 'staged'),
     },
     {
       id: 'worktree',
       label: t(AREA_LABELS.unstaged),
-      targetArea: 'unstaged',
       entries: entries.filter((entry) => entry.area === 'unstaged' || entry.area === 'untracked'),
     },
   ];
@@ -202,6 +191,7 @@ export function ChangeList({
 
   const selectFile = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
     const commandSelection = event.metaKey || event.ctrlKey;
+    let nextSelection: Set<string> | undefined;
     if (event.shiftKey) {
       const anchor = selectionAnchorRef.current ?? (selectedKey || key);
       const anchorIndex = orderedEntryKeys.indexOf(anchor);
@@ -210,28 +200,30 @@ export function ChangeList({
         const [start, end] =
           anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
         const range = orderedEntryKeys.slice(start, end + 1);
-        setSelectedKeys((current) => new Set(commandSelection ? [...current, ...range] : range));
+        nextSelection = new Set(commandSelection ? [...selectedKeys, ...range] : range);
+        updateSelectedKeys(nextSelection);
       }
     } else if (commandSelection) {
-      setSelectedKeys((current) => {
-        const next = new Set(current);
-        if (next.has(key) && next.size > 1) next.delete(key);
-        else next.add(key);
-        return next;
-      });
+      const next = new Set(selectedKeys);
+      if (next.has(key) && next.size > 1) next.delete(key);
+      else next.add(key);
+      nextSelection = next;
+      updateSelectedKeys(next);
       selectionAnchorRef.current = key;
     } else {
-      setSelectedKeys(new Set([key]));
+      nextSelection = new Set([key]);
+      updateSelectedKeys(nextSelection);
       selectionAnchorRef.current = key;
     }
-    onSelect(key);
+    const activeKey = nextSelection && !nextSelection.has(key) ? [...nextSelection].at(-1) : key;
+    if (activeKey) onSelect(activeKey);
   };
 
   const openContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
     event.preventDefault();
     event.currentTarget.focus();
     if (!selectedKeys.has(key)) {
-      setSelectedKeys(new Set([key]));
+      updateSelectedKeys(new Set([key]));
       selectionAnchorRef.current = key;
     }
     onSelect(key);
@@ -242,7 +234,7 @@ export function ChangeList({
   const selectAllFiles = (event: ReactKeyboardEvent<HTMLFieldSetElement>): void => {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
     event.preventDefault();
-    setSelectedKeys(new Set(orderedEntryKeys));
+    updateSelectedKeys(new Set(orderedEntryKeys));
     const anchor = selectedKey || orderedEntryKeys[0];
     selectionAnchorRef.current = anchor;
     if (!selectedKey && anchor) onSelect(anchor);
@@ -262,22 +254,13 @@ export function ChangeList({
     const nextIndex = Math.min(Math.max(currentIndex + offset, 0), groupEntryKeys.length - 1);
     const nextKey = groupEntryKeys[nextIndex];
     if (!nextKey || nextKey === key) return;
-    setSelectedKeys(new Set([nextKey]));
+    updateSelectedKeys(new Set([nextKey]));
     selectionAnchorRef.current = nextKey;
     onSelect(nextKey);
     rowRefs.current.get(nextKey)?.focus();
   };
 
-  const clearDrag = (): void => {
-    activeDragRef.current = undefined;
-    setDraggingKey(undefined);
-    setDropTarget(undefined);
-  };
-
   useEffect(() => {
-    activeDragRef.current = undefined;
-    setDraggingKey(undefined);
-    setDropTarget(undefined);
     setOpenMenuKey(undefined);
     setContextMenu(undefined);
   }, [generation, repoId]);
@@ -289,6 +272,7 @@ export function ChangeList({
     const initial = selectedKey ? new Set([selectedKey]) : new Set<string>();
     setSelectedKeys(initial);
     selectionAnchorRef.current = selectedKey || undefined;
+    setCollapsedGroups(new Set());
   }, [repoId, selectedKey]);
 
   useEffect(() => {
@@ -400,6 +384,15 @@ export function ChangeList({
     focus: PendingFocus,
   ): Promise<void> => {
     if (interactionsDisabled) return;
+    if (splitStageView) {
+      const targetGroup: CollapsibleGroup = focus.target === 'staged' ? 'staged' : 'worktree';
+      setCollapsedGroups((current) => {
+        if (!current.has(targetGroup)) return current;
+        const next = new Set(current);
+        next.delete(targetGroup);
+        return next;
+      });
+    }
     const available = new Set(
       entries
         .filter(
@@ -429,85 +422,6 @@ export function ChangeList({
     }
   };
 
-  const activeInternalDrag = (event: ReactDragEvent): ActiveDrag | undefined => {
-    if (interactionsDisabled) return undefined;
-    const active = activeDragRef.current;
-    if (
-      !active ||
-      !event.dataTransfer.types.includes(DRAG_MIME) ||
-      active.repoId !== repoId ||
-      active.generation !== generation ||
-      !entries.some((entry) => entryKey(entry) === active.key)
-    )
-      return undefined;
-    return active;
-  };
-
-  const currentDrop = (event: ReactDragEvent): ActiveDrag | undefined => {
-    const active = activeInternalDrag(event);
-    if (!active || event.dataTransfer.getData(DRAG_MIME) !== active.token) return undefined;
-    return active;
-  };
-
-  const beginDrag = (event: ReactDragEvent<HTMLButtonElement>, entry: ChangeEntry): void => {
-    if (interactionsDisabled || !isStageableArea(entry.area)) {
-      event.preventDefault();
-      return;
-    }
-    const token = makeDragToken();
-    const active: ActiveDrag = {
-      token,
-      repoId,
-      generation,
-      key: entryKey(entry),
-      path: entry.path,
-      sourceArea: entry.area,
-    };
-    activeDragRef.current = active;
-    event.dataTransfer.clearData();
-    event.dataTransfer.setData(DRAG_MIME, token);
-    event.dataTransfer.effectAllowed = 'move';
-    setDraggingKey(active.key);
-    const destination = t(active.sourceArea === 'staged' ? 'unstaged' : 'staged');
-    setDragAnnouncement(t('changeDragAnnouncement', { path: entry.path, destination }));
-  };
-
-  const dragOverGroup = (event: ReactDragEvent<HTMLElement>, area: ChangeArea): void => {
-    const active = activeInternalDrag(event);
-    if (!active || !canDrop(active.sourceArea, area)) {
-      event.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    setDropTarget(area);
-  };
-
-  const leaveGroup = (event: ReactDragEvent<HTMLElement>, area: ChangeArea): void => {
-    if (dropTarget !== area) return;
-    const next = event.relatedTarget;
-    if (next instanceof Node && event.currentTarget.contains(next)) return;
-    setDropTarget(undefined);
-  };
-
-  const dropOnGroup = (event: ReactDragEvent<HTMLElement>, area: ChangeArea): void => {
-    const active = currentDrop(event);
-    if (!active || !canDrop(active.sourceArea, area)) {
-      clearDrag();
-      return;
-    }
-    event.preventDefault();
-    const kind = transitionForArea(active.sourceArea);
-    clearDrag();
-    setDragAnnouncement('');
-    settleTransition(
-      runTransition(
-        { kind, paths: [active.path], sourceArea: active.sourceArea },
-        { path: active.path, target: targetForTransition(kind) },
-      ),
-    );
-  };
-
   const runFileAction = async (
     selectedEntries: ChangeEntry[],
     action: FileActionKind,
@@ -533,22 +447,12 @@ export function ChangeList({
 
   return (
     <fieldset
-      className={`change-groups${splitStageView ? '' : ' is-stage-combined'}`}
+      className={`change-groups${splitStageView ? '' : ' is-stage-hidden'}${splitStageView && collapsedGroups.has('staged') ? ' is-staged-collapsed' : ''}${splitStageView && collapsedGroups.has('worktree') ? ' is-worktree-collapsed' : ''}`}
       onKeyDown={selectAllFiles}
     >
       <legend className="sr-only">{t('changes')}</legend>
-      <p id="changes-drag-help" className="sr-only">
-        {t('changeDragHelp')}
-      </p>
-      <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {dragAnnouncement}
-      </p>
-      {groups.map(({ id, label, targetArea, entries: groupEntries }) => {
+      {groups.map(({ id, label, entries: groupEntries }) => {
         const stageGroup = id === 'conflicted' ? undefined : id;
-        const active = activeDragRef.current;
-        const compatibleDrop = Boolean(
-          targetArea && active && canDrop(active.sourceArea, targetArea),
-        );
         if (id === 'conflicted' && !groupEntries.length) return null;
         const selectedGroupEntry = groupEntries.find((entry) => entryKey(entry) === selectedKey);
         const allStaged =
@@ -573,31 +477,20 @@ export function ChangeList({
               (entry) => isStageableArea(entry.area) && transitionForArea(entry.area) === action,
             )
           : [];
-        const isDropTarget = targetArea !== undefined && dropTarget === targetArea;
-        const title = compatibleDrop
-          ? targetArea === 'staged'
-            ? t('dropToStage')
-            : t('dropToUnstage')
-          : label;
         const titleId = `area-${id}`;
+        const contentId = `${titleId}-content`;
+        const collapsibleGroup: CollapsibleGroup | undefined =
+          id === 'staged' || id === 'worktree' ? id : undefined;
+        const groupCollapsed = Boolean(collapsibleGroup && collapsedGroups.has(collapsibleGroup));
 
         return (
           <section
             key={id}
-            className={`change-group change-group-${id}${compatibleDrop ? ' can-drop' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
+            className={`change-group change-group-${id}${groupCollapsed ? ' is-collapsed' : ''}`}
             aria-labelledby={titleId}
-            onDragOver={(event) => {
-              if (targetArea) dragOverGroup(event, targetArea);
-            }}
-            onDragLeave={(event) => {
-              if (targetArea) leaveGroup(event, targetArea);
-            }}
-            onDrop={(event) => {
-              if (targetArea) dropOnGroup(event, targetArea);
-            }}
           >
-            <div className="change-group-header">
-              {stageGroup ? (
+            <div className={`change-group-header${collapsibleGroup ? ' is-collapsible' : ''}`}>
+              {stageGroup && splitStageView ? (
                 <label className="stage-toggle-hitbox">
                   <input
                     ref={(element) => {
@@ -634,9 +527,9 @@ export function ChangeList({
                     }}
                   />
                 </label>
-              ) : (
+              ) : splitStageView ? (
                 <span className="change-group-header-spacer" aria-hidden="true" />
-              )}
+              ) : null}
               <h3 id={titleId}>
                 <span
                   ref={(element) => {
@@ -646,14 +539,39 @@ export function ChangeList({
                   className="change-group-title"
                   tabIndex={-1}
                 >
-                  {title}
+                  {label}
                 </span>
                 <span className="change-count" aria-hidden="true">
                   {groupEntries.length}
                 </span>
               </h3>
+              {collapsibleGroup ? (
+                <button
+                  className="change-group-collapse-toggle"
+                  type="button"
+                  aria-expanded={!groupCollapsed}
+                  aria-controls={contentId}
+                  aria-label={t(groupCollapsed ? 'expandChangeGroup' : 'collapseChangeGroup', {
+                    area: label,
+                  })}
+                  onClick={() => {
+                    setCollapsedGroups((current) => {
+                      const next = new Set(current);
+                      if (next.has(collapsibleGroup)) next.delete(collapsibleGroup);
+                      else next.add(collapsibleGroup);
+                      return next;
+                    });
+                  }}
+                >
+                  {groupCollapsed ? (
+                    <ChevronRight aria-hidden="true" focusable="false" />
+                  ) : (
+                    <ChevronDown aria-hidden="true" focusable="false" />
+                  )}
+                </button>
+              ) : null}
             </div>
-            <div className="change-group-content">
+            <div id={contentId} className="change-group-content" hidden={groupCollapsed}>
               {groupEntries.length ? (
                 <ul className="change-list">
                   {groupEntries.map((entry) => {
@@ -684,9 +602,9 @@ export function ChangeList({
                     return (
                       <li
                         key={key}
-                        className={`change-item${selectedKeys.has(key) ? ' is-selected' : ''}${selectedKey === key ? ' is-current' : ''}${draggingKey === key ? ' is-dragging' : ''}`}
+                        className={`change-item${selectedKeys.has(key) ? ' is-selected' : ''}${selectedKey === key ? ' is-current' : ''}`}
                       >
-                        {entryStageableArea ? (
+                        {entryStageableArea && splitStageView ? (
                           <label className="stage-toggle-hitbox">
                             <input
                               ref={(element) => {
@@ -717,9 +635,9 @@ export function ChangeList({
                               }}
                             />
                           </label>
-                        ) : (
+                        ) : splitStageView ? (
                           <span className="change-row-spacer" aria-hidden="true" />
-                        )}
+                        ) : null}
                         <button
                           ref={(element) => {
                             if (element) rowRefs.current.set(key, element);
@@ -733,8 +651,6 @@ export function ChangeList({
                           })}
                           aria-current={selectedKey === key ? 'true' : undefined}
                           aria-pressed={selectedKeys.has(key)}
-                          aria-describedby={entryStageableArea ? 'changes-drag-help' : undefined}
-                          draggable={entryStageableArea && !interactionsDisabled ? true : undefined}
                           onClick={(event) => {
                             event.currentTarget.focus();
                             selectFile(event, key);
@@ -744,15 +660,15 @@ export function ChangeList({
                             if (event.key === 'ArrowUp') moveFileSelection(event, key, -1);
                             else if (event.key === 'ArrowDown') moveFileSelection(event, key, 1);
                           }}
-                          onDragStart={(event) => beginDrag(event, entry)}
-                          onDragEnd={() => {
-                            clearDrag();
-                            setDragAnnouncement('');
-                          }}
                         >
                           <FileStatusIcon status={entry.status} />
                           <span className="file-path">
-                            <strong>{fileName(entry.path)}</strong>
+                            <span className="file-name">
+                              <strong>{fileName(entry.path)}</strong>
+                              {unsavedFileKey === key ? (
+                                <output className="unsaved-file-dot" aria-label={t('unsaved')} />
+                              ) : null}
+                            </span>
                             <small>{parentPath(entry.path)}</small>
                           </span>
                           {entry.additions !== undefined || entry.deletions !== undefined ? (
@@ -767,6 +683,7 @@ export function ChangeList({
                           selectedPaths={selectedPaths}
                           open={openMenuKey === key}
                           disabled={fileActionsDisabled}
+                          editDisabled={fileEditDisabled || invalidFileActionEntry}
                           openDisabled={
                             fileOpenDisabled || selectedPaths.length !== 1 || invalidFileActionEntry
                           }
@@ -780,21 +697,22 @@ export function ChangeList({
                           onTriggerOpen={() => {
                             setContextMenu(undefined);
                             if (!selectedKeys.has(key)) {
-                              setSelectedKeys(new Set([key]));
+                              updateSelectedKeys(new Set([key]));
                               selectionAnchorRef.current = key;
                               onSelect(key);
                             }
                           }}
-                          onAction={(fileAction) => runFileAction(selectedEntries, fileAction)}
+                          onAction={(fileAction) =>
+                            runFileAction(
+                              fileAction === 'editFile' ? [entry] : selectedEntries,
+                              fileAction,
+                            )
+                          }
                         />
                       </li>
                     );
                   })}
                 </ul>
-              ) : compatibleDrop ? (
-                <p className="change-drop-placeholder">
-                  {t(targetArea === 'staged' ? 'dropHereToStage' : 'dropHereToUnstage')}
-                </p>
               ) : null}
             </div>
           </section>

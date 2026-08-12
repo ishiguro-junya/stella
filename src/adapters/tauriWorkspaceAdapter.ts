@@ -15,7 +15,8 @@ import type {
   ConflictBlock,
   ConflictDocument,
   ConflictSide,
-  ConventionalCommitInput,
+  CommitInput,
+  DiffSelection,
   QueryResult,
   RepoSnapshot,
   WorkspaceAction,
@@ -43,6 +44,7 @@ import type {
   WireConflictSide,
   WireHistoryResult,
   WireOpenRequest,
+  WirePatchSelection,
   WirePreviewOutcome,
   WireQuery,
   WireQueryOutcome,
@@ -417,8 +419,10 @@ function parseFooter(value: string | undefined): Array<{ token: string; value: s
   });
 }
 
-function commitInput(input: ConventionalCommitInput) {
+function commitInput(input: CommitInput) {
+  if (input.format === 'plain') return input;
   return {
+    format: input.format,
     type: input.type,
     scope: input.scope ?? null,
     breaking: input.breaking,
@@ -436,6 +440,27 @@ function upstreamParts(repo: RepoSnapshot): { remote: string; remoteBranch: stri
     : {
         remote: repo.branch.upstream.slice(0, slash),
         remoteBranch: repo.branch.upstream.slice(slash + 1),
+      };
+}
+
+function mapPatchSelection(selection: DiffSelection): WirePatchSelection;
+function mapPatchSelection(selection: DiffSelection): WirePatchSelection {
+  const identity = {
+    path: selection.path,
+    diffRevision: selection.diffId,
+  };
+  return selection.kind === 'lines'
+    ? {
+        kind: 'lines',
+        ...identity,
+        side: selection.side,
+        startLine: selection.startLine,
+        endLine: selection.endLine,
+      }
+    : {
+        kind: 'hunk',
+        ...identity,
+        hunkIndex: selection.hunkIndex,
       };
 }
 
@@ -461,38 +486,20 @@ async function mapAction(
       return {
         kind: 'stage',
         paths: [],
-        selection: {
-          path: action.selection.path,
-          diffRevision: action.selection.diffId,
-          side: action.selection.side,
-          startLine: action.selection.startLine,
-          endLine: action.selection.endLine,
-        },
+        selection: mapPatchSelection(action.selection),
       };
     case 'unstageSelection':
       return {
         kind: 'unstage',
         paths: [],
-        selection: {
-          path: action.selection.path,
-          diffRevision: action.selection.diffId,
-          side: action.selection.side,
-          startLine: action.selection.startLine,
-          endLine: action.selection.endLine,
-        },
+        selection: mapPatchSelection(action.selection),
       };
     case 'discardSelection':
       return {
         kind: 'discard',
         paths: [],
         target: 'unstaged',
-        selection: {
-          path: action.selection.path,
-          diffRevision: action.selection.diffId,
-          side: action.selection.side,
-          startLine: action.selection.startLine,
-          endLine: action.selection.endLine,
-        },
+        selection: mapPatchSelection(action.selection),
       };
     case 'commit':
       return { kind: 'commit', input: commitInput(action.input) };
@@ -596,6 +603,13 @@ async function mapAction(
         editor: { kind: 'systemDefault' },
       };
     }
+    case 'saveFile':
+      return {
+        kind: 'saveFile',
+        path: action.path,
+        text: action.text,
+        expectedContentHash: action.expectedContentHash,
+      };
     case 'fileAction':
       return { kind: 'fileAction', paths: action.paths, operation: action.operation };
   }
@@ -663,11 +677,17 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
     case 'discardFiles':
       return localized('actionDiscardChanges');
     case 'stageSelection':
-      return localized('actionStageSelectedLines');
+      return localized(
+        action.selection.kind === 'hunk' ? 'actionStageHunk' : 'actionStageSelectedLines',
+      );
     case 'unstageSelection':
-      return localized('actionUnstageSelectedLines');
+      return localized(
+        action.selection.kind === 'hunk' ? 'actionUnstageHunk' : 'actionUnstageSelectedLines',
+      );
     case 'discardSelection':
-      return localized('actionDiscardSelectedLines');
+      return localized(
+        action.selection.kind === 'hunk' ? 'actionDiscardHunk' : 'actionDiscardSelectedLines',
+      );
     case 'commit':
       return localized('actionCommit');
     case 'fetch':
@@ -710,6 +730,8 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionApplyConflictSide');
     case 'openExternal':
       return localized('actionOpenConflictExternally');
+    case 'saveFile':
+      return localized('actionSaveFile');
     case 'fileAction':
       switch (action.operation) {
         case 'moveToTrash':
@@ -1000,6 +1022,25 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
           const conflict = await mapConflictDocument(outcome.data);
           cacheConflict(state.conflicts, conflict);
           return { kind: 'conflict', document: conflict };
+        }
+        case 'fileContents': {
+          const outcome = await queryWire(request.repoId, {
+            kind: 'fileContents',
+            path: request.path,
+          });
+          if (outcome.kind !== 'fileContents') throw new Error('Invalid file contents response.');
+          return {
+            kind: 'fileContents',
+            document: {
+              repoId: outcome.data.repoId,
+              path: outcome.data.path,
+              text: outcome.data.text,
+              lineEnding: outcome.data.lineEnding,
+              hasUtf8Bom: outcome.data.hasUtf8Bom,
+              contentHash: outcome.data.contentHash,
+              generation: outcome.data.repoGeneration,
+            },
+          };
         }
         case 'activity':
           return {
