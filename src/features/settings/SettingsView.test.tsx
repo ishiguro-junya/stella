@@ -10,6 +10,7 @@ describe('SettingsView', () => {
     const user = userEvent.setup();
     const onAppearanceChange = vi.fn<(appearance: 'system' | 'light' | 'dark') => void>();
     const onLanguageChange = vi.fn<(language: 'ja' | 'en') => void>();
+    const onAutomaticUpdateChecksChange = vi.fn<(enabled: boolean) => void>();
     const onDiffStyleChange = vi.fn<(style: 'unified' | 'split') => void>();
     const onSplitStageViewChange = vi.fn<(split: boolean) => void>();
     const onUseConventionalCommitsChange = vi.fn<(enabled: boolean) => void>();
@@ -20,6 +21,7 @@ describe('SettingsView', () => {
     const settingsProps: ComponentProps<typeof SettingsView> = {
       appearance: 'system',
       language: 'en',
+      automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: true,
       useConventionalCommits: false,
@@ -37,6 +39,7 @@ describe('SettingsView', () => {
       },
       onAppearanceChange,
       onLanguageChange,
+      onAutomaticUpdateChecksChange,
       onDiffStyleChange,
       onSplitStageViewChange,
       onUseConventionalCommitsChange,
@@ -53,6 +56,7 @@ describe('SettingsView', () => {
     ).toEqual([
       'Language',
       'Appearance',
+      'Automatic Updates',
       'Diff layout',
       'Stage Display',
       'Conventional Commits',
@@ -63,6 +67,9 @@ describe('SettingsView', () => {
     ]);
     const languageSelect = screen.getByRole('combobox', { name: 'Language' });
     const appearanceSelect = screen.getByRole('combobox', { name: 'Appearance' });
+    const automaticUpdateChecksSelect = screen.getByRole('combobox', {
+      name: 'Automatic Updates',
+    });
     const diffLayoutSelect = screen.getByRole('combobox', { name: 'Diff layout' });
     const stageDisplaySelect = screen.getByRole('combobox', { name: 'Stage Display' });
     const conventionalCommitsSelect = screen.getByRole('combobox', {
@@ -76,9 +83,10 @@ describe('SettingsView', () => {
     });
     const editorWrapColumnInput = screen.getByRole('spinbutton', { name: 'Wrap Length' });
     const toolchainSelect = screen.getByRole('combobox', { name: 'Git Toolchain' });
-    expect(screen.getAllByRole('combobox')).toHaveLength(8);
+    expect(screen.getAllByRole('combobox')).toHaveLength(9);
     expect(languageSelect).toHaveValue('en');
     expect(appearanceSelect).toHaveValue('system');
+    expect(automaticUpdateChecksSelect).toHaveValue('enabled');
     expect(diffLayoutSelect).toHaveValue('unified');
     expect(stageDisplaySelect).toHaveValue('show');
     expect(conventionalCommitsSelect).toHaveValue('disabled');
@@ -118,6 +126,8 @@ describe('SettingsView', () => {
     expect(onAppearanceChange).toHaveBeenCalledWith('light');
     await user.selectOptions(languageSelect, 'ja');
     expect(onLanguageChange).toHaveBeenCalledWith('ja');
+    await user.selectOptions(automaticUpdateChecksSelect, 'disabled');
+    expect(onAutomaticUpdateChecksChange).toHaveBeenCalledWith(false);
     await user.selectOptions(diffLayoutSelect, 'split');
     expect(onDiffStyleChange).toHaveBeenCalledWith('split');
     expect(within(stageDisplaySelect).getByRole('option', { name: 'Show' })).toBeVisible();

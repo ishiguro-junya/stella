@@ -14,6 +14,7 @@ import { SelectControl } from '../../ui/SelectControl';
 export interface SettingsViewProps {
   appearance: Appearance;
   language: Language;
+  automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
   useConventionalCommits: boolean;
@@ -24,6 +25,7 @@ export interface SettingsViewProps {
   toolchainBusy?: boolean;
   onAppearanceChange: (appearance: Appearance) => void;
   onLanguageChange: (language: Language) => void;
+  onAutomaticUpdateChecksChange: (enabled: boolean) => void;
   onDiffStyleChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
   onUseConventionalCommitsChange: (enabled: boolean) => void;
@@ -52,6 +54,7 @@ function isToolchainMode(value: string): value is ToolchainMode {
 export function SettingsView({
   appearance,
   language,
+  automaticUpdateChecks,
   diffStyle,
   splitStageView,
   useConventionalCommits,
@@ -62,6 +65,7 @@ export function SettingsView({
   toolchainBusy = false,
   onAppearanceChange,
   onLanguageChange,
+  onAutomaticUpdateChecksChange,
   onDiffStyleChange,
   onSplitStageViewChange,
   onUseConventionalCommitsChange,
@@ -143,6 +147,28 @@ export function SettingsView({
                   )}
                 </option>
               ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="automatic-update-checks-title">
+            <div className="settings-row-copy">
+              <h2 id="automatic-update-checks-title">{t('automaticUpdateChecksTitle')}</h2>
+              <p id="automatic-update-checks-description">
+                {t('automaticUpdateChecksDescription')}
+              </p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="automatic-update-checks"
+              value={automaticUpdateChecks ? 'enabled' : 'disabled'}
+              aria-labelledby="automatic-update-checks-title"
+              aria-describedby="automatic-update-checks-description"
+              onChange={(event) =>
+                onAutomaticUpdateChecksChange(event.currentTarget.value === 'enabled')
+              }
+            >
+              <option value="enabled">{t('automaticUpdateChecksEnabled')}</option>
+              <option value="disabled">{t('automaticUpdateChecksDisabled')}</option>
             </SelectControl>
           </section>
 

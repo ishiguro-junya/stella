@@ -1,7 +1,8 @@
 # リリース手順
 
-この文書では、Stellaのversion更新、GitHub Releaseの作成、Homebrew Caskの更新を手動で行う手順を定義します。  
-StellaはApple Silicon向けに配布し、Developer ID署名、Apple公証、自動更新は行いません。  
+この文書では、Stellaのバージョン更新、GitHub Release、自動更新用ファイル、Homebrew Caskを手動で公開する手順を定義します。  
+StellaはApple Silicon向けに配布します。  
+Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
 
 ## 前提
 
@@ -12,13 +13,33 @@ StellaはApple Silicon向けに配布し、Developer ID署名、Apple公証、�
 - GitHub CLIの認証
 - Homebrew
 - mise
+- `/Users/ishiguro/.tauri/stella-updater.key`にある自動更新用の秘密鍵
+- macOSのキーチェーンに保存した`com.emuni.stella.updater`のパスワード
 
 すべてのcommandはStella Repositoryのrootから同じshellで実行します。  
 
 ```sh
-gh auth status
 mise install
 mise run setup
+```
+
+秘密鍵を紛失すると、既存のStellaへ新しい更新を配布できなくなります。  
+秘密鍵とキーチェーンのパスワードは、リポジトリ外の安全な場所へバックアップします。  
+
+自動更新用の固定Releaseは初回だけ作成します。  
+どちらも配布一覧上はプレリリースとして扱い、`latest.json`だけを更新します。  
+
+```sh
+gh release create updater-prerelease \
+  --repo ishiguro-junya/stella \
+  --title "Stella prerelease update feed" \
+  --notes "Stellaのプレリリース向け自動更新情報です。" \
+  --prerelease
+gh release create updater-stable \
+  --repo ishiguro-junya/stella \
+  --title "Stella stable update feed" \
+  --notes "Stellaの安定版向け自動更新情報です。" \
+  --prerelease
 ```
 
 ## 1. Release versionを決める
@@ -30,7 +51,15 @@ STELLA_VERSION="1.0.0-alpha.5"
 STELLA_TAG="v${STELLA_VERSION}"
 STELLA_RELEASE_DIR=".tmp/release-${STELLA_VERSION}"
 STELLA_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_arm64.zip"
+STELLA_UPDATER_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_aarch64.app.tar.gz"
+STELLA_UPDATER_SIGNATURE="${STELLA_UPDATER_ARCHIVE}.sig"
+STELLA_UPDATER_MANIFEST="${STELLA_RELEASE_DIR}/latest.json"
 STELLA_GIT_SOURCE="${STELLA_RELEASE_DIR}/git-2.55.0.tar.xz"
+if [[ "$STELLA_VERSION" == *-* ]]; then
+  STELLA_RELEASE_FLAGS=(--prerelease)
+else
+  STELLA_RELEASE_FLAGS=()
+fi
 ```
 
 既存のReleaseと重複していないことを確認します。  
@@ -92,7 +121,14 @@ mise run lint
 mise run typecheck
 mise run test
 mise run test:e2e
-mise run build
+export TAURI_SIGNING_PRIVATE_KEY="/Users/ishiguro/.tauri/stella-updater.key"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password \
+  -a ishiguro \
+  -s com.emuni.stella.updater \
+  -w \
+  /Users/ishiguro/Library/Keychains/login.keychain-db)"
+pnpm exec tauri build --config src-tauri/tauri.updater.conf.json
+unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
 生成したApplicationのversion、Bundle ID、architectureを確認します。  
@@ -121,6 +157,10 @@ mkdir -p "$STELLA_RELEASE_DIR"
 ditto -c -k --keepParent \
   target/release/bundle/macos/Stella.app \
   "$STELLA_ARCHIVE"
+cp target/release/bundle/macos/Stella.app.tar.gz \
+  "$STELLA_UPDATER_ARCHIVE"
+cp target/release/bundle/macos/Stella.app.tar.gz.sig \
+  "$STELLA_UPDATER_SIGNATURE"
 cp .tmp/toolchain/downloads/git-2.55.0.tar.xz "$STELLA_GIT_SOURCE"
 STELLA_SHA256="$(shasum -a 256 "$STELLA_ARCHIVE" | awk '{print $1}')"
 shasum -a 256 "$STELLA_ARCHIVE"
@@ -133,7 +173,21 @@ shasum -a 256 "$STELLA_GIT_SOURCE"
 - Releaseの概要
 - 変更内容
 - 動作環境
-- アルファ版、未署名、未公証、自動更新非対応であること
+- プレリリースの場合は、アルファ版、ベータ版、またはリリース候補版であること
+- Developer ID未署名、Apple未公証であること
+
+リリースノートと署名から自動更新用の`latest.json`を作成します。  
+
+```sh
+node --import tsx scripts/create-updater-manifest.mts \
+  "$STELLA_VERSION" \
+  "${STELLA_RELEASE_DIR}/release-notes.md" \
+  "$STELLA_UPDATER_ARCHIVE" \
+  "$STELLA_UPDATER_SIGNATURE" \
+  "$STELLA_UPDATER_MANIFEST"
+```
+
+`latest.json`の`version`、`darwin-aarch64`のURL、署名が対象ファイルと一致することを確認します。  
 
 ## 5. TagとGitHub Releaseを公開する
 
@@ -151,16 +205,18 @@ git tag -a "$STELLA_TAG" -m "Stella ${STELLA_VERSION}"
 git push origin "$STELLA_TAG"
 ```
 
-GitHub ReleaseをPrereleaseとして公開します。  
+プレリリースはGitHub Releaseでもプレリリースとして公開し、安定版ではプレリリース指定を外します。  
 
 ```sh
 gh release create "$STELLA_TAG" \
   "$STELLA_ARCHIVE" \
+  "$STELLA_UPDATER_ARCHIVE" \
+  "$STELLA_UPDATER_SIGNATURE" \
   "$STELLA_GIT_SOURCE" \
   --repo ishiguro-junya/stella \
   --title "Stella ${STELLA_VERSION}" \
   --notes-file "${STELLA_RELEASE_DIR}/release-notes.md" \
-  --prerelease \
+  "${STELLA_RELEASE_FLAGS[@]}" \
   --verify-tag
 ```
 
@@ -171,6 +227,25 @@ gh release view "$STELLA_TAG" \
   --repo ishiguro-junya/stella \
   --json tagName,name,isPrerelease,assets,url
 ```
+
+`alpha`、`beta`、`rc`を含むプレリリースでは、プレリリース用の更新情報だけを置き換えます。  
+安定版では両方を置き換え、プレリリース利用者も安定版へ更新できるようにします。  
+
+```sh
+gh release upload updater-prerelease \
+  "$STELLA_UPDATER_MANIFEST" \
+  --repo ishiguro-junya/stella \
+  --clobber
+
+if [[ "$STELLA_VERSION" != *-* ]]; then
+  gh release upload updater-stable \
+    "$STELLA_UPDATER_MANIFEST" \
+    --repo ishiguro-junya/stella \
+    --clobber
+fi
+```
+
+更新情報は、対象バージョンのGitHub Releaseとすべてのファイルが公開された後に置き換えます。  
 
 ## 6. Homebrew Caskを更新する
 

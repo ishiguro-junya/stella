@@ -25,6 +25,43 @@ export const MESSAGES = {
   appActivity: { en: 'Activity', ja: 'アクティビティ' },
   appSettings: { en: 'Settings', ja: '設定' },
   appNavigation: { en: 'App navigation', ja: 'アプリのナビゲーション' },
+  update: { en: 'Update', ja: '更新' },
+  updateAvailableAria: {
+    en: (args) => `Update to version ${text(args, 'version')}`,
+    ja: (args) => `バージョン${text(args, 'version')}に更新`,
+  },
+  checkingForUpdates: { en: 'Checking for updates…', ja: '更新を確認しています…' },
+  appIsUpToDate: { en: 'The app is up to date.', ja: 'アプリは最新です。' },
+  updateAvailableTitle: { en: 'An update is available', ja: '更新があります' },
+  updateVersionDescription: {
+    en: (args) =>
+      `Version ${text(args, 'current')} will be updated to version ${text(args, 'version')}.`,
+    ja: (args) =>
+      `バージョン${text(args, 'current')}からバージョン${text(args, 'version')}へ更新します。`,
+  },
+  later: { en: 'Later', ja: 'あとで' },
+  updateAndRestart: { en: 'Update and Restart', ja: '更新して再起動' },
+  downloadingUpdate: { en: 'Downloading the update…', ja: '更新をダウンロードしています…' },
+  finishWorkBeforeUpdate: {
+    en: 'Finish the current Git operation or activity before updating.',
+    ja: '実行中のGit操作またはアクティビティを完了してから更新してください。',
+  },
+  saveOrDiscardBeforeUpdate: {
+    en: 'Save or discard the current edits before updating.',
+    ja: '更新する前に、現在の編集内容を保存または破棄してください。',
+  },
+  updateWithoutSaving: { en: 'Update Without Saving', ja: '保存せずに更新' },
+  saveAndUpdate: { en: 'Save and Update', ja: '保存して更新' },
+  updateCheckFailedTitle: { en: 'Could not check for updates', ja: '更新を確認できませんでした' },
+  updateCheckFailed: {
+    en: 'The app could not check for updates.',
+    ja: 'アプリの更新を確認できませんでした。',
+  },
+  updateInstallFailedTitle: { en: 'Could not install the update', ja: '更新できませんでした' },
+  updateInstallFailed: {
+    en: 'The update could not be installed.',
+    ja: '更新をインストールできませんでした。',
+  },
   back: { en: 'Back', ja: '戻る' },
   preferences: { en: 'Preferences', ja: '環境設定' },
   settingsTitle: { en: 'Settings', ja: '設定' },
@@ -36,6 +73,13 @@ export const MESSAGES = {
   appearanceSystem: { en: 'System', ja: 'システム' },
   appearanceLight: { en: 'Light', ja: 'ライト' },
   appearanceDark: { en: 'Dark', ja: 'ダーク' },
+  automaticUpdateChecksTitle: { en: 'Automatic Updates', ja: '自動アップデート' },
+  automaticUpdateChecksDescription: {
+    en: 'Automatically check for updates at launch and while the app is open.',
+    ja: '起動時とアプリの使用中に更新を自動的に確認します。',
+  },
+  automaticUpdateChecksEnabled: { en: 'Automatically Check', ja: '自動的に確認' },
+  automaticUpdateChecksDisabled: { en: 'Manual Only', ja: '手動のみ' },
   languageTitle: { en: 'Language', ja: '言語' },
   stageDisplayTitle: { en: 'Stage Display', ja: 'ステージの表示' },
   stageDisplayDescription: {

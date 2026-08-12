@@ -105,6 +105,19 @@ describe('App shell and Settings', () => {
     expect(systemAppearance.theme).toBeNull();
     expect(systemAppearance.colorScheme).toBe(systemAppearance.preferred);
 
+    const automaticUpdates = $('select[name="automatic-update-checks"]');
+    await expect(automaticUpdates).toHaveValue('enabled');
+    await selectSetting('automatic-update-checks', 'disabled');
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () =>
+            JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}').automaticUpdateChecks,
+        )) === false,
+      { timeoutMsg: 'The automatic update setting was not saved.' },
+    );
+    await selectSetting('automatic-update-checks', 'enabled');
+
     await selectSetting('editor-line-wrapping', 'enabled');
     const wrapColumn = $('input[name="editor-wrap-column"]');
     await wrapColumn.waitForEnabled();

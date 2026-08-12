@@ -86,6 +86,19 @@ Frontendは現在状態と最新のserver anchorを保持し、Rust snapshotはb
 Frontendの各Undo／Redo snapshotは、手動編集を派生させた直近のRust revisionを`baseDocumentRevision`として保持します。  
 Rustは既知revisionと本文が完全一致すれば本文とblock状態を一緒に復元し、未知の手動draftは既知のbase revisionへ戻してから差分を同期します。  
 
+## アプリの更新
+
+Rust側の`app_update`モジュールがTauri Updaterを所有し、更新の確認、署名検証、ダウンロード、インストール、再起動を行います。  
+フロントエンドへUpdaterプラグインの権限は公開せず、`app_update_check`と`app_update_install`だけをTauri commandとして公開します。  
+確認済みの更新情報はRust側で保持し、インストール時に任意のURLや署名をフロントエンドから受け取りません。  
+
+実行中のバージョンにプレリリース識別子があればプレリリース用の固定`latest.json`を、なければ安定版用を参照します。  
+自動確認の時刻管理と表示状態はフロントエンドが担い、macOSメニューの「更新を確認…」も同じ確認処理へ通知します。  
+
+通常のビルドでは更新用ファイルを作りません。  
+リリース時だけ`tauri.updater.conf.json`を重ね、リポジトリ外の秘密鍵で`.app.tar.gz`へ署名します。  
+固定の更新情報はバージョン別GitHub ReleaseのURLと署名を参照し、対象ファイルの公開が完了してから置き換えます。  
+
 ## 運用ライフサイクル
 
 Repository mutationはRepository単位で直列化し、operation IDを付けます。  

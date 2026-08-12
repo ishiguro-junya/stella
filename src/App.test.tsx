@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceAdapterError, type WorkspaceAdapter } from './adapters/workspaceAdapter';
 import { App } from './App';
 import type { QueryResult, RepoSnapshot, WorkspaceSnapshot } from './domain/workspace';
+import type { AppUpdateInfo, AppUpdateInstallEvent } from './features/update/appUpdate';
 import { DEFAULT_PREFERENCES, readPreferences, writePreferences } from './persistence/preferences';
 import { conflictDocument, repoSnapshot } from './test/fixtures';
 
@@ -20,11 +21,25 @@ const tauriWindowMock = vi.hoisted(() => ({
   }),
 }));
 
+const appUpdateMock = vi.hoisted(() => ({
+  check: vi.fn<() => Promise<AppUpdateInfo | undefined>>(async () => undefined),
+  install: vi.fn<(onEvent: (event: AppUpdateInstallEvent) => void) => Promise<void>>(
+    async () => undefined,
+  ),
+  listen: vi.fn<(handler: () => void) => Promise<() => void>>(async () => () => undefined),
+}));
+
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     destroy: tauriWindowMock.destroy,
     onCloseRequested: tauriWindowMock.onCloseRequested,
   }),
+}));
+
+vi.mock('./features/update/appUpdate', () => ({
+  checkForAppUpdate: appUpdateMock.check,
+  installAppUpdate: appUpdateMock.install,
+  listenForCheckAppUpdates: appUpdateMock.listen,
 }));
 
 vi.mock('./features/diff/DiffSurface', () => ({ DiffSurface: () => <div>Diff</div> }));
@@ -111,6 +126,39 @@ async function enterRepositoryPath(
 }
 
 describe('App repository attach', () => {
+  it('shows an available update at launch and keeps its button left of Settings', async () => {
+    appUpdateMock.check.mockResolvedValueOnce({
+      currentVersion: '1.0.0-alpha.4',
+      version: '1.0.0-beta.1',
+      notes: 'Beta update',
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({ kind: 'activity', entries: [] })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+
+    const { container } = render(<App adapter={adapter} />);
+
+    expect(
+      await screen.findByRole('alertdialog', { name: 'An update is available' }),
+    ).toBeVisible();
+    const actions = container.querySelector<HTMLElement>('.titlebar-actions');
+    if (!actions) throw new Error('titlebar actions not found');
+    expect(
+      within(actions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Update', 'Settings']);
+  });
+
   it('keeps product branding out of the window content and names icon-only controls', () => {
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),

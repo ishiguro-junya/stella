@@ -7,6 +7,7 @@ type Appearance = 'system' | 'light' | 'dark';
 interface ResetAppOptions {
   language?: Language;
   appearance?: Appearance;
+  automaticUpdateChecks?: boolean;
   splitStageView?: boolean;
   useConventionalCommits?: boolean;
   stickyFileHeaders?: boolean;
@@ -26,6 +27,7 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     version: 1,
     appearance: options.appearance ?? 'system',
     language: options.language ?? 'ja',
+    automaticUpdateChecks: options.automaticUpdateChecks ?? true,
     diffStyle: 'unified',
     splitStageView: options.splitStageView ?? false,
     useConventionalCommits: options.useConventionalCommits ?? false,

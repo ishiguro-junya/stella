@@ -9,9 +9,11 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Runtime};
 
 const SETTINGS_MENU_ID: &str = "stella-settings";
+const CHECK_UPDATES_MENU_ID: &str = "stella-check-updates";
 const SETTINGS_MENU_ACCELERATOR: &str = "Cmd+,";
-const SETTINGS_EVENT_TARGET: &str = "main";
+const MENU_EVENT_TARGET: &str = "main";
 const OPEN_SETTINGS_EVENT: &str = "stella://open-settings";
+const CHECK_UPDATES_EVENT: &str = "stella://check-updates";
 const LICENSE_NAME: &str = "Sustainable Use License 1.0";
 const ABOUT_ICON: Image<'static> = tauri::include_image!("./icons/about-icon.png");
 
@@ -25,6 +27,7 @@ pub(crate) enum AppLanguage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct MenuLabels {
     about: &'static str,
+    check_updates: &'static str,
     settings: &'static str,
     services: &'static str,
     hide: &'static str,
@@ -51,6 +54,7 @@ struct MenuLabels {
 
 const ENGLISH_LABELS: MenuLabels = MenuLabels {
     about: "About Stella",
+    check_updates: "Check for Updates…",
     settings: "Settings…",
     services: "Services",
     hide: "Hide Stella",
@@ -77,6 +81,7 @@ const ENGLISH_LABELS: MenuLabels = MenuLabels {
 
 const JAPANESE_LABELS: MenuLabels = MenuLabels {
     about: "Stellaについて",
+    check_updates: "更新を確認…",
     settings: "設定…",
     services: "サービス",
     hide: "Stellaを隠す",
@@ -143,9 +148,12 @@ fn build_for_language<R: Runtime>(
     let settings = MenuItemBuilder::with_id(SETTINGS_MENU_ID, text.settings)
         .accelerator(SETTINGS_MENU_ACCELERATOR)
         .build(app)?;
+    let check_updates =
+        MenuItemBuilder::with_id(CHECK_UPDATES_MENU_ID, text.check_updates).build(app)?;
 
     let app_submenu = SubmenuBuilder::new(app, "Stella")
         .about_with_text(text.about, Some(about))
+        .item(&check_updates)
         .separator()
         .item(&settings)
         .separator()
@@ -198,16 +206,24 @@ pub(crate) fn set_app_language(app: AppHandle, language: AppLanguage) -> Result<
 }
 
 pub(crate) fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
-    if !is_settings_event(event.id()) {
+    let event_name = if is_settings_event(event.id()) {
+        OPEN_SETTINGS_EVENT
+    } else if is_check_updates_event(event.id()) {
+        CHECK_UPDATES_EVENT
+    } else {
         return;
-    }
-    if let Err(error) = app.emit_to(SETTINGS_EVENT_TARGET, OPEN_SETTINGS_EVENT, ()) {
-        eprintln!("Could not request the Stella Settings page: {error}");
+    };
+    if let Err(error) = app.emit_to(MENU_EVENT_TARGET, event_name, ()) {
+        eprintln!("Stellaのメニュー操作を通知できませんでした: {error}");
     }
 }
 
 fn is_settings_event(id: &MenuId) -> bool {
     id == SETTINGS_MENU_ID
+}
+
+fn is_check_updates_event(id: &MenuId) -> bool {
+    id == CHECK_UPDATES_MENU_ID
 }
 
 fn language_from_locale(value: &str) -> AppLanguage {
@@ -251,14 +267,16 @@ mod tests {
     #[test]
     fn settings_event_is_scoped_to_its_native_menu_item() {
         assert!(is_settings_event(&MenuId::new(SETTINGS_MENU_ID)));
+        assert!(is_check_updates_event(&MenuId::new(CHECK_UPDATES_MENU_ID)));
         assert!(!is_settings_event(&MenuId::new("quit")));
         assert_eq!(SETTINGS_MENU_ACCELERATOR, "Cmd+,");
     }
 
     #[test]
     fn settings_menu_emits_the_in_app_navigation_contract_to_the_main_window() {
-        assert_eq!(SETTINGS_EVENT_TARGET, "main");
+        assert_eq!(MENU_EVENT_TARGET, "main");
         assert_eq!(OPEN_SETTINGS_EVENT, "stella://open-settings");
+        assert_eq!(CHECK_UPDATES_EVENT, "stella://check-updates");
     }
 
     #[test]
@@ -273,6 +291,8 @@ mod tests {
     fn menu_labels_cover_both_languages_and_keep_settings_contract() {
         assert_eq!(labels(AppLanguage::En).settings, "Settings…");
         assert_eq!(labels(AppLanguage::Ja).settings, "設定…");
+        assert_eq!(labels(AppLanguage::En).check_updates, "Check for Updates…");
+        assert_eq!(labels(AppLanguage::Ja).check_updates, "更新を確認…");
         assert_eq!(labels(AppLanguage::En).file, "File");
         assert_eq!(labels(AppLanguage::Ja).file, "ファイル");
         assert_eq!(labels(AppLanguage::En).help, "Help");

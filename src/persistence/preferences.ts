@@ -35,6 +35,7 @@ export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
   language: Language;
+  automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
   useConventionalCommits: boolean;
@@ -55,6 +56,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   version: STORAGE_VERSION,
   appearance: 'system',
   language: 'en',
+  automaticUpdateChecks: true,
   diffStyle: 'unified',
   splitStageView: false,
   useConventionalCommits: false,
@@ -215,6 +217,10 @@ export function readPreferences(): StellaPreferences {
         ? value.appearance
         : DEFAULT_PREFERENCES.appearance,
       language: isLanguage(value.language) ? value.language : detectLanguage(),
+      automaticUpdateChecks:
+        typeof value.automaticUpdateChecks === 'boolean'
+          ? value.automaticUpdateChecks
+          : DEFAULT_PREFERENCES.automaticUpdateChecks,
       diffStyle: isDiffStyle(value.diffStyle) ? value.diffStyle : DEFAULT_PREFERENCES.diffStyle,
       splitStageView:
         typeof value.splitStageView === 'boolean'

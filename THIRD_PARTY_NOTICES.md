@@ -34,6 +34,14 @@ Stellaは、`@pierre/diffs` 1.3.5をApache License 2.0に基づいて同梱し�
 ライセンスの全文は、アプリケーションリソースの`licenses/pierre-diffs-LICENSE.md`に収録しています。  
 開発元プロジェクトは[diffs.com](https://diffs.com/)で公開されています。  
 
+## Tauri Updater plugin
+
+Stellaは、`tauri-plugin-updater` 2.10.1をMIT LicenseまたはApache License 2.0に基づいて同梱しています。  
+著作権者はTauri Programme in the Commons Conservancyおよびcontributorsです。  
+
+ライセンス情報は、アプリケーションリソースの`licenses/tauri-plugin-updater-LICENSE.spdx`に収録しています。  
+開発元プロジェクトは[Tauri Plugins Workspace](https://github.com/tauri-apps/plugins-workspace)で公開されています。  
+
 ## Lucide React
 
 Stellaは、`lucide-react` 1.30.0をISC Licenseに基づいて同梱しています。  

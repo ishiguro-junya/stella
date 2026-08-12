@@ -29,6 +29,7 @@ describe('appearance preferences', () => {
 
     expect(readPreferences()).toMatchObject({
       appearance: 'system',
+      automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: false,
       useConventionalCommits: false,
@@ -92,6 +93,12 @@ describe('appearance preferences', () => {
   it('round-trips a fixed appearance', () => {
     writePreferences({ ...DEFAULT_PREFERENCES, appearance: 'dark' });
     expect(readPreferences().appearance).toBe('dark');
+  });
+
+  it('defaults automatic update checks to on and saves the manual-only setting', () => {
+    expect(DEFAULT_PREFERENCES.automaticUpdateChecks).toBe(true);
+    writePreferences({ ...DEFAULT_PREFERENCES, automaticUpdateChecks: false });
+    expect(readPreferences().automaticUpdateChecks).toBe(false);
   });
 
   it('defaults Stage display to Hide and round-trips the Show preference', () => {

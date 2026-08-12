@@ -669,6 +669,11 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
+.titlebar .titlebar-update-button,
+.titlebar .titlebar-update-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
 .activity-toggle {
   position: relative;
 }
@@ -681,6 +686,19 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   border: 1px solid var(--surface-toolbar);
   border-radius: 50%;
   background: var(--accent);
+}
+
+.app-update-notes {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.app-update-progress {
+  display: grid;
+  gap: 8px;
+}
+.app-update-progress progress {
+  width: 100%;
 }
 
 .workspace-toolbar {

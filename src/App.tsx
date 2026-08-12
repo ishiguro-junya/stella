@@ -15,6 +15,7 @@ import {
   FolderGit2,
   GitBranch,
   History as HistoryIcon,
+  RefreshCw,
   Settings as SettingsIcon,
 } from 'lucide-react';
 
@@ -60,6 +61,12 @@ import { mergeActivityEntries } from './features/activity/activityPersistence';
 import { HistoryView } from './features/history/HistoryView';
 import { SettingsView } from './features/settings/SettingsView';
 import { listenForOpenSettings } from './features/settings/settingsMenu';
+import {
+  checkForAppUpdate,
+  installAppUpdate,
+  listenForCheckAppUpdates,
+  type AppUpdateInfo,
+} from './features/update/appUpdate';
 import { AddRepositoryDialog } from './features/repositories/AddRepositoryDialog';
 import type { RepositoryListItem } from './features/repositories/RepositoryLogo';
 import { RepositoryLanding } from './features/repositories/RepositoryLanding';
@@ -106,6 +113,7 @@ import {
 } from './theme/appearance';
 
 const EMPTY_WORKSPACE: WorkspaceSnapshot = { repos: [], activities: [] };
+const APP_UPDATE_INTERVAL_MS = 60 * 60 * 1_000;
 const ActivityView = lazy(async () => {
   const module = await import('./features/activity/ActivityView');
   return { default: module.ActivityView };
@@ -340,6 +348,9 @@ export function App({
   const [view, setView] = useState<WorkspaceView>(initialPreferences.view);
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
+  const [automaticUpdateChecks, setAutomaticUpdateChecks] = useState(
+    initialPreferences.automaticUpdateChecks,
+  );
   const [diffStyle, setDiffStyle] = useState<DiffStyle>(initialPreferences.diffStyle);
   const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
   const [useConventionalCommits, setUseConventionalCommits] = useState(
@@ -382,6 +393,11 @@ export function App({
   const [pendingOperationAction, setPendingOperationAction] = useState<GuardedOperationAction>();
   const [pendingUnsavedAction, setPendingUnsavedAction] = useState<WorkspaceAction>();
   const [pendingWindowClose, setPendingWindowClose] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo>();
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [pendingUpdateInstall, setPendingUpdateInstall] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState({ downloaded: 0, total: 0 });
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
   const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView>();
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
@@ -410,6 +426,9 @@ export function App({
   const logoRequestsRef = useRef(new Set<string>());
   const branchRequestIdRef = useRef(0);
   const workspaceViewTransitionTimerRef = useRef<number | undefined>(undefined);
+  const updateCheckInFlightRef = useRef(false);
+  const lastAutomaticUpdateCheckRef = useRef(0);
+  const promptedUpdateVersionRef = useRef<string | undefined>(undefined);
   const repo = selectedRepo(workspace);
   const effectiveRepositoryLogoLoader =
     repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
@@ -447,6 +466,35 @@ export function App({
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
   }, []);
+
+  const checkAppUpdate = useCallback(
+    async (manual = false): Promise<void> => {
+      if (updateCheckInFlightRef.current) return;
+      updateCheckInFlightRef.current = true;
+      if (manual) setNotice({ level: 'info', message: { id: 'checkingForUpdates' } });
+      try {
+        const update = await checkForAppUpdate();
+        if (!update) {
+          if (manual) setNotice({ level: 'info', message: { id: 'appIsUpToDate' } });
+          return;
+        }
+        setAvailableUpdate(update);
+        if (manual || promptedUpdateVersionRef.current !== update.version) {
+          promptedUpdateVersionRef.current = update.version;
+          setNotice(undefined);
+          setUpdateDialogOpen(true);
+        }
+      } catch (cause) {
+        if (manual) {
+          setNotice(undefined);
+          showError(t('updateCheckFailedTitle'), cause, t('updateCheckFailed'));
+        }
+      } finally {
+        updateCheckInFlightRef.current = false;
+      }
+    },
+    [showError, t],
+  );
 
   const disconnectRepository = useCallback(
     async (candidate: RepoSnapshot): Promise<void> => {
@@ -606,6 +654,7 @@ export function App({
       ...current,
       appearance,
       language,
+      automaticUpdateChecks,
       diffStyle,
       splitStageView,
       useConventionalCommits,
@@ -619,6 +668,7 @@ export function App({
     }));
   }, [
     appearance,
+    automaticUpdateChecks,
     diffStyle,
     editorLineWrapping,
     editorWrapColumn,
@@ -632,6 +682,23 @@ export function App({
     view,
     workspace,
   ]);
+
+  useEffect(() => {
+    if (restoringWorkspace || !automaticUpdateChecks) return undefined;
+    const checkIfDue = (): void => {
+      const now = Date.now();
+      if (now - lastAutomaticUpdateCheckRef.current < APP_UPDATE_INTERVAL_MS) return;
+      lastAutomaticUpdateCheckRef.current = now;
+      void checkAppUpdate();
+    };
+    checkIfDue();
+    const interval = window.setInterval(checkIfDue, APP_UPDATE_INTERVAL_MS);
+    window.addEventListener('focus', checkIfDue);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', checkIfDue);
+    };
+  }, [automaticUpdateChecks, checkAppUpdate, restoringWorkspace]);
 
   useEffect(() => {
     setLatestConflict((current) => {
@@ -1427,6 +1494,21 @@ export function App({
     };
   }, [requestNavigation]);
 
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void listenForCheckAppUpdates(() => void checkAppUpdate(true))
+      .then((dispose) => {
+        if (alive) unlisten = dispose;
+        else dispose();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, [checkAppUpdate]);
+
   const markActivityReady = useCallback((): void => {
     setActivityReady(true);
   }, []);
@@ -1471,6 +1553,46 @@ export function App({
   const repositoryUnavailable = Boolean(repo && unavailableRepoPath === repo.path);
   const currentActivities = workspace.activities;
   const hasRunningActivity = currentActivities.some((entry) => entry.status === 'running');
+  const updateBlocked =
+    busy ||
+    hasRunningActivity ||
+    workspace.repos.some((candidate) => candidate.operation.kind !== 'none');
+
+  const beginAppUpdate = async (save: boolean, discard = false): Promise<void> => {
+    if (updateBlocked || updateInstalling) return;
+    if (save && !(await leaveHandleRef.current?.save())) return;
+    if (discard) {
+      unsavedDirtyRef.current = false;
+      setWorkspaceViewRevision((current) => current + 1);
+    }
+    setPendingUpdateInstall(false);
+    setUpdateDialogOpen(true);
+    setUpdateInstalling(true);
+    setUpdateProgress({ downloaded: 0, total: 0 });
+    try {
+      await installAppUpdate((event) => {
+        if (event.event === 'progress') {
+          setUpdateProgress((current) => ({
+            downloaded: current.downloaded + event.chunkLength,
+            total: event.contentLength ?? current.total,
+          }));
+        }
+      });
+    } catch (cause) {
+      setUpdateInstalling(false);
+      showError(t('updateInstallFailedTitle'), cause, t('updateInstallFailed'));
+    }
+  };
+
+  const requestAppUpdate = (): void => {
+    if (updateBlocked || updateInstalling) return;
+    if (unsavedDirtyRef.current) {
+      setUpdateDialogOpen(false);
+      setPendingUpdateInstall(true);
+      return;
+    }
+    settleUiAction(beginAppUpdate(false));
+  };
   const activeError = errors[0];
   const currentRepositoryState = repo ? repositoryState(repo, t, message) : undefined;
   const showActivityMenu = Boolean(repo) || hasRunningActivity || page === 'activity';
@@ -1571,6 +1693,17 @@ export function App({
               aria-label={t('appNavigation')}
               data-tauri-drag-region
             >
+              {availableUpdate ? (
+                <button
+                  type="button"
+                  className="titlebar-menu-button titlebar-update-button"
+                  aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
+                  onClick={() => setUpdateDialogOpen(true)}
+                >
+                  <RefreshCw aria-hidden="true" focusable="false" />
+                  <span>{t('update')}</span>
+                </button>
+              ) : null}
               {repo ? (
                 <>
                   <button
@@ -1668,6 +1801,7 @@ export function App({
             <SettingsView
               appearance={appearance}
               language={language}
+              automaticUpdateChecks={automaticUpdateChecks}
               diffStyle={diffStyle}
               splitStageView={splitStageView}
               useConventionalCommits={useConventionalCommits}
@@ -1678,6 +1812,7 @@ export function App({
               toolchainBusy={toolchainBusy}
               onAppearanceChange={changeAppearance}
               onLanguageChange={changeLanguage}
+              onAutomaticUpdateChecksChange={setAutomaticUpdateChecks}
               onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}
               onUseConventionalCommitsChange={setUseConventionalCommits}
@@ -1829,6 +1964,95 @@ export function App({
               />
             )}
           </div>
+
+          {availableUpdate && updateDialogOpen ? (
+            <Dialog
+              labelledBy="app-update-title"
+              describedBy="app-update-description"
+              onDismiss={() => {
+                if (!updateInstalling) setUpdateDialogOpen(false);
+              }}
+            >
+              <h2 id="app-update-title">{t('updateAvailableTitle')}</h2>
+              <p id="app-update-description">
+                {t('updateVersionDescription', {
+                  current: availableUpdate.currentVersion,
+                  version: availableUpdate.version,
+                })}
+              </p>
+              {availableUpdate.notes ? (
+                <p className="app-update-notes">{availableUpdate.notes}</p>
+              ) : null}
+              {updateInstalling ? (
+                <div className="app-update-progress" aria-live="polite">
+                  <span>{t('downloadingUpdate')}</span>
+                  <progress
+                    value={updateProgress.downloaded}
+                    {...(updateProgress.total ? { max: updateProgress.total } : {})}
+                  />
+                </div>
+              ) : null}
+              {updateBlocked ? <p className="field-error">{t('finishWorkBeforeUpdate')}</p> : null}
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus={updateBlocked}
+                  disabled={updateInstalling}
+                  onClick={() => setUpdateDialogOpen(false)}
+                >
+                  {t('later')}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  data-dialog-initial-focus={!updateBlocked}
+                  disabled={updateBlocked || updateInstalling}
+                  onClick={requestAppUpdate}
+                >
+                  {t('updateAndRestart')}
+                </button>
+              </div>
+            </Dialog>
+          ) : null}
+
+          {availableUpdate && pendingUpdateInstall ? (
+            <Dialog
+              labelledBy="unsaved-update-title"
+              onDismiss={() => {
+                setPendingUpdateInstall(false);
+                setUpdateDialogOpen(true);
+              }}
+            >
+              <h2 id="unsaved-update-title">{t('unsavedChanges')}</h2>
+              <p>{t('saveOrDiscardBeforeUpdate')}</p>
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus
+                  onClick={() => {
+                    setPendingUpdateInstall(false);
+                    setUpdateDialogOpen(true);
+                  }}
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="danger-quiet"
+                  onClick={() => settleUiAction(beginAppUpdate(false, true))}
+                >
+                  {t('updateWithoutSaving')}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => settleUiAction(beginAppUpdate(true))}
+                >
+                  {t('saveAndUpdate')}
+                </button>
+              </div>
+            </Dialog>
+          ) : null}
 
           {repositorySwitcherOpen && repo ? (
             <RepositorySwitcherDialog

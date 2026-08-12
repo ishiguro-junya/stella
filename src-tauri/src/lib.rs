@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod app_menu;
+mod app_update;
 mod commit;
 mod conflict;
 mod git;
@@ -36,6 +37,7 @@ fn with_e2e_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri
 
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(app_update::plugin())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let manager = toolchain::ToolchainManager::load(
@@ -48,6 +50,7 @@ pub fn run() {
                 .map_err(|error| error.to_string())?;
             let workspace = Workspace::with_git(executor).map_err(|error| error.to_string())?;
             app.manage(Arc::new(workspace));
+            app.manage(Arc::new(app_update::AppUpdateState::default()));
             app.manage(manager);
             Ok(())
         });
@@ -62,6 +65,8 @@ pub fn run() {
             workspace_cancel,
             workspace_detach,
             repository_logo::repository_logo,
+            app_update::app_update_check,
+            app_update::app_update_install,
             app_menu::set_app_language,
             toolchain::toolchain_status,
             toolchain::toolchain_set_mode
