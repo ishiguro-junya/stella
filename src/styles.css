@@ -2565,14 +2565,20 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   font-size: 11px;
 }
 .repository-landing-empty {
-  display: grid;
-  min-height: 156px;
-  place-items: center;
-  padding: 24px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 12px;
+  display: flex;
+  min-height: 120px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 24px;
   color: var(--text-secondary);
   text-align: center;
+}
+.repository-landing-empty > .lucide {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.5;
 }
 .repository-landing-empty p {
   margin: 0;
