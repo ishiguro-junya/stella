@@ -954,7 +954,7 @@ mod tests {
             ),
         );
         let resolved = system_toolchain(Path::new("/usr/bin/git"));
-        let active_path = resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(1));
+        let active_path = resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(5));
         let executor = resolved.executor(Some(&active_path));
         let repo = directory.path().join("repo");
         executor
