@@ -38,6 +38,7 @@ describe('HistoryActionDialog', () => {
     expect(within(dialog).getByText(target.shortOid)).toBeVisible();
     const input = within(dialog).getByRole('textbox', { name: 'Branch name' });
     expect(input).toHaveFocus();
+    expect(input).not.toHaveAttribute('placeholder');
     await user.type(input, 'feature/history-menu');
     await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
 
@@ -57,7 +58,9 @@ describe('HistoryActionDialog', () => {
       within(dialog).getByText('Creates a lightweight Tag locally. It is not pushed to a remote.'),
     ).toBeVisible();
 
-    await user.type(within(dialog).getByRole('textbox', { name: 'Tag name' }), 'v2.0.0');
+    const input = within(dialog).getByRole('textbox', { name: 'Tag name' });
+    expect(input).not.toHaveAttribute('placeholder');
+    await user.type(input, 'v2.0.0');
     await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
     expect(onAction).toHaveBeenCalledWith({
       kind: 'createTag',

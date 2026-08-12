@@ -25,6 +25,7 @@ import type {
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
+import { DEFAULT_EDITOR_WRAP_COLUMN } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
 import {
   describeWorkspaceError,
@@ -48,6 +49,9 @@ export interface HistoryViewProps {
   onShowChanges: () => void;
   onAction: (action: WorkspaceAction) => Promise<void>;
   diffStyle?: DiffStyle | undefined;
+  lineWrapping?: boolean | undefined;
+  wrapColumn?: number | undefined;
+  stickyFileHeaders?: boolean | undefined;
   paneWidths: { left: number; right?: number };
   onPaneWidthsChange: (widths: { left: number; right?: number }) => void;
 }
@@ -64,7 +68,7 @@ type HistoryLaneStyle = CSSProperties & { '--history-lane-color': string };
 type HistoryMenuSource = 'list' | 'detail';
 
 const WORKING_TREE_LANE_STYLE: HistoryLaneStyle = {
-  '--history-lane-color': 'var(--text-muted)',
+  '--history-lane-color': 'var(--history-working-tree)',
 };
 
 function historyLaneStyle(lane: number): HistoryLaneStyle {
@@ -350,6 +354,9 @@ export function HistoryView({
   onShowChanges,
   onAction,
   diffStyle = 'unified',
+  lineWrapping = false,
+  wrapColumn = DEFAULT_EDITOR_WRAP_COLUMN,
+  stickyFileHeaders = false,
   paneWidths,
   onPaneWidthsChange,
 }: HistoryViewProps) {
@@ -735,8 +742,8 @@ export function HistoryView({
                   <span className="commit-copy">
                     <strong>{commit.subject}</strong>
                     <small className="commit-metadata">
-                      <span className="commit-author">{commit.authorName}</span>
                       <code className="commit-oid">{commit.shortOid}</code>
+                      <span className="commit-author">{commit.authorName}</span>
                       <time dateTime={commit.authoredAt}>
                         {formatDate(commit.authoredAt, {
                           dateStyle: 'medium',
@@ -826,14 +833,14 @@ export function HistoryView({
               {commitBody && commitBody !== details.subject.trim() ? <p>{commitBody}</p> : null}
               <dl className="metadata-list inline">
                 <div>
-                  <dt>{t('author')}</dt>
-                  <dd>{details.authorName}</dd>
-                </div>
-                <div>
                   <dt>{t('commitId')}</dt>
                   <dd>
                     <code>{details.shortOid}</code>
                   </dd>
+                </div>
+                <div>
+                  <dt>{t('author')}</dt>
+                  <dd>{details.authorName}</dd>
                 </div>
                 <div>
                   <dt>{t('date')}</dt>
@@ -869,9 +876,11 @@ export function HistoryView({
                         }
                   }
                   diffStyle={diffStyle}
+                  lineWrapping={lineWrapping}
+                  wrapColumn={wrapColumn}
                   performanceMode={Boolean(details.diff.tooLarge)}
                   showFileHeaders
-                  collapsibleFileHeaders
+                  stickyFileHeaders={stickyFileHeaders}
                   hunkSeparators="simple"
                   ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
                 />

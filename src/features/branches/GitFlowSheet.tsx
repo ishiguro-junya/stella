@@ -343,7 +343,7 @@ export function GitFlowSheet({
                   <option value="custom">Custom (defaults + config)</option>
                 </SelectControl>
               </label>
-              <label className="git-flow-check">
+              <label className="checkbox-field git-flow-check">
                 <input
                   type="checkbox"
                   checked={form.shared}
@@ -462,7 +462,7 @@ export function GitFlowSheet({
                   <option value="rebase">{t('rebase')}</option>
                 </SelectControl>
               </label>
-              <label className="git-flow-check">
+              <label className="checkbox-field git-flow-check">
                 <input
                   type="checkbox"
                   checked={form.shared}
@@ -474,7 +474,7 @@ export function GitFlowSheet({
           ) : null}
 
           {FETCH_COMMANDS.has(command) ? (
-            <label className="git-flow-check">
+            <label className="checkbox-field git-flow-check">
               <input
                 type="checkbox"
                 checked={form.fetch}
@@ -485,7 +485,7 @@ export function GitFlowSheet({
           ) : null}
 
           {command === 'delete' ? (
-            <label className="git-flow-check">
+            <label className="checkbox-field git-flow-check">
               <input
                 type="checkbox"
                 checked={form.remote}
@@ -527,7 +527,7 @@ export function GitFlowSheet({
                   onChange={(event) => field('tagMessage', event.target.value)}
                 />
               </label>
-              <label className="git-flow-check">
+              <label className="checkbox-field git-flow-check">
                 <input
                   type="checkbox"
                   checked={form.sign}
@@ -547,7 +547,7 @@ export function GitFlowSheet({
               ) : null}
               {command === 'finish' ? (
                 <>
-                  <label className="git-flow-check">
+                  <label className="checkbox-field git-flow-check">
                     <input
                       type="checkbox"
                       checked={form.keep}
@@ -555,7 +555,7 @@ export function GitFlowSheet({
                     />
                     <span>{t('gitFlowKeepBranch')}</span>
                   </label>
-                  <label className="git-flow-check">
+                  <label className="checkbox-field git-flow-check">
                     <input
                       type="checkbox"
                       checked={form.push}

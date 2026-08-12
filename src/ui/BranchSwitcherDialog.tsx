@@ -101,7 +101,6 @@ export function BranchSwitcherDialog({
             data-dialog-initial-focus
             value={branchName}
             aria-label={t('branchName')}
-            placeholder={t('branchNamePlaceholder')}
             disabled={Boolean(disabledReason)}
             onChange={(event) => setBranchName(event.currentTarget.value)}
           />

@@ -32,10 +32,9 @@ describe('AddRepositoryDialog', () => {
       'aria-selected',
       'true',
     );
-    await user.type(
-      within(dialog).getByRole('textbox', { name: 'Repository URL' }),
-      'https://example.com/stella.git',
-    );
+    const url = within(dialog).getByRole('textbox', { name: 'Repository URL' });
+    expect(url).not.toHaveAttribute('placeholder');
+    await user.type(url, 'https://example.com/stella.git');
     expect(onUrlChange).toHaveBeenCalled();
 
     await user.click(within(dialog).getByRole('tab', { name: 'Path' }));
@@ -65,13 +64,16 @@ describe('AddRepositoryDialog', () => {
 
     const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
     const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
+    const name = within(dialog).getByRole('textbox', { name: 'Repository name' });
+    expect(path).not.toHaveAttribute('placeholder');
+    expect(name).not.toHaveAttribute('placeholder');
     const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
     expect(path.parentElement).toContainElement(picker);
     expect(picker).not.toHaveTextContent(/Finder|Choose/u);
     await user.click(picker);
     expect(onChooseLocal).toHaveBeenCalledOnce();
 
-    await user.type(within(dialog).getByRole('textbox', { name: 'Repository name' }), 'Stella App');
+    await user.type(name, 'Stella App');
     expect(onNameChange).toHaveBeenCalled();
   });
 

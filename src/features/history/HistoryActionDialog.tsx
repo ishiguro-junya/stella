@@ -131,7 +131,6 @@ export function HistoryActionDialog({
             data-dialog-initial-focus
             value={name}
             aria-label={t('branchName')}
-            placeholder={t('branchNamePlaceholder')}
             disabled={fieldDisabled}
             onChange={(event) => setName(event.currentTarget.value)}
           />
@@ -144,7 +143,6 @@ export function HistoryActionDialog({
             data-dialog-initial-focus
             value={name}
             aria-label={t('tagName')}
-            placeholder={t('tagNamePlaceholder')}
             aria-describedby="create-tag-help"
             disabled={fieldDisabled}
             onChange={(event) => setName(event.currentTarget.value)}

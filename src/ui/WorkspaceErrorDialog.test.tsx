@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceErrorDialog } from './WorkspaceErrorDialog';
 
 describe('WorkspaceErrorDialog', () => {
-  it('focuses Close and preserves redacted Git output in accessible details', async () => {
+  it('focuses Close and always shows bounded Git output without an error label or toggle', async () => {
     const user = userEvent.setup();
     const onDismiss = vi.fn<() => void>();
     render(
@@ -24,10 +24,13 @@ describe('WorkspaceErrorDialog', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Operation failed' });
     expect(dialog).toHaveAccessibleDescription(/The hook rejected this operation\./u);
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
-    await user.click(screen.getByText('Show Git output'));
+    expect(screen.queryByText('Error')).not.toBeInTheDocument();
+    expect(dialog.querySelector('details')).not.toBeInTheDocument();
+    expect(dialog.querySelector('summary')).not.toBeInTheDocument();
     expect(screen.getByText('Exit code: 1')).toBeVisible();
     expect(screen.getByLabelText('stderr')).toHaveTextContent('policy denied');
     expect(screen.getByLabelText('stdout')).toHaveTextContent('hook output');
+    expect(screen.getByLabelText('stderr').parentElement).toHaveClass('notice-output-streams');
 
     await user.keyboard('{Escape}');
     expect(onDismiss).toHaveBeenCalledOnce();

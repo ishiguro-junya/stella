@@ -80,9 +80,6 @@ export function AddRepositoryDialog({
               aria-describedby={error ? 'repository-location-error' : undefined}
               autoComplete="off"
               data-dialog-initial-focus
-              placeholder={t(
-                source === 'url' ? 'repositoryUrlPlaceholder' : 'repositoryPathPlaceholder',
-              )}
               onChange={(event) =>
                 source === 'url'
                   ? onUrlChange(event.target.value)
@@ -119,7 +116,6 @@ export function AddRepositoryDialog({
             id="repository-display-name"
             value={name}
             autoComplete="off"
-            placeholder={t('repositoryDisplayNamePlaceholder')}
             onChange={(event) => onNameChange(event.target.value)}
           />
         </label>

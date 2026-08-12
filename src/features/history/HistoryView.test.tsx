@@ -260,7 +260,7 @@ describe('HistoryView', () => {
     expect(within(historyPane).getByText('Uncommitted changes')).toBeVisible();
     expect(within(historyPane).getByText('2 files')).toBeVisible();
     const workingTreeGraph = within(historyPane).getByTestId('history-graph-working-tree');
-    expect(workingTreeGraph).toHaveStyle('--history-lane-color: var(--text-muted)');
+    expect(workingTreeGraph).toHaveStyle('--history-lane-color: var(--history-working-tree)');
     expect(workingTreeGraph.querySelector('[data-edge-kind="working-tree"]')).toBeInTheDocument();
     expect(
       within(historyPane)
@@ -629,9 +629,15 @@ describe('HistoryView', () => {
     const currentHead = screen.getByRole('button', { name: /current head/u });
     expect(currentHead).toBeInTheDocument();
     const commitMetadata = currentHead.querySelector('.commit-metadata');
+    if (!commitMetadata) throw new Error('Commit metadata was not found.');
     const authoredAt = commitMetadata?.querySelector('time');
     expect(commitMetadata?.querySelector('.commit-author')).toHaveTextContent('Stella');
     expect(commitMetadata?.querySelector('.commit-oid')).toHaveTextContent('head');
+    expect([...commitMetadata.children].map((element) => element.className)).toEqual([
+      'commit-oid',
+      'commit-author',
+      '',
+    ]);
     expect(commitMetadata?.querySelector('.commit-metadata-separator')).not.toBeInTheDocument();
     expect(commitMetadata).not.toHaveTextContent('·');
     expect(authoredAt).toHaveAttribute('datetime', '2026-08-08T00:00:00Z');
@@ -642,7 +648,7 @@ describe('HistoryView', () => {
     expect(screen.queryByRole('checkbox', { name: 'All refs' })).not.toBeInTheDocument();
   });
 
-  it('shows the Commit ID beside the date and suppresses a duplicated commit body', async () => {
+  it('shows the Commit ID, Author, and Date in order and suppresses a duplicated commit body', async () => {
     const details = {
       ...commitDetails(undefined),
       subject: 'docs: update documentation',
@@ -678,7 +684,8 @@ describe('HistoryView', () => {
     expect(commitIdGroup).toHaveTextContent('Commit ID');
     if (!commitIdGroup) throw new Error('Commit ID metadata was not found.');
     expect(within(commitIdGroup).getByText(details.shortOid, { selector: 'code' })).toBeVisible();
-    expect(commitIdGroup.nextElementSibling).toHaveTextContent('Date');
+    expect(commitIdGroup.nextElementSibling).toHaveTextContent('Author');
+    expect(commitIdGroup.nextElementSibling?.nextElementSibling).toHaveTextContent('Date');
   });
 
   it('shows Tag and shortened branch decorations in the list and commit details', async () => {
@@ -1248,6 +1255,8 @@ describe('HistoryView', () => {
         onShowChanges={() => undefined}
         onAction={async () => undefined}
         diffStyle="split"
+        lineWrapping
+        wrapColumn={96}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
@@ -1255,7 +1264,11 @@ describe('HistoryView', () => {
     await screen.findByText('Diff');
     expect(screen.queryByRole('group', { name: 'Diff layout' })).not.toBeInTheDocument();
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({ diffStyle: 'split' }),
+      expect.objectContaining({
+        diffStyle: 'split',
+        lineWrapping: true,
+        wrapColumn: 96,
+      }),
     );
   });
 
@@ -1330,6 +1343,7 @@ describe('HistoryView', () => {
         adapter={adapter}
         onShowChanges={() => undefined}
         onAction={async () => undefined}
+        stickyFileHeaders
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
@@ -1340,7 +1354,7 @@ describe('HistoryView', () => {
       expect.objectContaining({
         source: expect.objectContaining({ kind: 'codeView' }),
         showFileHeaders: true,
-        collapsibleFileHeaders: true,
+        stickyFileHeaders: true,
         hunkSeparators: 'simple',
       }),
     );

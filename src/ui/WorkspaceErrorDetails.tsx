@@ -25,16 +25,23 @@ export function WorkspaceErrorDetails({ error }: { error: WorkspaceErrorContent 
   const { t, message } = useI18n();
   const hasOutput = Boolean(error.stderr || error.stdout || error.exitCode);
   return (
-    <>
-      <span>{error.localizedMessage ? message(error.localizedMessage) : error.message}</span>
+    <div className="workspace-error-details">
+      <span className="workspace-error-message">
+        {error.localizedMessage ? message(error.localizedMessage) : error.message}
+      </span>
       {hasOutput ? (
-        <details className="notice-output">
-          <summary>{t('showGitOutput')}</summary>
-          {error.exitCode ? <p>{t('exitCode', { code: error.exitCode })}</p> : null}
-          {error.stderr ? <pre aria-label="stderr">{error.stderr}</pre> : null}
-          {error.stdout ? <pre aria-label="stdout">{error.stdout}</pre> : null}
-        </details>
+        <div className="notice-output">
+          {error.exitCode ? (
+            <p className="notice-output-exit-code">{t('exitCode', { code: error.exitCode })}</p>
+          ) : null}
+          {error.stderr || error.stdout ? (
+            <div className="notice-output-streams">
+              {error.stderr ? <pre aria-label="stderr">{error.stderr}</pre> : null}
+              {error.stdout ? <pre aria-label="stdout">{error.stdout}</pre> : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -31,7 +31,6 @@ export function WorkspaceErrorDialog({ title, error, onDismiss }: WorkspaceError
       describedBy="runtime-error-description"
       onDismiss={onDismiss}
     >
-      <p className="eyebrow">{t('appError')}</p>
       <h2 id="runtime-error-title">{title}</h2>
       <div id="runtime-error-description">
         <WorkspaceErrorDetails error={error} />

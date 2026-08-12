@@ -71,10 +71,16 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitTypeLowercase')).toBe('型には小文字の英字のみ使用できます。');
     expect(translate('ja', 'commitScopeInvalid')).toBe('スコープには括弧や改行を使用できません。');
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
+    expect(translate('ja', 'commitMessageSingleLine')).toBe('メッセージは1行で入力してください。');
+    expect(translate('ja', 'conventionalCommitsEnabled')).toBe('使用する');
+    expect(translate('ja', 'conventionalCommitsDisabled')).toBe('使用しない');
     expect(translate('ja', 'stage')).toBe('Stage');
     expect(translate('ja', 'pull')).toBe('プル');
     expect(translate('ja', 'push')).toBe('プッシュ');
     expect(translate('ja', 'fetch')).toBe('フェッチ');
+    expect(translate('ja', 'actionEditLines')).toBe('選択した行を編集');
+    expect(translate('ja', 'actionCopySelectedLines')).toBe('選択した行をコピー');
+    expect(translate('ja', 'actionStageSelectedLines')).toBe('選択した行をステージ');
     expect(translate('ja', 'createBranchMenu')).toBe('ブランチを作成');
     expect(translate('ja', 'createTagMenu')).toBe('タグを作成');
     expect(translate('ja', 'mergeMenu')).toBe('マージを実行');
@@ -95,20 +101,11 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'activityBranchValue', { count: 3 })).toBe('3件');
   });
 
-  it('keeps the product name out of in-app explanatory copy', () => {
-    const copy = [
-      translate('en', 'appearanceDescription'),
-      translate('en', 'languageDescription'),
-      translate('en', 'toolchainDescription'),
-      translate('en', 'repositoriesDescription'),
-      translate('en', 'errorInternal'),
-      translate('ja', 'appearanceDescription'),
-      translate('ja', 'languageDescription'),
-      translate('ja', 'toolchainDescription'),
-      translate('ja', 'repositoriesDescription'),
-      translate('ja', 'errorInternal'),
-    ];
-    for (const message of copy) expect(message).not.toContain('Stella');
+  it('keeps the product name out of localized application copy', () => {
+    for (const translations of Object.values(MESSAGES)) {
+      expect(String(translations.en)).not.toContain('Stella');
+      expect(String(translations.ja)).not.toContain('Stella');
+    }
   });
 
   it('uses the requested Japanese Git toolchain copy', () => {
@@ -116,6 +113,25 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'toolchainDescription')).toBe(
       'Gitツールチェインが内蔵かこの端末にインストールされたもののどちらを使用するか選択します。',
     );
+    expect(translate('ja', 'toolchainRestartRequired')).toBe(
+      '変更を反映するにはアプリを再起動してください。',
+    );
+    expect(translate('ja', 'errorHookFailed')).toBe('Git Hookによって操作が拒否されました。');
+  });
+
+  it('uses localized Stage display copy without mixing Git terms', () => {
+    expect(translate('en', 'stageDisplayTitle')).toBe('Stage Display');
+    expect(translate('en', 'stageDisplayDescription')).toBe(
+      'Choose whether Staged and Unstaged files are shown separately.',
+    );
+    expect(translate('ja', 'stageDisplayTitle')).toBe('ステージの表示');
+    expect(translate('ja', 'stageDisplayDescription')).toBe(
+      'ステージ済みと未ステージのファイルを分けて表示するか選択します。',
+    );
+    expect(translate('en', 'stageDisplayShow')).toBe('Show');
+    expect(translate('en', 'stageDisplayHide')).toBe('Hide');
+    expect(translate('ja', 'stageDisplayShow')).toBe('表示する');
+    expect(translate('ja', 'stageDisplayHide')).toBe('表示しない');
   });
 
   it('switches copy, locale formatters, and html lang without remounting', () => {

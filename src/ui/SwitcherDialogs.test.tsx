@@ -238,6 +238,7 @@ describe('BranchSwitcherDialog', () => {
     expect(creation).toHaveTextContent('Create a branch from the current commit and switch to it.');
     const input = within(creation).getByRole('textbox', { name: 'Branch name' });
     expect(input).toHaveFocus();
+    expect(input).not.toHaveAttribute('placeholder');
     await user.type(input, 'feature/new-flow');
     await user.click(within(creation).getByRole('button', { name: 'Review impact' }));
 

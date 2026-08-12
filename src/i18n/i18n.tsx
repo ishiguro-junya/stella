@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 
 import { isMessageKey, MESSAGES, type MessageArgs, type MessageKey } from './messages';
 
@@ -89,7 +89,20 @@ export function translate(language: Language, id: MessageKey, args: MessageArgs 
 }
 
 export function I18nProvider({ language, children }: { language: Language; children: ReactNode }) {
-  const value = useMemo<I18nValue>(() => createI18nValue(language), [language]);
+  const valueRef = useRef<{
+    language: Language;
+    messages: typeof MESSAGES;
+    value: I18nValue;
+  }>(undefined);
+  // 通常renderではContextを安定させ、React Refreshでcatalogが置き換わった時だけ再構築する。
+  if (
+    !valueRef.current ||
+    valueRef.current.language !== language ||
+    valueRef.current.messages !== MESSAGES
+  ) {
+    valueRef.current = { language, messages: MESSAGES, value: createI18nValue(language) };
+  }
+  const { value } = valueRef.current;
 
   useEffect(() => {
     applyDocumentLanguage(language);
