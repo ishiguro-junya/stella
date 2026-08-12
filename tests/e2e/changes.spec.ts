@@ -46,23 +46,29 @@ async function readEditorPosition(): Promise<EditorPosition> {
 
 async function waitForEditorPosition(expectedLine: string): Promise<EditorPosition> {
   let position = await readEditorPosition();
-  await browser.waitUntil(
-    async () => {
-      position = await readEditorPosition();
-      return (
-        position.scrollTop > 0 &&
-        position.activeLine === expectedLine &&
-        position.focused &&
-        position.viewportRatio > 0.2 &&
-        position.viewportRatio < 0.3
-      );
-    },
-    {
-      timeout: 10_000,
-      interval: 50,
-      timeoutMsg: `The editor did not settle at ${expectedLine} above center with focus.`,
-    },
-  );
+  try {
+    await browser.waitUntil(
+      async () => {
+        position = await readEditorPosition();
+        return (
+          position.scrollTop > 0 &&
+          position.activeLine === expectedLine &&
+          position.focused &&
+          position.viewportRatio > 0.2 &&
+          position.viewportRatio < 0.3
+        );
+      },
+      {
+        timeout: 10_000,
+        interval: 50,
+        timeoutMsg: `The editor did not settle at ${expectedLine} above center with focus.`,
+      },
+    );
+  } catch (cause) {
+    throw new Error(`The editor did not settle at ${expectedLine}: ${JSON.stringify(position)}`, {
+      cause,
+    });
+  }
   return position;
 }
 

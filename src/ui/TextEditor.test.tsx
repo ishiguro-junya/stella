@@ -81,20 +81,28 @@ describe('TextEditor', () => {
     const value = lines.join('\n');
     const targetOffset = `${lines.slice(0, 79).join('\n')}\n`.length;
     const scrollIntoView = vi.spyOn(EditorView, 'scrollIntoView');
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function getClientHeight(this: HTMLElement) {
+        return this.classList.contains('editor-test-viewport') ? 480 : 0;
+      });
     const { container } = render(
-      <TextEditor
-        value={value}
-        path="notes.txt"
-        lineEnding="lf"
-        initialScrollLine={80}
-        ariaLabel="Edit notes.txt"
-        onChange={() => undefined}
-        onSave={() => undefined}
-      />,
+      <div className="editor-test-viewport">
+        <TextEditor
+          value={value}
+          path="notes.txt"
+          lineEnding="lf"
+          initialScrollLine={80}
+          ariaLabel="Edit notes.txt"
+          onChange={() => undefined}
+          onSave={() => undefined}
+        />
+      </div>,
     );
+    clientHeight.mockRestore();
 
     expect(container.querySelector('.cm-activeLine')).toHaveTextContent('line-80');
-    expect(scrollIntoView).toHaveBeenCalledWith(targetOffset, { y: 'start', yMargin: 0 });
+    expect(scrollIntoView).toHaveBeenCalledWith(targetOffset, { y: 'start', yMargin: 120 });
     expect(container.querySelector('.cm-content')).toHaveFocus();
   });
 

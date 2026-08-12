@@ -88,6 +88,15 @@ interface LatestCallbacks {
 
 const INITIAL_SCROLL_TOP_RATIO = 0.25;
 
+function resolveInitialScrollViewportHeight(host: HTMLElement): number {
+  let element: HTMLElement | null = host;
+  while (element) {
+    if (element.clientHeight > 0) return element.clientHeight;
+    element = element.parentElement;
+  }
+  return 0;
+}
+
 export function TextEditor({
   value,
   path,
@@ -309,7 +318,8 @@ export function TextEditor({
       ? Math.min(Math.max(Math.trunc(requestedScrollLine), 1), baseState.doc.lines)
       : 1;
     const scrollPosition = baseState.doc.line(scrollLine).from;
-    const scrollTopMargin = host.clientHeight * INITIAL_SCROLL_TOP_RATIO;
+    // Flex layoutの初回計測でEditor自身が0pxでも、初回描画前の位置決めを維持する。
+    const scrollTopMargin = resolveInitialScrollViewportHeight(host) * INITIAL_SCROLL_TOP_RATIO;
     const state = scrollRequested
       ? baseState.update({
           selection: { anchor: scrollPosition },
