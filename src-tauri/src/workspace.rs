@@ -4,7 +4,8 @@ use crate::git::{GitCommand, GitExecutor, GitOutput, RunControl, SequencerAction
 use crate::git_flow;
 use crate::journal::{JournalPhase, JournalStore, OperationJournal, default_journal_directory};
 use crate::model::*;
-use crate::patch::build_line_patch;
+use crate::patch::build_selected_patch;
+use crate::worktree_text::{load_editable_file, save_editable_file};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::ffi::OsString;
@@ -44,7 +45,7 @@ struct WorktreeWriteTarget {
 
 type ActionTargets<'a> = (
     &'a [String],
-    Option<&'a LineSelection>,
+    Option<&'a PatchSelection>,
     fn(&StatusEntry) -> bool,
 );
 
@@ -830,6 +831,55 @@ impl Workspace {
                 sessions.retain(|_, existing| existing.path != path);
                 sessions.insert(session.id.clone(), session);
                 Ok(QueryOutcome::Conflict(Box::new(document)))
+            }
+            Query::FileContents { path } => {
+                validate_path(&path)?;
+                let snapshot = self.snapshot(&repo)?;
+                let entry = snapshot
+                    .entries
+                    .iter()
+                    .find(|entry| entry.path == path)
+                    .ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::InvalidRequest,
+                            "Only files in Changes can be edited",
+                        )
+                        .localized_message(LocalizedMessage::new("fileEditUnavailable"))
+                        .detail("path", path.clone())
+                    })?;
+                if entry.conflict || entry.submodule != "N..." {
+                    return Err(WorkspaceError::new(
+                        ErrorCode::InvalidRequest,
+                        "Conflicted files and submodules cannot be edited here",
+                    )
+                    .localized_message(LocalizedMessage::new("fileEditUnsupported").arg(
+                        "reason",
+                        if entry.conflict {
+                            "conflict"
+                        } else {
+                            "submodule"
+                        },
+                    ))
+                    .detail("path", path)
+                    .detail(
+                        "reason",
+                        if entry.conflict {
+                            "conflict"
+                        } else {
+                            "submodule"
+                        },
+                    ));
+                }
+                let contents = load_editable_file(&self.git, &repo.root, &path, None)?;
+                Ok(QueryOutcome::FileContents(FileDocument {
+                    repo_id: repo.id.clone(),
+                    path,
+                    text: contents.text,
+                    line_ending: contents.line_ending,
+                    has_utf8_bom: contents.has_utf8_bom,
+                    content_hash: contents.content_hash,
+                    repo_generation: snapshot.repo_generation,
+                }))
             }
         }
     }
@@ -2069,6 +2119,7 @@ impl Workspace {
                 "operationId is required",
             ));
         }
+        self.git.ensure_development_build_current()?;
         let repo = self.repo(&request.repo_id)?;
         let control = RunControl::new();
         {
@@ -2442,7 +2493,7 @@ impl Workspace {
         match action {
             Action::Stage { paths, selection } => {
                 let output = if let Some(selection) = selection {
-                    self.reject_lfs_line_selection(repo, &selection.path, control)?;
+                    self.reject_lfs_line_selection(repo, selection.path(), control)?;
                     let patch = self.selected_patch(
                         repo,
                         before,
@@ -2465,7 +2516,7 @@ impl Workspace {
             }
             Action::Unstage { paths, selection } => {
                 let output = if let Some(selection) = selection {
-                    self.reject_lfs_line_selection(repo, &selection.path, control)?;
+                    self.reject_lfs_line_selection(repo, selection.path(), control)?;
                     let patch =
                         self.selected_patch(repo, before, DiffTarget::Staged, selection, control)?;
                     self.apply_patch(repo, &patch, true, true, control)?
@@ -2902,6 +2953,24 @@ impl Workspace {
                     synthetic_output("external-editor"),
                 ))
             }
+            Action::SaveFile {
+                path,
+                text,
+                expected_content_hash,
+            } => {
+                save_editable_file(
+                    &self.git,
+                    &repo.root,
+                    path,
+                    expected_content_hash,
+                    text,
+                    Some(control),
+                )?;
+                Ok((
+                    LocalizedMessage::new("backendFileSaved").arg("path", path.clone()),
+                    synthetic_output("file-save"),
+                ))
+            }
             Action::FileAction { paths, operation } => match operation {
                 FileOperation::MoveToTrash => {
                     let targets = paths
@@ -3099,17 +3168,17 @@ impl Workspace {
         repo: &RepoContext,
         snapshot: &RepoSnapshot,
         target: DiffTarget,
-        selection: &LineSelection,
+        selection: &PatchSelection,
         control: &RunControl,
     ) -> WorkspaceResult<String> {
         let material = self.diff_material(
             repo,
             snapshot,
             target,
-            std::slice::from_ref(&selection.path),
+            &[selection.path().to_owned()],
             Some(control),
         )?;
-        if hash(&material.bytes) != selection.diff_revision {
+        if hash(&material.bytes) != selection.diff_revision() {
             return Err(WorkspaceError::new(
                 ErrorCode::StaleDiff,
                 "The diff changed. Reload it and try again",
@@ -3118,22 +3187,22 @@ impl Workspace {
         if material.truncated || material.bytes.len() > DIFF_LIMIT {
             return Err(WorkspaceError::new(
                 ErrorCode::UnsupportedRepository,
-                "Line selection is unavailable for truncated diffs",
+                "Partial selection is unavailable for truncated diffs",
             ));
         }
         let patch = std::str::from_utf8(&material.bytes).map_err(|_| {
             WorkspaceError::new(
                 ErrorCode::UnsupportedRepository,
-                "Line selection is unavailable for non-UTF-8 diffs",
+                "Partial selection is unavailable for non-UTF-8 diffs",
             )
         })?;
         if patch.contains("GIT binary patch") || patch.contains("Binary files ") {
             return Err(WorkspaceError::new(
                 ErrorCode::UnsupportedRepository,
-                "Line selection is unavailable for binary files or symlinks",
+                "Partial selection is unavailable for binary files or symlinks",
             ));
         }
-        build_line_patch(patch, selection)
+        build_selected_patch(patch, selection)
     }
 
     fn diff_material(
@@ -4735,14 +4804,20 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
             selection: Some(selection),
             ..
         } => {
-            validate_path(&selection.path)?;
-            if selection.diff_revision.is_empty()
-                || selection.start_line == 0
-                || selection.end_line < selection.start_line
-            {
+            validate_path(selection.path())?;
+            let invalid = selection.diff_revision().is_empty()
+                || matches!(
+                    selection,
+                    PatchSelection::Lines {
+                        start_line,
+                        end_line,
+                        ..
+                    } if *start_line == 0 || end_line < start_line
+                );
+            if invalid {
                 return Err(WorkspaceError::new(
                     ErrorCode::InvalidRequest,
-                    "Invalid line selection",
+                    "Invalid partial selection",
                 ));
             }
         }
@@ -4762,6 +4837,15 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
         ));
     }
     match action {
+        Action::SaveFile {
+            expected_content_hash,
+            ..
+        } if expected_content_hash.is_empty() => {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The expected content hash is required",
+            ));
+        }
         Action::Fetch { remote } | Action::Pull { remote, .. } | Action::Push { remote, .. } => {
             validate_remote(remote)?
         }
@@ -4815,6 +4899,29 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
 }
 
 fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> WorkspaceResult<()> {
+    if let Action::SaveFile { path, .. } = action {
+        let entry = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == *path)
+            .ok_or_else(|| {
+                WorkspaceError::new(
+                    ErrorCode::InvalidRequest,
+                    "Only files in Changes can be edited",
+                )
+                .localized_message(LocalizedMessage::new("fileEditUnavailable"))
+                .detail("path", path.clone())
+            })?;
+        if entry.conflict || entry.submodule != "N..." {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The selected entry cannot be edited",
+            )
+            .localized_message(LocalizedMessage::new("fileEditUnsupported"))
+            .detail("path", path.clone()));
+        }
+        return Ok(());
+    }
     if let Action::FileAction { paths, operation } = action {
         if paths.is_empty() {
             return Err(WorkspaceError::new(
@@ -4872,12 +4979,12 @@ fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> Workspac
     if selection.is_some() && !paths.is_empty() {
         return Err(WorkspaceError::new(
             ErrorCode::InvalidRequest,
-            "Line selection and paths cannot be specified together",
+            "Partial selection and paths cannot be specified together",
         ));
     }
     let targets: Vec<&str> = selection.map_or_else(
         || paths.iter().map(String::as_str).collect(),
-        |selection| vec![selection.path.as_str()],
+        |selection| vec![selection.path()],
     );
     if targets.is_empty() {
         return Err(WorkspaceError::new(
@@ -5096,11 +5203,12 @@ fn action_paths(action: &Action) -> Vec<String> {
         } => {
             let mut output = paths.clone();
             if let Some(selection) = selection {
-                output.push(selection.path.clone());
+                output.push(selection.path().to_owned());
             }
             output
         }
         Action::FileAction { paths, .. } => paths.clone(),
+        Action::SaveFile { path, .. } => vec![path.clone()],
         Action::GitFlow { request } if request.shared => vec![".gitflow".into()],
         _ => Vec::new(),
     }
@@ -5210,6 +5318,7 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::ConflictMarkResolved { .. } => "actionMarkConflictResolved",
         Action::ConflictMaterialize { .. } => "actionApplyConflictSide",
         Action::ConflictOpenExternal { .. } => "actionOpenConflictExternally",
+        Action::SaveFile { .. } => "actionSaveFile",
         Action::FileAction { operation, .. } => match operation {
             FileOperation::MoveToTrash => "actionMoveFileToTrash",
             FileOperation::RevealInFinder => "actionShowInFinder",
@@ -6328,7 +6437,7 @@ mod tests {
                 expected_generation: session.snapshot.repo_generation,
                 action: Action::Stage {
                     paths: Vec::new(),
-                    selection: Some(LineSelection {
+                    selection: Some(PatchSelection::Lines {
                         path: "f.txt".into(),
                         diff_revision: diff.diff_revision,
                         side: SelectionSide::Additions,
@@ -6345,6 +6454,147 @@ mod tests {
         assert!(staged.contains("+new-a"));
         assert!(!staged.contains("+new-b"));
         assert!(!staged.contains("-old"));
+    }
+
+    #[test]
+    fn selected_hunk_is_staged_and_unstaged_as_one_atomic_change() {
+        let fixture = GitFixture::new();
+        let base = "start\nold-a\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nold-b\nend\n";
+        let changed = "start\nnew-a\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nnew-b\nend\n";
+        fixture.write("f.txt", base);
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.write("f.txt", changed);
+
+        let workspace = fixture.workspace();
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let unstaged_diff = match workspace
+            .query(QueryRequest {
+                repo_id: session.repo_id.clone(),
+                query: Query::Diff {
+                    target: DiffTarget::Unstaged,
+                    paths: vec!["f.txt".into()],
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::Diff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        let staged_outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "stage-second-hunk".into(),
+                repo_id: session.repo_id.clone(),
+                expected_generation: session.snapshot.repo_generation,
+                action: Action::Stage {
+                    paths: Vec::new(),
+                    selection: Some(PatchSelection::Hunk {
+                        path: "f.txt".into(),
+                        diff_revision: unstaged_diff.diff_revision,
+                        hunk_index: 1,
+                    }),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        let staged = fixture.git_output(&["diff", "--cached", "--", "f.txt"]);
+        assert!(staged.contains("-old-b"));
+        assert!(staged.contains("+new-b"));
+        assert!(!staged.contains("old-a"));
+        assert!(!staged.contains("new-a"));
+
+        let staged_diff = match workspace
+            .query(QueryRequest {
+                repo_id: session.repo_id.clone(),
+                query: Query::Diff {
+                    target: DiffTarget::Staged,
+                    paths: vec!["f.txt".into()],
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::Diff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        let unstaged_outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "unstage-only-hunk".into(),
+                repo_id: session.repo_id.clone(),
+                expected_generation: staged_outcome.repo_generation,
+                action: Action::Unstage {
+                    paths: Vec::new(),
+                    selection: Some(PatchSelection::Hunk {
+                        path: "f.txt".into(),
+                        diff_revision: staged_diff.diff_revision,
+                        hunk_index: 0,
+                    }),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert!(
+            fixture
+                .git_output(&["diff", "--cached", "--", "f.txt"])
+                .is_empty()
+        );
+        let unstaged = fixture.git_output(&["diff", "--", "f.txt"]);
+        assert!(unstaged.contains("-old-a"));
+        assert!(unstaged.contains("+new-a"));
+        assert!(unstaged.contains("-old-b"));
+        assert!(unstaged.contains("+new-b"));
+
+        let discard_diff = match workspace
+            .query(QueryRequest {
+                repo_id: session.repo_id.clone(),
+                query: Query::Diff {
+                    target: DiffTarget::Unstaged,
+                    paths: vec!["f.txt".into()],
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::Diff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        let discard_action = Action::Discard {
+            paths: Vec::new(),
+            target: DiscardTarget::Unstaged,
+            selection: Some(PatchSelection::Hunk {
+                path: "f.txt".into(),
+                diff_revision: discard_diff.diff_revision,
+                hunk_index: 1,
+            }),
+        };
+        let discard_preview = workspace
+            .preview(PreviewRequest {
+                repo_id: session.repo_id.clone(),
+                expected_generation: unstaged_outcome.repo_generation,
+                action: discard_action.clone(),
+            })
+            .unwrap();
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "discard-second-hunk".into(),
+                repo_id: session.repo_id,
+                expected_generation: unstaged_outcome.repo_generation,
+                action: discard_action,
+                confirmation_token: discard_preview.confirmation_token,
+            })
+            .unwrap();
+
+        let after_discard = fs::read_to_string(fixture.repo.join("f.txt")).unwrap();
+        assert!(after_discard.contains("new-a"));
+        assert!(after_discard.contains("old-b"));
+        assert!(!after_discard.contains("new-b"));
     }
 
     #[test]
@@ -6380,7 +6630,7 @@ mod tests {
                 expected_generation: text_diff.repo_generation,
                 action: Action::Stage {
                     paths: Vec::new(),
-                    selection: Some(LineSelection {
+                    selection: Some(PatchSelection::Lines {
                         path: "new.txt".into(),
                         diff_revision: text_diff.diff_revision,
                         side: SelectionSide::Additions,
@@ -10002,7 +10252,7 @@ mod tests {
                 repo_id: attached.repo_id,
                 expected_generation: attached.snapshot.repo_generation,
                 action: Action::Commit {
-                    input: ConventionalCommitInput {
+                    input: CommitInput::Conventional {
                         commit_type: "feat".into(),
                         scope: None,
                         breaking: false,
@@ -10838,6 +11088,278 @@ mod tests {
         );
     }
 
+    #[test]
+    fn file_contents_and_save_preserve_bom_crlf_and_the_staged_index() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = GitFixture::new();
+        fs::write(fixture.repo.join("note.txt"), b"\xEF\xBB\xBFbase\r\n").unwrap();
+        fixture.git(&["add", "--", "note.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fs::write(fixture.repo.join("note.txt"), b"\xEF\xBB\xBFstaged\r\n").unwrap();
+        fs::set_permissions(
+            fixture.repo.join("note.txt"),
+            fs::Permissions::from_mode(0o744),
+        )
+        .unwrap();
+        fixture.git(&["add", "--", "note.txt"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let document = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::FileContents {
+                    path: "note.txt".into(),
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::FileContents(document) => document,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert_eq!(document.text, "staged\r\n");
+        assert_eq!(document.line_ending, LineEnding::Crlf);
+        assert!(document.has_utf8_bom);
+
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "save-file".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::SaveFile {
+                    path: "note.txt".into(),
+                    text: "saved\nline\n".into(),
+                    expected_content_hash: document.content_hash,
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert_eq!(
+            fs::read(fixture.repo.join("note.txt")).unwrap(),
+            b"\xEF\xBB\xBFsaved\r\nline\r\n"
+        );
+        assert_eq!(fixture.git_output(&["show", ":note.txt"]), "\u{feff}staged");
+        assert_eq!(
+            fs::metadata(fixture.repo.join("note.txt"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o744
+        );
+    }
+
+    #[test]
+    fn file_contents_supports_untracked_and_renamed_current_paths() {
+        let fixture = GitFixture::new();
+        fixture.write("before.txt", "before\n");
+        fixture.git(&["add", "--", "before.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.git(&["mv", "--", "before.txt", "after.txt"]);
+        fixture.write("new.txt", "new\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        for (path, expected) in [("after.txt", "before\n"), ("new.txt", "new\n")] {
+            let result = workspace
+                .query(QueryRequest {
+                    repo_id: attached.repo_id.clone(),
+                    query: Query::FileContents { path: path.into() },
+                })
+                .unwrap();
+            let QueryOutcome::FileContents(document) = result else {
+                panic!("unexpected query outcome: {result:?}");
+            };
+            assert_eq!(document.path, path);
+            assert_eq!(document.text, expected);
+        }
+    }
+
+    #[test]
+    fn save_file_rejects_an_external_change_and_preserves_it() {
+        let fixture = GitFixture::new();
+        fixture.write("note.txt", "base\n");
+        fixture.git(&["add", "--", "note.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.write("note.txt", "opened\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let QueryOutcome::FileContents(document) = workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::FileContents {
+                    path: "note.txt".into(),
+                },
+            })
+            .unwrap()
+        else {
+            panic!("expected file contents");
+        };
+        fixture.write("note.txt", "external\n");
+
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "stale-file-save".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::SaveFile {
+                    path: "note.txt".into(),
+                    text: "draft\n".into(),
+                    expected_content_hash: document.content_hash,
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::StaleGeneration);
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("note.txt")).unwrap(),
+            "external\n"
+        );
+    }
+
+    #[test]
+    fn file_contents_rejects_unsupported_text_encodings_and_limits() {
+        let fixture = GitFixture::new();
+        fs::write(fixture.repo.join("mixed.txt"), b"a\r\nb\n").unwrap();
+        fs::write(fixture.repo.join("nul.txt"), b"a\0b").unwrap();
+        fs::write(fixture.repo.join("non-utf8.txt"), [0xff, 0xfe]).unwrap();
+        fs::write(
+            fixture.repo.join("long.txt"),
+            vec![b'a'; crate::worktree_text::MAX_EDIT_LONGEST_LINE + 1],
+        )
+        .unwrap();
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        for (path, reason) in [
+            ("mixed.txt", "lineEndings"),
+            ("nul.txt", "nul"),
+            ("non-utf8.txt", "nonUtf8"),
+            ("long.txt", "tooLarge"),
+        ] {
+            let error = workspace
+                .query(QueryRequest {
+                    repo_id: attached.repo_id.clone(),
+                    query: Query::FileContents { path: path.into() },
+                })
+                .unwrap_err();
+            assert_eq!(
+                error.details.get("reason").map(String::as_str),
+                Some(reason),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn file_contents_rejects_clean_and_symlink_entries() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = GitFixture::new();
+        fixture.write("clean.txt", "clean\n");
+        fixture.git(&["add", "--", "clean.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        symlink("clean.txt", fixture.repo.join("link.txt")).unwrap();
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let clean_error = workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::FileContents {
+                    path: "clean.txt".into(),
+                },
+            })
+            .unwrap_err();
+        assert_eq!(clean_error.localized_message.id, "fileEditUnavailable");
+
+        let link_error = workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id,
+                query: Query::FileContents {
+                    path: "link.txt".into(),
+                },
+            })
+            .unwrap_err();
+        assert_eq!(
+            link_error.details.get("reason").map(String::as_str),
+            Some("symlink")
+        );
+    }
+
+    #[test]
+    fn plain_commit_input_creates_an_ordinary_git_commit() {
+        let fixture = GitFixture::new();
+        fixture.write("message.txt", "plain\n");
+        fixture.git(&["add", "--", "message.txt"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "plain-commit".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Commit {
+                    input: CommitInput::Plain {
+                        message: "  日本語の通常メッセージ  ".into(),
+                    },
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert_eq!(
+            fixture.git_output(&["log", "-1", "--pretty=%B"]).trim(),
+            "日本語の通常メッセージ"
+        );
+    }
+
     struct GitFixture {
         temp: TempDir,
         repo: PathBuf,
@@ -11016,7 +11538,7 @@ mod tests {
 
     fn conventional_commit_action(description: &str) -> Action {
         Action::Commit {
-            input: ConventionalCommitInput {
+            input: CommitInput::Conventional {
                 commit_type: "feat".into(),
                 scope: None,
                 breaking: false,

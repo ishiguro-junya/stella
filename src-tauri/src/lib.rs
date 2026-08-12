@@ -11,6 +11,7 @@ mod patch;
 mod repository_logo;
 mod toolchain;
 mod workspace;
+mod worktree_text;
 
 pub use model::*;
 pub use workspace::{
@@ -41,8 +42,11 @@ pub fn run() {
                 app.path().app_config_dir()?,
                 app.path().resource_dir()?,
             );
-            let workspace =
-                Workspace::with_git(manager.executor()).map_err(|error| error.to_string())?;
+            let executor = manager
+                .executor()
+                .guard_development_build()
+                .map_err(|error| error.to_string())?;
+            let workspace = Workspace::with_git(executor).map_err(|error| error.to_string())?;
             app.manage(Arc::new(workspace));
             app.manage(manager);
             Ok(())

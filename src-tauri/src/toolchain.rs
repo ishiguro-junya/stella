@@ -3,15 +3,33 @@ use crate::model::{ErrorCode, WorkspaceError, WorkspaceResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::io::Read;
+use std::os::unix::ffi::OsStringExt;
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
+use std::thread;
+use std::time::{Duration, Instant};
 
 const SETTINGS_FILE: &str = "toolchain.json";
 const BUNDLED_DIRECTORY: &str = "toolchain";
 const SEARCH_DIRECTORIES: [&str; 3] = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
+const SYSTEM_FALLBACK_DIRECTORIES: [&str; 5] = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+];
+const SHELL_PATH_TIMEOUT: Duration = Duration::from_secs(2);
+const SHELL_OUTPUT_LIMIT: u64 = 64 * 1024;
+const SHELL_PATH_START_MARKER: &[u8] = b"__STELLA_PATH_BEGIN_7CBAF26E__";
+const SHELL_PATH_END_MARKER: &[u8] = b"__STELLA_PATH_END_7CBAF26E__";
+const SHELL_PATH_COMMAND: &str = "/usr/bin/printf '%s' '__STELLA_PATH_BEGIN_7CBAF26E__'; /usr/bin/printenv PATH; /usr/bin/printf '%s' '__STELLA_PATH_END_7CBAF26E__'";
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -121,27 +139,27 @@ struct ResolvedToolchain {
 }
 
 impl ResolvedToolchain {
-    fn executor(&self) -> GitExecutor {
+    fn executor(&self, active_system_path: Option<&OsStr>) -> GitExecutor {
         let git_path = self
             .git
             .path_buf()
             .unwrap_or_else(|| PathBuf::from("/nonexistent/stella-git"));
         let mut environment = Vec::<(OsString, OsString)>::new();
-        let executable_directories = match &self.root {
-            Some(root) => vec![
-                root.join("bin"),
-                PathBuf::from("/usr/bin"),
-                PathBuf::from("/bin"),
-                PathBuf::from("/usr/sbin"),
-                PathBuf::from("/sbin"),
-            ],
-            None => SEARCH_DIRECTORIES
-                .into_iter()
-                .map(PathBuf::from)
-                .chain([PathBuf::from("/bin"), PathBuf::from("/usr/sbin")])
-                .collect(),
+        let path = match &self.root {
+            Some(root) => join_search_path(
+                [
+                    root.join("bin"),
+                    PathBuf::from("/usr/bin"),
+                    PathBuf::from("/bin"),
+                    PathBuf::from("/usr/sbin"),
+                    PathBuf::from("/sbin"),
+                ]
+                .into_iter(),
+            ),
+            None => active_system_path
+                .map(OsStr::to_os_string)
+                .unwrap_or_else(fixed_system_path),
         };
-        let path = join_search_path(executable_directories.into_iter());
         environment.push(("PATH".into(), path));
 
         if let Some(root) = &self.root {
@@ -204,26 +222,44 @@ pub struct ToolchainManager {
     resource_directory: PathBuf,
     selected_mode: Mutex<ToolchainMode>,
     active: ResolvedToolchain,
+    active_system_path: Option<OsString>,
 }
 
 impl ToolchainManager {
     pub fn load(config_directory: PathBuf, resource_directory: PathBuf) -> Self {
+        Self::load_with_system_path_resolver(
+            config_directory,
+            resource_directory,
+            resolve_active_system_path,
+        )
+    }
+
+    fn load_with_system_path_resolver(
+        config_directory: PathBuf,
+        resource_directory: PathBuf,
+        system_path_resolver: impl FnOnce(&ResolvedToolchain) -> OsString,
+    ) -> Self {
         let settings_path = config_directory.join(SETTINGS_FILE);
         let selected_mode = read_settings(&settings_path).toolchain_mode;
-        let active = match selected_mode {
-            ToolchainMode::Bundled => resolve_bundled(&resource_directory),
-            ToolchainMode::System => resolve_system(),
+        let (active, active_system_path) = match selected_mode {
+            ToolchainMode::Bundled => (resolve_bundled(&resource_directory), None),
+            ToolchainMode::System => {
+                let active = resolve_system();
+                let path = system_path_resolver(&active);
+                (active, Some(path))
+            }
         };
         Self {
             settings_path,
             resource_directory,
             selected_mode: Mutex::new(selected_mode),
             active,
+            active_system_path,
         }
     }
 
     pub(crate) fn executor(&self) -> GitExecutor {
-        self.active.executor()
+        self.active.executor(self.active_system_path.as_deref())
     }
 
     pub fn status(&self) -> ToolchainStatus {
@@ -376,6 +412,152 @@ fn find_component(name: &str, args: &[&str]) -> ToolchainComponentStatus {
     )
 }
 
+fn resolve_active_system_path(resolved: &ResolvedToolchain) -> OsString {
+    let shell = configured_login_shell();
+    resolve_system_path_for_shell(resolved, &shell, SHELL_PATH_TIMEOUT)
+}
+
+fn resolve_system_path_for_shell(
+    resolved: &ResolvedToolchain,
+    shell: &Path,
+    timeout: Duration,
+) -> OsString {
+    resolve_login_shell_path(shell, timeout)
+        .and_then(|shell_path| system_path_with_shell(resolved, &shell_path))
+        .unwrap_or_else(fixed_system_path)
+}
+
+fn configured_login_shell() -> PathBuf {
+    let configured = std::env::var_os("SHELL");
+    select_login_shell(configured.as_deref())
+}
+
+fn select_login_shell(configured: Option<&OsStr>) -> PathBuf {
+    configured
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute() && is_executable_file(path))
+        .unwrap_or_else(|| PathBuf::from("/bin/zsh"))
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    fs::metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+fn resolve_login_shell_path(shell: &Path, timeout: Duration) -> Option<OsString> {
+    if !shell.is_absolute() || !is_executable_file(shell) {
+        return None;
+    }
+    let mut child = Command::new(shell)
+        .args(["-l", "-i", "-c", SHELL_PATH_COMMAND])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .ok()?;
+    let Some(stdout) = child.stdout.take() else {
+        terminate_process_group(&mut child);
+        return None;
+    };
+    let reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        stdout
+            .take(SHELL_OUTPUT_LIMIT)
+            .read_to_end(&mut output)
+            .ok()
+            .map(|_| output)
+    });
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                terminate_remaining_process_group(&child);
+                break Some(status);
+            }
+            Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(10)),
+            Ok(None) | Err(_) => {
+                terminate_process_group(&mut child);
+                break None;
+            }
+        }
+    };
+    let output = reader.join().ok().flatten()?;
+    status
+        .filter(|status| status.success())
+        .and_then(|_| parse_shell_path_output(&output))
+}
+
+fn parse_shell_path_output(output: &[u8]) -> Option<OsString> {
+    let start = find_bytes(output, SHELL_PATH_START_MARKER)? + SHELL_PATH_START_MARKER.len();
+    let end = find_bytes(&output[start..], SHELL_PATH_END_MARKER)? + start;
+    let path = output[start..end]
+        .strip_suffix(b"\r\n")
+        .or_else(|| output[start..end].strip_suffix(b"\n"))
+        .or_else(|| output[start..end].strip_suffix(b"\r"))
+        .unwrap_or(&output[start..end]);
+    (!path.is_empty()).then(|| OsString::from_vec(path.to_vec()))
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn terminate_remaining_process_group(child: &std::process::Child) {
+    let group = format!("-{}", child.id());
+    let _ = Command::new("/bin/kill")
+        .args(["-KILL", group.as_str()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+fn terminate_process_group(child: &mut std::process::Child) {
+    let group = format!("-{}", child.id());
+    let _ = Command::new("/bin/kill")
+        .args(["-TERM", group.as_str()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    for _ in 0..10 {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(_) => break,
+        }
+    }
+    terminate_remaining_process_group(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn system_path_with_shell(resolved: &ResolvedToolchain, shell_path: &OsStr) -> Option<OsString> {
+    let component_directories = [&resolved.git, &resolved.git_lfs, &resolved.git_flow]
+        .into_iter()
+        .filter_map(ToolchainComponentStatus::path_buf)
+        .filter_map(|path| path.parent().map(Path::to_path_buf));
+    let shell_directories = std::env::split_paths(shell_path)
+        .filter(|path| path.is_absolute() && path.is_dir())
+        .collect::<Vec<_>>();
+    if shell_directories.is_empty() {
+        return None;
+    }
+    let standard_directories = SYSTEM_FALLBACK_DIRECTORIES.into_iter().map(PathBuf::from);
+    Some(join_search_path(
+        component_directories
+            .chain(shell_directories)
+            .chain(standard_directories),
+    ))
+}
+
+fn fixed_system_path() -> OsString {
+    join_search_path(SYSTEM_FALLBACK_DIRECTORIES.into_iter().map(PathBuf::from))
+}
+
 fn join_search_path(directories: impl Iterator<Item = PathBuf>) -> OsString {
     let mut values = Vec::new();
     for directory in directories {
@@ -430,7 +612,36 @@ pub fn toolchain_set_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use tempfile::TempDir;
+
+    fn write_executable(path: &Path, contents: impl AsRef<[u8]>) {
+        fs::write(path, contents).unwrap();
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+
+    fn available_component(path: &Path) -> ToolchainComponentStatus {
+        ToolchainComponentStatus {
+            available: true,
+            path: Some(path.display().to_string()),
+            version: Some("test version".into()),
+            error: None,
+        }
+    }
+
+    fn system_toolchain(git_path: &Path) -> ResolvedToolchain {
+        let unavailable = ToolchainComponentStatus::missing(None, "missing");
+        ResolvedToolchain {
+            mode: ToolchainMode::System,
+            root: None,
+            git: available_component(git_path),
+            git_lfs: unavailable.clone(),
+            git_flow: unavailable,
+            gpg_available: false,
+        }
+    }
 
     fn write_required_bundled_components(directory: &Path) {
         for required in [
@@ -501,6 +712,171 @@ mod tests {
     }
 
     #[test]
+    fn shell_path_is_extracted_between_markers_despite_startup_output() {
+        let mut output = b"startup output\n".to_vec();
+        output.extend_from_slice(SHELL_PATH_START_MARKER);
+        output.extend_from_slice(b"/custom/bin:/usr/bin\r\n");
+        output.extend_from_slice(SHELL_PATH_END_MARKER);
+        output.extend_from_slice(b"\nafter output\n");
+
+        assert_eq!(
+            parse_shell_path_output(&output),
+            Some(OsString::from("/custom/bin:/usr/bin"))
+        );
+        assert!(parse_shell_path_output(b"startup output only").is_none());
+    }
+
+    #[test]
+    fn system_path_prioritizes_components_then_normalized_shell_directories() {
+        let directory = TempDir::new().unwrap();
+        let git_directory = directory.path().join("selected-git");
+        let shell_directory = directory.path().join("shell-bin");
+        fs::create_dir_all(&git_directory).unwrap();
+        fs::create_dir_all(&shell_directory).unwrap();
+        let resolved = system_toolchain(&git_directory.join("git"));
+        let shell_path = OsString::from(format!(
+            ":relative:{}:{}:{}",
+            shell_directory.display(),
+            git_directory.display(),
+            shell_directory.display()
+        ));
+
+        let path = system_path_with_shell(&resolved, &shell_path).unwrap();
+        let parts = std::env::split_paths(&path).collect::<Vec<_>>();
+        assert_eq!(parts[0], git_directory);
+        assert_eq!(parts[1], shell_directory);
+        assert_eq!(parts.iter().filter(|path| *path == &parts[0]).count(), 1);
+        assert!(parts.iter().all(|path| path.is_absolute()));
+        assert!(parts.contains(&PathBuf::from("/usr/bin")));
+    }
+
+    #[test]
+    fn login_shell_path_resolution_uses_markers_and_login_interactive_flags() {
+        let directory = TempDir::new().unwrap();
+        let expected = directory.path().join("shell-bin");
+        fs::create_dir_all(&expected).unwrap();
+        let shell = directory.path().join("fake-shell");
+        write_executable(
+            &shell,
+            format!(
+                "#!/bin/sh\n[ \"$1\" = -l ] || exit 10\n[ \"$2\" = -i ] || exit 11\n[ \"$3\" = -c ] || exit 12\nprintf 'startup output\\n'\nPATH='{}:/usr/bin:/bin'\nexport PATH\nexec /bin/sh -c \"$4\"\n",
+                expected.display()
+            ),
+        );
+
+        let path = resolve_login_shell_path(&shell, Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            std::env::split_paths(&path).next().as_deref(),
+            Some(expected.as_path())
+        );
+    }
+
+    #[test]
+    fn login_shell_selection_requires_an_absolute_executable() {
+        let directory = TempDir::new().unwrap();
+        let executable = directory.path().join("shell");
+        let non_executable = directory.path().join("not-executable");
+        write_executable(&executable, "#!/bin/sh\n");
+        fs::write(&non_executable, "#!/bin/sh\n").unwrap();
+
+        assert_eq!(select_login_shell(Some(executable.as_os_str())), executable);
+        assert_eq!(
+            select_login_shell(Some(non_executable.as_os_str())),
+            Path::new("/bin/zsh")
+        );
+        assert_eq!(
+            select_login_shell(Some(OsStr::new("relative-shell"))),
+            Path::new("/bin/zsh")
+        );
+        assert_eq!(select_login_shell(None), Path::new("/bin/zsh"));
+    }
+
+    #[test]
+    fn failed_shell_path_resolution_uses_the_fixed_system_path() {
+        let directory = TempDir::new().unwrap();
+        let shell = directory.path().join("fake-shell");
+        write_executable(
+            &shell,
+            "#!/bin/sh\nPATH='relative'\nexport PATH\nexec /bin/sh -c \"$4\"\n",
+        );
+        let resolved = system_toolchain(Path::new("/usr/bin/git"));
+
+        assert_eq!(
+            resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(1)),
+            fixed_system_path()
+        );
+
+        write_executable(&shell, "#!/bin/sh\nexit 1\n");
+        assert_eq!(
+            resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(1)),
+            fixed_system_path()
+        );
+    }
+
+    #[test]
+    fn shell_path_timeout_terminates_its_process_group() {
+        let directory = TempDir::new().unwrap();
+        let child_pid = directory.path().join("child.pid");
+        let shell = directory.path().join("fake-shell");
+        write_executable(
+            &shell,
+            format!(
+                "#!/bin/sh\n/bin/sleep 30 &\nprintf '%s' \"$!\" > '{}'\nwait\n",
+                child_pid.display()
+            ),
+        );
+
+        assert!(resolve_login_shell_path(&shell, SHELL_PATH_TIMEOUT).is_none());
+        assert!(child_pid.is_file());
+        let pid = fs::read_to_string(child_pid).unwrap();
+        let mut alive = true;
+        for _ in 0..100 {
+            alive = Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success());
+            if !alive {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!alive, "login shell child survived timeout");
+    }
+
+    #[test]
+    fn bundled_mode_does_not_resolve_the_login_shell_path() {
+        let directory = TempDir::new().unwrap();
+        ToolchainManager::load_with_system_path_resolver(
+            directory.path().join("config"),
+            directory.path().join("resources"),
+            |_| panic!("System PATH resolver must not run in bundled mode"),
+        );
+    }
+
+    #[test]
+    fn system_mode_resolves_its_path_once_during_load() {
+        let directory = TempDir::new().unwrap();
+        let config = directory.path().join("config");
+        let settings = config.join(SETTINGS_FILE);
+        write_settings(&settings, ToolchainMode::System).unwrap();
+        let calls = Cell::new(0);
+        let manager = ToolchainManager::load_with_system_path_resolver(
+            config,
+            directory.path().join("resources"),
+            |_| {
+                calls.set(calls.get() + 1);
+                fixed_system_path()
+            },
+        );
+        let _ = manager.executor();
+        let _ = manager.executor();
+
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
     fn component_probe_reports_a_missing_executable() {
         let status = ToolchainComponentStatus::probe(
             PathBuf::from("/definitely/missing/stella-git"),
@@ -526,7 +902,7 @@ mod tests {
             git_flow: unavailable,
             gpg_available: false,
         };
-        let executor = resolved.executor();
+        let executor = resolved.executor(None);
         let directory = TempDir::new().unwrap();
         executor
             .run(
@@ -558,6 +934,92 @@ mod tests {
             )
             .unwrap();
         assert!(!output.success());
+    }
+
+    #[test]
+    fn git_hook_can_resolve_a_command_from_the_login_shell_path() {
+        let directory = TempDir::new().unwrap();
+        let bin = directory.path().join("shell-bin");
+        fs::create_dir_all(&bin).unwrap();
+        write_executable(
+            &bin.join("stella-hook-tool"),
+            "#!/bin/sh\nprintf 'hook reached shell PATH\\n'\n",
+        );
+        let shell = directory.path().join("fake-shell");
+        write_executable(
+            &shell,
+            format!(
+                "#!/bin/sh\nprintf 'startup output\\n'\nPATH='{}:/usr/bin:/bin'\nexport PATH\nexec /bin/sh -c \"$4\"\n",
+                bin.display()
+            ),
+        );
+        let resolved = system_toolchain(Path::new("/usr/bin/git"));
+        let active_path = resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(1));
+        let executor = resolved.executor(Some(&active_path));
+        let repo = directory.path().join("repo");
+        executor
+            .run(
+                None,
+                crate::git::GitCommand::Init {
+                    path: repo.clone(),
+                    initial_branch: "main".into(),
+                },
+                None,
+                None,
+            )
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+        for (key, value) in [
+            ("user.name", "Stella Test"),
+            ("user.email", "test@localhost"),
+        ] {
+            assert!(
+                Command::new("/usr/bin/git")
+                    .args(["config", key, value])
+                    .current_dir(&repo)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        let hook = repo.join(".git/hooks/commit-msg");
+        write_executable(
+            &hook,
+            "#!/bin/sh\nstella-hook-tool > hook-path-result.txt\n",
+        );
+        fs::write(repo.join("file.txt"), "content\n").unwrap();
+        executor
+            .run(
+                Some(&repo),
+                crate::git::GitCommand::Add {
+                    paths: vec!["file.txt".into()],
+                },
+                None,
+                None,
+            )
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+        let message = directory.path().join("message.txt");
+        fs::write(&message, "test: shell path\n").unwrap();
+        executor
+            .run(
+                Some(&repo),
+                crate::git::GitCommand::Commit {
+                    message_file: message,
+                },
+                None,
+                None,
+            )
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.join("hook-path-result.txt")).unwrap(),
+            "hook reached shell PATH\n"
+        );
     }
 
     #[test]

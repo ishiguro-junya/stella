@@ -111,6 +111,9 @@ pub enum Query {
     Conflict {
         path: String,
     },
+    FileContents {
+        path: String,
+    },
 }
 
 const fn default_history_limit() -> u32 {
@@ -126,13 +129,34 @@ pub enum DiffTarget {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LineSelection {
-    pub path: String,
-    pub diff_revision: String,
-    pub side: SelectionSide,
-    pub start_line: u32,
-    pub end_line: u32,
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum PatchSelection {
+    Lines {
+        path: String,
+        diff_revision: String,
+        side: SelectionSide,
+        start_line: u32,
+        end_line: u32,
+    },
+    Hunk {
+        path: String,
+        diff_revision: String,
+        hunk_index: u32,
+    },
+}
+
+impl PatchSelection {
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Lines { path, .. } | Self::Hunk { path, .. } => path,
+        }
+    }
+
+    pub fn diff_revision(&self) -> &str {
+        match self {
+            Self::Lines { diff_revision, .. } | Self::Hunk { diff_revision, .. } => diff_revision,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -158,6 +182,7 @@ pub enum QueryOutcome {
     GitFlowOverview(GitFlowOverview),
     CommitDetails(CommitDetails),
     Conflict(Box<ConflictDocument>),
+    FileContents(FileDocument),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,20 +265,20 @@ pub enum Action {
     Stage {
         #[serde(default)]
         paths: Vec<String>,
-        selection: Option<LineSelection>,
+        selection: Option<PatchSelection>,
     },
     Unstage {
         #[serde(default)]
         paths: Vec<String>,
-        selection: Option<LineSelection>,
+        selection: Option<PatchSelection>,
     },
     Discard {
         paths: Vec<String>,
         target: DiscardTarget,
-        selection: Option<LineSelection>,
+        selection: Option<PatchSelection>,
     },
     Commit {
-        input: ConventionalCommitInput,
+        input: CommitInput,
     },
     Fetch {
         remote: String,
@@ -336,6 +361,11 @@ pub enum Action {
         conflict_generation: String,
         editor: ExternalEditor,
     },
+    SaveFile {
+        path: String,
+        text: String,
+        expected_content_hash: String,
+    },
     FileAction {
         paths: Vec<String>,
         operation: FileOperation,
@@ -387,6 +417,7 @@ impl Action {
             Self::ConflictMarkResolved { .. } => "conflictMarkResolved",
             Self::ConflictMaterialize { .. } => "conflictMaterialize",
             Self::ConflictOpenExternal { .. } => "conflictOpenExternal",
+            Self::SaveFile { .. } => "saveFile",
             Self::FileAction { .. } => "fileAction",
         }
     }
@@ -549,16 +580,21 @@ pub enum ResetMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ConventionalCommitInput {
-    #[serde(rename = "type")]
-    pub commit_type: String,
-    pub scope: Option<String>,
-    pub breaking: bool,
-    pub description: String,
-    pub body: Option<String>,
-    #[serde(default)]
-    pub footers: Vec<CommitFooter>,
+#[serde(rename_all = "camelCase", tag = "format")]
+pub enum CommitInput {
+    Plain {
+        message: String,
+    },
+    Conventional {
+        #[serde(rename = "type")]
+        commit_type: String,
+        scope: Option<String>,
+        breaking: bool,
+        description: String,
+        body: Option<String>,
+        #[serde(default)]
+        footers: Vec<CommitFooter>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -864,6 +900,18 @@ pub struct ConflictResult {
 pub enum LineEnding {
     Lf,
     Crlf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDocument {
+    pub repo_id: String,
+    pub path: String,
+    pub text: String,
+    pub line_ending: LineEnding,
+    pub has_utf8_bom: bool,
+    pub content_hash: String,
+    pub repo_generation: RepoGeneration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1321,6 +1369,46 @@ mod tests {
                 "kind": "fileAction",
                 "paths": ["src/app.ts"],
                 "operation": "revealInFinder"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Action::Commit {
+                input: CommitInput::Plain {
+                    message: "ordinary message".into(),
+                },
+            })
+            .unwrap(),
+            json!({
+                "kind": "commit",
+                "input": {
+                    "format": "plain",
+                    "message": "ordinary message"
+                }
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Action::Commit {
+                input: CommitInput::Conventional {
+                    commit_type: "feat".into(),
+                    scope: Some("ui".into()),
+                    breaking: false,
+                    description: "structured message".into(),
+                    body: None,
+                    footers: Vec::new(),
+                },
+            })
+            .unwrap(),
+            json!({
+                "kind": "commit",
+                "input": {
+                    "format": "conventional",
+                    "type": "feat",
+                    "scope": "ui",
+                    "breaking": false,
+                    "description": "structured message",
+                    "body": null,
+                    "footers": []
+                }
             })
         );
     }

@@ -5,21 +5,22 @@ use crate::model::{
     ConflictResult, ConflictSide, ConflictSides, ErrorCode, ExternalEditor, ExternalEditorKind,
     LineEnding, LocalizedMessage, OperationState, Utf16Range, WorkspaceError, WorkspaceResult,
 };
+use crate::worktree_text::{
+    MAX_EDIT_BYTES, MAX_EDIT_LINES, MAX_EDIT_LONGEST_LINE, NewlineStyle, atomic_write,
+    atomic_write_with_mode, checked_worktree_path, newline_style, text_metrics,
+};
 use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{self, File};
+use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use uuid::Uuid;
 
 const EDIT_BYTES: usize = 1024 * 1024;
 const EDIT_LINES: usize = 20_000;
-const PERFORMANCE_BYTES: usize = 5 * 1024 * 1024;
-const PERFORMANCE_LINES: usize = 100_000;
-const PERFORMANCE_LONGEST_LINE: usize = 256 * 1024;
 const REVISION_HISTORY_LIMIT: usize = 100;
 // このメモリ計算規約をconflictSession.tsと一致させる。
 // UTF-16 code unitあたり4 byteなら、JSとRustの文字列を保守的に見積もれる。
@@ -156,7 +157,7 @@ pub(crate) fn load(
     let worktree_path = checked_worktree_path(root, path)?;
     let result_read = read_worktree_entry_for_query(
         &worktree_path,
-        PERFORMANCE_BYTES,
+        MAX_EDIT_BYTES,
         attributes.marker_size,
         control,
     )?;
@@ -347,9 +348,9 @@ fn classify(
 
     let result = String::from_utf8(result_bytes.to_vec()).unwrap_or_default();
     let metrics = text_metrics(&result);
-    let performance = result_bytes.len() <= PERFORMANCE_BYTES
-        && metrics.lines <= PERFORMANCE_LINES
-        && metrics.longest_line <= PERFORMANCE_LONGEST_LINE;
+    let performance = result_bytes.len() <= MAX_EDIT_BYTES
+        && metrics.lines <= MAX_EDIT_LINES
+        && metrics.longest_line <= MAX_EDIT_LONGEST_LINE;
     let normal_mode = result_bytes.len() <= EDIT_BYTES && metrics.lines <= EDIT_LINES;
     if !performance {
         return (ConflictKind::Oversize, result, false, false);
@@ -364,14 +365,6 @@ fn classify(
         return (ConflictKind::Text, result, false, false);
     }
     (ConflictKind::Text, result, !normal_mode, true)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum NewlineStyle {
-    Neutral,
-    Lf,
-    Crlf,
-    Invalid,
 }
 
 fn compatible_line_endings(all_bytes: &[Option<&[u8]>]) -> bool {
@@ -390,35 +383,6 @@ fn compatible_line_endings(all_bytes: &[Option<&[u8]>]) -> bool {
         combined = style;
     }
     true
-}
-
-fn newline_style(bytes: &[u8]) -> NewlineStyle {
-    let mut saw_lf = false;
-    let mut saw_crlf = false;
-    let mut cursor = 0;
-    while cursor < bytes.len() {
-        match bytes[cursor] {
-            b'\r' if bytes.get(cursor + 1) == Some(&b'\n') => {
-                saw_crlf = true;
-                cursor += 2;
-            }
-            b'\r' => return NewlineStyle::Invalid,
-            b'\n' => {
-                saw_lf = true;
-                cursor += 1;
-            }
-            _ => cursor += 1,
-        }
-        if saw_lf && saw_crlf {
-            return NewlineStyle::Invalid;
-        }
-    }
-    match (saw_lf, saw_crlf) {
-        (false, false) => NewlineStyle::Neutral,
-        (true, false) => NewlineStyle::Lf,
-        (false, true) => NewlineStyle::Crlf,
-        (true, true) => NewlineStyle::Invalid,
-    }
 }
 
 fn parse_conflict_attributes(
@@ -464,30 +428,6 @@ fn parse_conflict_attributes(
         }
     }
     Ok(result)
-}
-
-struct TextMetrics {
-    lines: usize,
-    longest_line: usize,
-}
-
-fn text_metrics(text: &str) -> TextMetrics {
-    let mut lines = 0;
-    let mut longest_line = 0;
-    for line in text.split_inclusive('\n') {
-        lines += 1;
-        longest_line = longest_line.max(line.len());
-    }
-    if text.is_empty() {
-        lines = 0;
-    } else if !text.ends_with('\n') && lines == 0 {
-        lines = 1;
-        longest_line = text.len();
-    }
-    TextMetrics {
-        lines,
-        longest_line,
-    }
 }
 
 fn make_side(entry: Option<&StageEntry>, material: Option<BoundedBytes>) -> Option<ConflictSide> {
@@ -570,7 +510,7 @@ fn read_stage(
         .trim()
         .parse::<u64>()
         .map_err(|_| WorkspaceError::new(ErrorCode::GitFailed, "Failed to parse Git blob size"))?;
-    if size > PERFORMANCE_BYTES as u64 {
+    if size > MAX_EDIT_BYTES as u64 {
         return Ok(Some(BoundedBytes {
             bytes: Vec::new(),
             truncated: true,
@@ -756,9 +696,9 @@ pub(crate) fn save_result(
         WorkspaceError::new(ErrorCode::InvalidRequest, "The result must be UTF-8 text")
     })?;
     let metrics = text_metrics(result_text);
-    if result.len() > PERFORMANCE_BYTES
-        || metrics.lines > PERFORMANCE_LINES
-        || metrics.longest_line > PERFORMANCE_LONGEST_LINE
+    if result.len() > MAX_EDIT_BYTES
+        || metrics.lines > MAX_EDIT_LINES
+        || metrics.longest_line > MAX_EDIT_LONGEST_LINE
         || newline_style(result) == NewlineStyle::Invalid
     {
         return Err(WorkspaceError::new(
@@ -1238,10 +1178,6 @@ pub(crate) fn validate_session(
     Ok(())
 }
 
-fn atomic_write(root: &Path, path: &Path, bytes: &[u8]) -> WorkspaceResult<()> {
-    atomic_write_inner(root, path, bytes, None)
-}
-
 fn atomic_write_with_stage_mode(
     root: &Path,
     path: &Path,
@@ -1258,100 +1194,7 @@ fn atomic_write_with_stage_mode(
             ));
         }
     };
-    atomic_write_inner(root, path, bytes, Some(executable))
-}
-
-fn atomic_write_inner(
-    root: &Path,
-    path: &Path,
-    bytes: &[u8],
-    executable: Option<bool>,
-) -> WorkspaceResult<()> {
-    let parent = path.parent().ok_or_else(|| {
-        WorkspaceError::new(
-            ErrorCode::InvalidRequest,
-            "The path has no parent directory",
-        )
-    })?;
-    let canonical_root = root.canonicalize().map_err(io_error)?;
-    let canonical_parent = parent.canonicalize().map_err(io_error)?;
-    if !canonical_parent.starts_with(&canonical_root) {
-        return Err(outside_repository());
-    }
-    let temporary = parent.join(format!(".stella-conflict-{}", Uuid::new_v4()));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .map_err(io_error)?;
-    if let Ok(metadata) = fs::symlink_metadata(path)
-        && !metadata.file_type().is_symlink()
-    {
-        fs::set_permissions(&temporary, metadata.permissions()).map_err(io_error)?;
-    }
-    if let Some(executable) = executable {
-        let mut permissions = fs::metadata(&temporary).map_err(io_error)?.permissions();
-        let mode = if executable {
-            permissions.mode() | 0o111
-        } else {
-            permissions.mode() & !0o111
-        };
-        permissions.set_mode(mode);
-        fs::set_permissions(&temporary, permissions).map_err(io_error)?;
-    }
-    file.write_all(bytes).map_err(io_error)?;
-    file.sync_all().map_err(io_error)?;
-    fs::rename(&temporary, path).map_err(io_error)
-}
-
-fn checked_worktree_path(root: &Path, path: &str) -> WorkspaceResult<PathBuf> {
-    let candidate = Path::new(path);
-    if candidate.is_absolute()
-        || candidate
-            .components()
-            .any(|part| !matches!(part, std::path::Component::Normal(_)))
-        || path
-            .split('/')
-            .any(|component| component.is_empty() || matches!(component, "." | ".."))
-    {
-        return Err(outside_repository());
-    }
-    let canonical_root = root.canonicalize().map_err(io_error)?;
-    let components: Vec<_> = candidate.components().collect();
-    if components.is_empty() {
-        return Err(outside_repository());
-    }
-    let mut cursor = canonical_root.clone();
-    for (index, component) in components.iter().enumerate() {
-        let std::path::Component::Normal(component) = component else {
-            return Err(outside_repository());
-        };
-        cursor.push(component);
-        match fs::symlink_metadata(&cursor) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                if index + 1 != components.len() {
-                    return Err(outside_repository());
-                }
-            }
-            Ok(metadata) if index + 1 != components.len() && !metadata.is_dir() => {
-                return Err(outside_repository());
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => return Err(io_error(error)),
-        }
-    }
-    if cursor.exists()
-        && !cursor
-            .symlink_metadata()
-            .is_ok_and(|value| value.file_type().is_symlink())
-    {
-        let canonical = cursor.canonicalize().map_err(io_error)?;
-        if !canonical.starts_with(&canonical_root) {
-            return Err(outside_repository());
-        }
-    }
-    Ok(canonical_root.join(candidate))
+    atomic_write_with_mode(root, path, bytes, Some(executable))
 }
 
 fn read_worktree_entry_for_query(
@@ -1654,13 +1497,6 @@ impl MarkerLineProbe {
     }
 }
 
-fn outside_repository() -> WorkspaceError {
-    WorkspaceError::new(
-        ErrorCode::InvalidRequest,
-        "Paths outside the repository cannot be modified",
-    )
-}
-
 fn cancelled_error() -> WorkspaceError {
     WorkspaceError::new(
         ErrorCode::Cancelled,
@@ -1697,7 +1533,9 @@ fn io_error(error: std::io::Error) -> WorkspaceError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::path::PathBuf;
 
     fn choice_session(text: &str) -> ConflictSession {
         let generation = "generation".to_owned();
@@ -2203,7 +2041,7 @@ mod tests {
     #[test]
     fn performance_sized_revision_history_respects_the_shared_byte_budget() {
         let line = "0123456789abcdef\n";
-        let original = line.repeat(PERFORMANCE_BYTES / line.len());
+        let original = line.repeat(MAX_EDIT_BYTES / line.len());
         let original_revision = hash_bytes(original.as_bytes());
         let mut session = choice_session(&original);
         assert!(session.blocks.is_empty());
@@ -2255,8 +2093,8 @@ mod tests {
     fn limits_match_contract() {
         let regular = "a\n".repeat(EDIT_LINES);
         assert!(text_metrics(&regular).lines <= EDIT_LINES);
-        let long = "a".repeat(PERFORMANCE_LONGEST_LINE + 1);
-        assert!(text_metrics(&long).longest_line > PERFORMANCE_LONGEST_LINE);
+        let long = "a".repeat(MAX_EDIT_LONGEST_LINE + 1);
+        assert!(text_metrics(&long).longest_line > MAX_EDIT_LONGEST_LINE);
     }
 
     #[test]
@@ -2347,7 +2185,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let mut bytes = vec![b'a'; 16 * 1024 - 3];
         bytes.extend_from_slice(b"\n<<<<<<< external\n");
-        bytes.extend(std::iter::repeat_n(b'z', PERFORMANCE_BYTES));
+        bytes.extend(std::iter::repeat_n(b'z', MAX_EDIT_BYTES));
         let path = root.path().join("large.txt");
         fs::write(&path, &bytes).unwrap();
 
@@ -2368,7 +2206,7 @@ mod tests {
             &executable,
             format!(
                 "#!/bin/sh\nif [ \"$1\" = --literal-pathspecs ]; then\n  shift\nfi\nif [ \"$1\" = cat-file ] && [ \"$2\" = -s ]; then\n  echo {}\n  exit 0\nfi\ntouch \"{}\"\nexit 91\n",
-                PERFORMANCE_BYTES + 1,
+                MAX_EDIT_BYTES + 1,
                 body_marker.display(),
             ),
         )
@@ -2402,7 +2240,7 @@ mod tests {
 
         let read = read_worktree_entry_for_query(
             &path,
-            PERFORMANCE_BYTES,
+            MAX_EDIT_BYTES,
             Some(DEFAULT_CONFLICT_MARKER_SIZE),
             None,
         )
@@ -2449,11 +2287,11 @@ mod tests {
         let path = root.path().join("large.txt");
         let mut file = File::create(&path).unwrap();
         file.write_all(b"<<<<<<< unresolved\n").unwrap();
-        file.set_len((PERFORMANCE_BYTES + 1) as u64).unwrap();
+        file.set_len((MAX_EDIT_BYTES + 1) as u64).unwrap();
         drop(file);
         let read = read_worktree_entry_for_query(
             &path,
-            PERFORMANCE_BYTES,
+            MAX_EDIT_BYTES,
             Some(DEFAULT_CONFLICT_MARKER_SIZE),
             None,
         )
@@ -2604,7 +2442,7 @@ mod tests {
         assert_eq!(
             read_worktree_entry_for_query(
                 &path,
-                PERFORMANCE_BYTES,
+                MAX_EDIT_BYTES,
                 Some(DEFAULT_CONFLICT_MARKER_SIZE),
                 None,
             )

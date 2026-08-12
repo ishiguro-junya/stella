@@ -1,12 +1,48 @@
-use crate::model::{ConventionalCommitInput, ErrorCode, WorkspaceError, WorkspaceResult};
+use crate::model::{CommitFooter, CommitInput, ErrorCode, WorkspaceError, WorkspaceResult};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-pub(crate) fn build_message(input: &ConventionalCommitInput) -> WorkspaceResult<String> {
-    validate_type(&input.commit_type)?;
-    if let Some(scope) = &input.scope
+pub(crate) fn build_message(input: &CommitInput) -> WorkspaceResult<String> {
+    match input {
+        CommitInput::Plain { message } => build_plain_message(message),
+        CommitInput::Conventional {
+            commit_type,
+            scope,
+            breaking,
+            description,
+            body,
+            footers,
+        } => build_conventional_message(
+            commit_type,
+            scope.as_deref(),
+            *breaking,
+            description,
+            body.as_deref(),
+            footers,
+        ),
+    }
+}
+
+fn build_plain_message(message: &str) -> WorkspaceResult<String> {
+    let message = message.trim();
+    if message.is_empty() || message.contains(['\0', '\r', '\n']) {
+        return Err(invalid("Message is required and must be a single line"));
+    }
+    Ok(format!("{message}\n"))
+}
+
+fn build_conventional_message(
+    commit_type: &str,
+    scope: Option<&str>,
+    breaking: bool,
+    description: &str,
+    body: Option<&str>,
+    input_footers: &[CommitFooter],
+) -> WorkspaceResult<String> {
+    validate_type(commit_type)?;
+    if let Some(scope) = scope
         && (scope.is_empty()
             || scope
                 .chars()
@@ -14,35 +50,30 @@ pub(crate) fn build_message(input: &ConventionalCommitInput) -> WorkspaceResult<
     {
         return Err(invalid("Invalid scope"));
     }
-    let description = input.description.trim();
+    let description = description.trim();
     if description.is_empty() || description.contains(['\r', '\n']) {
         return Err(invalid("Description is required and must be a single line"));
     }
 
-    let mut subject = input.commit_type.clone();
-    if let Some(scope) = &input.scope {
+    let mut subject = commit_type.to_owned();
+    if let Some(scope) = scope {
         subject.push('(');
         subject.push_str(scope);
         subject.push(')');
     }
-    if input.breaking {
+    if breaking {
         subject.push('!');
     }
     subject.push_str(": ");
     subject.push_str(description);
 
     let mut sections = vec![subject];
-    if let Some(body) = input
-        .body
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
+    if let Some(body) = body.map(str::trim).filter(|v| !v.is_empty()) {
         sections.push(body.to_owned());
     }
 
     let mut footers = Vec::new();
-    for footer in &input.footers {
+    for footer in input_footers {
         let token = footer.token.trim();
         let value = footer.value.trim();
         if !valid_footer_token(token) || value.is_empty() {
@@ -50,9 +81,8 @@ pub(crate) fn build_message(input: &ConventionalCommitInput) -> WorkspaceResult<
         }
         footers.push(format!("{token}: {value}"));
     }
-    if input.breaking
-        && !input
-            .footers
+    if breaking
+        && !input_footers
             .iter()
             .any(|footer| footer.token == "BREAKING CHANGE")
     {
@@ -173,7 +203,7 @@ mod tests {
 
     #[test]
     fn structured_breaking_message_gets_footer() {
-        let message = build_message(&ConventionalCommitInput {
+        let message = build_message(&CommitInput::Conventional {
             commit_type: "feat".into(),
             scope: Some("workspace".into()),
             breaking: true,
@@ -184,5 +214,24 @@ mod tests {
         .unwrap();
         assert!(message.starts_with("feat(workspace)!: 契約を変更する"));
         assert!(message.contains("BREAKING CHANGE: 契約を変更する"));
+    }
+
+    #[test]
+    fn plain_message_is_trimmed_and_rejects_empty_or_multiline_input() {
+        assert_eq!(
+            build_message(&CommitInput::Plain {
+                message: "  日本語のメッセージ  ".into(),
+            })
+            .unwrap(),
+            "日本語のメッセージ\n"
+        );
+        for message in ["", "   ", "subject\nbody", "subject\rbody", "subject\0body"] {
+            assert!(
+                build_message(&CommitInput::Plain {
+                    message: message.into()
+                })
+                .is_err()
+            );
+        }
     }
 }

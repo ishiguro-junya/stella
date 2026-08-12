@@ -2,6 +2,8 @@ use crate::model::{CommandActivity, DiffTarget, ResetMode, WorkspaceError, Works
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(debug_assertions)]
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -22,6 +24,85 @@ pub(crate) struct GitExecutor {
     flow_executable: Option<PathBuf>,
     environment: Vec<(OsString, OsString)>,
     unavailable_reason: Option<String>,
+    #[cfg(debug_assertions)]
+    development_build_guard: Option<DevelopmentBuildGuard>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone)]
+struct DevelopmentBuildGuard {
+    executable: PathBuf,
+    startup_identity: ExecutableIdentity,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExecutableIdentity {
+    device: u64,
+    inode: u64,
+    size: u64,
+    modified_seconds: i64,
+    modified_nanoseconds: i64,
+}
+
+#[cfg(debug_assertions)]
+impl DevelopmentBuildGuard {
+    fn current() -> WorkspaceResult<Self> {
+        let executable = std::env::current_exe().map_err(|error| {
+            WorkspaceError::new(
+                crate::model::ErrorCode::Internal,
+                format!("開発版の実行ファイルを確認できません: {error}"),
+            )
+        })?;
+        Self::capture(executable)
+    }
+
+    fn capture(executable: PathBuf) -> WorkspaceResult<Self> {
+        let startup_identity = ExecutableIdentity::read(&executable).map_err(|error| {
+            WorkspaceError::new(
+                crate::model::ErrorCode::Internal,
+                format!("開発版の実行ファイルを確認できません: {error}"),
+            )
+        })?;
+        Ok(Self {
+            executable,
+            startup_identity,
+        })
+    }
+
+    fn ensure_current(&self) -> WorkspaceResult<()> {
+        let current_identity = ExecutableIdentity::read(&self.executable)
+            .map_err(|_| development_build_updated_error())?;
+        if current_identity != self.startup_identity {
+            return Err(development_build_updated_error());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(debug_assertions)]
+impl ExecutableIdentity {
+    fn read(path: &Path) -> std::io::Result<Self> {
+        let metadata = fs::metadata(path)?;
+        Ok(Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            size: metadata.size(),
+            modified_seconds: metadata.mtime(),
+            modified_nanoseconds: metadata.mtime_nsec(),
+        })
+    }
+}
+
+#[cfg(debug_assertions)]
+fn development_build_updated_error() -> WorkspaceError {
+    WorkspaceError::new(
+        crate::model::ErrorCode::InvalidRequest,
+        "更新があります。アプリを再起動してください。",
+    )
+    .localized_message(crate::model::LocalizedMessage::new(
+        "developmentBuildUpdated",
+    ))
 }
 
 #[derive(Debug, Clone)]
@@ -822,7 +903,29 @@ impl GitExecutor {
             flow_executable,
             environment,
             unavailable_reason,
+            #[cfg(debug_assertions)]
+            development_build_guard: None,
         }
+    }
+
+    pub(crate) fn guard_development_build(self) -> WorkspaceResult<Self> {
+        #[cfg(debug_assertions)]
+        let executor = {
+            let mut executor = self;
+            executor.development_build_guard = Some(DevelopmentBuildGuard::current()?);
+            executor
+        };
+        #[cfg(not(debug_assertions))]
+        let executor = self;
+        Ok(executor)
+    }
+
+    pub(crate) fn ensure_development_build_current(&self) -> WorkspaceResult<()> {
+        #[cfg(debug_assertions)]
+        if let Some(guard) = &self.development_build_guard {
+            guard.ensure_current()?;
+        }
+        Ok(())
     }
 
     pub(crate) fn has_lfs(&self) -> bool {
@@ -1190,6 +1293,27 @@ fn io_error(error: std::io::Error) -> WorkspaceError {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn development_build_guard_rejects_a_replaced_executable() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let executable = directory.path().join("stella");
+        fs::write(&executable, b"old build").expect("old executable");
+        let guard = DevelopmentBuildGuard::capture(executable.clone()).expect("capture guard");
+        guard.ensure_current().expect("unchanged executable");
+
+        let replacement = directory.path().join("stella.next");
+        fs::write(&replacement, b"new build").expect("new executable");
+        fs::rename(replacement, executable).expect("replace executable");
+
+        let error = guard.ensure_current().expect_err("stale build");
+        assert_eq!(
+            error.message,
+            "更新があります。アプリを再起動してください。"
+        );
+        assert_eq!(error.localized_message.id, "developmentBuildUpdated");
+    }
 
     #[test]
     fn remote_credentials_are_redacted() {
