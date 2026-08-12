@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -42,6 +42,16 @@ export async function writeRepositoryFile(
   content: string,
 ): Promise<void> {
   await writeFile(join(path, relativePath), content, 'utf8');
+}
+
+export async function writeExecutableRepositoryFile(
+  path: string,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const filePath = join(path, relativePath);
+  await writeFile(filePath, content, 'utf8');
+  await chmod(filePath, 0o755);
 }
 
 export async function createCommittedRepository(

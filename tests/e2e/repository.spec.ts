@@ -1,7 +1,12 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
-import { openRepository, resetApp, selectSetting } from './support/app.js';
+import {
+  expectInteractiveSelectedColors,
+  openRepository,
+  resetApp,
+  selectSetting,
+} from './support/app.js';
 import { createEmptyRepository, removeFixture } from './support/fixtures.js';
 
 describe('Repository and Branch navigation', () => {
@@ -53,6 +58,13 @@ describe('Repository and Branch navigation', () => {
     let switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
     await expect(switcher.$('[role="option"][aria-current="true"]')).toBeDisplayed();
+    await expectInteractiveSelectedColors(
+      '[role="dialog"] .switcher-option[aria-selected="true"]',
+      {
+        foreground: ['.switcher-check', '.switcher-option-icon'],
+        mutedForeground: ['.switcher-option-copy small'],
+      },
+    );
     expect(await switcher.getText()).not.toMatch(/Open repositories|Recent|[⌘⇧]/u);
     await browser.keys(['Escape']);
 

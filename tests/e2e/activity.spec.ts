@@ -1,7 +1,12 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
-import { commitCurrentChange, openRepository, resetApp } from './support/app.js';
+import {
+  commitCurrentChange,
+  expectInteractiveSelectedColors,
+  openRepository,
+  resetApp,
+} from './support/app.js';
 import {
   configureRepository,
   createEmptyRepository,
@@ -14,7 +19,7 @@ describe('Activity', () => {
 
   beforeEach(async () => {
     repositoryPath = await createEmptyRepository('activity');
-    await resetApp({ language: 'ja' });
+    await resetApp({ language: 'ja', splitStageView: true });
     await openRepository(repositoryPath);
     await configureRepository(repositoryPath);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Stella E2E\n');
@@ -37,6 +42,11 @@ describe('Activity', () => {
       'アクティビティ',
     );
     await expect(activity).toHaveAttribute('aria-current', 'page');
+    await $('.activity-list tbody tr[aria-selected="true"]').waitForDisplayed();
+    await expectInteractiveSelectedColors('.activity-list tbody tr[aria-selected="true"]', {
+      foreground: ['.activity-status'],
+      mutedForeground: ['.activity-item-summary', 'time', '.activity-item-duration'],
+    });
     await expect($(`.repository-toggle[title="${repositoryPath}"]`)).toBeDisplayed();
     await expect($('.branch-toggle')).toHaveText('main');
     await activity.click();
@@ -247,7 +257,7 @@ describe('Activity', () => {
       '236',
     );
     await expect($('.commit-list')).toHaveText(
-      expect.stringContaining('feat: E2Eリポジトリを初期化する'),
+      expect.stringContaining('E2Eリポジトリを初期化する'),
     );
   });
 });

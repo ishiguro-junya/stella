@@ -1,12 +1,20 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
-import { dragChangeToArea, openRepository, resetApp, setLogicalWindowSize } from './support/app.js';
+import {
+  expectAttachedTabs,
+  expectInteractiveSelectedColors,
+  openRepository,
+  resetApp,
+  selectSetting,
+  setLogicalWindowSize,
+} from './support/app.js';
 import {
   configureRepository,
   createEmptyRepository,
   removeFixture,
   runGit,
+  writeExecutableRepositoryFile,
   writeRepositoryFile,
 } from './support/fixtures.js';
 
@@ -15,7 +23,7 @@ describe('Changes', () => {
 
   beforeEach(async () => {
     repositoryPath = await createEmptyRepository('changes');
-    await resetApp({ language: 'ja' });
+    await resetApp({ language: 'ja', splitStageView: true });
     await openRepository(repositoryPath);
     await configureRepository(repositoryPath);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Stella E2E\n');
@@ -28,7 +36,46 @@ describe('Changes', () => {
     repositoryPath = '';
   });
 
-  it('shows, stages, drags, and commits a working tree change', async () => {
+  it('applies line wrapping to the displayed Diff and defaults to no wrapping', async () => {
+    await $('button.change-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-overflow="scroll"]'));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Diff did not default to no wrapping.' },
+    );
+    await expect($('.diff-surface')).toHaveAttribute('data-line-wrapping', 'false');
+
+    await $('button=設定').click();
+    await selectSetting('editor-line-wrapping', 'enabled');
+    const wrapColumn = $('input[name="editor-wrap-column"]');
+    await wrapColumn.setValue('80');
+    await $('button=変更差分').click();
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const host = document.querySelector<HTMLElement>('.diff-surface');
+          const root = host?.querySelector<HTMLElement>('diffs-container')?.shadowRoot;
+          return (
+            host?.dataset.lineWrapping === 'true' &&
+            host.dataset.wrapColumn === '80' &&
+            Boolean(root?.querySelector('[data-overflow="wrap"]')) &&
+            [...(root?.querySelectorAll('style') ?? [])].some((style) =>
+              style.textContent?.includes('calc(100% - 80ch - 1ch)'),
+            )
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Diff did not apply the wrapping settings.' },
+    );
+    await expect($('.diff-surface')).toHaveAttribute('data-wrap-column', '80');
+  });
+
+  it('shows, stages, and commits a working tree change', async () => {
     const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
     await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');
     const actionButtons = $$('.changes-action-bar .changes-action-button');
@@ -54,7 +101,7 @@ describe('Changes', () => {
     await expect(uncommittedChanges).toHaveText(expect.stringContaining('1ファイル'));
     await expect($('.history-working-tree-graph')).toHaveAttribute(
       'style',
-      expect.stringContaining('--history-lane-color: var(--text-muted)'),
+      expect.stringContaining('--history-lane-color: var(--history-working-tree)'),
     );
     await uncommittedChanges.click();
     await expect($('button[aria-label="変更差分"]')).toHaveAttribute('aria-current', 'page');
@@ -96,6 +143,10 @@ describe('Changes', () => {
       const unstaged = sidebar.querySelector<HTMLElement>('.change-group-worktree')!;
       const stagedContent = staged.querySelector<HTMLElement>('.change-group-content')!;
       const unstagedContent = unstaged.querySelector<HTMLElement>('.change-group-content')!;
+      const stagedHeader = staged.querySelector<HTMLElement>('.change-group-header')!;
+      const unstagedHeader = unstaged.querySelector<HTMLElement>('.change-group-header')!;
+      const stagedHeaderHeight = stagedHeader.getBoundingClientRect().height;
+      const unstagedHeaderHeight = unstagedHeader.getBoundingClientRect().height;
       const actionRect = actionSection.getBoundingClientRect();
       const filesRect = filesRegion.getBoundingClientRect();
       const stagedRect = staged.getBoundingClientRect();
@@ -103,6 +154,7 @@ describe('Changes', () => {
       const actionGrid = getComputedStyle(actionSection.querySelector('.changes-action-bar')!);
       return {
         actionsBeforeFiles: actionRect.bottom <= filesRect.top + 1,
+        firstGroupOffset: stagedRect.top - filesRect.top,
         actionColumns: actionGrid.gridTemplateColumns.split(' ').length,
         actionLabelsVisible: actionButtonElements.every(
           (button) => getComputedStyle(button.querySelector('span')!).display !== 'none',
@@ -115,17 +167,24 @@ describe('Changes', () => {
         }),
         groupsMeetAtMiddle: Math.abs(stagedRect.bottom - unstagedRect.top) <= 1,
         groupHeightDifference: Math.abs(stagedRect.height - unstagedRect.height),
+        stagedHeaderHeight,
+        unstagedHeaderHeight,
+        groupHeaderHeightDifference: Math.abs(stagedHeaderHeight - unstagedHeaderHeight),
         stagedOverflow: getComputedStyle(stagedContent).overflowY,
         unstagedOverflow: getComputedStyle(unstagedContent).overflowY,
       };
     });
     expect(changesPaneLayout).toEqual({
       actionsBeforeFiles: true,
+      firstGroupOffset: 0,
       actionColumns: 4,
       actionLabelsVisible: true,
       actionIconsUseCurrentSize: true,
       groupsMeetAtMiddle: true,
       groupHeightDifference: 0,
+      stagedHeaderHeight: 34,
+      unstagedHeaderHeight: 34,
+      groupHeaderHeightDifference: 0,
       stagedOverflow: 'auto',
       unstagedOverflow: 'auto',
     });
@@ -147,9 +206,46 @@ describe('Changes', () => {
     expect(renderedDiffText).toContain('# Stella E2E');
     await expect($('.loading-state')).not.toExist();
     await expect($('.change-item.is-current')).toBeDisplayed();
+    await expectInteractiveSelectedColors('.change-item.is-current', {
+      foreground: ['.file-status', '.row-action-trigger'],
+      mutedForeground: ['.file-path small'],
+    });
+    const selectedRowPaint = await browser.execute(() => {
+      const item = document.querySelector<HTMLElement>('.change-item.is-current');
+      const row = item?.querySelector<HTMLElement>('.change-row');
+      const stageHitbox = item?.querySelector<HTMLElement>('.stage-toggle-hitbox');
+      const action = item?.querySelector<HTMLElement>('.row-action-trigger');
+      if (!item || !row || !stageHitbox || !action) return null;
+      const probe = document.createElement('div');
+      probe.style.background = 'var(--interactive-selected-surface)';
+      document.body.append(probe);
+      const selectedSurface = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return {
+        itemBackground: getComputedStyle(item).backgroundColor,
+        selectedSurface,
+        rowBackground: getComputedStyle(row).backgroundColor,
+        stageHitboxBackground: getComputedStyle(stageHitbox).backgroundColor,
+        actionBackground: getComputedStyle(action).backgroundColor,
+        transitionProperty: getComputedStyle(item).transitionProperty,
+      };
+    });
+    expect(selectedRowPaint).toEqual({
+      itemBackground: selectedRowPaint?.selectedSurface,
+      selectedSurface: selectedRowPaint?.selectedSurface,
+      rowBackground: 'rgba(0, 0, 0, 0)',
+      stageHitboxBackground: 'rgba(0, 0, 0, 0)',
+      actionBackground: 'rgba(0, 0, 0, 0)',
+      transitionProperty: 'opacity',
+    });
     expect(
       await browser.execute(() => document.activeElement?.classList.contains('change-row')),
     ).toBe(true);
+    expect(
+      await browser.execute(() =>
+        document.querySelector<HTMLElement>('.change-row')?.hasAttribute('draggable'),
+      ),
+    ).toBe(false);
     await browser.execute(() => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     });
@@ -167,10 +263,7 @@ describe('Changes', () => {
     await $('input[aria-label="Unstage README.md"]').click();
     await expect($('input[aria-label="Stage README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('');
-    await dragChangeToArea(
-      'section[aria-labelledby="area-worktree"] .change-row',
-      'section[aria-labelledby="area-staged"]',
-    );
+    await $('input[aria-label="Stage README.md"]').click();
     await expect($('input[aria-label="Unstage README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('README.md\n');
 
@@ -182,6 +275,25 @@ describe('Changes', () => {
     await expect(activeCommitTrigger).toHaveAttribute('aria-expanded', 'true');
     const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
     await expect(commitDialog).toBeDisplayed();
+    expect(
+      await browser.execute(() => document.activeElement?.getAttribute('data-commit-field')),
+    ).toBe('description');
+    await expect(commitDialog.$('[data-commit-field="type"]')).not.toExist();
+    await expect(commitDialog.$('[data-commit-field="scope"]')).not.toExist();
+    await expect(commitDialog.$('.commit-breaking')).not.toExist();
+    await commitDialog.$('button=キャンセル').click();
+    await expect(commitDialog).not.toExist();
+    await $('button=設定').click();
+    await selectSetting('conventional-commits', 'enabled');
+    await expect($('select[name="conventional-commits"]')).toHaveValue('enabled');
+    await $('button=変更差分').click();
+    const conventionalCommitTrigger = $(
+      '.changes-action-bar .changes-action-button[aria-label="コミット"]',
+    );
+    await conventionalCommitTrigger.waitForClickable();
+    await conventionalCommitTrigger.click();
+    const conventionalCommitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    await expect(conventionalCommitDialog).toBeDisplayed();
     expect(
       await browser.execute(() => document.activeElement?.getAttribute('data-commit-field')),
     ).toBe('description');
@@ -212,8 +324,8 @@ describe('Changes', () => {
     });
     expect(compactCommitFormSpacing?.descriptionToMetadata).toBeLessThanOrEqual(16);
     expect(compactCommitFormSpacing?.metadataToBreaking).toBeLessThanOrEqual(16);
-    await commitDialog.$('[data-commit-field="type"]').setValue('Ss');
-    await expect(commitDialog.$('#commit-type-error')).toBeDisplayed();
+    await conventionalCommitDialog.$('[data-commit-field="type"]').setValue('Ss');
+    await expect(conventionalCommitDialog.$('#commit-type-error')).toBeDisplayed();
     const validationLayout = await browser.execute(() => {
       const type = document.querySelector<HTMLElement>('[data-commit-field="type"]');
       const scope = document.querySelector<HTMLElement>('[data-commit-field="scope"]');
@@ -225,14 +337,16 @@ describe('Changes', () => {
       };
     });
     expect(validationLayout?.fieldsAligned).toBeLessThanOrEqual(1);
-    await commitDialog.$('[data-commit-field="type"]').setValue('feat');
-    await expect(commitDialog.$('#commit-type-error')).not.toBeDisplayed();
+    await conventionalCommitDialog.$('[data-commit-field="type"]').setValue('feat');
+    await expect(conventionalCommitDialog.$('#commit-type-error')).not.toBeDisplayed();
     await setLogicalWindowSize(1180, 760);
-    await commitDialog.$('[data-commit-field="description"]').setValue('E2Eリポジトリを初期化する');
-    const commit = commitDialog.$('.commit-form button[type="submit"]');
+    await conventionalCommitDialog
+      .$('[data-commit-field="description"]')
+      .setValue('E2Eリポジトリを初期化する');
+    const commit = conventionalCommitDialog.$('.commit-form button[type="submit"]');
     await commit.waitForClickable();
     await commit.click();
-    await expect(commitDialog).not.toExist();
+    await expect(conventionalCommitDialog).not.toExist();
     await browser.waitUntil(
       async () =>
         (await browser.execute(() => document.querySelectorAll('.change-row').length)) === 0,
@@ -242,5 +356,487 @@ describe('Changes', () => {
       },
     );
     expect(await $('.change-group-worktree .empty-state-small').isExisting()).toBe(false);
+  });
+
+  it('always shows Git Hook output and scrolls output longer than five lines', async () => {
+    await writeExecutableRepositoryFile(
+      repositoryPath,
+      '.git/hooks/commit-msg',
+      '#!/bin/sh\nprintf "hook-line-1\\nhook-line-2\\nhook-line-3\\nhook-line-4\\nhook-line-5\\nhook-line-6\\n" >&2\nexit 1\n',
+    );
+    await $('input[aria-label="Stage README.md"]').click();
+    await $('input[aria-label="Unstage README.md"]').waitForDisplayed({ timeout: 10_000 });
+    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    await commitTrigger.waitForClickable({ timeout: 10_000 });
+    await commitTrigger.click();
+    const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    await commitDialog.waitForDisplayed({ timeout: 10_000 });
+    await commitDialog.$('[data-commit-field="description"]').setValue('Git Hookエラーを確認する');
+    await commitDialog.$('.commit-form button[type="submit"]').click();
+
+    const errorDialog = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
+    await errorDialog.waitForDisplayed({ timeout: 10_000 });
+    await expect(errorDialog).toHaveText(
+      expect.stringContaining('Git Hookによって操作が拒否されました。'),
+    );
+    await expect(errorDialog.$('.eyebrow')).not.toExist();
+    await expect(errorDialog.$('details')).not.toExist();
+    await expect(errorDialog.$('summary')).not.toExist();
+    await expect(errorDialog.$('pre[aria-label="stderr"]')).toHaveText(
+      expect.stringContaining('hook-line-6'),
+    );
+    const outputLayout = await browser.execute(() => {
+      const output = document.querySelector<HTMLElement>(
+        '[role="alertdialog"] .notice-output-streams',
+      )!;
+      return {
+        overflowY: getComputedStyle(output).overflowY,
+        scrolls: output.scrollHeight > output.clientHeight,
+      };
+    });
+    expect(outputLayout).toEqual({ overflowY: 'auto', scrolls: true });
+  });
+
+  it('shows every Shift-selected file in the right pane', async () => {
+    await writeRepositoryFile(repositoryPath, 'second.ts', 'export const second = true;\n');
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() => document.querySelectorAll('button.change-row').length)) === 2,
+      { timeout: 10_000, timeoutMsg: 'The second changed file did not appear.' },
+    );
+
+    await browser.execute(() => {
+      const rows = [...document.querySelectorAll<HTMLButtonElement>('button.change-row')];
+      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const selectedRows = document.querySelectorAll('button.change-row[aria-pressed="true"]');
+          const hosts = [
+            ...document.querySelectorAll<HTMLElement>(
+              '.multi-diff-list .diff-surface diffs-container',
+            ),
+          ];
+          return (
+            selectedRows.length === 2 &&
+            hosts.length === 2 &&
+            hosts.every((host) => Boolean(host.shadowRoot?.querySelector('[data-line-type]')))
+          );
+        }),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The Shift-selected files were not both rendered in the right pane.',
+      },
+    );
+
+    const visibleFileHeaders = await browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>('.multi-diff-list .selected-file-heading h2')].map(
+        (header) => header.textContent?.trim() ?? '',
+      ),
+    );
+    expect(visibleFileHeaders).toEqual(['README.md', 'second.ts']);
+  });
+
+  it('opens a changed file in the editor and returns to its Diff', async () => {
+    await $('button.change-row').click();
+    await expect($('.selected-file-toggle')).not.toExist();
+    const displayTab = $('.diff-file-toolbar [role="tab"][aria-label="表示"]');
+    const editTab = $('.diff-file-toolbar [role="tab"][aria-label="編集"]');
+    await expect(displayTab).toHaveAttribute('aria-selected', 'true');
+    await expectAttachedTabs('.diff-file-toolbar .file-view-mode-tabs');
+    await expectInteractiveSelectedColors(
+      '.diff-file-toolbar [role="tab"][aria-label="表示"][aria-selected="true"]',
+    );
+    await editTab.waitForClickable({ timeout: 10_000 });
+    await expect(editTab).toHaveAttribute('title', '編集');
+    await expect(editTab).toHaveText('');
+    await editTab.click();
+
+    const editor = $('.file-editor-pane');
+    await editor.waitForDisplayed({ timeout: 10_000 });
+    await expect(editor.$('h2')).toHaveText('README.md');
+    await expect(editor.$('[role="tab"][aria-label="編集"]')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expectInteractiveSelectedColors(
+      '.file-editor-pane [role="tab"][aria-label="編集"][aria-selected="true"]',
+    );
+    await expect(editor.$('button=保存する')).not.toExist();
+    await expect(editor.$('button=キャンセル')).not.toExist();
+    const textbox = editor.$('[role="textbox"]');
+    await expect(textbox).toHaveAttribute('aria-label', 'README.mdを編集');
+    const editorMenu = editor.$('button[aria-haspopup="menu"]');
+    await expect(editorMenu).toHaveAttribute(
+      'aria-label',
+      '選択中のファイルREADME.mdのその他の操作',
+    );
+    const gutterSpacing = await browser.execute(() => {
+      const lineNumber = document.querySelector<HTMLElement>(
+        '.file-editor .cm-lineNumbers .cm-gutterElement',
+      );
+      const foldGutter = document.querySelector<HTMLElement>('.file-editor .cm-foldGutter');
+      const foldMarkerChevron = foldGutter?.querySelector('.text-editor-fold-marker polyline');
+      return {
+        lineNumberPaddingRight: lineNumber ? getComputedStyle(lineNumber).paddingRight : '',
+        foldGutterWidth: foldGutter ? getComputedStyle(foldGutter).width : '',
+        foldMarkerPoints: foldMarkerChevron?.getAttribute('points') ?? '',
+      };
+    });
+    expect(gutterSpacing).toEqual({
+      lineNumberPaddingRight: '4px',
+      foldGutterWidth: '18px',
+      foldMarkerPoints: '4 2 8 6 4 10',
+    });
+
+    await textbox.click();
+    await textbox.addValue('x');
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelectorAll('.change-item .unsaved-file-dot').length === 1 &&
+            document.querySelectorAll('.file-editor-toolbar .unsaved-file-dot').length === 1,
+        ),
+      { timeout: 10_000, timeoutMsg: 'The unsaved dots did not appear in both panes.' },
+    );
+
+    await editor.$('[role="tab"][aria-label="表示"]').click();
+    const displayDialog = $('[role="alertdialog"]');
+    await displayDialog.waitForDisplayed({ timeout: 10_000 });
+    await expect(displayDialog.$('h2')).toHaveText('未保存の変更');
+    await displayDialog.$('button=保存せずに表示').click();
+    await expect(editor).not.toExist();
+    await $('.diff-surface').waitForDisplayed({ timeout: 10_000 });
+  });
+
+  it('uses the shared accent selection in the Conflict editor', async () => {
+    await runGit(repositoryPath, ['add', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 競合の基点を作成する']);
+    await runGit(repositoryPath, ['checkout', '-b', 'incoming']);
+    await writeRepositoryFile(repositoryPath, 'README.md', '# Incoming\n');
+    await runGit(repositoryPath, ['add', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: Incoming側を変更する']);
+    await runGit(repositoryPath, ['checkout', 'main']);
+    await writeRepositoryFile(repositoryPath, 'README.md', '# Current\n');
+    await runGit(repositoryPath, ['add', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: Current側を変更する']);
+
+    let mergeConflicted = false;
+    try {
+      await runGit(repositoryPath, ['merge', 'incoming']);
+    } catch {
+      mergeConflicted = true;
+    }
+    expect(mergeConflicted).toBe(true);
+
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('.file-status.conflicted').waitForDisplayed({ timeout: 20_000 });
+    await $('button.change-row').click();
+    await $('.conflict-workspace').waitForDisplayed({ timeout: 10_000 });
+    await expectAttachedTabs('.conflict-comparison .segmented');
+    await expectInteractiveSelectedColors('.conflict-comparison .segmented [aria-selected="true"]');
+    await expectInteractiveSelectedColors('.block-selector[aria-current="true"]');
+  });
+
+  it('opens Hunk and line editing above center and focused at the selected start position', async () => {
+    const base = [...Array.from({ length: 200 }, (_, index) => `line-${index + 1}`), ''].join('\n');
+    await writeRepositoryFile(repositoryPath, 'README.md', base);
+    await runGit(repositoryPath, ['add', '--', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 編集開始位置の基準を作る']);
+    await writeRepositoryFile(repositoryPath, 'README.md', base.replace('line-120', 'changed-120'));
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('.change-item .file-status.modified').waitForExist({ timeout: 10_000 });
+    await $('button.change-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return [...(root?.querySelectorAll<HTMLButtonElement>('button') ?? [])].some(
+            (button) => button.textContent === 'ハンクを編集',
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Hunk edit action did not appear.' },
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      [...root.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === 'ハンクを編集')
+        ?.click();
+    });
+    const editor = $('.file-editor-pane');
+    await editor.waitForDisplayed({ timeout: 10_000 });
+    const hunkEditorPosition = await browser.execute(() => {
+      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+      const activeLine = document.querySelector<HTMLElement>('.file-editor .cm-activeLine');
+      const scrollerRect = scroller?.getBoundingClientRect();
+      const activeLineRect = activeLine?.getBoundingClientRect();
+      return {
+        scrollTop: scroller?.scrollTop ?? 0,
+        activeLine: activeLine?.textContent ?? '',
+        focused: document.activeElement?.classList.contains('cm-content') ?? false,
+        viewportRatio:
+          scrollerRect && activeLineRect
+            ? (activeLineRect.top + activeLineRect.height / 2 - scrollerRect.top) /
+              scrollerRect.height
+            : 1,
+      };
+    });
+    expect(hunkEditorPosition.scrollTop).toBeGreaterThan(0);
+    expect(hunkEditorPosition.activeLine).toBe('line-117');
+    expect(hunkEditorPosition.focused).toBe(true);
+    expect(hunkEditorPosition.viewportRatio).toBeGreaterThan(0.2);
+    expect(hunkEditorPosition.viewportRatio).toBeLessThan(0.3);
+
+    await editor.$('[role="tab"][aria-label="表示"]').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector("[data-line-type='change-addition']"));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Diff did not return after Hunk editing.' },
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>(
+        "[data-content] [data-line-type='change-addition']",
+      )!;
+      line.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-content] [data-line][data-selected-line]'));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Diff line was not selected.' },
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>(
+        '[data-content] [data-line][data-selected-line]',
+      )!;
+      const rect = line.getBoundingClientRect();
+      line.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + 8,
+          clientY: rect.top + 8,
+        }),
+      );
+    });
+    await $('button=選択した行を編集').waitForClickable({ timeout: 10_000 });
+    await $('button=選択した行を編集').click();
+    await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
+    const lineEditorPosition = await browser.execute(() => {
+      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+      const activeLine = document.querySelector<HTMLElement>('.file-editor .cm-activeLine');
+      const scrollerRect = scroller?.getBoundingClientRect();
+      const activeLineRect = activeLine?.getBoundingClientRect();
+      return {
+        scrollTop: scroller?.scrollTop ?? 0,
+        activeLine: activeLine?.textContent ?? '',
+        focused: document.activeElement?.classList.contains('cm-content') ?? false,
+        viewportRatio:
+          scrollerRect && activeLineRect
+            ? (activeLineRect.top + activeLineRect.height / 2 - scrollerRect.top) /
+              scrollerRect.height
+            : 1,
+      };
+    });
+    expect(lineEditorPosition.scrollTop).toBeGreaterThan(0);
+    expect(lineEditorPosition.activeLine).toBe('changed-120');
+    expect(lineEditorPosition.focused).toBe(true);
+    expect(lineEditorPosition.viewportRatio).toBeGreaterThan(0.2);
+    expect(lineEditorPosition.viewportRatio).toBeLessThan(0.3);
+  });
+
+  it('places Hunk actions at the right edge and opens line actions from a blue selection', async () => {
+    const base = [
+      ...Array.from({ length: 30 }, (_, index) => {
+        if (index === 7) return 'old-a';
+        if (index === 21) return 'old-b';
+        return `line-${index + 1}`;
+      }),
+      '',
+    ].join('\n');
+    const changed = base.replace('old-a', 'new-a-1\nnew-a-2\nnew-a-3').replace('old-b', 'new-b');
+    await writeRepositoryFile(repositoryPath, 'README.md', base);
+    await runGit(repositoryPath, ['add', '--', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: Hunk操作の基準を作る']);
+    await writeRepositoryFile(repositoryPath, 'README.md', changed);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('.change-item .file-status.modified').waitForExist({ timeout: 10_000 });
+    await $('button.change-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-line-type]'));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The modified file diff was not rendered.' },
+    );
+    const separatorDiagnostics = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      return {
+        controlCount: root.querySelectorAll('[data-stella-hunk-controls]').length,
+        separators: [...root.querySelectorAll<HTMLElement>('[data-content] [data-separator]')].map(
+          (separator) => [...separator.attributes].map(({ name, value }) => [name, value]),
+        ),
+      };
+    });
+    if (separatorDiagnostics.controlCount !== 2) {
+      throw new Error(`Unexpected separators: ${JSON.stringify(separatorDiagnostics)}`);
+    }
+
+    const hunkLayout = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const controls = root.querySelector<HTMLElement>('[data-stella-hunk-controls]')!;
+      const content = controls.closest<HTMLElement>('[data-content]')!;
+      const controlsRect = controls.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
+      const actionButtons = [...controls.querySelectorAll<HTMLButtonElement>('button')];
+      const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];
+      const firstLabel = hunkLabels[0]!;
+      const firstLabelStyle = getComputedStyle(firstLabel);
+      const firstButtonStyle = getComputedStyle(actionButtons[0]!);
+      const separatorBackground = getComputedStyle(
+        controls.closest('[data-separator-wrapper]')!,
+      ).backgroundColor;
+      return {
+        actionLabels: actionButtons.map((button) => button.textContent),
+        hunkLabels: hunkLabels.map((label) => label.textContent),
+        bordered: actionButtons.every(
+          (button) =>
+            getComputedStyle(button).borderRightStyle !== 'none' &&
+            Number.parseFloat(getComputedStyle(button).borderRightWidth) > 0,
+        ),
+        inContentColumn: controls.closest('[data-gutter]') === null,
+        leftIsVisible: controlsRect.left >= contentRect.left - 1,
+        labelAtLeft: firstLabel.getBoundingClientRect().left - contentRect.left <= 8,
+        labelIsSubtle:
+          firstLabelStyle.color !== separatorBackground &&
+          firstLabelStyle.color !== firstButtonStyle.color,
+        rightGap: contentRect.right - controlsRect.right,
+        hasHunkToggle: controls.querySelector('[data-stella-hunk-toggle]') !== null,
+        unmodifiedTextVisible: [
+          ...root.querySelectorAll<HTMLElement>('[data-unmodified-lines]'),
+        ].some((element) => getComputedStyle(element).display !== 'none'),
+      };
+    });
+    expect(hunkLayout).toEqual({
+      actionLabels: ['ハンクを編集', 'ハンクをステージ', 'ハンクを破棄'],
+      hunkLabels: ['ハンク1 行5–13', 'ハンク2 行21–27'],
+      bordered: true,
+      inContentColumn: true,
+      leftIsVisible: true,
+      labelAtLeft: true,
+      labelIsSubtle: true,
+      rightGap: expect.any(Number),
+      hasHunkToggle: false,
+      unmodifiedTextVisible: false,
+    });
+    expect(hunkLayout.rightGap).toBeGreaterThanOrEqual(0);
+    expect(hunkLayout.rightGap).toBeLessThanOrEqual(8);
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const additions = root.querySelectorAll<HTMLElement>(
+        "[data-content] [data-line-type='change-addition']",
+      );
+      additions[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      additions[2]!.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, composed: true, shiftKey: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return root?.querySelectorAll('[data-line][data-selected-line]').length === 3;
+        }),
+      { timeout: 10_000, timeoutMsg: 'The Shift-clicked diff-line range was not selected.' },
+    );
+    const selectedLineStyle = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>('[data-line][data-selected-line]')!;
+      const style = getComputedStyle(line);
+      const primaryProbe = document.createElement('button');
+      primaryProbe.className = 'primary';
+      primaryProbe.style.position = 'fixed';
+      primaryProbe.style.visibility = 'hidden';
+      document.body.append(primaryProbe);
+      const interactiveBackgroundColor = getComputedStyle(primaryProbe).backgroundColor;
+      primaryProbe.remove();
+      const unselectedAddition = [
+        ...root.querySelectorAll<HTMLElement>("[data-line][data-line-type='change-addition']"),
+      ].find((candidate) => !candidate.hasAttribute('data-selected-line'))!;
+      const rect = line.getBoundingClientRect();
+      line.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + 8,
+          clientY: rect.top + 8,
+        }),
+      );
+      return {
+        selectedCount: root.querySelectorAll('[data-line][data-selected-line]').length,
+        selectedBackground: style.getPropertyValue('--diffs-computed-selected-line-bg').trim(),
+        selectedBackgroundColor: style.backgroundColor,
+        interactiveBackgroundColor,
+        additionBackgroundColor: getComputedStyle(unselectedAddition).backgroundColor,
+        userSelect:
+          style.getPropertyValue('user-select') || style.getPropertyValue('-webkit-user-select'),
+      };
+    });
+    expect(selectedLineStyle.selectedCount).toBe(3);
+    expect(selectedLineStyle.selectedBackground).not.toBe('');
+    expect(selectedLineStyle.selectedBackgroundColor).not.toBe(
+      selectedLineStyle.additionBackgroundColor,
+    );
+    expect(selectedLineStyle.selectedBackgroundColor).not.toBe(
+      selectedLineStyle.interactiveBackgroundColor,
+    );
+    expect(selectedLineStyle.userSelect).toBe('none');
+    await $('[role="menu"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $$('[role="menuitem"]').map((item) => item.getText())).toEqual([
+      '選択した行を編集',
+      '選択した行をコピー',
+      '選択した行をステージ',
+      '選択行を破棄',
+    ]);
+    await $('button=選択した行をコピー').click();
+    await $('.file-action-notice[role="status"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $('.file-action-notice[role="status"]').getText()).toBe(
+      '選択行をコピーしました。',
+    );
   });
 });

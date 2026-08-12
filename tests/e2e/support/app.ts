@@ -8,6 +8,10 @@ interface ResetAppOptions {
   language?: Language;
   appearance?: Appearance;
   splitStageView?: boolean;
+  useConventionalCommits?: boolean;
+  stickyFileHeaders?: boolean;
+  editorLineWrapping?: boolean;
+  editorWrapColumn?: number;
   registeredRepoPaths?: string[];
 }
 
@@ -23,7 +27,11 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     appearance: options.appearance ?? 'system',
     language: options.language ?? 'ja',
     diffStyle: 'unified',
-    splitStageView: options.splitStageView ?? true,
+    splitStageView: options.splitStageView ?? false,
+    useConventionalCommits: options.useConventionalCommits ?? false,
+    stickyFileHeaders: options.stickyFileHeaders ?? false,
+    editorLineWrapping: options.editorLineWrapping ?? false,
+    editorWrapColumn: options.editorWrapColumn ?? 120,
     registeredRepoPaths: options.registeredRepoPaths ?? [],
     repositoryNames: {},
     openRepoPaths: [],
@@ -59,6 +67,121 @@ export async function selectSetting(name: string, value: string): Promise<void> 
     { settingName: name, settingValue: value },
   );
   expect(changed).toBe(true);
+}
+
+export async function expectInteractiveSelectedColors(
+  selector: string,
+  options: {
+    foreground?: readonly string[];
+    mutedForeground?: readonly string[];
+  } = {},
+): Promise<void> {
+  const result = await browser.execute(
+    ({ targetSelector, foregroundSelectors, mutedForegroundSelectors }) => {
+      const target = document.querySelector<HTMLElement>(targetSelector);
+      if (!target) return { missing: [targetSelector] };
+
+      const primaryProbe = document.createElement('button');
+      primaryProbe.className = 'primary';
+      primaryProbe.style.position = 'fixed';
+      primaryProbe.style.visibility = 'hidden';
+      const mutedProbe = document.createElement('span');
+      mutedProbe.style.color = 'var(--interactive-selected-muted-foreground)';
+      primaryProbe.append(mutedProbe);
+      document.body.append(primaryProbe);
+
+      const targetStyle = getComputedStyle(target);
+      const primaryStyle = getComputedStyle(primaryProbe);
+      const expectedMutedForeground = getComputedStyle(mutedProbe).color;
+      const foreground = foregroundSelectors.map((childSelector) => {
+        const child = target.querySelector<HTMLElement>(childSelector);
+        return [childSelector, child ? getComputedStyle(child).color : undefined] as const;
+      });
+      const mutedForeground = mutedForegroundSelectors.map((childSelector) => {
+        const child = target.querySelector<HTMLElement>(childSelector);
+        return [childSelector, child ? getComputedStyle(child).color : undefined] as const;
+      });
+      const computed = {
+        missing: [...foreground, ...mutedForeground]
+          .filter(([, color]) => color === undefined)
+          .map(([childSelector]) => childSelector),
+        background: targetStyle.backgroundColor,
+        selectedForeground: targetStyle.color,
+        expectedBackground: primaryStyle.backgroundColor,
+        expectedForeground: primaryStyle.color,
+        expectedMutedForeground,
+        foregroundChildren: foreground.map(
+          ([childSelector, color]) => [childSelector, color] as const,
+        ),
+        mutedForegroundChildren: mutedForeground.map(
+          ([childSelector, color]) => [childSelector, color] as const,
+        ),
+      };
+      primaryProbe.remove();
+      return computed;
+    },
+    {
+      targetSelector: selector,
+      foregroundSelectors: options.foreground ?? [],
+      mutedForegroundSelectors: options.mutedForeground ?? [],
+    },
+  );
+
+  expect(result.missing).toEqual([]);
+  if (!('expectedBackground' in result)) throw new Error(`Selected element not found: ${selector}`);
+  expect(result.background).toBe(result.expectedBackground);
+  expect(result.selectedForeground).toBe(result.expectedForeground);
+  expect(result.foregroundChildren.every(([, color]) => color === result.expectedForeground)).toBe(
+    true,
+  );
+  expect(
+    result.mutedForegroundChildren.every(([, color]) => color === result.expectedMutedForeground),
+  ).toBe(true);
+}
+
+export async function expectAttachedTabs(selector: string): Promise<void> {
+  const result = await browser.execute((containerSelector) => {
+    const container = document.querySelector<HTMLElement>(containerSelector);
+    if (!container) return { missing: true };
+    const tabs = [...container.children].filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element.getAttribute('role') === 'tab',
+    );
+    if (tabs.length < 2) return { missing: true };
+
+    const containerStyle = getComputedStyle(container);
+    const first = tabs[0];
+    const last = tabs.at(-1);
+    if (!first || !last) return { missing: true };
+    const firstStyle = getComputedStyle(first);
+    const lastStyle = getComputedStyle(last);
+    const rects = tabs.map((tab) => tab.getBoundingClientRect());
+    return {
+      missing: false,
+      gap: containerStyle.gap,
+      outerBorderWidth: containerStyle.borderTopWidth,
+      outerBorderColor: containerStyle.borderTopColor,
+      attached: rects.slice(1).every((rect, index) => {
+        const previous = rects[index];
+        return previous ? Math.abs(previous.right - rect.left) <= 0.5 : false;
+      }),
+      firstRadii: [firstStyle.borderTopLeftRadius, firstStyle.borderTopRightRadius],
+      lastRadii: [lastStyle.borderTopLeftRadius, lastStyle.borderTopRightRadius],
+      innerBordersTransparent: tabs.every(
+        (tab) => getComputedStyle(tab).borderRightColor === 'rgba(0, 0, 0, 0)',
+      ),
+    };
+  }, selector);
+
+  expect(result.missing).toBe(false);
+  if (result.missing) throw new Error(`Tab group not found: ${selector}`);
+  expect(result.gap).toBe('0px');
+  expect(result.outerBorderWidth).toBe('1px');
+  expect(result.outerBorderColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(result.attached).toBe(true);
+  expect(result.firstRadii).toEqual(['6px', '0px']);
+  expect(result.lastRadii).toEqual(['0px', '6px']);
+  expect(result.innerBordersTransparent).toBe(true);
 }
 
 export async function expectHistoryCommitLayout(width: number, height: number): Promise<void> {
@@ -126,6 +249,10 @@ export async function openRepository(
   await expect(dialog).toBeDisplayed();
   if (options.inspectDialog) {
     await expect(dialog.$('button=URL')).toHaveAttribute('aria-selected', 'true');
+    await expectAttachedTabs('[role="alertdialog"] .add-repository-source');
+    await expectInteractiveSelectedColors(
+      '[role="alertdialog"] .add-repository-source [aria-selected="true"]',
+    );
     await expect(dialog.$('#repository-display-name')).toExist();
   }
   await dialog.$(`button=${language === 'ja' ? 'パス' : 'Path'}`).click();
@@ -156,7 +283,8 @@ export async function commitCurrentChange(description: string): Promise<void> {
   await trigger.waitForClickable();
   await trigger.click();
   const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
-  await dialog.$('[data-commit-field="type"]').setValue('feat');
+  const type = dialog.$('[data-commit-field="type"]');
+  if (await type.isExisting()) await type.setValue('feat');
   await dialog.$('[data-commit-field="description"]').setValue(description);
   const submit = dialog.$('.commit-form button[type="submit"]');
   await submit.waitForClickable();
@@ -167,52 +295,6 @@ export async function commitCurrentChange(description: string): Promise<void> {
       (await browser.execute(() => document.querySelectorAll('.change-row').length)) === 0,
     { timeout: 10_000, timeoutMsg: 'Committed changes did not disappear from the change list.' },
   );
-}
-
-export async function dragChangeToArea(
-  sourceSelector: string,
-  targetSelector: string,
-): Promise<void> {
-  const dragStarted = await browser.execute((source) => {
-    const sourceElement = document.querySelector<HTMLElement>(source);
-    if (!sourceElement) return false;
-    const dataTransfer = new DataTransfer();
-    sourceElement.dispatchEvent(
-      new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }),
-    );
-    const hasStellaToken = dataTransfer.types.includes('application/x-stella-change');
-    (window as Window & { stellaE2eDrag?: DataTransfer }).stellaE2eDrag = dataTransfer;
-    return hasStellaToken;
-  }, sourceSelector);
-  expect(dragStarted).toBe(true);
-
-  await browser.waitUntil(async () => $(targetSelector).isExisting(), {
-    timeout: 2_000,
-    timeoutMsg: 'The empty drag target did not appear.',
-  });
-
-  const dropped = await browser.execute(
-    (source, target) => {
-      const sourceElement = document.querySelector<HTMLElement>(source);
-      const targetElement = document.querySelector<HTMLElement>(target);
-      const dragWindow = window as Window & { stellaE2eDrag?: DataTransfer };
-      const dataTransfer = dragWindow.stellaE2eDrag;
-      if (!sourceElement || !targetElement || !dataTransfer) return false;
-      for (const type of ['dragover', 'drop']) {
-        targetElement.dispatchEvent(
-          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }),
-        );
-      }
-      sourceElement.dispatchEvent(
-        new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }),
-      );
-      delete dragWindow.stellaE2eDrag;
-      return true;
-    },
-    sourceSelector,
-    targetSelector,
-  );
-  expect(dropped).toBe(true);
 }
 
 export async function dispatchDoubleClick(selector: string): Promise<void> {

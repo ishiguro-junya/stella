@@ -1,11 +1,15 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
+import { join } from 'node:path';
 
 import {
   dispatchDoubleClick,
+  expectInteractiveSelectedColors,
   expectHistoryCommitLayout,
   openRepository,
   resetApp,
+  saveLogicalScreenshot,
+  selectSetting,
   setLogicalWindowSize,
 } from './support/app.js';
 import {
@@ -13,7 +17,40 @@ import {
   createFixtureDirectory,
   removeFixture,
   runGit,
+  writeRepositoryFile,
 } from './support/fixtures.js';
+
+const visualQaDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
+
+async function clickHistoryDiffToggle(): Promise<void> {
+  await browser.execute(() => {
+    const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+    const toggle = host?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle');
+    if (!toggle) throw new Error('The History diff collapse toggle was not found.');
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+  });
+}
+
+async function historyDiffExpanded(): Promise<boolean | undefined> {
+  return browser.execute(() => {
+    const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+    const toggle =
+      host?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle') ??
+      host?.shadowRoot?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle');
+    return toggle ? toggle.getAttribute('aria-expanded') === 'true' : undefined;
+  });
+}
+
+async function historyDiffBodyVisible(): Promise<boolean> {
+  return browser.execute(() => {
+    const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+    return host?.shadowRoot?.querySelector('pre') !== null;
+  });
+}
+
+async function historyDiffFileCount(): Promise<number> {
+  return browser.execute(() => document.querySelectorAll('.diff-surface diffs-container').length);
+}
 
 describe('History', () => {
   let fixturePath = '';
@@ -24,7 +61,14 @@ describe('History', () => {
     repositoryPath = await createCommittedRepository(fixturePath, 'repository', {
       message: 'feat: E2Eリポジトリを初期化する',
     });
-    await resetApp({ language: 'ja' });
+    await writeRepositoryFile(
+      repositoryPath,
+      'CHANGELOG.md',
+      `${Array.from({ length: 30 }, (_, index) => `History layout line ${index + 1}`).join('\n')}\n`,
+    );
+    await runGit(repositoryPath, ['add', 'CHANGELOG.md']);
+    await runGit(repositoryPath, ['commit', '--amend', '--no-edit']);
+    await resetApp({ language: 'ja', appearance: 'dark', stickyFileHeaders: true });
     await openRepository(repositoryPath);
   });
 
@@ -34,11 +78,170 @@ describe('History', () => {
     repositoryPath = '';
   });
 
+  it('applies the shared line wrapping settings to the right pane Diff', async () => {
+    await $('button=設定').click();
+    await selectSetting('editor-line-wrapping', 'enabled');
+    await $('input[name="editor-wrap-column"]').setValue('80');
+    await $('button=操作履歴').click();
+    await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const host = document.querySelector<HTMLElement>('.history-view .diff-surface');
+          const root = host?.querySelector<HTMLElement>('diffs-container')?.shadowRoot;
+          return (
+            host?.dataset.lineWrapping === 'true' &&
+            host.dataset.wrapColumn === '80' &&
+            Boolean(root?.querySelector('[data-overflow="wrap"]')) &&
+            [...(root?.querySelectorAll('style') ?? [])].some((style) =>
+              style.textContent?.includes('calc(100% - 80ch - 1ch)'),
+            )
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'History did not apply the wrapping settings.' },
+    );
+    await expect($('.history-view .diff-surface')).toHaveAttribute('data-wrap-column', '80');
+  });
+
+  it('keeps the Commit lane continuous and distinct from the working tree in Light and Dark appearances', async () => {
+    await writeRepositoryFile(repositoryPath, 'SECOND.md', 'Second commit\n');
+    await runGit(repositoryPath, ['add', 'SECOND.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: History配色を確認する']);
+    const paletteCommitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    await writeRepositoryFile(repositoryPath, 'UNCOMMITTED.md', 'Uncommitted change\n');
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=操作履歴').click();
+    await expect($('.history-view')).toBeDisplayed();
+    const paletteCommit = $(`[data-history-commit-oid="${paletteCommitOid}"]`);
+    await paletteCommit.waitForDisplayed({ timeout: 20_000 });
+    await paletteCommit.click();
+    await $('.commit-detail-header .ref-chip.branch').waitForDisplayed({ timeout: 20_000 });
+    await expectInteractiveSelectedColors('.history-commit-item.is-current', {
+      foreground: ['.row-action-trigger', '.ref-chip'],
+      mutedForeground: ['.commit-metadata', '.commit-oid'],
+    });
+
+    const historyColors = await browser.execute(() => {
+      const selectedCommit = document.querySelector<HTMLElement>('.history-commit-item.is-current');
+      const selectedCommitEdge = selectedCommit?.querySelector<SVGPathElement>(
+        '.history-graph-edge:not(.working-tree)',
+      );
+      const selectedCommitNode = selectedCommit?.querySelector<HTMLElement>('.history-graph-node');
+      const listBranch = selectedCommit?.querySelector<HTMLElement>('.ref-chip.branch');
+      const nextCommit = selectedCommit?.nextElementSibling;
+      const nextCommitEdge = nextCommit?.querySelector<SVGPathElement>('.history-graph-edge');
+      const workingTreeEdge = document.querySelector<SVGPathElement>(
+        '.history-working-tree-graph .history-graph-edge',
+      );
+      const workingTreeNode = document.querySelector<HTMLElement>(
+        '.history-working-tree-graph .history-graph-node',
+      );
+      const detailBranch = document.querySelector<HTMLElement>(
+        '.commit-detail-header .ref-chip.branch',
+      );
+      if (
+        !selectedCommit ||
+        !selectedCommitEdge ||
+        !selectedCommitNode ||
+        !listBranch ||
+        !nextCommitEdge ||
+        !workingTreeEdge ||
+        !workingTreeNode ||
+        !detailBranch
+      )
+        return null;
+      return {
+        selectedBackground: getComputedStyle(selectedCommit).backgroundColor,
+        selectedCommitEdge: getComputedStyle(selectedCommitEdge).stroke,
+        selectedCommitNode: getComputedStyle(selectedCommitNode).borderColor,
+        listBranchFontSize: getComputedStyle(listBranch).fontSize,
+        nextCommitEdge: getComputedStyle(nextCommitEdge).stroke,
+        workingTreeEdge: getComputedStyle(workingTreeEdge).stroke,
+        workingTreeNode: getComputedStyle(workingTreeNode).borderColor,
+        branchForeground: getComputedStyle(detailBranch).color,
+        branchBackground: getComputedStyle(detailBranch).backgroundColor,
+        detailBranchFontSize: getComputedStyle(detailBranch).fontSize,
+      };
+    });
+    expect(historyColors).toEqual({
+      selectedBackground: 'rgb(20, 115, 230)',
+      selectedCommitEdge: 'rgb(182, 109, 226)',
+      selectedCommitNode: 'rgb(182, 109, 226)',
+      listBranchFontSize: '12px',
+      nextCommitEdge: 'rgb(182, 109, 226)',
+      workingTreeEdge: 'rgb(119, 120, 129)',
+      workingTreeNode: 'rgb(119, 120, 129)',
+      branchForeground: 'rgb(100, 177, 255)',
+      branchBackground: 'rgb(23, 54, 82)',
+      detailBranchFontSize: '12px',
+    });
+    if (visualQaDirectory) {
+      await browser.execute(() => {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      });
+      await saveLogicalScreenshot(
+        join(visualQaDirectory, 'history-graph-and-branch-dark-1180x760.png'),
+        1180,
+        760,
+      );
+    }
+
+    const lightHistoryColors = await browser.execute(async () => {
+      document.documentElement.dataset.theme = 'light';
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const selectedCommit = document.querySelector<HTMLElement>('.history-commit-item.is-current');
+      const selectedCommitEdge = selectedCommit?.querySelector<SVGPathElement>(
+        '.history-graph-edge:not(.working-tree)',
+      );
+      const selectedCommitNode = selectedCommit?.querySelector<HTMLElement>('.history-graph-node');
+      const nextCommitEdge =
+        selectedCommit?.nextElementSibling?.querySelector<SVGPathElement>('.history-graph-edge');
+      const workingTreeEdge = document.querySelector<SVGPathElement>(
+        '.history-working-tree-graph .history-graph-edge',
+      );
+      if (
+        !selectedCommit ||
+        !selectedCommitEdge ||
+        !selectedCommitNode ||
+        !nextCommitEdge ||
+        !workingTreeEdge
+      )
+        return null;
+      return {
+        selectedBackground: getComputedStyle(selectedCommit).backgroundColor,
+        selectedCommitEdge: getComputedStyle(selectedCommitEdge).stroke,
+        selectedCommitNode: getComputedStyle(selectedCommitNode).borderColor,
+        nextCommitEdge: getComputedStyle(nextCommitEdge).stroke,
+        workingTreeEdge: getComputedStyle(workingTreeEdge).stroke,
+      };
+    });
+    expect(lightHistoryColors).toEqual({
+      selectedBackground: 'rgb(8, 127, 245)',
+      selectedCommitEdge: 'rgb(123, 44, 191)',
+      selectedCommitNode: 'rgb(123, 44, 191)',
+      nextCommitEdge: 'rgb(123, 44, 191)',
+      workingTreeEdge: 'rgb(115, 115, 123)',
+    });
+    if (visualQaDirectory) {
+      await saveLogicalScreenshot(
+        join(visualQaDirectory, 'history-graph-and-branch-light-1180x760.png'),
+        1180,
+        760,
+      );
+    }
+  });
+
   it('searches history and creates Tags and Branches from a Commit', async () => {
     await $('button=操作履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="操作履歴"]')).toHaveAttribute('aria-current', 'page');
+    await expectInteractiveSelectedColors('.history-commit-item.is-current', {
+      foreground: ['.row-action-trigger', '.ref-chip'],
+      mutedForeground: ['.commit-metadata', '.commit-oid'],
+    });
     await expect($('.repository-view-tabs')).not.toExist();
+
     const historyResizer = $('[role="separator"][aria-label="操作履歴一覧の幅"]');
     await expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
     await historyResizer.click();
@@ -57,20 +260,119 @@ describe('History', () => {
     await historySearch.setValue('一致しない検索');
     await expect($('.history-search-empty')).toHaveText('一致する操作履歴はありません。');
     await historySearch.setValue('');
-    await browser.waitUntil(
-      async () =>
-        browser.execute(() => {
-          const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
-          return host?.shadowRoot?.textContent?.includes('README.md') ?? false;
-        }),
-      { timeout: 10_000, timeoutMsg: 'The History diff did not display its file name.' },
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 2, {
+      timeout: 10_000,
+      timeoutMsg: 'The History multi-file diff did not render two files.',
+    });
+    const historyDiffNames = await browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')].map(
+        (host) =>
+          host.querySelector<HTMLElement>('.diff-file-custom-header-title > span:last-child')
+            ?.textContent ?? '',
+      ),
     );
-    const historyDiffText = await browser.execute(
-      () =>
-        document.querySelector<HTMLElement>('.diff-surface diffs-container')?.shadowRoot
-          ?.textContent ?? '',
+    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'README.md']);
+    const historyFileNameTypography = await browser.execute(() => {
+      const fileName = document.querySelector<HTMLElement>(
+        '.history-view .diff-file-custom-header-title > span:last-child',
+      );
+      if (!fileName) throw new Error('The History file name was not found.');
+      const style = getComputedStyle(fileName);
+      return {
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+      };
+    });
+    expect(historyFileNameTypography).toEqual({
+      fontSize: '14px',
+      fontWeight: '600',
+      lineHeight: '20px',
+    });
+    const historyDiffText = await browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')]
+        .map((host) => host.shadowRoot?.textContent ?? '')
+        .join('\n'),
     );
     expect(historyDiffText).not.toMatch(/unmodified lines?/iu);
+
+    const historyFileLayout = await browser.execute(async () => {
+      const surface = document.querySelector<HTMLElement>('.diff-surface');
+      const hosts = [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')];
+      const firstHeader = hosts[0]?.shadowRoot?.querySelector<HTMLElement>('[data-diffs-header]');
+      if (!surface || !firstHeader)
+        throw new Error('The History file header layout was not found.');
+      surface.scrollTop = 40;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const stickyOffset = Math.abs(
+        firstHeader.getBoundingClientRect().top - surface.getBoundingClientRect().top,
+      );
+
+      const firstHost = hosts[0];
+      if (!firstHost) throw new Error('The first History diff host was not found.');
+      surface.scrollTop = Math.max(0, firstHost.offsetHeight - surface.clientHeight / 2);
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const renderedHosts = [
+        ...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container'),
+      ];
+      const firstLines = [
+        ...(renderedHosts[0]?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line]') ?? []),
+      ];
+      const lastFirstLine = firstLines.at(-1);
+      const secondHeader =
+        renderedHosts[1]?.shadowRoot?.querySelector<HTMLElement>('[data-diffs-header]');
+      if (!lastFirstLine || !secondHeader)
+        throw new Error('The expanded History file boundary was not rendered.');
+
+      const probe = document.createElement('div');
+      probe.style.border = '1px solid var(--border-strong)';
+      document.body.append(probe);
+      const expectedBorderColor = getComputedStyle(probe).borderTopColor;
+      probe.remove();
+      const secondHeaderStyle = getComputedStyle(secondHeader);
+      const boundaryGap = Math.round(
+        secondHeader.getBoundingClientRect().top - lastFirstLine.getBoundingClientRect().bottom,
+      );
+      surface.scrollTop = 0;
+      return {
+        boundaryGap,
+        borderTopColor: secondHeaderStyle.borderTopColor,
+        borderTopWidth: secondHeaderStyle.borderTopWidth,
+        expectedBorderColor,
+        stickyOffset,
+      };
+    });
+    expect(historyFileLayout).toEqual({
+      boundaryGap: 0,
+      borderTopColor: historyFileLayout.expectedBorderColor,
+      borderTopWidth: '1px',
+      expectedBorderColor: historyFileLayout.expectedBorderColor,
+      stickyOffset: 0,
+    });
+
+    await browser.waitUntil(historyDiffBodyVisible, {
+      timeoutMsg: 'The History diff body was not visible before collapsing it.',
+    });
+
+    await clickHistoryDiffToggle();
+    await browser.waitUntil(async () => (await historyDiffExpanded()) === false, {
+      timeoutMsg: 'Clicking the History diff toggle did not collapse its diff.',
+    });
+    await browser.waitUntil(async () => !(await historyDiffBodyVisible()), {
+      timeoutMsg: 'Clicking the History diff toggle did not hide its diff body.',
+    });
+    await clickHistoryDiffToggle();
+    await browser.waitUntil(async () => (await historyDiffExpanded()) === true, {
+      timeoutMsg: 'Clicking the collapsed History diff toggle did not expand its diff.',
+    });
+    await browser.waitUntil(historyDiffBodyVisible, {
+      timeoutMsg: 'Clicking the collapsed History diff toggle did not show its diff body.',
+    });
+
     expect(
       await browser.execute(() =>
         getComputedStyle(
