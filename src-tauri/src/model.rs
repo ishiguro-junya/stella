@@ -73,6 +73,12 @@ pub struct WorkspaceSession {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct DetachRequest {
+    pub repo_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryRequest {
     pub repo_id: String,
     pub query: Query,
@@ -85,6 +91,9 @@ pub struct QueryRequest {
     tag = "kind"
 )]
 pub enum Query {
+    RepositoryAvailability {
+        path: String,
+    },
     Status,
     Diff {
         target: DiffTarget,
@@ -114,6 +123,7 @@ pub enum Query {
     FileContents {
         path: String,
     },
+    Remotes,
 }
 
 const fn default_history_limit() -> u32 {
@@ -174,6 +184,7 @@ pub enum SelectionSide {
     content = "data"
 )]
 pub enum QueryOutcome {
+    RepositoryAvailability(RepositoryAvailabilityResult),
     Status(RepoSnapshot),
     Diff(DiffResult),
     History(HistoryResult),
@@ -183,6 +194,38 @@ pub enum QueryOutcome {
     CommitDetails(CommitDetails),
     Conflict(Box<ConflictDocument>),
     FileContents(FileDocument),
+    Remotes(RemoteResult),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RepositoryAvailability {
+    Available,
+    Missing,
+    NotRepository,
+    Inaccessible,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryAvailabilityResult {
+    pub path: String,
+    pub availability: RepositoryAvailability,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDefinition {
+    pub name: String,
+    pub fetch_urls: Vec<String>,
+    pub push_urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteResult {
+    pub remotes: Vec<RemoteDefinition>,
+    pub repo_generation: RepoGeneration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -293,6 +336,12 @@ pub enum Action {
         remote_branch: String,
         set_upstream: bool,
     },
+    SetRemoteUrl {
+        remote: String,
+        url_kind: RemoteUrlKind,
+        expected_url: String,
+        new_url: String,
+    },
     CreateBranch {
         name: String,
         start_point: String,
@@ -400,6 +449,7 @@ impl Action {
             Self::Fetch { .. } => "fetch",
             Self::Pull { .. } => "pull",
             Self::Push { .. } => "push",
+            Self::SetRemoteUrl { .. } => "setRemoteUrl",
             Self::CreateBranch { .. } => "createBranch",
             Self::CreateTag { .. } => "createTag",
             Self::GitFlow { .. } => "gitFlow",
@@ -433,9 +483,17 @@ impl Action {
                     | Self::Revert { .. }
                     | Self::CreateBranch { .. }
                     | Self::CreateTag { .. }
+                    | Self::SetRemoteUrl { .. }
                     | Self::GitFlow { .. }
             )
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteUrlKind {
+    Fetch,
+    Push,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -1068,6 +1126,8 @@ pub enum ErrorCode {
     GitFailed,
     HookFailed,
     AuthenticationFailed,
+    RemoteUnavailable,
+    NetworkFailed,
     ConflictStateChanged,
     OperationInProgress,
     Cancelled,
@@ -1090,6 +1150,8 @@ impl ErrorCode {
             Self::GitFailed => "errorGitFailed",
             Self::HookFailed => "errorHookFailed",
             Self::AuthenticationFailed => "errorAuthenticationFailed",
+            Self::RemoteUnavailable => "errorRemoteUnavailable",
+            Self::NetworkFailed => "errorNetworkFailed",
             Self::ConflictStateChanged => "errorConflictStateChanged",
             Self::OperationInProgress => "errorOperationInProgress",
             Self::Cancelled => "errorCancelled",

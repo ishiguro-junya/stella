@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clearRemoteHealthIssue,
   DEFAULT_PREFERENCES,
+  forgetRepositoryPath,
   readPreferences,
+  recordRemoteHealthIssue,
   rememberRepositoryPath,
+  replaceRepositoryPath,
   writePreferences,
 } from './preferences';
 
@@ -200,5 +204,110 @@ describe('appearance preferences', () => {
     expect(rememberRepositoryPath('/tmp/stella').repositoryNames).toEqual({
       '/tmp/stella': 'My Stella',
     });
+  });
+
+  it('moves repository metadata, selection, warnings, and both commit draft formats together', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: ['/old/repo'],
+      repositoryNames: { '/old/repo': 'Moved' },
+      repositoryHealthIssues: {
+        '/old/repo': [
+          { kind: 'remote', remote: 'origin', reason: 'network', failedAt: '2026-08-12T00:00:00Z' },
+        ],
+      },
+      openRepoPaths: ['/old/repo'],
+      selectedRepoPath: '/old/repo',
+      commitDrafts: {
+        '/old/repo': {
+          plainMessage: 'plain draft',
+          conventional: {
+            type: 'fix',
+            scope: 'repo',
+            breaking: false,
+            description: 'structured draft',
+          },
+        },
+      },
+    });
+
+    expect(replaceRepositoryPath('/old/repo', '/new/repo')).toMatchObject({
+      registeredRepoPaths: ['/new/repo'],
+      repositoryNames: { '/new/repo': 'Moved' },
+      repositoryHealthIssues: {
+        '/new/repo': [{ kind: 'remote', remote: 'origin', reason: 'network' }],
+      },
+      openRepoPaths: ['/new/repo'],
+      selectedRepoPath: '/new/repo',
+      commitDrafts: {
+        '/new/repo': {
+          plainMessage: 'plain draft',
+          conventional: { description: 'structured draft' },
+        },
+      },
+    });
+  });
+
+  it('does not merge a path replacement into an existing registration', () => {
+    const initial = {
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: ['/old/repo', '/new/repo'],
+      repositoryNames: { '/old/repo': 'Old', '/new/repo': 'New' },
+    };
+    writePreferences(initial);
+    expect(replaceRepositoryPath('/old/repo', '/new/repo')).toEqual(initial);
+  });
+
+  it('persists only remote warning metadata and clears the matching remote only', () => {
+    writePreferences(DEFAULT_PREFERENCES);
+    recordRemoteHealthIssue('/repo', 'origin', 'authentication');
+    recordRemoteHealthIssue('/repo', 'backup', 'network');
+    const remaining = clearRemoteHealthIssue('/repo', 'origin');
+    expect(remaining.repositoryHealthIssues['/repo']).toMatchObject([
+      { kind: 'remote', remote: 'backup', reason: 'network' },
+    ]);
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...remaining,
+        repositoryHealthIssues: {
+          '/repo': [
+            {
+              kind: 'remote',
+              remote: 'backup',
+              reason: 'network',
+              failedAt: '2026-08-12T00:00:00Z',
+              url: 'https://user:secret@example.test/repo.git',
+              output: 'secret',
+            },
+          ],
+        },
+      }),
+    );
+    expect(readPreferences().repositoryHealthIssues['/repo']).toEqual([
+      {
+        kind: 'remote',
+        remote: 'backup',
+        reason: 'network',
+        failedAt: '2026-08-12T00:00:00Z',
+      },
+    ]);
+  });
+
+  it('forgets registration metadata without touching unrelated repositories', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: ['/repo', '/other'],
+      repositoryNames: { '/repo': 'Repo', '/other': 'Other' },
+      openRepoPaths: ['/repo', '/other'],
+      selectedRepoPath: '/repo',
+    });
+    expect(forgetRepositoryPath('/repo')).toMatchObject({
+      registeredRepoPaths: ['/other'],
+      repositoryNames: { '/other': 'Other' },
+      openRepoPaths: ['/other'],
+    });
+    expect(readPreferences().selectedRepoPath).toBeUndefined();
   });
 });

@@ -2812,6 +2812,12 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
 .registered-repositories li + li {
   border-top: 1px solid var(--border-subtle);
 }
+.registered-repository-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
 .registered-repository-row {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
@@ -2856,6 +2862,51 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.registered-repository-row .repository-health-label,
+.repository-health-label {
+  color: var(--warning);
+  font-weight: 600;
+}
+.registered-repository-actions {
+  display: flex;
+  gap: 4px;
+  padding-right: 7px;
+}
+.registered-repository-actions button,
+.remote-definition header button,
+.remote-url-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  font-size: 11px;
+}
+.registered-repository-actions button > svg,
+.remote-definition header button > svg,
+.remote-url-row button > svg {
+  width: 13px;
+  height: 13px;
+}
+.repository-relocation-path,
+.repository-relocation-paths code {
+  overflow-wrap: anywhere;
+}
+.repository-relocation-paths {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.repository-relocation-paths div {
+  display: grid;
+  gap: 3px;
+}
+.repository-relocation-paths dt {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.repository-relocation-paths dd {
+  margin: 0;
+}
 .registered-repository-row strong {
   font-size: 13px;
   font-weight: 600;
@@ -2893,6 +2944,77 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   .repository-landing {
     padding-top: 36px;
   }
+}
+.remote-manager-sheet {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.remote-manager-header,
+.remote-definition > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.remote-manager-header h2,
+.remote-manager-header p,
+.remote-definition h3,
+.remote-definition h4,
+.remote-manager-error p {
+  margin: 0;
+}
+.remote-manager-header p {
+  margin-top: 5px;
+  color: var(--text-secondary);
+}
+.remote-manager-list {
+  display: grid;
+  gap: 12px;
+}
+.remote-definition {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+.remote-definition > header > div {
+  display: grid;
+  gap: 3px;
+}
+.remote-url-group {
+  display: grid;
+  gap: 6px;
+}
+.remote-url-group h4 {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.remote-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.remote-url-row code,
+.remote-url-row label,
+.remote-url-row input {
+  min-width: 0;
+  width: 100%;
+}
+.remote-url-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-manager-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--danger);
 }
 
 .modal-backdrop {

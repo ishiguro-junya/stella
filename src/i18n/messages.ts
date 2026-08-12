@@ -1024,6 +1024,126 @@ export const MESSAGES = {
     en: 'No repositories have been added yet.',
     ja: '追加済みのリポジトリはありません。',
   },
+  repositoryMissing: { en: 'Check location', ja: '場所を確認' },
+  repositoryNotRepository: { en: 'Check repository', ja: 'リポジトリを確認' },
+  repositoryInaccessible: { en: 'Check access', ja: 'アクセス権を確認' },
+  repositoryNeedsRemoteCheck: { en: 'Check remote', ja: 'リモートを確認' },
+  repositoryNeedsAuthenticationCheck: { en: 'Check authentication', ja: '認証を確認' },
+  repositoryNeedsNetworkCheck: { en: 'Check connection', ja: '接続を確認' },
+  repositoryCheckFailed: {
+    en: 'Could not check the repository location.',
+    ja: 'リポジトリの場所を確認できませんでした。',
+  },
+  repairRepositoryLocation: { en: 'Choose Location', ja: '場所を選び直す' },
+  repositoryLocationUnavailableTitle: {
+    en: 'Repository location is unavailable',
+    ja: 'リポジトリの場所を利用できません',
+  },
+  repositoryLocationUnavailableDescription: {
+    en: 'Choose the repository at its new location, or close this repository.',
+    ja: '移動先のリポジトリを選ぶか、このリポジトリを閉じてください。',
+  },
+  repositoryLocationUnavailableWithDraft: {
+    en: 'Editing has stopped to protect unsaved changes. Choose the new location or discard the changes and close the repository.',
+    ja: '未保存の編集を保護するため操作を停止しました。新しい場所を選ぶか、編集内容を破棄して閉じてください。',
+  },
+  discardAndCloseRepository: {
+    en: 'Discard Changes and Close',
+    ja: '編集内容を破棄して閉じる',
+  },
+  chooseRelocatedRepository: { en: 'Choose New Repository Location', ja: '新しい場所を選択' },
+  confirmRepositoryRelocation: { en: 'Confirm New Location', ja: '新しい場所を確認' },
+  repositoryRelocationDescription: {
+    en: 'The app does not determine whether these are the same repository. Confirm the locations before replacing the registration.',
+    ja: '同じリポジトリかどうかは自動判定しません。登録を付け替える前に両方の場所を確認してください。',
+  },
+  oldRepositoryLocation: { en: 'Previous location', ja: '以前の場所' },
+  newRepositoryLocation: { en: 'New location', ja: '新しい場所' },
+  replaceRepositoryLocation: { en: 'Replace Location', ja: '場所を付け替える' },
+  repositoryRelocationFailedTitle: {
+    en: 'Could not replace repository location',
+    ja: 'リポジトリの場所を付け替えられませんでした',
+  },
+  repositoryRelocationFailed: {
+    en: 'The repository remains at its previous registration.',
+    ja: '以前の登録と編集内容はそのまま保持されています。',
+  },
+  relocationDraftChanged: {
+    en: 'The file at the new location has changed from the editing base. It was not overwritten.',
+    ja: '新しい場所のファイルが編集開始時の状態と異なるため、上書きしませんでした。編集内容は保持されています。',
+  },
+  repositoryRelocated: {
+    en: 'Repository location was replaced.',
+    ja: 'リポジトリの場所を付け替えました。',
+  },
+  repositoryAlreadyRegisteredTitle: {
+    en: 'This location is already registered',
+    ja: 'この場所は登録済みです',
+  },
+  repositoryAlreadyRegisteredDescription: {
+    en: 'Open the existing registration or remove the previous registration. The registrations will not be merged automatically.',
+    ja: '既存の登録を開くか、以前の登録を解除してください。自動では統合しません。',
+  },
+  openRegisteredRepository: { en: 'Open Registered Repository', ja: '登録済みの方を開く' },
+  forgetOldRepository: { en: 'Remove Previous Registration', ja: '以前の登録を解除' },
+  forgetRepository: { en: 'Remove', ja: '登録を解除' },
+  forgetNamedRepository: {
+    en: () => 'Remove repository from the list',
+    ja: () => 'リポジトリの登録を解除',
+  },
+  forgetRepositoryTitle: { en: 'Remove Repository', ja: 'リポジトリの登録を解除' },
+  forgetRepositoryDescription: {
+    en: (args) =>
+      `Remove ${text(args, 'repository')} from the list? Local files will not be deleted.`,
+    ja: (args) =>
+      `${text(args, 'repository')}を一覧から解除しますか。ローカルファイルは削除しません。`,
+  },
+  unsavedChangesWillBeDiscarded: {
+    en: 'Unsaved editing will be discarded.',
+    ja: '未保存の編集内容は破棄されます。',
+  },
+  forgetRepositoryOperationBlocked: {
+    en: 'Complete or abort the Git operation before removing this repository.',
+    ja: 'Git操作を完了または中止してから登録を解除してください。',
+  },
+  forgetRepositoryFailedTitle: {
+    en: 'Could not remove repository',
+    ja: 'リポジトリの登録を解除できませんでした',
+  },
+  forgetRepositoryFailed: {
+    en: 'The repository registration was not changed.',
+    ja: 'リポジトリの登録は変更されていません。',
+  },
+  manageRemotes: { en: 'Remote URLs', ja: 'リモートURL' },
+  manageRemotesDescription: {
+    en: 'Review existing fetch and push URLs. Adding, removing, and renaming remotes are not supported.',
+    ja: '既存のフェッチURLとプッシュURLを確認・変更できます。リモートの追加・削除・名称変更はできません。',
+  },
+  fetchUrls: { en: 'Fetch URLs', ja: 'フェッチURL' },
+  pushUrls: { en: 'Push URLs', ja: 'プッシュURL' },
+  fetchRemote: { en: 'Fetch', ja: 'フェッチ' },
+  noRemotes: { en: 'No remotes are configured.', ja: 'リモートが設定されていません。' },
+  loadRemotesFailed: {
+    en: 'Could not load remote URLs.',
+    ja: 'リモートURLを読み込めませんでした。',
+  },
+  newRemoteUrl: { en: 'New remote URL', ja: '新しいリモートURL' },
+  changeRemoteUrl: {
+    en: (args) => `Change a URL for ${text(args, 'remote')}`,
+    ja: (args) => `${text(args, 'remote')}のURLを変更`,
+  },
+  reviewRemoteUrlChange: { en: 'Review Change', ja: '変更内容を確認' },
+  changeRemoteUrlAction: { en: 'Change URL', ja: 'URLを変更' },
+  change: { en: 'Change', ja: '変更' },
+  actionSetRemoteUrl: { en: 'Change remote URL', ja: 'リモートURLを変更' },
+  previewSetRemoteUrl: {
+    en: 'The local Git configuration will be changed after the current URL is checked again.',
+    ja: '変更前のURLを再確認してから、ローカルのGit設定を変更します。',
+  },
+  backendRemoteUrlUpdated: {
+    en: 'The remote URL was updated.',
+    ja: 'リモートURLを更新しました。',
+  },
   addRepository: { en: 'Add Repository', ja: 'リポジトリを追加' },
   repositorySource: { en: 'Repository source', ja: 'リポジトリの追加元' },
   repositoryUrlTab: { en: 'URL', ja: 'URL' },
@@ -1413,6 +1533,14 @@ export const MESSAGES = {
   errorAuthenticationFailed: {
     en: 'Git authentication failed.',
     ja: 'Gitの認証に失敗しました。',
+  },
+  errorRemoteUnavailable: {
+    en: 'The remote repository is unavailable.',
+    ja: 'リモートリポジトリを利用できません。',
+  },
+  errorNetworkFailed: {
+    en: 'Could not connect to the remote repository.',
+    ja: 'リモートリポジトリへ接続できませんでした。',
   },
   errorIo: {
     en: 'A required file or system resource could not be accessed.',

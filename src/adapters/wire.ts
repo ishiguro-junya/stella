@@ -22,6 +22,7 @@ export interface WireQueryRequest {
 }
 
 export type WireQuery =
+  | { kind: 'repositoryAvailability'; path: string }
   | { kind: 'status' }
   | { kind: 'diff'; target: WireDiffTarget; paths: string[] }
   | { kind: 'history'; limit: number; skip: number; search?: string }
@@ -30,6 +31,7 @@ export type WireQuery =
   | { kind: 'commitDetails'; oid: string }
   | { kind: 'conflict'; path: string }
   | { kind: 'fileContents'; path: string }
+  | { kind: 'remotes' }
   | {
       kind: 'commitActivity';
       operationId: string;
@@ -39,6 +41,13 @@ export type WireQuery =
 export type WireDiffTarget = 'unstaged' | 'staged' | 'head';
 
 export type WireQueryOutcome =
+  | {
+      kind: 'repositoryAvailability';
+      data: {
+        path: string;
+        availability: 'available' | 'missing' | 'notRepository' | 'inaccessible';
+      };
+    }
   | { kind: 'status'; data: WireRepoSnapshot }
   | { kind: 'diff'; data: WireDiffResult }
   | { kind: 'history'; data: WireHistoryResult }
@@ -47,6 +56,7 @@ export type WireQueryOutcome =
   | { kind: 'commitDetails'; data: WireCommitDetails }
   | { kind: 'conflict'; data: WireConflictDocument }
   | { kind: 'fileContents'; data: WireFileDocument }
+  | { kind: 'remotes'; data: WireRemoteResult }
   | { kind: 'commitActivity'; data: WireCommitActivitySeries };
 
 export interface WirePreviewRequest {
@@ -128,6 +138,13 @@ export type WireAction =
       localBranch: string;
       remoteBranch: string;
       setUpstream: boolean;
+    }
+  | {
+      kind: 'setRemoteUrl';
+      remote: string;
+      urlKind: 'fetch' | 'push';
+      expectedUrl: string;
+      newUrl: string;
     }
   | { kind: 'createBranch'; name: string; startPoint: string; checkout: boolean }
   | { kind: 'createTag'; name: string; target: string }
@@ -212,6 +229,11 @@ export interface WireRepoSnapshot {
   gitFlowOperation?: string | null;
   repoGeneration: number;
   eventSeq: number;
+}
+
+export interface WireRemoteResult {
+  remotes: Array<{ name: string; fetchUrls: string[]; pushUrls: string[] }>;
+  repoGeneration: number;
 }
 
 export interface WireStatusEntry {

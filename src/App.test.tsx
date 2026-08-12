@@ -2104,3 +2104,215 @@ describe('App repository attach', () => {
     },
   );
 });
+
+describe('App repository recovery', () => {
+  it('validates and confirms a relocated registered repository before migrating its settings', async () => {
+    const user = userEvent.setup();
+    const oldPath = '/tmp/old-repository';
+    const newPath = '/tmp/new-repository';
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [oldPath],
+      repositoryNames: { [oldPath]: 'Moved Repository' },
+      repositoryHealthIssues: {
+        [oldPath]: [{ kind: 'remote', remote: 'origin', reason: 'network' }],
+      },
+      commitDrafts: {
+        [oldPath]: {
+          plainMessage: 'plain draft',
+          conventional: {
+            type: 'fix',
+            breaking: false,
+            description: 'structured draft',
+          },
+        },
+      },
+    });
+    const relocated = repoSnapshot({ repoId: 'repo-relocated', path: newPath });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [relocated],
+        selectedRepoId: relocated.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'repositoryAvailability') {
+          return {
+            kind: 'repositoryAvailability',
+            path: request.path,
+            availability: request.path === oldPath ? 'missing' : 'available',
+          };
+        }
+        if (request.kind === 'snapshot') return { kind: 'snapshot', snapshot: relocated };
+        return { kind: 'activity', entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    const directoryPicker = vi.fn<() => Promise<string>>(async () => newPath);
+    render(<App adapter={adapter} directoryPicker={directoryPicker} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Choose Location' }));
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Confirm New Location' });
+    expect(confirmation).toHaveTextContent(oldPath);
+    expect(confirmation).toHaveTextContent(newPath);
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace Location' }));
+
+    await waitFor(() =>
+      expect(adapter.attach).toHaveBeenCalledWith({ kind: 'openExisting', path: newPath }),
+    );
+    expect(readPreferences()).toMatchObject({
+      registeredRepoPaths: [newPath],
+      repositoryNames: { [newPath]: 'Moved Repository' },
+      repositoryHealthIssues: {
+        [newPath]: [{ kind: 'remote', remote: 'origin', reason: 'network' }],
+      },
+      commitDrafts: {
+        [newPath]: {
+          plainMessage: 'plain draft',
+          conventional: { description: 'structured draft' },
+        },
+      },
+    });
+  });
+
+  async function prepareFileRelocation(newBaseHash: string) {
+    const user = userEvent.setup();
+    const oldPath = '/tmp/old-editing-repository';
+    const newPath = '/tmp/new-editing-repository';
+    const change = { path: 'src/app.ts', area: 'unstaged' as const, status: 'modified' as const };
+    const oldRepo = repoSnapshot({ repoId: 'repo-old', path: oldPath, changes: [change] });
+    const newRepo = repoSnapshot({ repoId: 'repo-new', path: newPath, changes: [change] });
+    let oldPathMissing = false;
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [oldPath],
+      openRepoPaths: [oldPath],
+      selectedRepoPath: oldPath,
+    });
+    const execute = vi.fn<WorkspaceAdapter['execute']>(async (request) => ({
+      repoId: request.repoId,
+      generation: newRepo.generation,
+      summary: { id: 'backendFileSaved' },
+      snapshot: newRepo,
+    }));
+    const detach = vi.fn<NonNullable<WorkspaceAdapter['detach']>>(async () => undefined);
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async (request) => {
+        const repository = request.kind !== 'clone' && request.path === newPath ? newRepo : oldRepo;
+        return {
+          repos: [repository],
+          selectedRepoId: repository.repoId,
+          activities: [],
+        };
+      }),
+      detach,
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'repositoryAvailability') {
+          return {
+            kind: 'repositoryAvailability',
+            path: request.path,
+            availability: request.path === oldPath && oldPathMissing ? 'missing' : 'available',
+          };
+        }
+        if (request.kind === 'snapshot') {
+          return {
+            kind: 'snapshot',
+            snapshot: request.repoId === newRepo.repoId ? newRepo : oldRepo,
+          };
+        }
+        if (request.kind === 'diff') {
+          return {
+            kind: 'diff',
+            diff: {
+              diffId: `diff-${request.repoId}`,
+              repoId: request.repoId,
+              path: request.path,
+              area: request.area,
+              generation: oldRepo.generation,
+              patch: 'diff --git a/src/app.ts b/src/app.ts\n',
+            },
+          };
+        }
+        if (request.kind === 'fileContents') {
+          const moved = request.repoId === newRepo.repoId;
+          return {
+            kind: 'fileContents',
+            document: {
+              repoId: request.repoId,
+              path: request.path,
+              text: moved ? 'moved contents\n' : 'original contents\n',
+              lineEnding: 'lf',
+              hasUtf8Bom: false,
+              contentHash: moved ? newBaseHash : 'base-hash',
+              generation: oldRepo.generation,
+            },
+          };
+        }
+        if (request.kind === 'commitActivity') {
+          return commitActivityResult(oldRepo, request.bucketBoundariesUnixSeconds);
+        }
+        return { kind: 'activity', entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute,
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} directoryPicker={async () => newPath} />);
+
+    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
+      target: { value: 'local draft\n' },
+    });
+    oldPathMissing = true;
+    fireEvent.focus(window);
+    await user.click(await screen.findByRole('button', { name: 'Choose Location' }));
+    const confirmation = await screen.findByRole('alertdialog', {
+      name: 'Confirm New Location',
+    });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace Location' }));
+
+    return { user, oldPath, newPath, oldRepo, newRepo, execute, detach };
+  }
+
+  it('未保存のファイル編集は移動先の基準が一致する場合に引き継ぐ', async () => {
+    const { oldRepo, newRepo, newPath, execute, detach } = await prepareFileRelocation('base-hash');
+
+    await waitFor(() =>
+      expect(execute).toHaveBeenCalledWith({
+        repoId: newRepo.repoId,
+        action: {
+          kind: 'saveFile',
+          path: 'src/app.ts',
+          text: 'local draft\n',
+          expectedContentHash: 'base-hash',
+        },
+      }),
+    );
+    expect(detach).toHaveBeenCalledWith(oldRepo.repoId);
+    expect(readPreferences().registeredRepoPaths).toEqual([newPath]);
+  });
+
+  it('移動先の基準が異なる場合は未保存のファイル編集と旧登録を保持する', async () => {
+    const { user, oldPath, newRepo, execute, detach } =
+      await prepareFileRelocation('external-hash');
+
+    const error = await screen.findByRole('alertdialog', {
+      name: 'Could not replace repository location',
+    });
+    await user.click(within(error).getByRole('button', { name: 'Close' }));
+    expect(execute).not.toHaveBeenCalled();
+    expect(detach).toHaveBeenCalledWith(newRepo.repoId);
+    expect(screen.getByRole('textbox', { name: 'Edit src/app.ts' })).toHaveValue('local draft\n');
+    expect(readPreferences().registeredRepoPaths).toEqual([oldPath]);
+  });
+});

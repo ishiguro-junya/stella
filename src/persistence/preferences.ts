@@ -1,4 +1,10 @@
-import type { ConventionalCommitInput, DiffStyle, WorkspaceView } from '../domain/workspace';
+import type {
+  ConventionalCommitInput,
+  DiffStyle,
+  RepositoryHealthIssue,
+  RemoteHealthReason,
+  WorkspaceView,
+} from '../domain/workspace';
 import { detectLanguage, isLanguage, type Language } from '../i18n/i18n';
 import type { Appearance } from '../theme/appearance';
 
@@ -37,6 +43,7 @@ export interface StellaPreferences {
   editorWrapColumn: number;
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
+  repositoryHealthIssues: Record<string, RepositoryHealthIssue[]>;
   openRepoPaths: string[];
   selectedRepoPath?: string;
   view: WorkspaceView;
@@ -56,6 +63,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   editorWrapColumn: DEFAULT_EDITOR_WRAP_COLUMN,
   registeredRepoPaths: [],
   repositoryNames: {},
+  repositoryHealthIssues: {},
   openRepoPaths: [],
   view: 'changes',
   paneWidths: {
@@ -148,6 +156,34 @@ function repositoryNameRecord(value: unknown): Record<string, string> {
   );
 }
 
+function repositoryHealthIssueRecord(value: unknown): Record<string, RepositoryHealthIssue[]> {
+  if (!isRecord(value)) return {};
+  const output: Record<string, RepositoryHealthIssue[]> = {};
+  for (const [path, candidates] of Object.entries(value)) {
+    if (!Array.isArray(candidates)) continue;
+    const issues = candidates.flatMap((candidate): RepositoryHealthIssue[] => {
+      if (!isRecord(candidate) || candidate.kind !== 'remote') return [];
+      if (
+        candidate.reason !== 'unavailable' &&
+        candidate.reason !== 'authentication' &&
+        candidate.reason !== 'network'
+      )
+        return [];
+      if (typeof candidate.remote !== 'string' || !candidate.remote.trim()) return [];
+      return [
+        {
+          kind: 'remote',
+          reason: candidate.reason,
+          remote: candidate.remote,
+          ...(typeof candidate.failedAt === 'string' ? { failedAt: candidate.failedAt } : {}),
+        },
+      ];
+    });
+    if (issues.length) output[path] = issues;
+  }
+  return output;
+}
+
 function boundedWidth(value: unknown, fallback: number, min = 180, max = 520): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(max, Math.max(min, value))
@@ -199,6 +235,7 @@ export function readPreferences(): StellaPreferences {
       editorWrapColumn: normalizeEditorWrapColumn(value.editorWrapColumn),
       registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
       repositoryNames: repositoryNameRecord(value.repositoryNames),
+      repositoryHealthIssues: repositoryHealthIssueRecord(value.repositoryHealthIssues),
       openRepoPaths: stringArray(value.openRepoPaths, 12),
       ...(typeof value.selectedRepoPath === 'string'
         ? { selectedRepoPath: value.selectedRepoPath }
@@ -262,4 +299,88 @@ export function rememberRepositoryPath(path: string, name?: string): StellaPrefe
       ? { ...current.repositoryNames, [path]: name.trim() }
       : current.repositoryNames,
   }));
+}
+
+export function replaceRepositoryPath(oldPath: string, newPath: string): StellaPreferences {
+  return updatePreferences((current) => {
+    if (oldPath !== newPath && current.registeredRepoPaths.includes(newPath)) return current;
+    const repositoryNames = { ...current.repositoryNames };
+    const repositoryHealthIssues = { ...current.repositoryHealthIssues };
+    const commitDrafts = { ...current.commitDrafts };
+    if (repositoryNames[oldPath] !== undefined) {
+      repositoryNames[newPath] = repositoryNames[oldPath];
+      delete repositoryNames[oldPath];
+    }
+    if (repositoryHealthIssues[oldPath] !== undefined) {
+      repositoryHealthIssues[newPath] = repositoryHealthIssues[oldPath];
+      delete repositoryHealthIssues[oldPath];
+    }
+    if (commitDrafts[oldPath] !== undefined) {
+      commitDrafts[newPath] = commitDrafts[oldPath];
+      delete commitDrafts[oldPath];
+    }
+    return {
+      ...current,
+      registeredRepoPaths: current.registeredRepoPaths.map((path) =>
+        path === oldPath ? newPath : path,
+      ),
+      repositoryNames,
+      repositoryHealthIssues,
+      openRepoPaths: current.openRepoPaths.map((path) => (path === oldPath ? newPath : path)),
+      ...(current.selectedRepoPath === oldPath ? { selectedRepoPath: newPath } : {}),
+      commitDrafts,
+    };
+  });
+}
+
+export function forgetRepositoryPath(path: string): StellaPreferences {
+  return updatePreferences((current) => {
+    const repositoryNames = { ...current.repositoryNames };
+    const repositoryHealthIssues = { ...current.repositoryHealthIssues };
+    const commitDrafts = { ...current.commitDrafts };
+    delete repositoryNames[path];
+    delete repositoryHealthIssues[path];
+    delete commitDrafts[path];
+    const withoutSelectedRepoPath = { ...current };
+    delete withoutSelectedRepoPath.selectedRepoPath;
+    return {
+      ...(current.selectedRepoPath === path ? withoutSelectedRepoPath : current),
+      registeredRepoPaths: current.registeredRepoPaths.filter((candidate) => candidate !== path),
+      repositoryNames,
+      repositoryHealthIssues,
+      openRepoPaths: current.openRepoPaths.filter((candidate) => candidate !== path),
+      commitDrafts,
+    };
+  });
+}
+
+export function recordRemoteHealthIssue(
+  path: string,
+  remote: string,
+  reason: RemoteHealthReason,
+): StellaPreferences {
+  return updatePreferences((current) => ({
+    ...current,
+    repositoryHealthIssues: {
+      ...current.repositoryHealthIssues,
+      [path]: [
+        ...(current.repositoryHealthIssues[path] ?? []).filter(
+          (issue) => issue.kind !== 'remote' || issue.remote !== remote,
+        ),
+        { kind: 'remote', reason, remote, failedAt: new Date().toISOString() },
+      ],
+    },
+  }));
+}
+
+export function clearRemoteHealthIssue(path: string, remote: string): StellaPreferences {
+  return updatePreferences((current) => {
+    const repositoryHealthIssues = { ...current.repositoryHealthIssues };
+    const remaining = (repositoryHealthIssues[path] ?? []).filter(
+      (issue) => issue.kind !== 'remote' || issue.remote !== remote,
+    );
+    if (remaining.length) repositoryHealthIssues[path] = remaining;
+    else delete repositoryHealthIssues[path];
+    return { ...current, repositoryHealthIssues };
+  });
 }

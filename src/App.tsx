@@ -39,6 +39,8 @@ import type {
   BranchSummary,
   ConflictDocument,
   DiffStyle,
+  RemoteDefinition,
+  RepositoryAvailability,
   RepoSnapshot,
   WorkspaceAction,
   WorkspaceEvent,
@@ -53,7 +55,7 @@ import {
   repositoryNameFromRemoteUrl,
 } from './domain/repositoryLocation';
 import { ChangesView } from './features/changes/ChangesView';
-import type { UnsavedChangesHandle } from './domain/unsavedChanges';
+import type { UnsavedChangesHandle, UnsavedRelocationDraft } from './domain/unsavedChanges';
 import { mergeActivityEntries } from './features/activity/activityPersistence';
 import { HistoryView } from './features/history/HistoryView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -78,6 +80,7 @@ import { applyNativeLanguage } from './i18n/nativeLanguage';
 import { Dialog } from './ui/Dialog';
 import { BranchSwitcherDialog } from './ui/BranchSwitcherDialog';
 import { RepositorySwitcherDialog } from './ui/RepositorySwitcherDialog';
+import { RemoteManagerDialog } from './ui/RemoteManagerDialog';
 import {
   markWorkspaceErrorHandled,
   WorkspaceErrorDialog,
@@ -86,8 +89,12 @@ import {
 import { describeWorkspaceError, type WorkspaceErrorContent } from './ui/WorkspaceErrorDetails';
 import {
   CHANGES_PANE_MIN_WIDTH,
+  clearRemoteHealthIssue,
+  forgetRepositoryPath,
   readPreferences,
+  recordRemoteHealthIssue,
   rememberRepositoryPath,
+  replaceRepositoryPath,
   updatePreferences,
   type PaneWidthPreferences,
 } from './persistence/preferences';
@@ -162,9 +169,24 @@ interface BranchDialogState {
   error?: string;
 }
 
+interface RemoteManagerState {
+  path: string;
+  repoId: string;
+  remotes: RemoteDefinition[];
+  loading: boolean;
+  error?: string;
+}
+
+interface RelocationState {
+  oldPath: string;
+  newPath: string;
+  duplicate: boolean;
+}
+
 type WorkspaceViewTransitionStyle = CSSProperties & { '--left-pane': string };
 
 function actionNeedsPreview(action: WorkspaceAction): boolean {
+  if (action.kind === 'setRemoteUrl') return true;
   if (action.kind === 'fileAction') return action.operation === 'moveToTrash';
   if (action.kind === 'gitFlow') {
     return [
@@ -194,9 +216,28 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
 }
 
 function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): string {
+  if (action.kind === 'setRemoteUrl') return t('changeRemoteUrlAction');
   if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('deleteFiles');
   if (action.kind === 'discardFiles') return t('discardFiles');
   return t('run');
+}
+
+function actionRemote(action: WorkspaceAction, repo: RepoSnapshot): string | undefined {
+  if (action.kind === 'fetch')
+    return action.remote ?? repo.branch.upstream?.split('/')[0] ?? 'origin';
+  if (action.kind === 'pullFastForward' || action.kind === 'push')
+    return repo.branch.upstream?.split('/')[0] ?? 'origin';
+  return undefined;
+}
+
+function remoteHealthReason(
+  cause: unknown,
+): 'unavailable' | 'authentication' | 'network' | undefined {
+  if (!(cause instanceof WorkspaceAdapterError)) return undefined;
+  if (cause.code === 'remoteUnavailable') return 'unavailable';
+  if (cause.code === 'authenticationFailed') return 'authentication';
+  if (cause.code === 'networkFailed') return 'network';
+  return undefined;
 }
 
 function repositoryState(
@@ -324,6 +365,12 @@ export function App({
   const [paneWidths, setPaneWidths] = useState<PaneWidthPreferences>(initialPreferences.paneWidths);
   const [registeredPaths, setRegisteredPaths] = useState(initialPreferences.registeredRepoPaths);
   const [repositoryNames, setRepositoryNames] = useState(initialPreferences.repositoryNames);
+  const [repositoryHealthIssues, setRepositoryHealthIssues] = useState(
+    initialPreferences.repositoryHealthIssues,
+  );
+  const [repositoryAvailability, setRepositoryAvailability] = useState<
+    Record<string, RepositoryAvailability>
+  >({});
   const [repositoryLogoUrls, setRepositoryLogoUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<AppNotice>();
@@ -340,6 +387,10 @@ export function App({
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
+  const [remoteManager, setRemoteManager] = useState<RemoteManagerState>();
+  const [relocation, setRelocation] = useState<RelocationState>();
+  const [unavailableRepoPath, setUnavailableRepoPath] = useState<string>();
+  const [pendingForgetPath, setPendingForgetPath] = useState<string>();
   const [branchControlFocused, setBranchControlFocused] = useState(false);
   const [restoringWorkspace, setRestoringWorkspace] = useState(
     initialPreferences.openRepoPaths.length > 0,
@@ -368,8 +419,18 @@ export function App({
         path,
         name: repositoryNames[path] ?? repositoryNameFromPath(path) ?? path,
         ...(repositoryLogoUrls[path] ? { logoUrl: repositoryLogoUrls[path] } : {}),
+        ...(repositoryAvailability[path] ? { availability: repositoryAvailability[path] } : {}),
+        ...(repositoryHealthIssues[path]?.length
+          ? { healthIssues: repositoryHealthIssues[path] }
+          : {}),
       })),
-    [registeredPaths, repositoryLogoUrls, repositoryNames],
+    [
+      registeredPaths,
+      repositoryAvailability,
+      repositoryHealthIssues,
+      repositoryLogoUrls,
+      repositoryNames,
+    ],
   );
   const repoDisplayName = repo
     ? (registeredRepositories.find((candidate) => candidate.path === repo.path)?.name ?? repo.name)
@@ -386,6 +447,70 @@ export function App({
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
   }, []);
+
+  const disconnectRepository = useCallback(
+    async (candidate: RepoSnapshot): Promise<void> => {
+      if (candidate.operation.kind !== 'none') {
+        setUnavailableRepoPath(candidate.path);
+        return;
+      }
+      await adapter.detach?.(candidate.repoId);
+      setWorkspace((current) => {
+        const repos = current.repos.filter((item) => item.repoId !== candidate.repoId);
+        const selectedRepoId =
+          current.selectedRepoId === candidate.repoId ? repos[0]?.repoId : current.selectedRepoId;
+        return {
+          ...current,
+          repos,
+          ...(selectedRepoId ? { selectedRepoId } : {}),
+        };
+      });
+    },
+    [adapter],
+  );
+
+  const inspectRepositoryPath = useCallback(
+    async (path: string): Promise<RepositoryAvailability> => {
+      const result = await adapter.query({ kind: 'repositoryAvailability', path });
+      if (result.kind !== 'repositoryAvailability') throw new Error(t('repositoryCheckFailed'));
+      setRepositoryAvailability((current) => ({ ...current, [path]: result.availability }));
+      return result.availability;
+    },
+    [adapter, t],
+  );
+
+  const checkRegisteredRepositories = useCallback(async (): Promise<void> => {
+    await Promise.allSettled(
+      registeredPaths.map(async (path) => {
+        const availability = await inspectRepositoryPath(path);
+        if (availability === 'available') return;
+        const attached = workspaceRef.current.repos.find((candidate) => candidate.path === path);
+        if (!attached) return;
+        if (
+          attached.operation.kind !== 'none' ||
+          (workspaceRef.current.selectedRepoId === attached.repoId && unsavedDirtyRef.current)
+        ) {
+          setUnavailableRepoPath(path);
+          return;
+        }
+        await disconnectRepository(attached);
+      }),
+    );
+  }, [disconnectRepository, inspectRepositoryPath, registeredPaths]);
+
+  useEffect(() => {
+    void checkRegisteredRepositories();
+  }, [checkRegisteredRepositories]);
+
+  useEffect(() => {
+    if (!unavailableRepoPath) return;
+    setPendingAction(undefined);
+    setPendingNavigation(undefined);
+    setPendingOperationAction(undefined);
+    setPendingUnsavedAction(undefined);
+    setBranchDialog(undefined);
+    setRemoteManager(undefined);
+  }, [unavailableRepoPath]);
 
   useEffect(() => {
     if (!Reflect.has(globalThis, '__TAURI_INTERNALS__')) return () => undefined;
@@ -639,6 +764,26 @@ export function App({
             return replaceRepo(next, snapshot);
           }, latest),
         );
+        await Promise.allSettled(
+          results.flatMap((result, index) => {
+            if (result.status === 'fulfilled') return [];
+            const candidate = current.repos[index];
+            if (!candidate) return [];
+            return [
+              inspectRepositoryPath(candidate.path).then(async (availability) => {
+                if (availability === 'available') return;
+                if (
+                  candidate.operation.kind !== 'none' ||
+                  (current.selectedRepoId === candidate.repoId && unsavedDirtyRef.current)
+                ) {
+                  setUnavailableRepoPath(candidate.path);
+                  return;
+                }
+                await disconnectRepository(candidate);
+              }),
+            ];
+          }),
+        );
       } finally {
         pollingRef.current = false;
         if (active && pendingPollingRef.current) {
@@ -652,9 +797,13 @@ export function App({
     }, 2_000);
     const focus = () => {
       void poll(true);
+      void checkRegisteredRepositories();
     };
     const visibility = () => {
-      if (document.visibilityState === 'visible') void poll(true);
+      if (document.visibilityState === 'visible') {
+        void poll(true);
+        void checkRegisteredRepositories();
+      }
     };
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', visibility);
@@ -665,10 +814,10 @@ export function App({
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [adapter]);
+  }, [adapter, checkRegisteredRepositories, disconnectRepository, inspectRepositoryPath]);
 
   const attach = useCallback(
-    async (request: AttachRequest, repositoryName?: string): Promise<void> => {
+    async (request: AttachRequest, repositoryName?: string): Promise<RepoSnapshot | undefined> => {
       setBusy(true);
       setNotice(undefined);
       try {
@@ -686,6 +835,8 @@ export function App({
           const preferences = rememberRepositoryPath(attachedPath, repositoryName);
           setRegisteredPaths(preferences.registeredRepoPaths);
           setRepositoryNames(preferences.repositoryNames);
+          setRepositoryHealthIssues(preferences.repositoryHealthIssues);
+          setRepositoryAvailability((current) => ({ ...current, [attachedPath]: 'available' }));
         }
         setAddRepositoryDialog(undefined);
         if (attachedRepoId) {
@@ -694,17 +845,55 @@ export function App({
             ...(request.kind === 'clone' ? {} : { page: 'workspace', view: 'changes' }),
           });
         }
+        return attached.repos.find((candidate) => candidate.repoId === attachedRepoId);
       } catch (cause) {
         if (cause instanceof WorkspaceAdapterError && cause.code === 'cancelled') {
           setNotice({ level: 'info', message: { id: 'errorCancelled' } });
         } else {
           showError(t('openRepositoryFailedTitle'), cause, t('openRepositoryFailed'));
         }
+        return undefined;
       } finally {
         setBusy(false);
       }
     },
     [adapter, showError, t],
+  );
+
+  const loadRemoteManager = useCallback(
+    async (repoId: string, path: string): Promise<void> => {
+      setRemoteManager((current) => ({
+        path,
+        repoId,
+        remotes: current?.repoId === repoId ? current.remotes : [],
+        loading: true,
+      }));
+      try {
+        const result = await adapter.query({ kind: 'remotes', repoId });
+        if (result.kind !== 'remotes') throw new Error(t('loadRemotesFailed'));
+        setRemoteManager({ path, repoId, remotes: result.remotes, loading: false });
+      } catch (cause) {
+        const error = describeWorkspaceError(cause, t('loadRemotesFailed'));
+        setRemoteManager({ path, repoId, remotes: [], loading: false, error: error.message });
+      }
+    },
+    [adapter, t],
+  );
+
+  const openRemoteManager = useCallback(
+    async (path: string): Promise<void> => {
+      setRepositorySwitcherOpen(false);
+      const availability =
+        repositoryAvailability[path] ?? (await inspectRepositoryPath(path).catch(() => undefined));
+      if (availability && availability !== 'available') {
+        setUnavailableRepoPath(path);
+        return;
+      }
+      const current = workspaceRef.current.repos.find((candidate) => candidate.path === path);
+      const attached = current ?? (await attach({ kind: 'openExisting', path }));
+      if (attached) await loadRemoteManager(attached.repoId, path);
+    },
+    [attach, inspectRepositoryPath, loadRemoteManager, repositoryAvailability],
   );
 
   useEffect(() => {
@@ -726,6 +915,174 @@ export function App({
     } catch (cause) {
       showError(t('openRepositoryFailedTitle'), cause, t('chooseDirectoryFailed'));
       return null;
+    }
+  };
+
+  const chooseRelocatedRepository = async (oldPath: string): Promise<void> => {
+    const newPath = await chooseDirectory(t('chooseRelocatedRepository'));
+    if (!newPath) return;
+    try {
+      const availability = await inspectRepositoryPath(newPath);
+      if (availability !== 'available') {
+        const detail =
+          availability === 'missing'
+            ? t('repositoryMissing')
+            : availability === 'notRepository'
+              ? t('repositoryNotRepository')
+              : t('repositoryInaccessible');
+        showError(t('repositoryRelocationFailedTitle'), new Error(detail), detail);
+        return;
+      }
+      setRelocation({
+        oldPath,
+        newPath,
+        duplicate: oldPath !== newPath && registeredPaths.includes(newPath),
+      });
+    } catch (cause) {
+      showError(t('repositoryRelocationFailedTitle'), cause, t('repositoryCheckFailed'));
+    }
+  };
+
+  const transferRelocationDraft = async (
+    newRepo: RepoSnapshot,
+    draft: UnsavedRelocationDraft,
+  ): Promise<RepoSnapshot> => {
+    if (draft.kind === 'file') {
+      const result = await adapter.query({
+        kind: 'fileContents',
+        repoId: newRepo.repoId,
+        path: draft.path,
+      });
+      if (result.kind !== 'fileContents' || result.document.contentHash !== draft.baseHash) {
+        throw new WorkspaceAdapterError('staleDiff', t('relocationDraftChanged'));
+      }
+      const outcome = await adapter.execute({
+        repoId: newRepo.repoId,
+        action: {
+          kind: 'saveFile',
+          path: draft.path,
+          text: draft.text,
+          expectedContentHash: result.document.contentHash,
+        },
+      });
+      return outcome.snapshot ?? newRepo;
+    }
+    const result = await adapter.query({
+      kind: 'conflict',
+      repoId: newRepo.repoId,
+      path: draft.path,
+    });
+    if (result.kind !== 'conflict' || result.document.contentHash !== draft.baseHash) {
+      throw new WorkspaceAdapterError('staleDiff', t('relocationDraftChanged'));
+    }
+    const outcome = await adapter.execute({
+      repoId: newRepo.repoId,
+      action: {
+        kind: 'saveConflict',
+        sessionId: result.document.sessionId,
+        path: draft.path,
+        draftText: draft.text,
+        contentHash: result.document.contentHash,
+        documentRevision: result.document.documentRevision,
+      },
+    });
+    return outcome.snapshot ?? newRepo;
+  };
+
+  const confirmRepositoryRelocation = async (): Promise<void> => {
+    if (!relocation || relocation.duplicate) return;
+    const oldRepo = workspaceRef.current.repos.find(
+      (candidate) => candidate.path === relocation.oldPath,
+    );
+    const draft =
+      oldRepo && workspaceRef.current.selectedRepoId === oldRepo.repoId && unsavedDirtyRef.current
+        ? leaveHandleRef.current?.relocationDraft?.()
+        : undefined;
+    let attachedRepo: RepoSnapshot | undefined;
+    setBusy(true);
+    try {
+      const attached = await adapter.attach({ kind: 'openExisting', path: relocation.newPath });
+      attachedRepo = attached.selectedRepoId
+        ? attached.repos.find((candidate) => candidate.repoId === attached.selectedRepoId)
+        : attached.repos[0];
+      if (!attachedRepo) throw new Error(t('openRepositoryFailed'));
+      const restoredRepo = draft
+        ? await transferRelocationDraft(attachedRepo, draft)
+        : attachedRepo;
+      if (oldRepo) await adapter.detach?.(oldRepo.repoId);
+      setWorkspace((current) => {
+        const withoutOld = oldRepo
+          ? {
+              ...current,
+              repos: current.repos.filter((candidate) => candidate.repoId !== oldRepo.repoId),
+            }
+          : current;
+        const next = replaceRepo(withoutOld, restoredRepo);
+        return { ...next, selectedRepoId: restoredRepo.repoId };
+      });
+      const preferences = replaceRepositoryPath(relocation.oldPath, relocation.newPath);
+      setRegisteredPaths(preferences.registeredRepoPaths);
+      setRepositoryNames(preferences.repositoryNames);
+      setRepositoryHealthIssues(preferences.repositoryHealthIssues);
+      setRepositoryAvailability((current) => {
+        const next = { ...current, [relocation.newPath]: 'available' as const };
+        delete next[relocation.oldPath];
+        return next;
+      });
+      setRelocation(undefined);
+      setUnavailableRepoPath(undefined);
+      unsavedDirtyRef.current = false;
+      setWorkspaceViewRevision((current) => current + 1);
+      setNotice({ level: 'info', message: { id: 'repositoryRelocated' } });
+    } catch (cause) {
+      if (attachedRepo && attachedRepo.repoId !== oldRepo?.repoId) {
+        await adapter.detach?.(attachedRepo.repoId).catch(() => undefined);
+      }
+      showError(t('repositoryRelocationFailedTitle'), cause, t('repositoryRelocationFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestForgetRepository = (path: string): void => {
+    const attached = workspaceRef.current.repos.find((candidate) => candidate.path === path);
+    if (attached?.operation.kind !== 'none') {
+      showError(
+        t('forgetRepositoryFailedTitle'),
+        new WorkspaceAdapterError('operationInProgress', t('forgetRepositoryOperationBlocked')),
+        t('forgetRepositoryOperationBlocked'),
+      );
+      return;
+    }
+    setPendingForgetPath(path);
+  };
+
+  const confirmForgetRepository = async (): Promise<void> => {
+    if (!pendingForgetPath) return;
+    const path = pendingForgetPath;
+    const attached = workspaceRef.current.repos.find((candidate) => candidate.path === path);
+    setBusy(true);
+    try {
+      if (attached) await disconnectRepository(attached);
+      const preferences = forgetRepositoryPath(path);
+      setRegisteredPaths(preferences.registeredRepoPaths);
+      setRepositoryNames(preferences.repositoryNames);
+      setRepositoryHealthIssues(preferences.repositoryHealthIssues);
+      setRepositoryAvailability((current) => {
+        const next = { ...current };
+        delete next[path];
+        return next;
+      });
+      if (attached && workspaceRef.current.selectedRepoId === attached.repoId) {
+        unsavedDirtyRef.current = false;
+        setWorkspaceViewRevision((current) => current + 1);
+      }
+      setPendingForgetPath(undefined);
+      if (unavailableRepoPath === path) setUnavailableRepoPath(undefined);
+    } catch (cause) {
+      showError(t('forgetRepositoryFailedTitle'), cause, t('forgetRepositoryFailed'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -781,7 +1138,8 @@ export function App({
     if (!workspaceRef.current.repos.length) return;
     setBranchDialog(undefined);
     setRepositorySwitcherOpen(true);
-  }, []);
+    void checkRegisteredRepositories();
+  }, [checkRegisteredRepositories]);
 
   const openBranchSwitcher = useCallback((): void => {
     const currentRepo = selectedRepo(workspaceRef.current);
@@ -856,14 +1214,27 @@ export function App({
   };
 
   const execute = async (request: ActionRequest): Promise<void> => {
+    const requestedRepo = workspaceRef.current.repos.find(
+      (candidate) => candidate.repoId === request.repoId,
+    );
+    const remote = requestedRepo ? actionRemote(request.action, requestedRepo) : undefined;
     setBusy(true);
     setNotice(undefined);
     try {
       const outcome = await adapter.execute(request);
       applyOutcome(outcome.snapshot);
       if (outcome.conflictDocument) setLatestConflict(outcome.conflictDocument);
+      if (requestedRepo && remote) {
+        const preferences = clearRemoteHealthIssue(requestedRepo.path, remote);
+        setRepositoryHealthIssues(preferences.repositoryHealthIssues);
+      }
     } catch (cause) {
       if (request.action.kind === 'pullFastForward' && isPullDivergenceError(cause)) throw cause;
+      const reason = remoteHealthReason(cause);
+      if (requestedRepo && remote && reason) {
+        const preferences = recordRemoteHealthIssue(requestedRepo.path, remote, reason);
+        setRepositoryHealthIssues(preferences.repositoryHealthIssues);
+      }
       showError(t('operationFailedTitle'), cause, t('operationFailed'));
       throw markWorkspaceErrorHandled(cause, t('operationFailed'));
     } finally {
@@ -871,10 +1242,13 @@ export function App({
     }
   };
 
-  const runAction = async (action: WorkspaceAction): Promise<void> => {
-    if (!repo) return;
+  const runAction = async (action: WorkspaceAction, targetRepoId = repo?.repoId): Promise<void> => {
+    const targetRepo = workspaceRef.current.repos.find(
+      (candidate) => candidate.repoId === targetRepoId,
+    );
+    if (!targetRepo || unavailableRepoPath === targetRepo.path) return;
     const request: ActionRequest = {
-      repoId: repo.repoId,
+      repoId: targetRepo.repoId,
       action,
     };
     if (!actionNeedsPreview(action)) {
@@ -935,12 +1309,26 @@ export function App({
 
   const confirmAction = async (): Promise<void> => {
     if (!pendingAction) return;
+    const completedAction = pendingAction.request.action;
     const request: ActionRequest = {
       ...pendingAction.request,
       preview: pendingAction.preview,
     };
     setPendingAction(undefined);
     await execute(request);
+    if (completedAction.kind === 'setRemoteUrl') {
+      if (completedAction.urlKind === 'fetch') {
+        try {
+          await execute({
+            repoId: request.repoId,
+            action: { kind: 'fetch', remote: completedAction.remote },
+          });
+        } catch {
+          // URL変更は完了済みのため、フェッチ失敗は警告と通常の詳細画面に残す。
+        }
+      }
+      if (remoteManager) await loadRemoteManager(remoteManager.repoId, remoteManager.path);
+    }
   };
 
   const performNavigation = useCallback(
@@ -1080,6 +1468,7 @@ export function App({
   };
 
   const operationActions = repo && repo.operation.kind !== 'none' ? repo.operation : undefined;
+  const repositoryUnavailable = Boolean(repo && unavailableRepoPath === repo.path);
   const currentActivities = workspace.activities;
   const hasRunningActivity = currentActivities.some((entry) => entry.status === 'running');
   const activeError = errors[0];
@@ -1099,6 +1488,12 @@ export function App({
       : undefined;
   const branchDialogRepo = branchDialog
     ? workspace.repos.find((candidate) => candidate.repoId === branchDialog.repoId)
+    : undefined;
+  const unavailableRepo = unavailableRepoPath
+    ? workspace.repos.find((candidate) => candidate.path === unavailableRepoPath)
+    : undefined;
+  const pendingForgetRepository = pendingForgetPath
+    ? registeredRepositories.find((candidate) => candidate.path === pendingForgetPath)
     : undefined;
 
   if (restoringWorkspace) {
@@ -1337,7 +1732,7 @@ export function App({
                     <div className="button-row compact">
                       <button
                         type="button"
-                        disabled={!operationActions.canContinue || busy}
+                        disabled={!operationActions.canContinue || busy || repositoryUnavailable}
                         onClick={() => requestOperationAction({ kind: 'continueOperation' })}
                       >
                         {t('continueAction')}
@@ -1345,7 +1740,7 @@ export function App({
                       {operationActions.canSkip ? (
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={busy || repositoryUnavailable}
                           onClick={() => requestOperationAction({ kind: 'skipOperation' })}
                         >
                           {t('skipAction')}
@@ -1354,7 +1749,7 @@ export function App({
                       <button
                         type="button"
                         className="danger-quiet"
-                        disabled={!operationActions.canAbort || busy}
+                        disabled={!operationActions.canAbort || busy || repositoryUnavailable}
                         onClick={() => requestOperationAction({ kind: 'abortOperation' })}
                       >
                         {t('abortAction')}
@@ -1381,7 +1776,7 @@ export function App({
                       repo={repo}
                       adapter={adapter}
                       externalConflict={latestConflict}
-                      busy={busy}
+                      busy={busy || repositoryUnavailable}
                       onError={showError}
                       onAction={runAction}
                       onUnsavedDirtyChange={handleUnsavedDirtyChange}
@@ -1404,7 +1799,7 @@ export function App({
                       key={`history:${repo.repoId}`}
                       repo={repo}
                       adapter={adapter}
-                      busy={busy}
+                      busy={busy || repositoryUnavailable}
                       onError={showError}
                       onShowChanges={() =>
                         requestNavigation({ page: 'workspace', view: 'changes' })
@@ -1428,6 +1823,9 @@ export function App({
                 busy={busy}
                 onAdd={openAddRepositoryDialog}
                 onOpen={(path) => settleUiAction(attach({ kind: 'openExisting', path }))}
+                onRepair={(path) => settleUiAction(chooseRelocatedRepository(path))}
+                onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
+                onForget={requestForgetRepository}
               />
             )}
           </div>
@@ -1446,10 +1844,219 @@ export function App({
               }}
               onSelectRegistered={(path) => {
                 setRepositorySwitcherOpen(false);
-                settleUiAction(attach({ kind: 'openExisting', path }));
+                const registration = registeredRepositories.find(
+                  (candidate) => candidate.path === path,
+                );
+                if (registration?.availability && registration.availability !== 'available') {
+                  settleUiAction(chooseRelocatedRepository(path));
+                } else if (registration?.healthIssues?.some((issue) => issue.kind === 'remote')) {
+                  settleUiAction(openRemoteManager(path));
+                } else {
+                  settleUiAction(attach({ kind: 'openExisting', path }));
+                }
               }}
+              onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
               onAdd={openAddRepositoryDialog}
             />
+          ) : null}
+
+          {remoteManager ? (
+            <RemoteManagerDialog
+              remotes={remoteManager.remotes}
+              healthIssues={repositoryHealthIssues[remoteManager.path] ?? []}
+              loading={remoteManager.loading}
+              busy={busy}
+              {...(remoteManager.error ? { error: remoteManager.error } : {})}
+              onDismiss={() => setRemoteManager(undefined)}
+              onReload={() =>
+                settleUiAction(loadRemoteManager(remoteManager.repoId, remoteManager.path))
+              }
+              onFetch={(remote) =>
+                settleUiAction(runAction({ kind: 'fetch', remote }, remoteManager.repoId))
+              }
+              onChangeUrl={(edit) =>
+                settleUiAction(runAction({ kind: 'setRemoteUrl', ...edit }, remoteManager.repoId))
+              }
+            />
+          ) : null}
+
+          {unavailableRepoPath ? (
+            <Dialog
+              labelledBy="repository-unavailable-title"
+              describedBy="repository-unavailable-description"
+              onDismiss={() => {
+                if (!unavailableRepo && !unsavedDirtyRef.current) setUnavailableRepoPath(undefined);
+              }}
+            >
+              <h2 id="repository-unavailable-title">{t('repositoryLocationUnavailableTitle')}</h2>
+              <p id="repository-unavailable-description">
+                {unavailableRepo && unsavedDirtyRef.current
+                  ? t('repositoryLocationUnavailableWithDraft')
+                  : t('repositoryLocationUnavailableDescription')}
+              </p>
+              <code className="repository-relocation-path">{unavailableRepoPath}</code>
+              {unavailableRepo?.operation.kind !== 'none' ? (
+                <p className="field-error">{t('forgetRepositoryOperationBlocked')}</p>
+              ) : null}
+              <div className="button-row end">
+                {!unavailableRepo || !unsavedDirtyRef.current ? (
+                  <button
+                    type="button"
+                    data-dialog-initial-focus
+                    onClick={() => setUnavailableRepoPath(undefined)}
+                  >
+                    {t('cancel')}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  data-dialog-initial-focus={Boolean(unavailableRepo && unsavedDirtyRef.current)}
+                  disabled={busy}
+                  onClick={() => settleUiAction(chooseRelocatedRepository(unavailableRepoPath))}
+                >
+                  {t('repairRepositoryLocation')}
+                </button>
+                {unavailableRepo ? (
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={busy || unavailableRepo.operation.kind !== 'none'}
+                    onClick={() =>
+                      settleUiAction(
+                        (async () => {
+                          unsavedDirtyRef.current = false;
+                          setWorkspaceViewRevision((current) => current + 1);
+                          await disconnectRepository(unavailableRepo);
+                          setUnavailableRepoPath(undefined);
+                        })(),
+                      )
+                    }
+                  >
+                    {t('discardAndCloseRepository')}
+                  </button>
+                ) : null}
+              </div>
+            </Dialog>
+          ) : null}
+
+          {relocation ? (
+            <Dialog
+              labelledBy="repository-relocation-title"
+              describedBy="repository-relocation-description"
+              onDismiss={() => setRelocation(undefined)}
+            >
+              <h2 id="repository-relocation-title">
+                {relocation.duplicate
+                  ? t('repositoryAlreadyRegisteredTitle')
+                  : t('confirmRepositoryRelocation')}
+              </h2>
+              <p id="repository-relocation-description">
+                {relocation.duplicate
+                  ? t('repositoryAlreadyRegisteredDescription')
+                  : t('repositoryRelocationDescription')}
+              </p>
+              <dl className="repository-relocation-paths">
+                <div>
+                  <dt>{t('oldRepositoryLocation')}</dt>
+                  <dd>
+                    <code>{relocation.oldPath}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('newRepositoryLocation')}</dt>
+                  <dd>
+                    <code>{relocation.newPath}</code>
+                  </dd>
+                </div>
+              </dl>
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus
+                  disabled={busy}
+                  onClick={() => setRelocation(undefined)}
+                >
+                  {t('cancel')}
+                </button>
+                {relocation.duplicate ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        const path = relocation.newPath;
+                        setRelocation(undefined);
+                        settleUiAction(attach({ kind: 'openExisting', path }));
+                      }}
+                    >
+                      {t('openRegisteredRepository')}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-quiet"
+                      disabled={busy}
+                      onClick={() => {
+                        const path = relocation.oldPath;
+                        setRelocation(undefined);
+                        requestForgetRepository(path);
+                      }}
+                    >
+                      {t('forgetOldRepository')}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy}
+                    onClick={() => settleUiAction(confirmRepositoryRelocation())}
+                  >
+                    {t('replaceRepositoryLocation')}
+                  </button>
+                )}
+              </div>
+            </Dialog>
+          ) : null}
+
+          {pendingForgetPath ? (
+            <Dialog
+              labelledBy="forget-repository-title"
+              describedBy="forget-repository-description"
+              onDismiss={() => setPendingForgetPath(undefined)}
+            >
+              <h2 id="forget-repository-title">{t('forgetRepositoryTitle')}</h2>
+              <p id="forget-repository-description">
+                {t('forgetRepositoryDescription', {
+                  repository: pendingForgetRepository?.name ?? pendingForgetPath,
+                })}
+              </p>
+              {workspace.repos.some(
+                (candidate) =>
+                  candidate.path === pendingForgetPath &&
+                  candidate.repoId === workspace.selectedRepoId &&
+                  unsavedDirtyRef.current,
+              ) ? (
+                <p className="field-error">{t('unsavedChangesWillBeDiscarded')}</p>
+              ) : null}
+              <div className="button-row end">
+                <button
+                  type="button"
+                  data-dialog-initial-focus
+                  disabled={busy}
+                  onClick={() => setPendingForgetPath(undefined)}
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => settleUiAction(confirmForgetRepository())}
+                >
+                  {t('forgetRepository')}
+                </button>
+              </div>
+            </Dialog>
           ) : null}
 
           {branchDialog && branchDialogRepo ? (

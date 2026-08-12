@@ -12,6 +12,9 @@ describe('RepositoryLanding', () => {
         busy={false}
         onAdd={() => undefined}
         onOpen={() => undefined}
+        onRepair={() => undefined}
+        onManageRemotes={() => undefined}
+        onForget={() => undefined}
       />,
     );
 
@@ -36,11 +39,14 @@ describe('RepositoryLanding', () => {
         busy={false}
         onAdd={() => undefined}
         onOpen={onOpen}
+        onRepair={() => undefined}
+        onManageRemotes={() => undefined}
+        onForget={() => undefined}
       />,
     );
 
     const list = screen.getByRole('list', { name: 'Repositories' });
-    const rows = within(list).getAllByRole('button');
+    const rows = within(list).getAllByRole('button', { name: /Most Recent|Older/u });
     expect(rows[0]).toHaveTextContent('Most Recent');
     expect(rows[0]).toHaveTextContent('/Users/stella/most-recent');
     expect(rows[0]?.querySelector('img')).toHaveAttribute('src', 'asset://recent/logo.svg');
@@ -50,5 +56,37 @@ describe('RepositoryLanding', () => {
     if (!older) throw new Error('Expected the older repository row.');
     await user.click(older);
     expect(onOpen).toHaveBeenCalledWith('/Users/stella/older');
+  });
+
+  it('routes local and remote warnings to their recovery actions', async () => {
+    const user = userEvent.setup();
+    const onRepair = vi.fn<(path: string) => void>();
+    const onManageRemotes = vi.fn<(path: string) => void>();
+    render(
+      <RepositoryLanding
+        repositories={[
+          { path: '/missing', name: 'Missing', availability: 'missing' },
+          {
+            path: '/remote',
+            name: 'Remote',
+            availability: 'available',
+            healthIssues: [{ kind: 'remote', remote: 'origin', reason: 'authentication' }],
+          },
+        ]}
+        busy={false}
+        onAdd={() => undefined}
+        onOpen={() => undefined}
+        onRepair={onRepair}
+        onManageRemotes={onManageRemotes}
+        onForget={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Check location')).toBeVisible();
+    expect(screen.getByText('Check authentication')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Choose Location' }));
+    await user.click(screen.getByRole('button', { name: 'Remote URLs' }));
+    expect(onRepair).toHaveBeenCalledWith('/missing');
+    expect(onManageRemotes).toHaveBeenCalledWith('/remote');
   });
 });

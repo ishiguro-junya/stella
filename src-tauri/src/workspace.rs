@@ -592,8 +592,14 @@ impl Workspace {
         request: QueryRequest,
         registration: Option<QueryRegistration>,
     ) -> WorkspaceResult<QueryOutcome> {
+        if let Query::RepositoryAvailability { path } = &request.query {
+            return Ok(QueryOutcome::RepositoryAvailability(
+                self.repository_availability(path.clone()),
+            ));
+        }
         let repo = self.repo(&request.repo_id)?;
         match request.query {
+            Query::RepositoryAvailability { .. } => unreachable!("handled before repo lookup"),
             Query::Status => Ok(QueryOutcome::Status(self.snapshot(&repo)?)),
             Query::Diff { target, paths } => {
                 let snapshot = self.snapshot(&repo)?;
@@ -881,7 +887,80 @@ impl Workspace {
                     repo_generation: snapshot.repo_generation,
                 }))
             }
+            Query::Remotes => {
+                let snapshot = self.snapshot(&repo)?;
+                Ok(QueryOutcome::Remotes(RemoteResult {
+                    remotes: self.remote_definitions(&repo, None)?,
+                    repo_generation: snapshot.repo_generation,
+                }))
+            }
         }
+    }
+
+    fn repository_availability(&self, path: String) -> RepositoryAvailabilityResult {
+        let requested = PathBuf::from(&path);
+        let availability = match requested.canonicalize() {
+            Ok(canonical) => match self
+                .git
+                .run(Some(&canonical), GitCommand::TopLevel, None, None)
+            {
+                Ok(output) if output.success() => RepositoryAvailability::Available,
+                Ok(output) if is_not_a_git_repository(&output) => {
+                    RepositoryAvailability::NotRepository
+                }
+                Ok(_) | Err(_) => RepositoryAvailability::Inaccessible,
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                RepositoryAvailability::Missing
+            }
+            Err(_) => RepositoryAvailability::Inaccessible,
+        };
+        RepositoryAvailabilityResult { path, availability }
+    }
+
+    fn remote_definitions(
+        &self,
+        repo: &RepoContext,
+        control: Option<&RunControl>,
+    ) -> WorkspaceResult<Vec<RemoteDefinition>> {
+        let names = self
+            .git
+            .run(Some(&repo.root), GitCommand::RemoteNames, None, control)?
+            .ensure_success()?
+            .stdout_text();
+        names
+            .lines()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(|name| {
+                validate_remote(name)?;
+                let urls = |push| -> WorkspaceResult<Vec<String>> {
+                    Ok(self
+                        .git
+                        .run(
+                            Some(&repo.root),
+                            GitCommand::RemoteUrls {
+                                remote: name.to_owned(),
+                                push,
+                            },
+                            None,
+                            control,
+                        )?
+                        .ensure_success()?
+                        .stdout_text()
+                        .lines()
+                        .map(str::trim)
+                        .filter(|url| !url.is_empty())
+                        .map(str::to_owned)
+                        .collect())
+                };
+                Ok(RemoteDefinition {
+                    name: name.to_owned(),
+                    fetch_urls: urls(false)?,
+                    push_urls: urls(true)?,
+                })
+            })
+            .collect()
     }
 
     fn query_commit_activity_registered(
@@ -1142,6 +1221,47 @@ impl Workspace {
         let mut affected_commits = Vec::new();
         let mut lost_commit_oids = Vec::new();
         let mut resolved_targets = Vec::new();
+
+        if let Action::SetRemoteUrl {
+            remote,
+            url_kind,
+            expected_url,
+            ..
+        } = action
+        {
+            let definition = self
+                .remote_definitions(repo, control)?
+                .into_iter()
+                .find(|definition| definition.name == *remote)
+                .ok_or_else(|| {
+                    WorkspaceError::new(ErrorCode::PreviewMismatch, "The remote no longer exists")
+                })?;
+            let urls = match url_kind {
+                RemoteUrlKind::Fetch => &definition.fetch_urls,
+                RemoteUrlKind::Push => &definition.push_urls,
+            };
+            if !urls.contains(expected_url) {
+                return Err(WorkspaceError::new(
+                    ErrorCode::PreviewMismatch,
+                    "The remote URL changed before confirmation",
+                ));
+            }
+            let impact_payload = serde_json::to_vec(&(
+                action.kind_name(),
+                remote,
+                url_kind,
+                urls,
+                &snapshot.operation,
+            ))
+            .map_err(|error| WorkspaceError::new(ErrorCode::Internal, error.to_string()))?;
+            return Ok(Some(TargetBinding {
+                resolved_targets: Vec::new(),
+                impact_digest: hash(&impact_payload),
+                affected_paths: Vec::new(),
+                affected_commits: Vec::new(),
+                lost_commit_oids: Vec::new(),
+            }));
+        }
 
         let oid = if let Some(input) = input {
             let oid = self
@@ -2668,6 +2788,47 @@ impl Workspace {
                 )?;
                 Ok((LocalizedMessage::new("backendPushCompleted"), output))
             }
+            Action::SetRemoteUrl {
+                remote,
+                url_kind,
+                expected_url,
+                new_url,
+            } => {
+                let push = *url_kind == RemoteUrlKind::Push;
+                let output = self.run_checked(
+                    repo,
+                    GitCommand::SetRemoteUrl {
+                        remote: remote.clone(),
+                        push,
+                        new_url: new_url.clone(),
+                        expected_url: expected_url.clone(),
+                    },
+                    None,
+                    control,
+                )?;
+                let updated = self
+                    .remote_definitions(repo, Some(control))?
+                    .into_iter()
+                    .find(|definition| definition.name == *remote)
+                    .ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::Internal,
+                            "The updated remote could not be read back",
+                        )
+                    })?;
+                let urls = if push {
+                    updated.push_urls
+                } else {
+                    updated.fetch_urls
+                };
+                if !urls.contains(new_url) {
+                    return Err(WorkspaceError::new(
+                        ErrorCode::Internal,
+                        "The updated remote URL did not match the requested value",
+                    ));
+                }
+                Ok((LocalizedMessage::new("backendRemoteUrlUpdated"), output))
+            }
             Action::CreateBranch {
                 name,
                 start_point,
@@ -3840,6 +4001,39 @@ impl Workspace {
         };
         CancelOutcome { accepted }
     }
+
+    fn detach(&self, request: DetachRequest) -> WorkspaceResult<()> {
+        if request.repo_id.trim().is_empty() {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "repoId is required",
+            ));
+        }
+        let repo = self.repo(&request.repo_id)?;
+        match self.snapshot(&repo) {
+            Ok(snapshot) if !matches!(snapshot.operation, OperationState::None) => {
+                return Err(WorkspaceError::new(
+                    ErrorCode::OperationInProgress,
+                    "Complete or abort the operation before closing the repository",
+                ));
+            }
+            Ok(_) => {}
+            // 利用不能な場所は状態を読み直せないため、復旧入口へ移すための切断を許可する。
+            Err(error) => {
+                let availability = self
+                    .repository_availability(repo.root.display().to_string())
+                    .availability;
+                if availability == RepositoryAvailability::Available {
+                    return Err(error);
+                }
+            }
+        }
+        self.repos
+            .write()
+            .expect("repos write lock")
+            .remove(&request.repo_id);
+        Ok(())
+    }
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -3894,6 +4088,17 @@ pub fn workspace_cancel(
     request: CancelRequest,
 ) -> CancelOutcome {
     workspace.cancel(request)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn workspace_detach(
+    workspace: tauri::State<'_, Arc<Workspace>>,
+    request: DetachRequest,
+) -> WorkspaceResult<()> {
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.detach(request))
+        .await
+        .map_err(join_error)?
 }
 
 fn join_error(error: impl std::fmt::Display) -> WorkspaceError {
@@ -4849,6 +5054,22 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
         Action::Fetch { remote } | Action::Pull { remote, .. } | Action::Push { remote, .. } => {
             validate_remote(remote)?
         }
+        Action::SetRemoteUrl {
+            remote,
+            expected_url,
+            new_url,
+            ..
+        } => {
+            validate_remote(remote)?;
+            validate_remote_url(expected_url)?;
+            validate_remote_url(new_url)?;
+            if expected_url == new_url {
+                return Err(WorkspaceError::new(
+                    ErrorCode::InvalidRequest,
+                    "The new remote URL must be different",
+                ));
+            }
+        }
         _ => {}
     }
     match action {
@@ -5045,6 +5266,19 @@ fn validate_remote(remote: &str) -> WorkspaceResult<()> {
         return Err(WorkspaceError::new(
             ErrorCode::InvalidRequest,
             "Invalid remote name or URL",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_remote_url(url: &str) -> WorkspaceResult<()> {
+    if url.trim().is_empty()
+        || url.starts_with('-')
+        || url.chars().any(|ch| ch == '\0' || ch.is_control())
+    {
+        return Err(WorkspaceError::new(
+            ErrorCode::InvalidRequest,
+            "Invalid remote URL",
         ));
     }
     Ok(())
@@ -5250,6 +5484,13 @@ fn remote_effect(
                 .arg("localBranch", local_branch.clone())
                 .arg("remoteBranch", remote_branch.clone()),
         ),
+        Action::SetRemoteUrl {
+            remote, url_kind, ..
+        } => Some(
+            LocalizedMessage::new("previewSetRemoteUrl")
+                .arg("remote", remote.clone())
+                .arg("kind", format!("{url_kind:?}")),
+        ),
         Action::GitFlow { request }
             if request.command == GitFlowCommand::Delete && request.remote =>
         {
@@ -5301,6 +5542,7 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::Fetch { .. } => "actionFetch",
         Action::Pull { .. } => "actionPull",
         Action::Push { .. } => "actionPush",
+        Action::SetRemoteUrl { .. } => "actionSetRemoteUrl",
         Action::CreateBranch { .. } => "actionCreateBranch",
         Action::CreateTag { .. } => "actionCreateTag",
         Action::GitFlow { .. } => "actionGitFlow",
@@ -6188,6 +6430,177 @@ mod tests {
 
         assert_eq!(error.code, ErrorCode::RepoNotFound);
         assert!(!missing.exists());
+    }
+
+    #[test]
+    fn repository_availability_distinguishes_missing_non_git_and_available_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let plain = temp.path().join("plain");
+        let missing = temp.path().join("missing");
+        fs::create_dir(&plain).unwrap();
+        let fixture = GitFixture::new();
+        let workspace = fixture.workspace();
+
+        assert_eq!(
+            workspace
+                .repository_availability(missing.display().to_string())
+                .availability,
+            RepositoryAvailability::Missing
+        );
+        assert_eq!(
+            workspace
+                .repository_availability(plain.display().to_string())
+                .availability,
+            RepositoryAvailability::NotRepository
+        );
+        assert_eq!(
+            workspace
+                .repository_availability(fixture.repo_string())
+                .availability,
+            RepositoryAvailability::Available
+        );
+    }
+
+    #[test]
+    fn repository_availability_reports_an_unreadable_repository_as_inaccessible() {
+        let fixture = GitFixture::new();
+        let workspace = fixture.workspace();
+        let original_permissions = fs::metadata(&fixture.repo).unwrap().permissions();
+        let mut inaccessible_permissions = original_permissions.clone();
+        inaccessible_permissions.set_mode(0o000);
+        fs::set_permissions(&fixture.repo, inaccessible_permissions).unwrap();
+
+        let availability = workspace
+            .repository_availability(fixture.repo_string())
+            .availability;
+
+        fs::set_permissions(&fixture.repo, original_permissions).unwrap();
+        assert_eq!(availability, RepositoryAvailability::Inaccessible);
+    }
+
+    #[test]
+    fn detach_allows_a_repository_that_is_no_longer_a_git_repository() {
+        let fixture = GitFixture::new();
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::OpenExisting {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        fs::rename(fixture.repo.join(".git"), fixture.repo.join(".git-moved")).unwrap();
+
+        workspace
+            .detach(DetachRequest {
+                repo_id: attached.repo_id.clone(),
+            })
+            .unwrap();
+
+        match workspace.repo(&attached.repo_id) {
+            Ok(_) => panic!("detached repository remained registered"),
+            Err(error) => assert_eq!(error.code, ErrorCode::RepoNotFound),
+        }
+    }
+
+    #[test]
+    fn remote_urls_round_trip_and_execute_rechecks_the_previewed_url() {
+        let fixture = GitFixture::new();
+        fixture.git(&["remote", "add", "origin", "https://example.test/old.git"]);
+        fixture.git(&[
+            "remote",
+            "set-url",
+            "--add",
+            "origin",
+            "https://mirror.example.test/old.git",
+        ]);
+        fixture.git(&[
+            "remote",
+            "set-url",
+            "--add",
+            "--push",
+            "origin",
+            "ssh://example.test/push.git",
+        ]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::OpenExisting {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let definitions = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::Remotes,
+            })
+            .unwrap()
+        {
+            QueryOutcome::Remotes(result) => result.remotes,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert_eq!(definitions[0].fetch_urls.len(), 2);
+        assert_eq!(definitions[0].push_urls, ["ssh://example.test/push.git"]);
+
+        let action = Action::SetRemoteUrl {
+            remote: "origin".into(),
+            url_kind: RemoteUrlKind::Fetch,
+            expected_url: "https://example.test/old.git".into(),
+            new_url: "https://example.test/new.git".into(),
+        };
+        let token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            attached.snapshot.repo_generation,
+            action.clone(),
+        );
+        let outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "change-remote-url".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: Some(token),
+            })
+            .unwrap();
+        assert!(
+            fixture
+                .git_output(&["remote", "get-url", "--all", "origin"])
+                .contains("https://example.test/new.git")
+        );
+
+        let stale_action = Action::SetRemoteUrl {
+            remote: "origin".into(),
+            url_kind: RemoteUrlKind::Fetch,
+            expected_url: "https://example.test/new.git".into(),
+            new_url: "https://example.test/final.git".into(),
+        };
+        let stale_token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            outcome.snapshot.repo_generation,
+            stale_action.clone(),
+        );
+        fixture.git(&[
+            "remote",
+            "set-url",
+            "origin",
+            "https://example.test/external.git",
+            "https://example.test/new.git",
+        ]);
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "stale-remote-url".into(),
+                repo_id: attached.repo_id,
+                expected_generation: outcome.snapshot.repo_generation,
+                action: stale_action,
+                confirmation_token: Some(stale_token),
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::PreviewMismatch);
     }
 
     #[test]

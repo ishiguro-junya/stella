@@ -43,6 +43,7 @@ describe('RepositorySwitcherDialog', () => {
         onDismiss={onDismiss}
         onSelectOpen={() => undefined}
         onSelectRegistered={() => undefined}
+        onManageRemotes={() => undefined}
         onAdd={() => undefined}
       />,
     );
@@ -77,6 +78,7 @@ describe('RepositorySwitcherDialog', () => {
         onDismiss={() => undefined}
         onSelectOpen={() => undefined}
         onSelectRegistered={onSelectRegistered}
+        onManageRemotes={() => undefined}
         onAdd={() => undefined}
       />,
     );
@@ -120,6 +122,7 @@ describe('RepositorySwitcherDialog', () => {
         onDismiss={() => undefined}
         onSelectOpen={onSelectOpen}
         onSelectRegistered={() => undefined}
+        onManageRemotes={() => undefined}
         onAdd={() => undefined}
       />,
     );

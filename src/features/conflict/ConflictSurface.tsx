@@ -352,7 +352,15 @@ export function ConflictSurface({
 
   useEffect(() => {
     if (!onLeaveHandleChange) return () => undefined;
-    const handle: UnsavedChangesHandle = { save: () => saveRef.current() };
+    const handle: UnsavedChangesHandle = {
+      save: () => saveRef.current(),
+      relocationDraft: () => ({
+        kind: 'conflict',
+        path: baseDocumentRef.current.path,
+        baseHash: baseDocumentRef.current.contentHash,
+        text: historyRef.current.present.resultText,
+      }),
+    };
     onLeaveHandleChange(handle);
     return () => onLeaveHandleChange(null);
   }, [onLeaveHandleChange]);

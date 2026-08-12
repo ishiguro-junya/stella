@@ -17,6 +17,7 @@ export interface WorkspaceAdapter {
   preview: (request: ActionRequest) => Promise<ActionPreview>;
   execute: (request: ActionRequest) => Promise<ActionOutcome>;
   cancel: (request: CancelRequest) => Promise<void>;
+  detach?: (repoId: string) => Promise<void>;
   subscribe: (onEvent: (event: WorkspaceEvent) => void) => Promise<() => void>;
 }
 

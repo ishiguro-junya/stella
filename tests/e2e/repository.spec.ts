@@ -1,5 +1,6 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
+import { rename } from 'node:fs/promises';
 
 import {
   expectInteractiveSelectedColors,
@@ -7,19 +8,26 @@ import {
   resetApp,
   selectSetting,
 } from './support/app.js';
-import { createEmptyRepository, removeFixture } from './support/fixtures.js';
+import { createEmptyRepository, removeFixture, runGit } from './support/fixtures.js';
 
 describe('Repository and Branch navigation', () => {
   let repositoryPath = '';
+  let relocatedPath = '';
+  let remotePath = '';
 
   beforeEach(async () => {
     repositoryPath = await createEmptyRepository('repository');
+    remotePath = await createEmptyRepository('repository-remote');
     await resetApp({ language: 'ja' });
   });
 
   afterEach(async () => {
     await removeFixture(repositoryPath);
+    await removeFixture(relocatedPath);
+    await removeFixture(remotePath);
     repositoryPath = '';
+    relocatedPath = '';
+    remotePath = '';
   });
 
   it('adds and initializes a repository and exposes the current Branch actions', async () => {
@@ -100,5 +108,92 @@ describe('Repository and Branch navigation', () => {
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher.$('button=Create branch')).toBeDisplayed();
     await expect(switcher.$('button=Git Flow')).not.toExist();
+  });
+
+  it('reconnects a repository after its local directory is moved', async () => {
+    const oldPath = repositoryPath;
+    relocatedPath = `${repositoryPath}-moved`;
+    await openRepository(oldPath, { language: 'ja' });
+    await browser.execute((path) => {
+      Reflect.set(window, 'stellaE2eDirectoryPickerResult', path);
+    }, relocatedPath);
+
+    await rename(oldPath, relocatedPath);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+
+    const chooseLocation = $('button=場所を選び直す');
+    await chooseLocation.waitForDisplayed({ timeout: 10_000 });
+    await chooseLocation.click();
+    const confirmation = $('[role="alertdialog"][aria-labelledby="repository-relocation-title"]');
+    await confirmation.waitForDisplayed({ timeout: 10_000 });
+    await expect(confirmation).toHaveText(expect.stringContaining(oldPath));
+    await expect(confirmation).toHaveText(expect.stringContaining(relocatedPath));
+    await confirmation.$('button=場所を付け替える').click();
+
+    await $(`.repository-toggle[title="${relocatedPath}"]`).waitForDisplayed({ timeout: 10_000 });
+    await expect($('.changes-view')).toBeDisplayed();
+    expect((await runGit(relocatedPath, ['status', '--short'])).trim()).toBe('');
+    expect(
+      await browser.execute((expectedPath) => {
+        const stored = localStorage.getItem('stella.preferences.v1');
+        if (!stored) return false;
+        const preferences: unknown = JSON.parse(stored);
+        if (!preferences || typeof preferences !== 'object') return false;
+        const registered: unknown = Object.getOwnPropertyDescriptor(
+          preferences,
+          'registeredRepoPaths',
+        )?.value;
+        const open: unknown = Object.getOwnPropertyDescriptor(preferences, 'openRepoPaths')?.value;
+        const selected: unknown = Object.getOwnPropertyDescriptor(
+          preferences,
+          'selectedRepoPath',
+        )?.value;
+        return (
+          Array.isArray(registered) &&
+          registered.length === 1 &&
+          registered[0] === expectedPath &&
+          Array.isArray(open) &&
+          open.length === 1 &&
+          open[0] === expectedPath &&
+          selected === expectedPath
+        );
+      }, relocatedPath),
+    ).toBe(true);
+  });
+
+  it('repairs a failed Fetch by changing its URL and fetching the selected remote', async () => {
+    const missingRemote = `${remotePath}-moved`;
+    await runGit(repositoryPath, ['remote', 'add', 'origin', missingRemote]);
+    await openRepository(repositoryPath, { language: 'ja' });
+
+    await $('.changes-action-bar .changes-action-button[aria-label="フェッチ"]').click();
+    const error = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
+    await expect(error).toHaveText(expect.stringContaining('リモートリポジトリを利用できません'));
+    await error.$('button=閉じる').click();
+
+    await $('.repository-toggle').click();
+    const switcher = $('[role="dialog"]');
+    await expect(switcher).toHaveText(expect.stringContaining('リモートを確認'));
+    await switcher.$('button=リモートURL').click();
+    const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
+    await expect(manager).toHaveText(expect.stringContaining(missingRemote));
+    const firstUrlRow = manager.$$('.remote-url-row')[0];
+    if (!firstUrlRow) throw new Error('The remote URL row was not displayed.');
+    await firstUrlRow.$('button=変更').click();
+    await firstUrlRow.$('input').setValue(remotePath);
+    await manager.$('button=変更内容を確認').click();
+
+    const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
+    await expect(confirmation).toBeDisplayed();
+    await confirmation.$('button=URLを変更').click();
+    await browser.waitUntil(
+      async () =>
+        (await runGit(repositoryPath, ['remote', 'get-url', 'origin'])).trim() === remotePath,
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The updated remote URL was not retained.',
+      },
+    );
+    await expect(manager).not.toHaveText(expect.stringContaining('リモートを確認'));
   });
 });

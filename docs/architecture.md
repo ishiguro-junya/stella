@@ -6,12 +6,24 @@
 ## モジュール構成
 
 Tauri Core processの`Workspace`をGit操作の境界とします。  
-Frontendは型付きのattach、query、preview、execute、cancelだけを利用し、Git command、path解決、出力parse、generation管理、確認token、operation復旧を知りません。  
+Frontendは型付きのattach、detach、query、preview、execute、cancelだけを利用し、Git command、path解決、出力parse、generation管理、確認token、operation復旧を知りません。  
 Repositoryを開く処理は、選択したpathを解決する`Open`、登録済みRepositoryを再接続する`OpenExisting`、Remoteから作成する`Clone`へ分けます。  
 
 `Workspace`内部には起動時に固定したGit toolchain runner、status／patch parser、競合session、operation journalを置きます。  
 これらはFrontend interfaceへ公開せず、一時Repositoryとbare remoteを使った統合testを`Workspace` interface越しに行います。  
 同じRepositoryを再attachした場合はevent Channelを置き換え、古いwindow sessionへの重複通知を防ぎます。  
+
+`RepositoryAvailability`問い合わせは登録状態を変更せず、場所を`available`、`missing`、`notRepository`、`inaccessible`へ分類します。  
+フロントエンドは登録済みの場所を起動、復帰、一覧表示時に検査し、開いているリポジトリは通常更新の失敗後にも再検査します。  
+未保存内容がなければ`detach`し、既存の`repositoryRemoved`通知で作業画面から外します。  
+未保存内容がある場合は`UnsavedChangesHandle`から種類、相対パス、基準ハッシュ、下書きを取得し、新しいセッションの内容と基準ハッシュが一致した場合だけ保存操作へ渡します。  
+場所の付け替えは、登録情報、表示名、選択状態、リモート警告、両形式のコミット下書きを1つの設定更新で移します。  
+
+`Remotes`問い合わせは`git remote`と`git remote get-url --all`からフェッチURLとプッシュURLを型付きで返します。  
+`SetRemoteUrl`は変更前URLを対象結合へ含め、プレビューと実行の間に設定が変わった場合は`previewMismatch`で停止します。  
+Gitはシェルを介さず固定した引数配列で`remote set-url`を実行し、更新後に設定を読み直します。  
+リモート警告の永続化はフロントエンドの設定境界で行い、リモート名、分類、失敗日時以外を保存しません。  
+通常のGitエラー詳細は既存の一時的なエラー画面とアクティビティに残します。  
 
 `ToolchainManager`はFrontendの`localStorage`とは独立したnative設定をApplication config directoryへatomic保存します。  
 起動時に内蔵またはSystemを一度だけ解決し、`Workspace`はその`GitExecutor`だけを保持します。  

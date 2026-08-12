@@ -165,20 +165,26 @@ describe('FileEditorSurface', () => {
   });
 
   it('exposes the same explicit save through Command-S and the unsaved leave handle', async () => {
-    let leaveHandle: UnsavedChangesHandle | null = null;
+    const leaveHandle = { current: null as UnsavedChangesHandle | null };
     const onLeaveHandleChange = vi.fn<(handle: UnsavedChangesHandle | null) => void>((handle) => {
-      leaveHandle = handle;
+      leaveHandle.current = handle;
     });
     const { onSave } = renderEditor({ onLeaveHandleChange });
     const editor = screen.getByRole('textbox', { name: 'Edit src/app.ts' });
     fireEvent.change(editor, { target: { value: 'changed\n' } });
+    expect(leaveHandle.current?.relocationDraft?.()).toEqual({
+      kind: 'file',
+      path: 'src/app.ts',
+      baseHash: 'hash-1',
+      text: 'changed\n',
+    });
 
     fireEvent.keyDown(editor, { key: 's', metaKey: true });
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
 
     fireEvent.change(editor, { target: { value: 'changed again\n' } });
     await act(async () => {
-      expect(await leaveHandle?.save()).toBe(true);
+      expect(await leaveHandle.current?.save()).toBe(true);
     });
     expect(onSave).toHaveBeenCalledTimes(2);
   });

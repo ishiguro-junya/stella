@@ -144,7 +144,15 @@ export function FileEditorSurface({
 
   useEffect(() => {
     if (!onLeaveHandleChange) return () => undefined;
-    const handle: UnsavedChangesHandle = { save: () => saveRef.current() };
+    const handle: UnsavedChangesHandle = {
+      save: () => saveRef.current(),
+      relocationDraft: () => ({
+        kind: 'file',
+        path: baseRef.current.path,
+        baseHash: baseRef.current.contentHash,
+        text: draftRef.current,
+      }),
+    };
     onLeaveHandleChange(handle);
     return () => onLeaveHandleChange(null);
   }, [onLeaveHandleChange]);

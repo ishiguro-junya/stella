@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import { conflictDocument } from '../../test/fixtures';
 import { markWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import { ConflictSurface, type ConflictSurfaceActions } from './ConflictSurface';
@@ -118,6 +119,30 @@ function wholeFileDocument(): ReturnType<typeof conflictDocument> {
 }
 
 describe('ConflictSurface', () => {
+  it('exposes a relocation draft with the original conflict hash', async () => {
+    const user = userEvent.setup();
+    const document = conflictDocument({ contentHash: 'conflict-base-hash' });
+    const leaveHandle = { current: null as UnsavedChangesHandle | null };
+
+    render(
+      <ConflictSurface
+        document={document}
+        actions={actions()}
+        onLeaveHandleChange={(handle) => {
+          leaveHandle.current = handle;
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Edit Result' }));
+
+    expect(leaveHandle.current?.relocationDraft?.()).toEqual({
+      kind: 'conflict',
+      path: document.path,
+      baseHash: 'conflict-base-hash',
+      text: 'local draft\n',
+    });
+  });
+
   it.each<RuntimeOperation>(['choice', 'save', 'mark', 'reload', 'copy', 'open', 'materialize'])(
     'forwards %s runtime errors to the shared dialog handler',
     async (operation) => {

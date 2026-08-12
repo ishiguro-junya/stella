@@ -504,7 +504,7 @@ async function mapAction(
     case 'commit':
       return { kind: 'commit', input: commitInput(action.input) };
     case 'fetch':
-      return { kind: 'fetch', remote: upstream.remote };
+      return { kind: 'fetch', remote: action.remote ?? upstream.remote };
     case 'pullFastForward':
       return { kind: 'pull', remote: upstream.remote, remoteBranch: upstream.remoteBranch };
     case 'push':
@@ -514,6 +514,14 @@ async function mapAction(
         localBranch: repo.branch.name ?? 'HEAD',
         remoteBranch: upstream.remoteBranch,
         setUpstream: !repo.branch.upstream,
+      };
+    case 'setRemoteUrl':
+      return {
+        kind: 'setRemoteUrl',
+        remote: action.remote,
+        urlKind: action.urlKind,
+        expectedUrl: action.expectedUrl,
+        newUrl: action.newUrl,
       };
     case 'createBranch':
       return {
@@ -692,6 +700,8 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionCommit');
     case 'fetch':
       return localized('actionFetch');
+    case 'setRemoteUrl':
+      return localized('actionSetRemoteUrl');
     case 'pullFastForward':
       return localized('actionPull');
     case 'push':
@@ -934,6 +944,19 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
     async query(request: WorkspaceQuery, options): Promise<QueryResult> {
       throwIfAborted(options?.signal);
       switch (request.kind) {
+        case 'repositoryAvailability': {
+          const outcome = await queryWire('', {
+            kind: 'repositoryAvailability',
+            path: request.path,
+          });
+          if (outcome.kind !== 'repositoryAvailability')
+            throw new Error('Invalid repository availability response.');
+          return {
+            kind: 'repositoryAvailability',
+            path: outcome.data.path,
+            availability: outcome.data.availability,
+          };
+        }
         case 'snapshot': {
           const snapshot = await refresh(request.repoId);
           return { kind: 'snapshot', snapshot };
@@ -1040,6 +1063,19 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
               contentHash: outcome.data.contentHash,
               generation: outcome.data.repoGeneration,
             },
+          };
+        }
+        case 'remotes': {
+          const outcome = await queryWire(request.repoId, { kind: 'remotes' });
+          if (outcome.kind !== 'remotes') throw new Error('Invalid remote list response.');
+          return {
+            kind: 'remotes',
+            remotes: outcome.data.remotes.map((remote) => ({
+              name: remote.name,
+              fetchUrls: [...remote.fetchUrls],
+              pushUrls: [...remote.pushUrls],
+            })),
+            generation: outcome.data.repoGeneration,
           };
         }
         case 'activity':
@@ -1244,6 +1280,17 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
 
     async cancel(request) {
       await invokeWorkspace('workspace_cancel', { request: { operationId: request.activityId } });
+    },
+
+    async detach(repoId) {
+      await invokeWorkspace<void>('workspace_detach', { request: { repoId } });
+      state.repos.delete(repoId);
+      state.wireHistories.delete(repoId);
+      state.histories.delete(repoId);
+      state.headOids.delete(repoId);
+      clearRepoConflicts(state.conflicts, repoId);
+      state.channels.delete(repoId);
+      emit({ kind: 'repositoryRemoved', repoId });
     },
 
     async subscribe(onEvent) {

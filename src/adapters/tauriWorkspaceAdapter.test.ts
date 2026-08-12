@@ -132,6 +132,66 @@ beforeEach(() => {
 });
 
 describe('tauriWorkspaceAdapter', () => {
+  it('queries repository availability without attaching a session', async () => {
+    invokeMock.mockResolvedValue({
+      kind: 'repositoryAvailability',
+      data: { path: '/moved/repo', availability: 'missing' },
+    });
+    const adapter = createTauriWorkspaceAdapter();
+
+    await expect(
+      adapter.query({ kind: 'repositoryAvailability', path: '/moved/repo' }),
+    ).resolves.toEqual({
+      kind: 'repositoryAvailability',
+      path: '/moved/repo',
+      availability: 'missing',
+    });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_query', {
+      request: {
+        repoId: '',
+        query: { kind: 'repositoryAvailability', path: '/moved/repo' },
+      },
+    });
+  });
+
+  it('maps all remote URLs and disconnects the repository session', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'remotes') {
+        return {
+          kind: 'remotes',
+          data: {
+            remotes: [
+              {
+                name: 'origin',
+                fetchUrls: ['https://example.test/repo.git', 'https://mirror.test/repo.git'],
+                pushUrls: ['ssh://example.test/repo.git'],
+              },
+            ],
+            repoGeneration: 1,
+          },
+        };
+      }
+      if (command === 'workspace_detach') return undefined;
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'openExisting', path: '/tmp/stella' });
+
+    await expect(adapter.query({ kind: 'remotes', repoId: 'repo-1' })).resolves.toEqual({
+      kind: 'remotes',
+      remotes: [
+        {
+          name: 'origin',
+          fetchUrls: ['https://example.test/repo.git', 'https://mirror.test/repo.git'],
+          pushUrls: ['ssh://example.test/repo.git'],
+        },
+      ],
+      generation: 1,
+    });
+    await adapter.detach?.('repo-1');
+    expect(invokeMock).toHaveBeenCalledWith('workspace_detach', { request: { repoId: 'repo-1' } });
+  });
+
   it('maps a registered repository selection to the typed OpenExisting request', async () => {
     invokeMock.mockImplementation(baseInvoke());
     const adapter = createTauriWorkspaceAdapter();
@@ -1164,7 +1224,10 @@ describe('tauriWorkspaceAdapter', () => {
     });
     const adapter = createTauriWorkspaceAdapter();
     await adapter.attach({ kind: 'open', path: '/tmp/stella' });
-    await adapter.execute({ repoId: 'repo-1', action: { kind: 'fetch' } });
+    await adapter.execute({ repoId: 'repo-1', action: { kind: 'fetch', remote: 'backup' } });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
+      request: expect.objectContaining({ action: { kind: 'fetch', remote: 'backup' } }),
+    });
     const historyCalls = invokeMock.mock.calls.filter(
       ([command, args]) => command === 'workspace_query' && requestedQueryKind(args) === 'history',
     );

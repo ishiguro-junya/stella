@@ -1,10 +1,14 @@
 import { FolderGit2 } from 'lucide-react';
 import { useState } from 'react';
 
+import type { RepositoryAvailability, RepositoryHealthIssue } from '../../domain/workspace';
+
 export interface RepositoryListItem {
   path: string;
   name: string;
   logoUrl?: string;
+  availability?: RepositoryAvailability;
+  healthIssues?: readonly RepositoryHealthIssue[];
 }
 
 export interface RepositoryLogoProps {

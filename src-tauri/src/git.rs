@@ -180,6 +180,11 @@ pub(crate) enum GitCommand {
     },
     References,
     Branches,
+    RemoteNames,
+    RemoteUrls {
+        remote: String,
+        push: bool,
+    },
     HeadOid,
     Resolve {
         revision: String,
@@ -241,6 +246,12 @@ pub(crate) enum GitCommand {
         remote: String,
         refspec: String,
         set_upstream: bool,
+    },
+    SetRemoteUrl {
+        remote: String,
+        push: bool,
+        new_url: String,
+        expected_url: String,
     },
     CreateBranch {
         name: String,
@@ -478,6 +489,15 @@ impl GitCommand {
                 "refs/heads",
                 "refs/remotes",
             ]),
+            Self::RemoteNames => strings(["remote"]),
+            Self::RemoteUrls { remote, push } => {
+                let mut args = strings(["remote", "get-url", "--all"]);
+                if *push {
+                    args.push("--push".into());
+                }
+                args.push(remote.into());
+                args
+            }
             Self::HeadOid => strings(["rev-parse", "--verify", "HEAD"]),
             Self::Resolve { revision } => vec![
                 "rev-parse".into(),
@@ -614,6 +634,21 @@ impl GitCommand {
                 args.push("--".into());
                 args.push(remote.into());
                 args.push(refspec.into());
+                args
+            }
+            Self::SetRemoteUrl {
+                remote,
+                push,
+                new_url,
+                expected_url,
+            } => {
+                let mut args = strings(["remote", "set-url"]);
+                if *push {
+                    args.push("--push".into());
+                }
+                args.push(remote.into());
+                args.push(new_url.into());
+                args.push(exact_git_regex(expected_url).into());
                 args
             }
             Self::CreateBranch { name, start_point } => vec![
@@ -785,6 +820,8 @@ impl GitCommand {
                 | Self::CommitParents { .. }
                 | Self::References
                 | Self::Branches
+                | Self::RemoteNames
+                | Self::RemoteUrls { .. }
                 | Self::HeadOid
                 | Self::Resolve { .. }
                 | Self::MergeBase { .. }
@@ -1256,6 +1293,22 @@ fn redact(value: &str) -> String {
     redacted
 }
 
+fn exact_git_regex(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('^');
+    for ch in value.chars() {
+        if matches!(
+            ch,
+            '.' | '[' | ']' | '\\' | '*' | '^' | '$' | '(' | ')' | '+' | '?' | '{' | '}' | '|'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped.push('$');
+    escaped
+}
+
 fn git_failure(output: &GitOutput) -> WorkspaceError {
     let stderr = output.stderr_text();
     let lowered = stderr.to_ascii_lowercase();
@@ -1267,6 +1320,18 @@ fn git_failure(output: &GitOutput) -> WorkspaceError {
         || lowered.contains("could not read username")
     {
         crate::model::ErrorCode::AuthenticationFailed
+    } else if lowered.contains("repository not found")
+        || lowered.contains("does not appear to be a git repository")
+    {
+        crate::model::ErrorCode::RemoteUnavailable
+    } else if lowered.contains("could not resolve host")
+        || lowered.contains("could not resolve hostname")
+        || lowered.contains("failed to connect")
+        || lowered.contains("connection timed out")
+        || lowered.contains("network is unreachable")
+        || lowered.contains("connection reset")
+    {
+        crate::model::ErrorCode::NetworkFailed
     } else {
         crate::model::ErrorCode::GitFailed
     };
@@ -1325,6 +1390,48 @@ mod tests {
             redact("token=one&access_token=two password=three token=four"),
             "token=***&access_token=*** password=*** token=***"
         );
+    }
+
+    #[test]
+    fn remote_failures_are_classified_without_promoting_ordinary_git_rejections() {
+        let failure = |stderr: &str| GitOutput {
+            argv: vec!["/usr/bin/git".into(), "fetch".into()],
+            status: Some(128),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+            truncated: false,
+            cancelled: false,
+            hook_executed: false,
+        };
+        assert_eq!(
+            git_failure(&failure("fatal: repository not found")).code,
+            crate::model::ErrorCode::RemoteUnavailable
+        );
+        assert_eq!(
+            git_failure(&failure("fatal: Authentication failed")).code,
+            crate::model::ErrorCode::AuthenticationFailed
+        );
+        assert_eq!(
+            git_failure(&failure("fatal: Could not resolve host: example.test")).code,
+            crate::model::ErrorCode::NetworkFailed
+        );
+        assert_eq!(
+            git_failure(&failure("remote rejected: protected branch")).code,
+            crate::model::ErrorCode::GitFailed
+        );
+    }
+
+    #[test]
+    fn remote_url_commands_keep_values_as_single_arguments() {
+        let args = GitCommand::SetRemoteUrl {
+            remote: "origin".into(),
+            push: true,
+            new_url: "ssh://example.test/repo.git;touch injected".into(),
+            expected_url: "ssh://example.test/old.[git]".into(),
+        }
+        .args();
+        assert!(args.contains(&"ssh://example.test/repo.git;touch injected".into()));
+        assert!(args.contains(&"^ssh://example\\.test/old\\.\\[git\\]$".into()));
     }
 
     #[test]

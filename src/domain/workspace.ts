@@ -86,6 +86,20 @@ export interface BranchSummary {
   upstream?: string;
 }
 
+export type RepositoryAvailability = 'available' | 'missing' | 'notRepository' | 'inaccessible';
+
+export type RemoteHealthReason = 'unavailable' | 'authentication' | 'network';
+
+export type RepositoryHealthIssue =
+  | { kind: 'local'; reason: RepositoryAvailability }
+  | { kind: 'remote'; reason: RemoteHealthReason; remote: string; failedAt?: string };
+
+export interface RemoteDefinition {
+  name: string;
+  fetchUrls: string[];
+  pushUrls: string[];
+}
+
 export type GitFlowCommand =
   | 'init'
   | 'start'
@@ -336,9 +350,16 @@ export type WorkspaceAction =
   | { kind: 'unstageSelection'; selection: DiffSelection }
   | { kind: 'discardSelection'; selection: DiffSelection }
   | { kind: 'commit'; input: CommitInput }
-  | { kind: 'fetch' }
+  | { kind: 'fetch'; remote?: string }
   | { kind: 'pullFastForward' }
   | { kind: 'push' }
+  | {
+      kind: 'setRemoteUrl';
+      remote: string;
+      urlKind: 'fetch' | 'push';
+      expectedUrl: string;
+      newUrl: string;
+    }
   | { kind: 'createBranch'; name: string; startOid: string; checkout?: boolean }
   | { kind: 'createTag'; name: string; targetOid: string }
   | { kind: 'gitFlow'; request: GitFlowRequest }
@@ -391,6 +412,7 @@ export type AttachRequest =
   | { kind: 'clone'; remoteUrl: string; destination: string };
 
 export type WorkspaceQuery =
+  | { kind: 'repositoryAvailability'; path: string }
   | { kind: 'snapshot'; repoId: RepoId }
   | { kind: 'diff'; repoId: RepoId; path: string; area: ChangeArea }
   | { kind: 'history'; repoId: RepoId; limit: number; skip: number; search?: string }
@@ -399,6 +421,7 @@ export type WorkspaceQuery =
   | { kind: 'gitFlowOverview'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }
   | { kind: 'fileContents'; repoId: RepoId; path: string }
+  | { kind: 'remotes'; repoId: RepoId }
   | { kind: 'activity'; repoId?: RepoId }
   | {
       kind: 'commitActivity';
@@ -407,6 +430,7 @@ export type WorkspaceQuery =
     };
 
 export type QueryResult =
+  | { kind: 'repositoryAvailability'; path: string; availability: RepositoryAvailability }
   | { kind: 'snapshot'; snapshot: RepoSnapshot }
   | { kind: 'diff'; diff: DiffDocument }
   | { kind: 'history'; commits: CommitSummary[] }
@@ -415,6 +439,7 @@ export type QueryResult =
   | { kind: 'gitFlowOverview'; overview: GitFlowOverview }
   | { kind: 'conflict'; document: ConflictDocument }
   | { kind: 'fileContents'; document: FileDocument }
+  | { kind: 'remotes'; remotes: RemoteDefinition[]; generation: Generation }
   | { kind: 'activity'; entries: ActivityEntry[] }
   | { kind: 'commitActivity'; series: CommitActivitySeries };
 
