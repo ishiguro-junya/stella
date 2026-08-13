@@ -450,16 +450,8 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Activity' })).toHaveAccessibleDescription(
-        'Operation running',
-      ),
-    );
     await user.click(screen.getByRole('button', { name: 'Repositories' }));
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Activity' })).toHaveAccessibleDescription(
-      'Operation running',
-    );
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Activity' })).toHaveFocus();

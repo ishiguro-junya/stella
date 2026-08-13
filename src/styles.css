@@ -637,7 +637,7 @@ button:where(:has(> .lucide)):where(:not(.icon-button, .new-repo-button, .file-a
   > .lucide {
   display: block;
 }
-button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
+button:where(:has(> .lucide)) > span {
   line-height: 1.2;
 }
 .icon-button {
@@ -674,20 +674,6 @@ button:where(:has(> .lucide)) > span:not(.activity-running-indicator) {
   background: var(--accent);
   color: var(--accent-contrast);
 }
-.activity-toggle {
-  position: relative;
-}
-.activity-running-indicator {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 6px;
-  height: 6px;
-  border: 1px solid var(--surface-toolbar);
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 .app-update-notes {
   max-height: 180px;
   overflow: auto;

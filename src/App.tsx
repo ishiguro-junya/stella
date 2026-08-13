@@ -1758,21 +1758,12 @@ export function App({
                   className="titlebar-menu-button activity-toggle"
                   aria-label={t('appActivity')}
                   aria-current={page === 'activity' ? 'page' : undefined}
-                  aria-describedby={hasRunningActivity ? 'activity-running-status' : undefined}
                   onClick={() => {
                     if (page !== 'activity') requestNavigation({ page: 'activity' });
                   }}
                 >
                   <ChartNoAxesCombined aria-hidden="true" focusable="false" />
                   <span>{t('appActivity')}</span>
-                  {hasRunningActivity ? (
-                    <>
-                      <span className="activity-running-indicator" aria-hidden="true" />
-                      <span id="activity-running-status" className="sr-only">
-                        {t('activityOperationRunning')}
-                      </span>
-                    </>
-                  ) : null}
                 </button>
               ) : null}
               <button
