@@ -16,8 +16,8 @@ mod worktree_text;
 
 pub use model::*;
 pub use workspace::{
-    Workspace, workspace_attach, workspace_cancel, workspace_detach, workspace_execute,
-    workspace_preview, workspace_query,
+    Workspace, workspace_attach, workspace_cancel, workspace_delete_repository, workspace_detach,
+    workspace_execute, workspace_preview, workspace_query,
 };
 
 use std::sync::Arc;
@@ -64,6 +64,7 @@ pub fn run() {
             workspace_execute,
             workspace_cancel,
             workspace_detach,
+            workspace_delete_repository,
             repository_logo::repository_logo,
             app_update::app_update_check,
             app_update::app_update_install,

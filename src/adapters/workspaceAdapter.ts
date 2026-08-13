@@ -18,6 +18,7 @@ export interface WorkspaceAdapter {
   execute: (request: ActionRequest) => Promise<ActionOutcome>;
   cancel: (request: CancelRequest) => Promise<void>;
   detach?: (repoId: string) => Promise<void>;
+  deleteRepository?: (path: string) => Promise<void>;
   subscribe: (onEvent: (event: WorkspaceEvent) => void) => Promise<() => void>;
 }
 

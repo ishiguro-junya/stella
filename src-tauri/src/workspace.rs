@@ -3998,6 +3998,61 @@ impl Workspace {
         CancelOutcome { accepted }
     }
 
+    fn delete_repository(&self, path: String) -> WorkspaceResult<()> {
+        let root = self.repository_root_for_deletion(&path)?;
+        trash::delete(&root).map_err(|error| WorkspaceError::new(ErrorCode::Io, error.to_string()))
+    }
+
+    fn repository_root_for_deletion(&self, path: &str) -> WorkspaceResult<PathBuf> {
+        let requested = PathBuf::from(path.trim());
+        if path.trim().is_empty() || !requested.is_absolute() {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "An absolute repository path is required",
+            ));
+        }
+        let root = canonicalize_repository_path(&requested)?;
+        if root.parent().is_none() {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The filesystem root cannot be deleted",
+            ));
+        }
+        if std::env::var_os("HOME")
+            .and_then(|home| PathBuf::from(home).canonicalize().ok())
+            .is_some_and(|home| home == root)
+        {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The home directory cannot be deleted",
+            ));
+        }
+        let git_root = command_path(&self.git, &root, GitCommand::TopLevel)?;
+        if git_root != root {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "Only the repository root can be deleted",
+            ));
+        }
+        if let Some(repo) = self
+            .repos
+            .read()
+            .expect("repos read lock")
+            .values()
+            .find(|repo| repo.root == root)
+            .cloned()
+        {
+            let snapshot = self.snapshot(&repo)?;
+            if !matches!(snapshot.operation, OperationState::None) {
+                return Err(WorkspaceError::new(
+                    ErrorCode::OperationInProgress,
+                    "Complete or abort the operation before deleting the repository",
+                ));
+            }
+        }
+        Ok(root)
+    }
+
     fn detach(&self, request: DetachRequest) -> WorkspaceResult<()> {
         if request.repo_id.trim().is_empty() {
             return Err(WorkspaceError::new(
@@ -4093,6 +4148,17 @@ pub async fn workspace_detach(
 ) -> WorkspaceResult<()> {
     let workspace = workspace.inner().clone();
     tauri::async_runtime::spawn_blocking(move || workspace.detach(request))
+        .await
+        .map_err(join_error)?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn workspace_delete_repository(
+    workspace: tauri::State<'_, Arc<Workspace>>,
+    path: String,
+) -> WorkspaceResult<()> {
+    let workspace = workspace.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || workspace.delete_repository(path))
         .await
         .map_err(join_error)?
 }
@@ -6472,6 +6538,44 @@ mod tests {
 
         fs::set_permissions(&fixture.repo, original_permissions).unwrap();
         assert_eq!(availability, RepositoryAvailability::Inaccessible);
+    }
+
+    #[test]
+    fn repository_deletion_accepts_only_the_exact_repository_root() {
+        let fixture = GitFixture::new();
+        let workspace = fixture.workspace();
+        let nested = fixture.repo.join("nested");
+        fs::create_dir(&nested).unwrap();
+
+        assert_eq!(
+            workspace
+                .repository_root_for_deletion(&fixture.repo_string())
+                .unwrap(),
+            fixture.repo.canonicalize().unwrap()
+        );
+        assert_eq!(
+            workspace
+                .repository_root_for_deletion(&nested.display().to_string())
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            workspace
+                .repository_root_for_deletion("/")
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+        if let Some(home) = std::env::var_os("HOME") {
+            assert_eq!(
+                workspace
+                    .repository_root_for_deletion(&PathBuf::from(home).display().to_string())
+                    .unwrap_err()
+                    .code,
+                ErrorCode::InvalidRequest
+            );
+        }
     }
 
     #[test]

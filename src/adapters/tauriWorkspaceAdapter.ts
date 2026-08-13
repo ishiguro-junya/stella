@@ -1293,6 +1293,10 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
       emit({ kind: 'repositoryRemoved', repoId });
     },
 
+    async deleteRepository(path) {
+      await invokeWorkspace<void>('workspace_delete_repository', { path });
+    },
+
     async subscribe(onEvent) {
       state.subscribers.add(onEvent);
       return () => state.subscribers.delete(onEvent);
