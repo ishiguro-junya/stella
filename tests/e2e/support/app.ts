@@ -40,7 +40,7 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     view: 'changes',
     paneWidths: {
       changes: { left: 320, right: 336 },
-      history: { left: 244 },
+      history: { left: 320 },
       activity: { left: 560 },
     },
     commitDrafts: {},

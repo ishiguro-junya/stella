@@ -70,7 +70,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   view: 'changes',
   paneWidths: {
     changes: { left: 320, right: 336 },
-    history: { left: 244 },
+    history: { left: 320 },
     activity: { left: 560 },
   },
   commitDrafts: {},

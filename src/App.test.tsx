@@ -269,10 +269,10 @@ describe('App repository attach', () => {
     expect(history).toHaveAttribute('aria-current', 'page');
     expect(history).toHaveFocus();
     const historyResizer = await screen.findByRole('separator', { name: 'History list width' });
-    expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '320');
     historyResizer.focus();
     await user.keyboard('{ArrowLeft}');
-    expect(historyResizer).toHaveAttribute('aria-valuenow', '236');
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '312');
 
     await user.click(settings);
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
@@ -291,7 +291,7 @@ describe('App repository attach', () => {
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         paneWidths: {
           changes: { left: 344, right: 336 },
-          history: { left: 236 },
+          history: { left: 312 },
           activity: { left: 536 },
         },
       }),
