@@ -54,6 +54,9 @@ mise run setup
 mise run dev
 ```
 
+開発用リポジトリの`origin`にはローカルのbareリポジトリを使用し、GitHubやネットワークへは接続しません。
+`mise run reset`を実行すると、作業内容とローカルremoteをまとめて初期状態へ戻します。
+
 ## 🧰 コマンド
 
 | コマンド | 内容 |
@@ -68,7 +71,7 @@ mise run dev
 | `mise run test` | ユニットテストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
 | `mise run screenshot` | スクリーンショットを生成する。 |
-| `mise run fixture:reset` | 開発用リポジトリを初期状態へ戻す。 |
+| `mise run reset` | 開発用リポジトリを初期状態へ戻す。 |
 
 ## 📁 ディレクトリ構成
 

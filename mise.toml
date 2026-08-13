@@ -20,7 +20,7 @@ run = [
 description = "Tauri applicationを開発modeで起動する"
 run = "pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
 
-[tasks."fixture:reset"]
+[tasks.reset]
 description = "開発用fixtureを基底状態へ戻す"
 run = "node --import tsx scripts/showcase-fixture.mts reset"
 

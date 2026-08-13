@@ -3,7 +3,10 @@ import { access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resetDevelopmentShowcaseFixture } from '../tests/e2e/support/showcaseRepository.js';
+import {
+  ensureDevelopmentShowcaseRemote,
+  resetDevelopmentShowcaseFixture,
+} from '../tests/e2e/support/showcaseRepository.js';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const developmentRepositoryPath = join(repositoryRoot, '.tmp', 'dev', 'ohtani-shohei');
@@ -28,6 +31,7 @@ async function exists(path: string): Promise<boolean> {
 async function prepareDevelopmentRepository(): Promise<void> {
   if (!(await exists(join(developmentRepositoryPath, '.git'))))
     await resetDevelopmentShowcaseFixture();
+  else await ensureDevelopmentShowcaseRemote();
   process.env.VITE_DEV_REPOSITORY_PATH = developmentRepositoryPath;
 }
 

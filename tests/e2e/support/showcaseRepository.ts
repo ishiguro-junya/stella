@@ -3,13 +3,19 @@ import { access, cp, mkdir, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { configureRepository, runGit, writeRepositoryFile } from './fixtures.js';
+import {
+  configureRepository,
+  ensureLocalBareRemote,
+  runGit,
+  writeRepositoryFile,
+} from './fixtures.js';
 
 const run = promisify(execFile);
 const fixtureBaseRoot = join(process.cwd(), '.tmp', 'fixtures', 'base');
 const fixtureBaseRepository = join(fixtureBaseRoot, 'ohtani-shohei');
 const developmentFixtureRoot = join(process.cwd(), '.tmp', 'dev');
 const developmentRepository = join(developmentFixtureRoot, 'ohtani-shohei');
+const developmentRemote = join(developmentFixtureRoot, 'ohtani-shohei-remote.git');
 const CONTRIBUTORS = [
   ['大谷翔平', 'shohei.ohtani@example.invalid'],
   ['山本由伸', 'yoshinobu.yamamoto@example.invalid'],
@@ -278,9 +284,16 @@ export async function setupShowcaseFixtureBase(): Promise<string> {
 export async function resetDevelopmentShowcaseFixture(): Promise<string> {
   await requireFixtureBase();
   await rm(developmentRepository, { recursive: true, force: true });
+  await rm(developmentRemote, { recursive: true, force: true });
   await rm(join(developmentFixtureRoot, '.showcase-ready'), { force: true });
   await mkdir(developmentFixtureRoot, { recursive: true });
   await cp(fixtureBaseRepository, developmentRepository, { recursive: true });
+  await ensureLocalBareRemote(developmentRepository, developmentRemote);
+  return realpath(developmentRepository);
+}
+
+export async function ensureDevelopmentShowcaseRemote(): Promise<string> {
+  await ensureLocalBareRemote(developmentRepository, developmentRemote);
   return realpath(developmentRepository);
 }
 
