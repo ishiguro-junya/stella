@@ -1210,7 +1210,7 @@ impl Workspace {
             Action::Reset { commit, .. }
             | Action::CherryPick { commit, .. }
             | Action::Revert { commit, .. } => Some(commit),
-            Action::Merge { source } => Some(source),
+            Action::Merge { source, .. } => Some(source),
             Action::Rebase { onto } => Some(onto),
             Action::CreateBranch { start_point, .. } => Some(start_point),
             Action::CreateTag { target, .. } => Some(target),
@@ -2769,7 +2769,6 @@ impl Workspace {
                 remote,
                 remote_branch,
             } => {
-                require_clean(before)?;
                 self.run_checked(
                     repo,
                     GitCommand::Fetch {
@@ -2794,27 +2793,63 @@ impl Workspace {
                 local_branch,
                 remote_branch,
                 set_upstream,
+                force_with_lease,
+                push_tags,
             } => {
                 if self.git.has_lfs() {
+                    let mut lfs_args = vec!["push".into()];
+                    if *push_tags {
+                        lfs_args.push("--all".into());
+                    }
+                    lfs_args.push(remote.into());
+                    lfs_args.push(format!("refs/heads/{local_branch}").into());
+                    if *push_tags {
+                        let references = self
+                            .git
+                            .run(
+                                Some(&repo.root),
+                                GitCommand::References,
+                                None,
+                                Some(control),
+                            )?
+                            .ensure_success()?;
+                        lfs_args.extend(
+                            String::from_utf8_lossy(&references.stdout)
+                                .lines()
+                                .filter_map(|line| line.split_once('\0').map(|(name, _)| name))
+                                .filter(|name| name.starts_with("refs/tags/"))
+                                .map(Into::into),
+                        );
+                    }
                     self.git
-                        .run_lfs(
-                            &repo.root,
-                            vec![
-                                "push".into(),
-                                remote.into(),
-                                format!("refs/heads/{local_branch}").into(),
-                            ],
-                            Some(control),
-                        )?
+                        .run_lfs(&repo.root, lfs_args, Some(control))?
                         .ensure_success()?;
                 }
                 let refspec = format!("refs/heads/{local_branch}:refs/heads/{remote_branch}");
+                let lease = force_with_lease
+                    .then(|| {
+                        let remote_ref = format!("refs/remotes/{remote}/{remote_branch}");
+                        let expected = self
+                            .git
+                            .run(Some(&repo.root), GitCommand::Branches, None, Some(control))
+                            .and_then(GitOutput::ensure_success)
+                            .map(|output| {
+                                parse_branches(&output.stdout)
+                                    .into_iter()
+                                    .find(|branch| branch.full_name == remote_ref)
+                                    .map_or_else(String::new, |branch| branch.oid)
+                            })?;
+                        Ok::<_, WorkspaceError>((format!("refs/heads/{remote_branch}"), expected))
+                    })
+                    .transpose()?;
                 let output = self.run_checked(
                     repo,
                     GitCommand::Push {
                         remote: remote.clone(),
                         refspec,
                         set_upstream: *set_upstream,
+                        force_with_lease: lease,
+                        push_tags: *push_tags,
                     },
                     None,
                     control,
@@ -2941,11 +2976,21 @@ impl Workspace {
                 )?;
                 Ok((LocalizedMessage::new("backendBranchCheckedOut"), output))
             }
-            Action::Merge { source } => {
+            Action::Merge {
+                source,
+                commit_immediately,
+            } => {
                 require_clean(before)?;
                 let source = self.bound_target(repo, source, target_binding, control)?;
-                let output =
-                    self.run_checked(repo, GitCommand::MergeNoCommit { source }, None, control)?;
+                let output = self.run_checked(
+                    repo,
+                    GitCommand::Merge {
+                        source,
+                        commit_immediately: *commit_immediately,
+                    },
+                    None,
+                    control,
+                )?;
                 Ok((LocalizedMessage::new("backendMergeCreated"), output))
             }
             Action::Rebase { onto } => {
@@ -5222,7 +5267,7 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
         }
         Action::GitFlow { request } => git_flow::validate(request)?,
         Action::Checkout { branch } => validate_branch_name(branch)?,
-        Action::Merge { source } => validate_revision(source)?,
+        Action::Merge { source, .. } => validate_revision(source)?,
         Action::Rebase { onto } => validate_revision(onto)?,
         Action::CherryPick { commit, .. }
         | Action::Revert { commit, .. }
@@ -5580,7 +5625,7 @@ fn action_commits(action: &Action) -> Vec<String> {
     match action {
         Action::CreateBranch { start_point, .. } => vec![start_point.clone()],
         Action::CreateTag { target, .. } => vec![target.clone()],
-        Action::Merge { source } => vec![source.clone()],
+        Action::Merge { source, .. } => vec![source.clone()],
         Action::Rebase { onto } => vec![onto.clone()],
         Action::CherryPick { commit, .. }
         | Action::Revert { commit, .. }
@@ -6104,6 +6149,7 @@ mod tests {
             },
             Action::Merge {
                 source: "target".into(),
+                commit_immediately: false,
             },
             Action::Rebase {
                 onto: "target".into(),
@@ -7750,6 +7796,120 @@ mod tests {
     }
 
     #[test]
+    fn fast_forward_pull_preserves_non_conflicting_uncommitted_changes() {
+        let fixture = GitFixture::new();
+        fixture.write("local.txt", "base\n");
+        fixture.git(&["add", "--", "local.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        let bare = fixture.temp.path().join("dirty-pull.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "-u", "origin", "main"]);
+        let other = fixture.temp.path().join("dirty-pull-other");
+        run_git(
+            fixture.temp.path(),
+            &["clone", bare.to_str().unwrap(), other.to_str().unwrap()],
+        );
+        run_git(&other, &["config", "user.name", "Remote Test"]);
+        run_git(&other, &["config", "user.email", "remote@example.test"]);
+        fs::write(other.join("remote.txt"), "remote\n").unwrap();
+        run_git(&other, &["add", "--", "remote.txt"]);
+        run_git(&other, &["commit", "-m", "feat: remote"]);
+        run_git(&other, &["push", "origin", "main"]);
+        let remote_head = run_git_output(&other, &["rev-parse", "HEAD"]);
+        fixture.write("local.txt", "uncommitted\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        assert!(!attached.snapshot.entries.is_empty());
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "pull-with-uncommitted-change".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Pull {
+                    remote: "origin".into(),
+                    remote_branch: "main".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert_eq!(fixture.git_output(&["rev-parse", "HEAD"]), remote_head);
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("local.txt")).unwrap(),
+            "uncommitted\n"
+        );
+    }
+
+    #[test]
+    fn fast_forward_pull_rejects_conflicting_uncommitted_changes_without_overwriting_them() {
+        let fixture = GitFixture::new();
+        fixture.write("shared.txt", "base\n");
+        fixture.git(&["add", "--", "shared.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        let local_head = fixture.git_output(&["rev-parse", "HEAD"]);
+        let bare = fixture.temp.path().join("conflicting-dirty-pull.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "-u", "origin", "main"]);
+        let other = fixture.temp.path().join("conflicting-dirty-pull-other");
+        run_git(
+            fixture.temp.path(),
+            &["clone", bare.to_str().unwrap(), other.to_str().unwrap()],
+        );
+        run_git(&other, &["config", "user.name", "Remote Test"]);
+        run_git(&other, &["config", "user.email", "remote@example.test"]);
+        fs::write(other.join("shared.txt"), "remote\n").unwrap();
+        run_git(&other, &["add", "--", "shared.txt"]);
+        run_git(&other, &["commit", "-m", "feat: remote"]);
+        run_git(&other, &["push", "origin", "main"]);
+        fixture.write("shared.txt", "uncommitted\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "reject-conflicting-uncommitted-pull".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Pull {
+                    remote: "origin".into(),
+                    remote_branch: "main".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::GitFailed);
+        assert_eq!(fixture.git_output(&["rev-parse", "HEAD"]), local_head);
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("shared.txt")).unwrap(),
+            "uncommitted\n"
+        );
+    }
+
+    #[test]
     fn real_remote_divergence_is_reported_and_pull_remains_fast_forward_only() {
         let fixture = GitFixture::new();
         fixture.write("f.txt", "base\n");
@@ -8027,6 +8187,7 @@ mod tests {
             .unwrap();
         let action = Action::Merge {
             source: "topic".into(),
+            commit_immediately: false,
         };
         let preview = workspace
             .preview(PreviewRequest {
@@ -8726,6 +8887,7 @@ mod tests {
         for action in [
             Action::Merge {
                 source: "target".into(),
+                commit_immediately: false,
             },
             Action::Rebase {
                 onto: "target".into(),
@@ -9322,6 +9484,7 @@ mod tests {
             .unwrap();
         let action = Action::Merge {
             source: "topic".into(),
+            commit_immediately: false,
         };
         let token = preview_token(
             &workspace,
@@ -9343,6 +9506,58 @@ mod tests {
             outcome.snapshot.operation,
             OperationState::Merge { .. }
         ));
+    }
+
+    #[test]
+    fn merge_action_commits_immediately_when_requested() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.git(&["switch", "-c", "topic"]);
+        fixture.write("f.txt", "base\ntopic\n");
+        fixture.git(&["commit", "-am", "feat: topic"]);
+        fixture.git(&["switch", "main"]);
+        let pre_head = fixture.git_output(&["rev-parse", "HEAD"]);
+
+        let workspace = fixture.workspace();
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::Merge {
+            source: "topic".into(),
+            commit_immediately: true,
+        };
+        let token = preview_token(
+            &workspace,
+            &session.repo_id,
+            session.snapshot.repo_generation,
+            action.clone(),
+        );
+        let outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "merge-commit-immediately".into(),
+                repo_id: session.repo_id,
+                expected_generation: session.snapshot.repo_generation,
+                action,
+                confirmation_token: Some(token),
+            })
+            .unwrap();
+
+        assert_ne!(fixture.git_output(&["rev-parse", "HEAD"]), pre_head);
+        assert_eq!(
+            fixture
+                .git_output(&["rev-list", "--parents", "-n", "1", "HEAD"])
+                .split_whitespace()
+                .count(),
+            3
+        );
+        assert!(matches!(outcome.snapshot.operation, OperationState::None));
     }
 
     #[test]
@@ -11115,7 +11330,7 @@ mod tests {
                 None,
             )
             .unwrap();
-        workspace
+        let outcome = workspace
             .execute(ExecuteRequest {
                 operation_id: "initial-push".into(),
                 repo_id: session.repo_id,
@@ -11125,10 +11340,13 @@ mod tests {
                     local_branch: "main".into(),
                     remote_branch: "main".into(),
                     set_upstream: true,
+                    force_with_lease: false,
+                    push_tags: false,
                 },
                 confirmation_token: None,
             })
             .unwrap();
+        assert_eq!(outcome.snapshot.upstream.as_deref(), Some("origin/main"));
         let remote_head = run_git_output(
             fixture.temp.path(),
             &[
@@ -11139,6 +11357,293 @@ mod tests {
             ],
         );
         assert_eq!(remote_head, fixture.git_output(&["rev-parse", "HEAD"]));
+    }
+
+    #[test]
+    fn rejected_tag_keeps_the_branch_and_upstream_unchanged() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.git(&["tag", "existing"]);
+        let bare = fixture.temp.path().join("remote.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "origin", "main", "--tags"]);
+        let remote_head = run_git_output(
+            fixture.temp.path(),
+            &[
+                "--git-dir",
+                bare.to_str().unwrap(),
+                "rev-parse",
+                "refs/heads/main",
+            ],
+        );
+
+        fixture.write("local.txt", "local\n");
+        fixture.git(&["add", "--", "local.txt"]);
+        fixture.git(&["commit", "-m", "feat: local update"]);
+        fixture.git(&["tag", "-f", "existing"]);
+        fixture.git_fails(&["config", "--get", "branch.main.remote"]);
+
+        let workspace = fixture.workspace();
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "atomic-tag-rejection".into(),
+                repo_id: session.repo_id,
+                expected_generation: session.snapshot.repo_generation,
+                action: Action::Push {
+                    remote: "origin".into(),
+                    local_branch: "main".into(),
+                    remote_branch: "main".into(),
+                    set_upstream: true,
+                    force_with_lease: false,
+                    push_tags: true,
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::GitFailed);
+        assert_eq!(
+            run_git_output(
+                fixture.temp.path(),
+                &[
+                    "--git-dir",
+                    bare.to_str().unwrap(),
+                    "rev-parse",
+                    "refs/heads/main",
+                ],
+            ),
+            remote_head
+        );
+        fixture.git_fails(&["config", "--get", "branch.main.remote"]);
+    }
+
+    #[test]
+    fn force_with_lease_rejects_a_remote_branch_updated_elsewhere() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        let bare = fixture.temp.path().join("remote.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "--set-upstream", "origin", "main"]);
+
+        let other = fixture.temp.path().join("other");
+        run_git(
+            fixture.temp.path(),
+            &["clone", bare.to_str().unwrap(), other.to_str().unwrap()],
+        );
+        run_git(&other, &["config", "user.name", "Other Test"]);
+        run_git(&other, &["config", "user.email", "other@example.test"]);
+        fs::write(other.join("other.txt"), "remote\n").unwrap();
+        run_git(&other, &["add", "--", "other.txt"]);
+        run_git(&other, &["commit", "-m", "feat: remote update"]);
+        run_git(&other, &["push", "origin", "main"]);
+        let remote_head = run_git_output(&other, &["rev-parse", "HEAD"]);
+
+        fixture.write("local.txt", "local\n");
+        fixture.git(&["add", "--", "local.txt"]);
+        fixture.git(&["commit", "-m", "feat: local update"]);
+        let workspace = fixture.workspace();
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "stale-force-lease".into(),
+                repo_id: session.repo_id,
+                expected_generation: session.snapshot.repo_generation,
+                action: Action::Push {
+                    remote: "origin".into(),
+                    local_branch: "main".into(),
+                    remote_branch: "main".into(),
+                    set_upstream: false,
+                    force_with_lease: true,
+                    push_tags: false,
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::GitFailed);
+        assert_eq!(
+            run_git_output(
+                fixture.temp.path(),
+                &[
+                    "--git-dir",
+                    bare.to_str().unwrap(),
+                    "rev-parse",
+                    "refs/heads/main",
+                ],
+            ),
+            remote_head
+        );
+    }
+
+    #[test]
+    fn force_with_lease_uses_an_empty_expectation_without_tracking_information() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        let bare = fixture.temp.path().join("remote.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "origin", "main"]);
+        fixture.git(&["update-ref", "-d", "refs/remotes/origin/main"]);
+        fixture.write("local.txt", "local\n");
+        fixture.git(&["add", "--", "local.txt"]);
+        fixture.git(&["commit", "-m", "feat: local update"]);
+
+        let workspace = fixture.workspace();
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "empty-force-lease".into(),
+                repo_id: session.repo_id,
+                expected_generation: session.snapshot.repo_generation,
+                action: Action::Push {
+                    remote: "origin".into(),
+                    local_branch: "main".into(),
+                    remote_branch: "main".into(),
+                    set_upstream: false,
+                    force_with_lease: true,
+                    push_tags: false,
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::GitFailed);
+    }
+
+    #[test]
+    fn push_tags_sends_all_tags_to_git_and_git_lfs() {
+        let fixture = GitFixture::new();
+        fixture.write("main.txt", "main\n");
+        fixture.git(&["add", "--", "main.txt"]);
+        fixture.git(&["commit", "-m", "feat: main"]);
+        fixture.git(&["tag", "v-main"]);
+        fixture.git(&["switch", "-c", "tagged"]);
+        fixture.write("tagged.txt", "tagged\n");
+        fixture.git(&["add", "--", "tagged.txt"]);
+        fixture.git(&["commit", "-m", "feat: tagged object"]);
+        fixture.git(&["tag", "v-tagged"]);
+        fixture.git(&["switch", "main"]);
+
+        let bare = fixture.temp.path().join("remote.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        let lfs_log = fixture.temp.path().join("lfs-args");
+        let lfs = fixture.temp.path().join("git-lfs");
+        fs::write(
+            &lfs,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n",
+                lfs_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&lfs).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&lfs, permissions).unwrap();
+        let workspace = Workspace::new(
+            GitExecutor::configured(
+                PathBuf::from("/usr/bin/git"),
+                Some(lfs),
+                None,
+                Vec::new(),
+                None,
+            ),
+            test_journal_store(&fixture.temp.path().join("lfs-journal")).unwrap(),
+        );
+        let session = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "push-tags-with-lfs".into(),
+                repo_id: session.repo_id,
+                expected_generation: session.snapshot.repo_generation,
+                action: Action::Push {
+                    remote: "origin".into(),
+                    local_branch: "main".into(),
+                    remote_branch: "main".into(),
+                    set_upstream: true,
+                    force_with_lease: false,
+                    push_tags: true,
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        let lfs_args = fs::read_to_string(lfs_log).unwrap();
+        assert_eq!(
+            lfs_args.lines().collect::<Vec<_>>(),
+            [
+                "push",
+                "--all",
+                "origin",
+                "refs/heads/main",
+                "refs/tags/v-main",
+                "refs/tags/v-tagged",
+            ]
+        );
+        for tag in ["v-main", "v-tagged"] {
+            assert!(
+                !run_git_output(
+                    fixture.temp.path(),
+                    &[
+                        "--git-dir",
+                        bare.to_str().unwrap(),
+                        "rev-parse",
+                        &format!("refs/tags/{tag}"),
+                    ],
+                )
+                .is_empty()
+            );
+        }
     }
 
     fn assert_external_structured_continue_is_rejected(operation: StructuredOperation) {
@@ -11627,6 +12132,7 @@ mod tests {
                 merge,
                 Action::Merge {
                     source: "topic".into(),
+                    commit_immediately: false,
                 },
             ),
             (
@@ -11819,6 +12325,8 @@ mod tests {
                     local_branch: "main".into(),
                     remote_branch: "main".into(),
                     set_upstream: true,
+                    force_with_lease: false,
+                    push_tags: false,
                 },
                 confirmation_token: None,
             })

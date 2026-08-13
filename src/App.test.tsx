@@ -1915,11 +1915,31 @@ describe('App repository attach', () => {
         selectedRepoId: repo.repoId,
         activities: [],
       })),
-      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
-        request.kind === 'snapshot'
-          ? { kind: 'snapshot' as const, snapshot: repo }
-          : { kind: 'activity' as const, entries: [] },
-      ),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'snapshot') return { kind: 'snapshot' as const, snapshot: repo };
+        if (request.kind === 'branches') {
+          return {
+            kind: 'branches' as const,
+            branches: [
+              {
+                fullName: 'refs/remotes/origin/main',
+                shortName: 'origin/main',
+                oid: 'remote-main',
+                current: false,
+                remote: true,
+              },
+            ],
+          };
+        }
+        if (request.kind === 'remotes') {
+          return {
+            kind: 'remotes' as const,
+            remotes: [{ name: 'origin', fetchUrls: ['example'], pushUrls: ['example'] }],
+            generation: 1,
+          };
+        }
+        return { kind: 'activity' as const, entries: [] };
+      }),
       preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
         throw new Error('unused');
       }),
@@ -1933,6 +1953,13 @@ describe('App repository attach', () => {
     await enterRepositoryPath(user, repo.path);
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await user.click(screen.getByRole('button', { name: 'Pull' }));
+    const pullDialog = await screen.findByRole('dialog', { name: 'Pull' });
+    await waitFor(() =>
+      expect(within(pullDialog).getByRole('combobox', { name: 'Remote branch' })).toHaveValue(
+        'origin/main',
+      ),
+    );
+    await user.click(within(pullDialog).getByRole('button', { name: 'Pull' }));
     await waitFor(() => expect(execute).toHaveBeenCalledOnce());
     await waitFor(() =>
       expect(

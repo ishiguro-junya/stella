@@ -94,6 +94,30 @@ RepositoryのGit Hookは設定にかかわらず実行し、Hookが要求する�
 
 ステージ表示が「なし」の場合は、Gitの無視対象を除くステージ済み、未ステージ、未追跡の全変更をCommit直前にStageしてCommitします。  
 
+## Pull／Push
+
+ChangesのPullとPushは毎回ダイアログを開いてから実行します。  
+ダイアログを開くだけではFetchしません。  
+Pullは現在のローカルブランチを固定表示し、ローカルに取得済みのリモートブランチを`origin/main`形式で表示して、追跡先を初期選択します。  
+追跡先がない場合もPullを利用でき、Pull先を変更しても追跡先は変更しません。  
+Pullが分岐を検出した場合はダイアログを閉じ、選択したPull先を既存のMerge／Rebase案内へ引き継ぎます。  
+「マージした変更をすぐにコミット」は既定で選択し、分岐後にMergeを選んだ場合はGitの既定メッセージでMerge commitを作成します。  
+選択を外した場合はCommit前のMerge状態で停止します。  
+
+Pushは現在のローカルブランチを送信元として固定し、リモートと送信先ブランチを指定します。  
+既存のリモートブランチを候補に表示し、新しいブランチ名も入力できます。  
+Pull／Pushダイアログの「ブランチを更新」は選択中のリモートをFetchし、リモートブランチ候補を再読込します。  
+送信先の初期値は追跡先、`origin/現在のブランチ名`、最初のリモートの順で決定します。  
+追跡先がない場合だけ、Push成功時に選択した送信先を追跡先として設定します。  
+「安全に強制プッシュ（--force-with-lease）」は対象リモート追跡ブランチのOIDを期待値とし、追跡情報がない場合はリモートに同名ブランチが存在しないことを期待値とします。  
+選択時は警告を表示しますが、実行ボタンの見た目は変更せず、追加確認も表示しません。  
+「すべてのローカルタグをプッシュ」は、現在のブランチと全ローカルタグをすべて成功する場合だけ一括で送信し、既存タグを強制上書きしません。  
+両チェックボックスはダイアログを開くたびに未選択へ戻します。  
+
+Pull／Push成功時はダイアログを閉じ、失敗時は選択内容を保持します。  
+リモート操作の実行中もダイアログを閉じられ、Activity画面から操作をキャンセルできます。  
+Detached HEAD、実行中のGit操作、未保存の編集では既存どおり利用できません。  
+
 ## 差分表示
 
 通常diffと競合中のBase↔Current／Base↔Incomingを表示します。  
@@ -318,6 +342,7 @@ Git Flow操作UIは現在公開しません。
 `.gitattributes`の`filter=lfs`を検出し、Clone、Checkout、Merge、Rebase、Pull、Stage、Commitで選択中toolchainのGit LFS filterを透過的に使用します。  
 Git LFS対象fileのStage／Unstageはfilterを確実に適用するためfile全体で行い、行単位操作は利用できません。  
 通常Pushでは、Git refを送る前に対象refのLFS objectをuploadします。  
+全ローカルタグをPushする場合は、現在のブランチと全ローカルタグから到達できるLFS objectを先にuploadします。  
 利用者のglobal Git設定とhookは変更しません。  
 SystemにGit LFSがないLFS Repositoryはpointer fileのまま操作を続けず、必要componentを示して停止します。  
 track、untrack、lock、migrateの専用UIは設けません。  

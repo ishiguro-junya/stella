@@ -179,6 +179,43 @@ export const MESSAGES = {
   fetch: { en: 'Fetch', ja: 'フェッチ' },
   pull: { en: 'Pull', ja: 'プル' },
   push: { en: 'Push', ja: 'プッシュ' },
+  remote: { en: 'Remote', ja: 'リモート' },
+  localBranch: { en: 'Local branch', ja: 'ローカルブランチ' },
+  remoteBranch: { en: 'Remote branch', ja: 'リモートブランチ' },
+  selectRemoteBranch: { en: 'Select a remote branch', ja: 'リモートブランチを選択' },
+  refreshBranches: { en: 'Refresh branches', ja: 'ブランチを更新' },
+  pullDialogDescription: {
+    en: 'Select the remote branch to pull into the current branch.',
+    ja: 'ローカルブランチへ取り込むリモートブランチを選択します。',
+  },
+  commitMergeImmediately: {
+    en: 'Commit merged changes immediately',
+    ja: 'マージした変更をすぐにコミット',
+  },
+  pushDialogDescription: {
+    en: (args) => `Select where to push ${text(args, 'branch')}.`,
+    ja: (args) => `${text(args, 'branch')}のプッシュ先を選択します。`,
+  },
+  forceWithLease: {
+    en: 'Force push safely (--force-with-lease)',
+    ja: '安全に強制プッシュ（--force-with-lease）',
+  },
+  pushAllLocalTags: {
+    en: 'Push all local tags',
+    ja: 'すべてのローカルタグをプッシュ',
+  },
+  forceWithLeaseWarning: {
+    en: 'This can rewrite remote branch history. The push will fail if the remote branch changed unexpectedly.',
+    ja: 'リモートブランチの履歴を書き換える可能性があります。リモートブランチが想定外に更新されている場合は失敗します。',
+  },
+  loadRemoteTargetsFailed: {
+    en: 'Could not load remotes and branches.',
+    ja: 'リモートとブランチを読み込めませんでした。',
+  },
+  noRemoteBranches: {
+    en: 'There are no remote branches to pull.',
+    ja: 'プルできるリモートブランチがありません。',
+  },
   changeAllAria: {
     en: (args, { number }) => {
       const total = count(args, 'count');
@@ -404,10 +441,6 @@ export const MESSAGES = {
   copyPathFailed: {
     en: 'Could not copy the file path.',
     ja: 'ファイルパスをコピーできませんでした。',
-  },
-  setUpstreamBeforePull: {
-    en: 'Set an upstream branch before pulling.',
-    ja: 'プルする前に上流ブランチを設定してください。',
   },
   fastForwardUnavailable: { en: 'Fast-forward unavailable', ja: 'ファストフォワードできません' },
   fetchCompleteResolve: {

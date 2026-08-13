@@ -62,7 +62,9 @@ export function HistoryActionDialog({
           ? { kind: 'createTag', name: name.trim(), targetOid: request.target.oid }
           : undefined;
       case 'merge':
-        return sourceRef.trim() ? { kind: 'merge', sourceRef: sourceRef.trim() } : undefined;
+        return sourceRef.trim()
+          ? { kind: 'merge', sourceRef: sourceRef.trim(), commitImmediately: false }
+          : undefined;
       case 'rebase':
         return sourceRef.trim() ? { kind: 'rebase', ontoRef: sourceRef.trim() } : undefined;
       case 'cherryPick':

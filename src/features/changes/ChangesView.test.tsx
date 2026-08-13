@@ -887,12 +887,11 @@ describe('ChangesView diff lifecycle', () => {
         .map((button) => button.textContent),
     ).toEqual(['Commit', 'Pull', 'Push', 'Fetch']);
     const pull = screen.getByRole('button', { name: 'Pull' });
-    expect(pull).toBeDisabled();
+    expect(pull).toBeEnabled();
     expect(pull).toHaveClass('changes-action-button');
     expect(pull).toHaveAttribute('title', 'Pull');
     expect(pull).toHaveTextContent('Pull');
-    expect(pull).toHaveAccessibleDescription('Set an upstream branch before pulling.');
-    expect(screen.getByText('Set an upstream branch before pulling.')).toHaveClass('sr-only');
+    expect(pull).toHaveAttribute('aria-expanded', 'false');
     for (const label of ['Commit', 'Push', 'Fetch']) {
       const action = within(actions).getByRole('button', { name: label });
       expect(action).toHaveClass('changes-action-button');
@@ -1114,11 +1113,35 @@ describe('ChangesView diff lifecycle', () => {
       },
     });
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async (action) => {
-      if (action.kind === 'pullFastForward')
+      if (action.kind === 'pull')
         throw new WorkspaceAdapterError('pullDiverged', 'Fast-forward is not possible.');
     });
+    const adapter = adapterWithDiff();
+    const queryDiff = adapter.query;
+    adapter.query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'branches')
+        return {
+          kind: 'branches',
+          branches: [
+            {
+              fullName: 'refs/remotes/origin/main',
+              shortName: 'origin/main',
+              oid: 'remote-main',
+              current: false,
+              remote: true,
+            },
+          ],
+        };
+      if (request.kind === 'remotes')
+        return {
+          kind: 'remotes',
+          remotes: [{ name: 'origin', fetchUrls: ['example'], pushUrls: ['example'] }],
+          generation: 1,
+        };
+      return await queryDiff(request);
+    });
     const props = {
-      adapter: adapterWithDiff(),
+      adapter,
       onAction,
       paneWidths: { left: 240, right: 330 },
       onPaneWidthsChange: () => undefined,
@@ -1130,15 +1153,27 @@ describe('ChangesView diff lifecycle', () => {
     });
     expect(commit).toHaveAttribute('aria-expanded', 'false');
     await user.click(screen.getByRole('button', { name: 'Pull' }));
+    const pullDialog = await screen.findByRole('dialog', { name: 'Pull' });
+    expect(
+      within(pullDialog).getByRole('checkbox', {
+        name: 'Commit merged changes immediately',
+      }),
+    ).toBeChecked();
+    await user.click(within(pullDialog).getByRole('button', { name: 'Pull' }));
     expect(await screen.findByText('Fast-forward unavailable')).toBeVisible();
     expect(commit).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Pull' })).not.toBeInTheDocument();
     rerender(<ChangesView repo={{ ...repo, generation: 2 }} {...props} />);
     expect(screen.getByText('Fast-forward unavailable')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Merge' }));
     await waitFor(() =>
-      expect(onAction).toHaveBeenLastCalledWith({ kind: 'merge', sourceRef: 'FETCH_HEAD' }),
+      expect(onAction).toHaveBeenLastCalledWith({
+        kind: 'merge',
+        sourceRef: 'FETCH_HEAD',
+        commitImmediately: true,
+      }),
     );
     await waitFor(() =>
       expect(screen.queryByText('Fast-forward unavailable')).not.toBeInTheDocument(),

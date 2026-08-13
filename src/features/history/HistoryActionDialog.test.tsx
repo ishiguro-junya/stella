@@ -70,7 +70,7 @@ describe('HistoryActionDialog', () => {
   });
 
   it.each([
-    ['merge', 'Merge', { kind: 'merge', sourceRef: 'origin/topic' }],
+    ['merge', 'Merge', { kind: 'merge', sourceRef: 'origin/topic', commitImmediately: false }],
     ['rebase', 'Rebase', { kind: 'rebase', ontoRef: 'origin/topic' }],
   ] as const)(
     'prefills the selected Commit OID for %s but allows another source ref',

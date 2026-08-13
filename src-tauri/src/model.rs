@@ -336,6 +336,8 @@ pub enum Action {
         local_branch: String,
         remote_branch: String,
         set_upstream: bool,
+        force_with_lease: bool,
+        push_tags: bool,
     },
     SetRemoteUrl {
         remote: String,
@@ -360,6 +362,7 @@ pub enum Action {
     },
     Merge {
         source: String,
+        commit_immediately: bool,
     },
     Rebase {
         onto: String,

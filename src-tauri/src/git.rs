@@ -250,6 +250,8 @@ pub(crate) enum GitCommand {
         remote: String,
         refspec: String,
         set_upstream: bool,
+        force_with_lease: Option<(String, String)>,
+        push_tags: bool,
     },
     SetRemoteUrl {
         remote: String,
@@ -272,8 +274,9 @@ pub(crate) enum GitCommand {
     Switch {
         branch: String,
     },
-    MergeNoCommit {
+    Merge {
         source: String,
+        commit_immediately: bool,
     },
     MergeFastForward {
         source: String,
@@ -649,10 +652,19 @@ impl GitCommand {
                 remote,
                 refspec,
                 set_upstream,
+                force_with_lease,
+                push_tags,
             } => {
                 let mut args = strings(["push", "--porcelain", "--progress"]);
                 if *set_upstream {
                     args.push("--set-upstream".into());
+                }
+                if let Some((reference, expected)) = force_with_lease {
+                    args.push(format!("--force-with-lease={reference}:{expected}").into());
+                }
+                if *push_tags {
+                    args.push("--atomic".into());
+                    args.push("--tags".into());
                 }
                 args.push("--".into());
                 args.push(remote.into());
@@ -704,16 +716,24 @@ impl GitCommand {
                     branch.into(),
                 ]
             }
-            Self::MergeNoCommit { source } => vec![
-                "merge".into(),
-                "--no-commit".into(),
-                "--no-ff".into(),
-                "--no-edit".into(),
-                "--no-autostash".into(),
-                "--no-overwrite-ignore".into(),
-                "--".into(),
-                source.into(),
-            ],
+            Self::Merge {
+                source,
+                commit_immediately,
+            } => {
+                let mut args = strings(["merge"]);
+                if !commit_immediately {
+                    args.push("--no-commit".into());
+                }
+                args.extend(strings([
+                    "--no-ff",
+                    "--no-edit",
+                    "--no-autostash",
+                    "--no-overwrite-ignore",
+                    "--",
+                ]));
+                args.push(source.into());
+                args
+            }
             Self::MergeFastForward { source } => vec![
                 "merge".into(),
                 "--ff-only".into(),
@@ -1459,6 +1479,33 @@ mod tests {
     }
 
     #[test]
+    fn push_combines_an_exact_force_lease_with_all_tags() {
+        assert_eq!(
+            GitCommand::Push {
+                remote: "origin".into(),
+                refspec: "refs/heads/main:refs/heads/release".into(),
+                set_upstream: true,
+                force_with_lease: Some(("refs/heads/release".into(), "expected-oid".into())),
+                push_tags: true,
+            }
+            .args(),
+            strings([
+                "--literal-pathspecs",
+                "push",
+                "--porcelain",
+                "--progress",
+                "--set-upstream",
+                "--force-with-lease=refs/heads/release:expected-oid",
+                "--atomic",
+                "--tags",
+                "--",
+                "origin",
+                "refs/heads/main:refs/heads/release",
+            ])
+        );
+    }
+
+    #[test]
     fn paths_are_always_after_double_dash() {
         let args = GitCommand::Add {
             paths: vec!["--intent-to-add".into()],
@@ -1518,6 +1565,25 @@ mod tests {
         .args();
         assert!(create.contains(&OsString::from("--no-overwrite-ignore")));
         assert!(create.contains(&OsString::from("-c")));
+    }
+
+    #[test]
+    fn merge_commit_option_only_omits_no_commit_when_enabled() {
+        let pending = GitCommand::Merge {
+            source: "topic".into(),
+            commit_immediately: false,
+        }
+        .args();
+        let immediate = GitCommand::Merge {
+            source: "topic".into(),
+            commit_immediately: true,
+        }
+        .args();
+
+        assert!(pending.contains(&OsString::from("--no-commit")));
+        assert!(!immediate.contains(&OsString::from("--no-commit")));
+        assert!(immediate.contains(&OsString::from("--no-ff")));
+        assert!(immediate.contains(&OsString::from("--no-edit")));
     }
 
     #[test]

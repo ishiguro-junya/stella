@@ -112,7 +112,7 @@ body {
 }
 
 button,
-input,
+input:not([type='checkbox'], [type='radio']),
 select,
 textarea {
   color: inherit;
@@ -207,18 +207,35 @@ summary:focus-visible,
   outline-offset: 2px;
 }
 
-input,
+input:not([type='checkbox'], [type='radio']),
 select,
 textarea {
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   padding: 6px 9px;
   box-shadow: inset 0 1px 1px rgb(0 0 0 / 4%);
 }
 
+input:not([type='checkbox'], [type='radio']),
 select {
-  min-height: 40px;
-  padding: 7px 30px 7px 11px;
+  height: 36px;
+}
+
+select {
+  min-height: 36px;
+  padding: 6px 30px 6px 9px;
+}
+
+input:disabled:not([type='checkbox'], [type='radio']),
+select:disabled,
+textarea:disabled {
+  border-color: var(--border-subtle);
+  background: var(--surface-sunken);
+  box-shadow: none;
+  color: var(--text-tertiary);
+  -webkit-text-fill-color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .select-control {
@@ -230,10 +247,10 @@ select {
 
 .select-control > select {
   min-width: 0;
-  padding: 8px 40px 8px 12px;
+  padding: 6px 40px 6px 12px;
   appearance: none;
   cursor: default;
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 .select-control > .lucide {
@@ -371,13 +388,11 @@ kbd {
 
 .settings-select {
   width: 220px;
-  min-height: 40px;
 }
 
 .settings-number-input {
   width: 220px;
   min-width: 0;
-  min-height: 40px;
 }
 
 .settings-toolchain-row {
@@ -934,7 +949,7 @@ button:where(:has(> .lucide)) > span {
   width: 100%;
   min-height: 42px;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 3px 4px;
   color: var(--text-secondary);
   font-size: 10px;
@@ -1833,6 +1848,10 @@ button:where(:has(> .lucide)) > span {
   font-size: 11px;
   font-weight: 600;
 }
+.dialog-form-field > span {
+  font-size: 11px;
+  font-weight: 600;
+}
 .checkbox-field,
 .compact-toggle {
   display: flex !important;
@@ -1909,7 +1928,7 @@ button:where(:has(> .lucide)) > span {
   width: 100%;
 }
 .repository-path-picker {
-  width: 34px;
+  width: 36px;
   padding: 0;
 }
 .repository-path-picker > svg {
@@ -1917,6 +1936,58 @@ button:where(:has(> .lucide)) > span {
   height: 15px;
 }
 .dialog-form-error {
+  margin: 0;
+}
+.remote-operation-form select,
+.remote-operation-form input:not([type='checkbox']) {
+  width: 100%;
+}
+.remote-operation-dialog {
+  width: min(680px, 100%);
+}
+.remote-operation-form select {
+  font-size: 13px;
+}
+.remote-operation-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.remote-operation-refresh-button {
+  display: inline-grid;
+  width: 36px;
+  padding: 0;
+  place-items: center;
+}
+.remote-operation-refresh-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.remote-operation-refresh-button[aria-busy='true'] > svg {
+  animation: activity-status-spin 1s linear infinite;
+}
+.remote-operation-empty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.remote-operation-empty-row > p {
+  margin: 0;
+}
+.remote-operation-form > :is(.dialog-form-field, .remote-operation-empty-row) + .checkbox-field {
+  margin-top: 6px;
+}
+.dialog-body.remote-operation-form-pull {
+  min-height: 162px;
+}
+.dialog-body.remote-operation-form-push {
+  min-height: 272px;
+}
+.remote-operation-source {
+  font-family: var(--font-mono);
+}
+.remote-operation-form .inline-alert {
   margin: 0;
 }
 .remote-action-hint {
@@ -3065,6 +3136,10 @@ button:where(:has(> .lucide)) > span {
   gap: 14px;
   padding: 10px 24px 20px;
   overflow: auto;
+}
+.dialog-body button,
+.dialog-footer button {
+  min-height: 36px;
 }
 .dialog-footer {
   display: flex;

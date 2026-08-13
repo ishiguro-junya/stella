@@ -513,15 +513,17 @@ async function mapAction(
       };
     case 'fetch':
       return { kind: 'fetch', remote: action.remote ?? upstream.remote };
-    case 'pullFastForward':
-      return { kind: 'pull', remote: upstream.remote, remoteBranch: upstream.remoteBranch };
+    case 'pull':
+      return { kind: 'pull', remote: action.remote, remoteBranch: action.remoteBranch };
     case 'push':
       return {
         kind: 'push',
-        remote: upstream.remote,
+        remote: action.remote,
         localBranch: repo.branch.name ?? 'HEAD',
-        remoteBranch: upstream.remoteBranch,
+        remoteBranch: action.remoteBranch,
         setUpstream: !repo.branch.upstream,
+        forceWithLease: action.forceWithLease,
+        pushTags: action.pushTags,
       };
     case 'setRemoteUrl':
       return {
@@ -545,7 +547,11 @@ async function mapAction(
     case 'checkoutBranch':
       return { kind: 'checkout', branch: action.name };
     case 'merge':
-      return { kind: 'merge', source: action.sourceRef };
+      return {
+        kind: 'merge',
+        source: action.sourceRef,
+        commitImmediately: action.commitImmediately,
+      };
     case 'rebase':
       return { kind: 'rebase', onto: action.ontoRef };
     case 'cherryPick':
@@ -710,7 +716,7 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionFetch');
     case 'setRemoteUrl':
       return localized('actionSetRemoteUrl');
-    case 'pullFastForward':
+    case 'pull':
       return localized('actionPull');
     case 'push':
       return localized('actionPush');

@@ -33,6 +33,12 @@ describe('App shell and Settings', () => {
     );
     await selectSetting('language', 'en');
     await expect($('h1=Settings')).toBeDisplayed();
+    expect(
+      await browser.execute(() => [
+        document.querySelector('select[name="language"]')?.getBoundingClientRect().height,
+        document.querySelector('input[name="editor-wrap-column"]')?.getBoundingClientRect().height,
+      ]),
+    ).toEqual([36, 36]);
     await expect($('.titlebar-actions')).toHaveAttribute('aria-label', 'App navigation');
     await expect(settings).toHaveAttribute('aria-current', 'page');
     const selectedNavigationColors = await browser.execute(() => {

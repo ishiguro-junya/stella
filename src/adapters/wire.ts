@@ -138,6 +138,8 @@ export type WireAction =
       localBranch: string;
       remoteBranch: string;
       setUpstream: boolean;
+      forceWithLease: boolean;
+      pushTags: boolean;
     }
   | {
       kind: 'setRemoteUrl';
@@ -150,7 +152,7 @@ export type WireAction =
   | { kind: 'createTag'; name: string; target: string }
   | { kind: 'gitFlow'; request: WireGitFlowRequest }
   | { kind: 'checkout'; branch: string }
-  | { kind: 'merge'; source: string }
+  | { kind: 'merge'; source: string; commitImmediately: boolean }
   | { kind: 'rebase'; onto: string }
   | { kind: 'cherryPick'; commit: string; mainline: number | null }
   | { kind: 'revert'; commit: string; mainline: number | null }

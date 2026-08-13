@@ -10,7 +10,9 @@ import {
   setLogicalWindowSize,
 } from './support/app.js';
 import {
+  cloneLocalRemote,
   createFixtureDirectory,
+  ensureLocalBareRemote,
   removeFixture,
   runGit,
   writeExecutableRepositoryFile,
@@ -154,6 +156,281 @@ describe('Changes', () => {
     expect(await runGit(repositoryPath, ['show', 'HEAD:README.md'])).toBe('# Stella E2E\n');
   });
 
+  it('opens the Pull dialog after remote branches load and keeps refresh stationary', async () => {
+    const remotePath = `${fixturePath}/layout-shift-remote.git`;
+    await ensureLocalBareRemote(repositoryPath, remotePath);
+    await runGit(repositoryPath, ['update-ref', '-d', 'refs/remotes/origin/main']);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await browser.execute(() => {
+      const observer = new MutationObserver(() => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="pull-dialog-title"]',
+        );
+        if (!dialog) return;
+        const busy =
+          dialog.querySelector('.remote-operation-form')?.getAttribute('aria-busy') === 'true';
+        const data = document.documentElement.dataset;
+        if (busy) data.pullDialogRenderedBusy = 'true';
+        if (
+          !dialog.querySelector('.remote-operation-empty-row') ||
+          data.pullDialogReadyTop !== undefined
+        )
+          return;
+        const rect = dialog.getBoundingClientRect();
+        data.pullDialogReadyTop = String(rect.top);
+        data.pullDialogReadyHeight = String(rect.height);
+        data.pullDialogInputHeight = String(
+          dialog.querySelector('#pull-local-branch')?.getBoundingClientRect().height,
+        );
+        data.pullDialogRefreshButtonHeight = String(
+          dialog.querySelector('.remote-operation-refresh-button')?.getBoundingClientRect().height,
+        );
+        observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+      document
+        .querySelector<HTMLButtonElement>('.changes-action-button[aria-label="プル"]')
+        ?.click();
+    });
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => document.documentElement.dataset.pullDialogReadyTop !== undefined),
+      { timeoutMsg: 'Pull dialog did not finish loading remote branches.' },
+    );
+    const positions = await browser.execute(() => {
+      const data = document.documentElement.dataset;
+      return {
+        inputHeight: Number(data.pullDialogInputHeight),
+        refreshButtonHeight: Number(data.pullDialogRefreshButtonHeight),
+      };
+    });
+    expect(
+      await browser.execute(
+        () => document.documentElement.dataset.pullDialogRenderedBusy === 'true',
+      ),
+    ).toBe(false);
+    expect(positions.inputHeight).toBe(36);
+    expect(positions.refreshButtonHeight).toBe(positions.inputHeight);
+    await expect($('#pull-local-branch')).toBeDisabled();
+    await expect($('#pull-local-branch')).toHaveValue('main');
+    await expect($('.remote-operation-empty-row')).toBeDisplayed();
+
+    await browser.execute(() => {
+      const dialog = document.querySelector<HTMLElement>(
+        '[role="dialog"][aria-labelledby="pull-dialog-title"]',
+      );
+      const source = dialog?.querySelector<HTMLElement>('.remote-operation-source');
+      const refresh = dialog?.querySelector<HTMLButtonElement>('.remote-operation-refresh-button');
+      if (!dialog || !source || !refresh) return;
+      const baseline = {
+        dialog: dialog.getBoundingClientRect(),
+        source: source.getBoundingClientRect(),
+      };
+      let sawBusy = false;
+      const shifted = (): boolean => {
+        const currentSource = dialog.querySelector<HTMLElement>('.remote-operation-source');
+        if (!currentSource) return true;
+        const currentDialogRect = dialog.getBoundingClientRect();
+        const currentSourceRect = currentSource.getBoundingClientRect();
+        return [
+          currentDialogRect.top - baseline.dialog.top,
+          currentDialogRect.height - baseline.dialog.height,
+          currentSourceRect.top - baseline.source.top,
+        ].some((delta) => Math.abs(delta) > 0.5);
+      };
+      const observer = new MutationObserver(() => {
+        if (shifted()) document.documentElement.dataset.pullDialogRefreshShifted = 'true';
+        if (refresh.getAttribute('aria-busy') === 'true') sawBusy = true;
+        if (sawBusy && refresh.getAttribute('aria-busy') === 'false') {
+          document.documentElement.dataset.pullDialogRefreshFinished = 'true';
+          observer.disconnect();
+        }
+      });
+      document.documentElement.dataset.pullDialogRefreshShifted = 'false';
+      observer.observe(dialog, { attributes: true, childList: true, subtree: true });
+      refresh.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () => document.documentElement.dataset.pullDialogRefreshFinished === 'true',
+        ),
+      { timeoutMsg: 'Pull dialog did not finish refreshing remote branches.' },
+    );
+    expect(
+      await browser.execute(
+        () => document.documentElement.dataset.pullDialogRefreshShifted === 'true',
+      ),
+    ).toBe(false);
+    await expect($('#pull-remote-branch')).toHaveValue('origin/main');
+    expect(
+      await browser.execute(() => {
+        const localBranch = document.querySelector<HTMLElement>('#pull-local-branch');
+        const remoteBranch = document.querySelector<HTMLElement>('#pull-remote-branch');
+        if (!localBranch || !remoteBranch) return undefined;
+        const disabledStyle = getComputedStyle(localBranch);
+        const enabledStyle = getComputedStyle(remoteBranch);
+        return {
+          equalHeight:
+            localBranch.getBoundingClientRect().height ===
+            remoteBranch.getBoundingClientRect().height,
+          backgroundDiffers: disabledStyle.backgroundColor !== enabledStyle.backgroundColor,
+          borderDiffers: disabledStyle.borderColor !== enabledStyle.borderColor,
+          boxShadow: disabledStyle.boxShadow,
+          cursor: disabledStyle.cursor,
+        };
+      }),
+    ).toEqual({
+      equalHeight: true,
+      backgroundDiffers: true,
+      borderDiffers: true,
+      boxShadow: 'none',
+      cursor: 'not-allowed',
+    });
+  });
+
+  it('pulls the selected remote branch through the native adapter', async () => {
+    const remotePath = `${fixturePath}/pull-remote.git`;
+    await ensureLocalBareRemote(repositoryPath, remotePath);
+    const peerPath = await cloneLocalRemote(fixturePath, remotePath, 'pull-peer');
+    await writeRepositoryFile(peerPath, 'remote-update.md', 'remote update\n');
+    await runGit(peerPath, ['add', 'remote-update.md']);
+    await runGit(peerPath, ['commit', '-m', 'test: remoteから更新する']);
+    await runGit(peerPath, ['push', 'origin', 'main']);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+
+    await $('.changes-action-button[aria-label="プル"]').click();
+    const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
+    await expect(pullDialog.$('select')).toHaveValue('origin/main');
+    const refreshBranches = pullDialog.$('button[aria-label="ブランチを更新"]');
+    await refreshBranches.click();
+    await refreshBranches.waitForEnabled();
+    await pullDialog.$('button[type="submit"]').click();
+    const failureDialog = $('[role="alertdialog"]');
+    await browser.waitUntil(
+      async () => !(await pullDialog.isExisting()) || (await failureDialog.isExisting()),
+      { timeoutMsg: 'Pull did not complete or report a failure.' },
+    );
+    if (await failureDialog.isExisting()) {
+      throw new Error(`Pull failed: ${await failureDialog.getText()}`);
+    }
+    await expect(pullDialog).not.toExist();
+    expect(await runGit(repositoryPath, ['show', 'HEAD:remote-update.md'])).toBe('remote update\n');
+  });
+
+  it('opens Pull and Push dialogs and resets Push options when reopened', async () => {
+    const remotePath = `${fixturePath}/remote.git`;
+    await ensureLocalBareRemote(repositoryPath, remotePath);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+
+    await $('.changes-action-button[aria-label="プル"]').click();
+    const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
+    await expect(pullDialog).toBeDisplayed();
+    await expect(pullDialog).toHaveText(
+      expect.stringContaining('ローカルブランチへ取り込むリモートブランチを選択します。'),
+    );
+    await expect(pullDialog).toHaveText(expect.stringContaining('ローカルブランチ'));
+    await expect(pullDialog.$('select')).toHaveValue('origin/main');
+    await expect(pullDialog.$('label=マージした変更をすぐにコミット').$('input')).toBeChecked();
+    const refreshBranches = pullDialog.$('button[aria-label="ブランチを更新"]');
+    await refreshBranches.click();
+    await refreshBranches.waitForEnabled();
+    await expect(pullDialog.$('select')).toHaveValue('origin/main');
+    await pullDialog.$('button=キャンセル').click();
+
+    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    let pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
+    await pushDialog.waitForDisplayed();
+    await expect(pushDialog).toHaveText(expect.stringContaining('ローカルブランチ'));
+    await expect(pushDialog.$('#push-local-branch')).toBeDisabled();
+    await expect(pushDialog.$('#push-local-branch')).toHaveValue('main');
+    await expect(pushDialog.$('select')).toHaveValue('origin');
+    expect(
+      await browser.execute(() => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="push-dialog-title"]',
+        );
+        return [
+          '#push-local-branch',
+          '#push-remote',
+          'input[list="push-remote-branches"]',
+          '.remote-operation-refresh-button',
+          '.dialog-footer button[type="submit"]',
+        ].map((selector) => dialog?.querySelector(selector)?.getBoundingClientRect().height);
+      }),
+    ).toEqual([36, 36, 36, 36, 36]);
+    await expect(pushDialog.$('button[aria-label="ブランチを更新"]')).toBeDisplayed();
+    await expect(pushDialog.$('input[list="push-remote-branches"]')).toHaveValue('main');
+    const force = pushDialog.$('label=安全に強制プッシュ（--force-with-lease）').$('input');
+    const tags = pushDialog.$('label=すべてのローカルタグをプッシュ').$('input');
+    await force.click();
+    await tags.click();
+    await expect(pushDialog.$('.inline-alert.warning')).toBeDisplayed();
+    await expect(pushDialog.$('button[type="submit"]')).not.toHaveElementClass('danger');
+    await pushDialog.$('button=キャンセル').click();
+
+    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
+    await pushDialog.waitForDisplayed();
+    await browser.waitUntil(
+      async () => (await pushDialog.$$('input[type="checkbox"]').map(() => true)).length === 2,
+      { timeoutMsg: 'Push options did not load after reopening the dialog.' },
+    );
+    expect(
+      await pushDialog.$$('input[type="checkbox"]').map((input) => input.isSelected()),
+    ).toEqual([false, false]);
+  });
+
+  it('pushes the current branch and all local tags to a local remote', async () => {
+    const remotePath = `${fixturePath}/push-remote.git`;
+    await ensureLocalBareRemote(repositoryPath, remotePath);
+    await runGit(repositoryPath, ['add', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: remoteへ送信する']);
+    await runGit(repositoryPath, ['tag', 'e2e-local-tag']);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+
+    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    const pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
+    await pushDialog.waitForDisplayed();
+    await pushDialog.$('label=すべてのローカルタグをプッシュ').$('input').click();
+    await pushDialog.$('button[type="submit"]').click();
+    await expect(pushDialog).not.toExist();
+
+    const localHead = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    expect((await runGit(remotePath, ['rev-parse', 'refs/heads/main'])).trim()).toBe(localHead);
+    expect((await runGit(remotePath, ['rev-parse', 'refs/tags/e2e-local-tag'])).trim()).toBe(
+      localHead,
+    );
+  });
+
+  it('rejects a force-with-lease push after a peer updates the remote', async () => {
+    const remotePath = `${fixturePath}/lease-remote.git`;
+    await ensureLocalBareRemote(repositoryPath, remotePath);
+    const peerPath = await cloneLocalRemote(fixturePath, remotePath, 'lease-peer');
+
+    await writeRepositoryFile(repositoryPath, 'local-update.md', 'local update\n');
+    await runGit(repositoryPath, ['add', 'local-update.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: localを更新する']);
+    await writeRepositoryFile(peerPath, 'peer-update.md', 'peer update\n');
+    await runGit(peerPath, ['add', 'peer-update.md']);
+    await runGit(peerPath, ['commit', '-m', 'test: peerから更新する']);
+    await runGit(peerPath, ['push', 'origin', 'main']);
+    const peerHead = (await runGit(peerPath, ['rev-parse', 'HEAD'])).trim();
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+
+    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    const pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
+    await pushDialog.waitForDisplayed();
+    await pushDialog.$('label=安全に強制プッシュ（--force-with-lease）').$('input').click();
+    await pushDialog.$('button[type="submit"]').click();
+    const errorDialog = $('[role="alertdialog"]');
+    await errorDialog.waitForDisplayed();
+
+    await expect(pushDialog).toBeDisplayed();
+    expect((await runGit(remotePath, ['rev-parse', 'refs/heads/main'])).trim()).toBe(peerHead);
+  });
+
   it('shows, stages, and commits a working tree change', async () => {
     const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
     await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');
@@ -238,12 +515,16 @@ describe('Changes', () => {
         actionLabelsVisible: actionButtonElements.every(
           (button) => getComputedStyle(button.querySelector('span')!).display !== 'none',
         ),
+        actionIconLabelGaps: actionButtonElements.map((button) => getComputedStyle(button).gap),
         actionIconsUseCurrentSize: actionButtonElements.every((button) => {
           const icon = button.querySelector<SVGElement>('.lucide')!;
           return (
             getComputedStyle(icon).width === '16px' && getComputedStyle(icon).height === '16px'
           );
         }),
+        stageTogglesUseCompactHeight: [
+          ...sidebar.querySelectorAll<HTMLElement>('.stage-toggle'),
+        ].every((toggle) => toggle.getBoundingClientRect().height === 15),
         groupsMeetAtMiddle: Math.abs(stagedRect.bottom - unstagedRect.top) <= 1,
         groupHeightDifference: Math.abs(stagedRect.height - unstagedRect.height),
         stagedHeaderHeight,
@@ -258,7 +539,9 @@ describe('Changes', () => {
       firstGroupOffset: 0,
       actionColumns: 4,
       actionLabelsVisible: true,
+      actionIconLabelGaps: ['4px', '4px', '4px', '4px'],
       actionIconsUseCurrentSize: true,
+      stageTogglesUseCompactHeight: true,
       groupsMeetAtMiddle: true,
       groupHeightDifference: 0,
       stagedHeaderHeight: 34,

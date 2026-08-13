@@ -585,7 +585,7 @@ describe('tauriWorkspaceAdapter', () => {
     });
   });
 
-  it('passes merge commit mainline selection through preview requests', async () => {
+  it('passes merge options and merge commit mainline selection through preview requests', async () => {
     invokeMock.mockImplementation(async (command, args) => {
       if (command === 'workspace_preview') {
         return {
@@ -605,6 +605,10 @@ describe('tauriWorkspaceAdapter', () => {
 
     await adapter.preview({
       repoId: 'repo-1',
+      action: { kind: 'merge', sourceRef: 'origin/topic', commitImmediately: true },
+    });
+    await adapter.preview({
+      repoId: 'repo-1',
       action: { kind: 'cherryPick', oid: 'merge-oid', mainline: 2 },
     });
     await adapter.preview({
@@ -612,6 +616,13 @@ describe('tauriWorkspaceAdapter', () => {
       action: { kind: 'revert', oid: 'merge-oid', mainline: 1 },
     });
 
+    expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
+      request: {
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: { kind: 'merge', source: 'origin/topic', commitImmediately: true },
+      },
+    });
     expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
       request: {
         repoId: 'repo-1',
@@ -702,6 +713,107 @@ describe('tauriWorkspaceAdapter', () => {
         includeAllChanges: true,
       },
     ]);
+  });
+
+  it('maps explicit Pull and Push targets and Push options to wire actions', async () => {
+    let generation = 1;
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_execute') {
+        generation += 1;
+        return {
+          operationId: `remote-${generation}`,
+          summary: { id: 'backendPushCompleted' },
+          repoGeneration: generation,
+          eventSeq: generation,
+          snapshot: { ...snapshot(), repoGeneration: generation, eventSeq: generation },
+          command: {
+            argv: ['git'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: { kind: 'pull', remote: 'backup', remoteBranch: 'develop' },
+    });
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'push',
+        remote: 'backup',
+        remoteBranch: 'release',
+        forceWithLease: true,
+        pushTags: true,
+      },
+    });
+
+    const actions = invokeMock.mock.calls
+      .filter(([command]) => command === 'workspace_execute')
+      .map(([, args]) => args?.request)
+      .filter(isRecord)
+      .map((request) => request.action);
+    expect(actions).toEqual([
+      { kind: 'pull', remote: 'backup', remoteBranch: 'develop' },
+      {
+        kind: 'push',
+        remote: 'backup',
+        localBranch: 'main',
+        remoteBranch: 'release',
+        setUpstream: false,
+        forceWithLease: true,
+        pushTags: true,
+      },
+    ]);
+  });
+
+  it('sets the selected Push target as upstream only when none exists', async () => {
+    const untracked = { ...snapshot(), upstream: null };
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_execute') {
+        return {
+          operationId: 'initial-push',
+          summary: { id: 'backendPushCompleted' },
+          repoGeneration: 2,
+          eventSeq: 2,
+          snapshot: { ...untracked, upstream: 'backup/topic', repoGeneration: 2, eventSeq: 2 },
+          command: {
+            argv: ['git', 'push'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      return baseInvoke(untracked)(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: {
+        kind: 'push',
+        remote: 'backup',
+        remoteBranch: 'topic',
+        forceWithLease: false,
+        pushTags: false,
+      },
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('workspace_execute', {
+      request: expect.objectContaining({
+        action: expect.objectContaining({ setUpstream: true }),
+      }),
+    });
   });
 
   it('keeps preview generation and confirmation tokens inside the adapter boundary', async () => {

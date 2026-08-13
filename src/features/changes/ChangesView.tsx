@@ -60,6 +60,7 @@ import { ChangeList, type StageTransitionRequest } from './ChangeList';
 import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 import { FileEditorSurface, type FileEditorSaveInput } from './FileEditorSurface';
 import { FileViewModeTabs } from './FileViewModeTabs';
+import { RemoteOperationDialog } from './RemoteOperationDialog';
 
 export interface ChangesViewProps {
   repo: RepoSnapshot;
@@ -166,7 +167,10 @@ export function ChangesView({
     text: string;
   }>();
   const [error, setError] = useState<WorkspaceErrorContent>();
-  const [pullDiverged, setPullDiverged] = useState(false);
+  const [divergedPull, setDivergedPull] = useState<{
+    target: string;
+    commitMergeImmediately: boolean;
+  }>();
   const [conflictDirty, setConflictDirty] = useState(false);
   const [fileEditorDirty, setFileEditorDirty] = useState(false);
   const [editingTarget, setEditingTarget] = useState<{
@@ -177,6 +181,7 @@ export function ChangesView({
   const [fileDocument, setFileDocument] = useState<FileDocument>();
   const [fileEditorExternalStateChanged, setFileEditorExternalStateChanged] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [remoteDialog, setRemoteDialog] = useState<'pull' | 'push'>();
   const [detailFileMenuOpen, setDetailFileMenuOpen] = useState(false);
   const [detailFileMenuContextPoint, setDetailFileMenuContextPoint] =
     useState<FileActionMenuPoint>();
@@ -257,7 +262,6 @@ export function ChangesView({
     conflict && selectedArea === 'conflicted' && conflict.path === selectedPath
       ? conflict
       : undefined;
-  const pullTarget = repo.branch.upstream;
   const disabledCommitReason = commitDisabledReason(repo, splitStageView, t, message);
   const operationActionDisabledReason =
     repo.operation.kind === 'none'
@@ -475,7 +479,7 @@ export function ChangesView({
   }, [adapter, repo.repoId, selectedArea, selectedPath]);
 
   useEffect(() => {
-    setPullDiverged(false);
+    setDivergedPull(undefined);
   }, [repo.branch.name, repo.branch.upstream]);
 
   useEffect(() => {
@@ -1053,33 +1057,38 @@ export function ChangesView({
     setFileDocument(document);
   };
 
-  const pull = async (): Promise<void> => {
-    setPullDiverged(false);
+  const pull = async (
+    remote: string,
+    remoteBranch: string,
+    commitMergeImmediately: boolean,
+  ): Promise<void> => {
+    setDivergedPull(undefined);
     try {
-      await onAction({ kind: 'pullFastForward' });
+      await onAction({ kind: 'pull', remote, remoteBranch });
     } catch (cause) {
       if (isPullDivergenceError(cause)) {
-        setPullDiverged(true);
+        setDivergedPull({ target: `${remote}/${remoteBranch}`, commitMergeImmediately });
+        return;
       }
+      throw cause;
     }
   };
 
   const resolveDivergedPull = async (kind: 'merge' | 'rebase'): Promise<void> => {
     await onAction(
       kind === 'merge'
-        ? { kind: 'merge', sourceRef: 'FETCH_HEAD' }
+        ? {
+            kind: 'merge',
+            sourceRef: 'FETCH_HEAD',
+            commitImmediately: divergedPull?.commitMergeImmediately ?? true,
+          }
         : { kind: 'rebase', ontoRef: 'FETCH_HEAD' },
     );
-    setPullDiverged(false);
+    setDivergedPull(undefined);
   };
 
   const repositoryActions = (
     <section className="changes-action-section">
-      {!repo.branch.detached && !repo.branch.upstream ? (
-        <p id="pull-disabled-reason" className="sr-only">
-          {t('setUpstreamBeforePull')}
-        </p>
-      ) : null}
       <fieldset className="changes-action-bar" aria-label={t('actions')}>
         <button
           type="button"
@@ -1098,16 +1107,14 @@ export function ChangesView({
           type="button"
           className="changes-action-button quiet"
           aria-label={t('pull')}
+          aria-haspopup="dialog"
+          aria-expanded={remoteDialog === 'pull'}
           title={t('pull')}
-          disabled={repositoryActionsDisabled || repo.branch.detached || !repo.branch.upstream}
+          disabled={repositoryActionsDisabled || repo.branch.detached}
           aria-describedby={
-            operationActionDisabledReason
-              ? 'changes-operation-action-reason'
-              : !repo.branch.detached && !repo.branch.upstream
-                ? 'pull-disabled-reason'
-                : undefined
+            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
           }
-          onClick={() => void pull()}
+          onClick={() => setRemoteDialog('pull')}
         >
           <Download aria-hidden="true" focusable="false" size={14} />
           <span>{t('pull')}</span>
@@ -1116,12 +1123,14 @@ export function ChangesView({
           type="button"
           className="changes-action-button quiet"
           aria-label={t('push')}
+          aria-haspopup="dialog"
+          aria-expanded={remoteDialog === 'push'}
           title={t('push')}
           disabled={repositoryActionsDisabled || repo.branch.detached}
           aria-describedby={
             operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
           }
-          onClick={() => settleAction(onAction({ kind: 'push' }))}
+          onClick={() => setRemoteDialog('push')}
         >
           <Upload aria-hidden="true" focusable="false" size={14} />
           <span>{t('push')}</span>
@@ -1141,14 +1150,14 @@ export function ChangesView({
           <span>{t('fetch')}</span>
         </button>
       </fieldset>
-      {pullDiverged && pullTarget ? (
+      {divergedPull ? (
         <section
           className="inline-alert warning pull-resolution"
           aria-labelledby="pull-resolution-title"
         >
           <div>
             <strong id="pull-resolution-title">{t('fastForwardUnavailable')}</strong>
-            <p>{t('fetchCompleteResolve', { target: pullTarget })}</p>
+            <p>{t('fetchCompleteResolve', { target: divergedPull.target })}</p>
           </div>
           <div className="button-row">
             <button
@@ -1583,6 +1592,19 @@ export function ChangesView({
             }
           />
         </Dialog>
+      ) : null}
+      {remoteDialog ? (
+        <RemoteOperationDialog
+          key={`${repo.repoId}:${remoteDialog}`}
+          kind={remoteDialog}
+          repo={repo}
+          adapter={adapter}
+          busy={busy}
+          onDismiss={() => setRemoteDialog(undefined)}
+          onRefreshBranches={(remote) => onAction({ kind: 'fetch', remote })}
+          onPull={pull}
+          onPush={onAction}
+        />
       ) : null}
       {pendingSelectedKey ? (
         <Dialog

@@ -234,8 +234,7 @@ function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): st
 function actionRemote(action: WorkspaceAction, repo: RepoSnapshot): string | undefined {
   if (action.kind === 'fetch')
     return action.remote ?? repo.branch.upstream?.split('/')[0] ?? 'origin';
-  if (action.kind === 'pullFastForward' || action.kind === 'push')
-    return repo.branch.upstream?.split('/')[0] ?? 'origin';
+  if (action.kind === 'pull' || action.kind === 'push') return action.remote;
   return undefined;
 }
 
@@ -1308,7 +1307,7 @@ export function App({
         setRepositoryHealthIssues(preferences.repositoryHealthIssues);
       }
     } catch (cause) {
-      if (request.action.kind === 'pullFastForward' && isPullDivergenceError(cause)) throw cause;
+      if (request.action.kind === 'pull' && isPullDivergenceError(cause)) throw cause;
       const reason = remoteHealthReason(cause);
       if (requestedRepo && remote && reason) {
         const preferences = recordRemoteHealthIssue(requestedRepo.path, remote, reason);

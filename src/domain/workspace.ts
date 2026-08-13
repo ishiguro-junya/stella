@@ -353,8 +353,14 @@ export type WorkspaceAction =
   | { kind: 'discardSelection'; selection: DiffSelection }
   | { kind: 'commit'; input: CommitInput; includeAllChanges: boolean }
   | { kind: 'fetch'; remote?: string }
-  | { kind: 'pullFastForward' }
-  | { kind: 'push' }
+  | { kind: 'pull'; remote: string; remoteBranch: string }
+  | {
+      kind: 'push';
+      remote: string;
+      remoteBranch: string;
+      forceWithLease: boolean;
+      pushTags: boolean;
+    }
   | {
       kind: 'setRemoteUrl';
       remote: string;
@@ -366,7 +372,7 @@ export type WorkspaceAction =
   | { kind: 'createTag'; name: string; targetOid: string }
   | { kind: 'gitFlow'; request: GitFlowRequest }
   | { kind: 'checkoutBranch'; name: string }
-  | { kind: 'merge'; sourceRef: string }
+  | { kind: 'merge'; sourceRef: string; commitImmediately: boolean }
   | { kind: 'rebase'; ontoRef: string }
   | { kind: 'cherryPick'; oid: string; mainline?: number }
   | { kind: 'revert'; oid: string; mainline?: number }
