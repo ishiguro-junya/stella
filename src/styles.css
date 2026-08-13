@@ -3446,50 +3446,6 @@ button:where(:has(> .lucide)) > span {
   .repo-path {
     display: none;
   }
-  .activity-page-panels {
-    grid-template-columns: var(--activity-left-pane, 560px) 5px minmax(250px, 1fr);
-  }
-  .three-pane {
-    grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
-  }
-  .changes-two-pane {
-    grid-template-columns: minmax(240px, 30%) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .three-pane > .pane-resizer {
-    display: none;
-  }
-  .changes-list-pane,
-  .commit-list-pane {
-    grid-column: 1;
-    grid-row: 1 / 3;
-  }
-  .diff-pane,
-  .commit-detail-pane {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .commit-pane {
-    display: block;
-    grid-column: 2;
-    grid-row: 2;
-    border-top: 1px solid var(--border-subtle);
-  }
-  .history-view .commit-detail-pane {
-    grid-row: 1 / 3;
-  }
-  .conflict-pane-span {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-  .changes-two-pane .changes-sidebar-pane,
-  .changes-two-pane .changes-content-pane {
-    grid-row: 1;
-  }
-  .changes-content-pane {
-    grid-column: 2;
-  }
   .conflict-workspace {
     grid-template-columns: 1fr;
     overflow: auto;

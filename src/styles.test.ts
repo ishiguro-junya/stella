@@ -12,6 +12,15 @@ describe('global scroll behavior', () => {
   });
 });
 
+describe('workspace pane resizing', () => {
+  it('keeps pane resizers and configured pane widths at narrow window sizes', () => {
+    expect(styles).not.toMatch(/\.three-pane\s*>\s*\.pane-resizer\s*\{[^}]*display:\s*none;/u);
+    expect(styles).not.toMatch(
+      /\.three-pane\s*\{[^}]*grid-template-columns:\s*minmax\(240px,\s*30%\)/u,
+    );
+  });
+});
+
 describe('common dialog layout', () => {
   it('keeps the 580px shell fixed while only the body scrolls', () => {
     expect(styles).toMatch(
