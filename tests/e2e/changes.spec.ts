@@ -10,13 +10,13 @@ import {
   setLogicalWindowSize,
 } from './support/app.js';
 import {
-  configureRepository,
-  createEmptyRepository,
+  createFixtureDirectory,
   removeFixture,
   runGit,
   writeExecutableRepositoryFile,
   writeRepositoryFile,
 } from './support/fixtures.js';
+import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 interface EditorPosition {
   scrollTop: number;
@@ -73,20 +73,22 @@ async function waitForEditorPosition(expectedLine: string): Promise<EditorPositi
 }
 
 describe('Changes', () => {
+  let fixturePath = '';
   let repositoryPath = '';
 
   beforeEach(async () => {
-    repositoryPath = await createEmptyRepository('changes');
+    fixturePath = await createFixtureDirectory('changes');
+    repositoryPath = await copyE2EShowcaseRepository(fixturePath);
     await resetApp({ language: 'ja', splitStageView: true });
     await openRepository(repositoryPath);
-    await configureRepository(repositoryPath);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Stella E2E\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await $('input[aria-label="ステージ README.md"]').waitForClickable({ timeout: 20_000 });
   });
 
   afterEach(async () => {
-    await removeFixture(repositoryPath);
+    await removeFixture(fixturePath);
+    fixturePath = '';
     repositoryPath = '';
   });
 

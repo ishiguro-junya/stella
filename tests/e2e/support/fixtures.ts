@@ -53,21 +53,3 @@ export async function writeExecutableRepositoryFile(
   await writeFile(filePath, content, 'utf8');
   await chmod(filePath, 0o755);
 }
-
-export async function createCommittedRepository(
-  root: string,
-  name: string,
-  options: { dirty?: boolean; message?: string } = {},
-): Promise<string> {
-  const path = join(root, name);
-  await mkdir(path, { recursive: true });
-  await runGit(path, ['init', '-b', 'main']);
-  await configureRepository(path);
-  await writeRepositoryFile(path, 'README.md', `# ${name}\n`);
-  await runGit(path, ['add', 'README.md']);
-  await runGit(path, ['commit', '-m', options.message ?? 'Initial commit']);
-  if (options.dirty) {
-    await writeRepositoryFile(path, 'README.md', `# ${name}\n\nModified for visual QA.\n`);
-  }
-  return realpath(path);
-}

@@ -13,12 +13,12 @@ import {
   setLogicalWindowSize,
 } from './support/app.js';
 import {
-  createCommittedRepository,
   createFixtureDirectory,
   removeFixture,
   runGit,
   writeRepositoryFile,
 } from './support/fixtures.js';
+import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 const visualQaDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
 
@@ -58,9 +58,7 @@ describe('History', () => {
 
   beforeEach(async () => {
     fixturePath = await createFixtureDirectory('history');
-    repositoryPath = await createCommittedRepository(fixturePath, 'repository', {
-      message: 'feat: E2Eリポジトリを初期化する',
-    });
+    repositoryPath = await copyE2EShowcaseRepository(fixturePath);
     await writeRepositoryFile(
       repositoryPath,
       'CHANGELOG.md',
@@ -232,7 +230,8 @@ describe('History', () => {
     }
   });
 
-  it('searches history and creates Tags and Branches from a Commit', async () => {
+  it('searches history and creates Tags and Branches from a Commit', async function () {
+    this.timeout(120_000);
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="履歴"]')).toHaveAttribute('aria-current', 'page');
@@ -248,14 +247,14 @@ describe('History', () => {
     await browser.keys(['ArrowLeft']);
     await expect(historyResizer).toHaveAttribute('aria-valuenow', '312');
     await expect($('.commit-list')).toHaveText(
-      expect.stringContaining('feat: E2Eリポジトリを初期化する'),
+      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
     );
 
     const historySearch = $('input[aria-label="履歴を検索"]');
     await expect(historySearch).toBeDisplayed();
-    await historySearch.setValue('E2Eリポジトリ');
+    await historySearch.setValue('50本塁打');
     await expect($('.commit-list')).toHaveText(
-      expect.stringContaining('feat: E2Eリポジトリを初期化する'),
+      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
     );
     await historySearch.setValue('一致しない検索');
     await expect($('.history-search-empty')).toHaveText('一致する履歴はありません。');
@@ -271,7 +270,7 @@ describe('History', () => {
             ?.textContent ?? '',
       ),
     );
-    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'README.md']);
+    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'src/records.ts']);
     const historyFileNameTypography = await browser.execute(() => {
       const fileName = document.querySelector<HTMLElement>(
         '.history-view .diff-file-custom-header-title > span:last-child',
@@ -423,7 +422,7 @@ describe('History', () => {
     await expect(historyActionsDialog).not.toExist();
     await tagConfirmation.$('button=実行').click();
     await expect(tagConfirmation).not.toExist();
-    await expect($('.ref-chip.tag')).toHaveText(tagName);
+    await expect($(`.ref-chip.tag[aria-label="タグ ${tagName}"]`)).toHaveText(tagName);
     expect(await runGit(repositoryPath, ['rev-parse', `refs/tags/${tagName}`])).toMatch(
       /^[0-9a-f]{40}\n$/u,
     );

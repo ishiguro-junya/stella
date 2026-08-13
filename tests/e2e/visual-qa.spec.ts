@@ -12,11 +12,12 @@ import {
   setLogicalWindowSize,
 } from './support/app.js';
 import {
-  createCommittedRepository,
   createFixtureDirectory,
   removeFixture,
   runGit,
+  writeRepositoryFile,
 } from './support/fixtures.js';
+import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 const visualQaDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
 
@@ -27,13 +28,11 @@ describe('Visual QA', () => {
 
     const visualRoot = await createFixtureDirectory('visual');
     try {
-      const currentPath = await createCommittedRepository(visualRoot, 'stella-visual-qa', {
-        dirty: true,
-      });
-      const conflictPath = await createCommittedRepository(visualRoot, 'stella-conflict', {
-        dirty: true,
-      });
-      const manualPath = await createCommittedRepository(visualRoot, 'stella-manual');
+      const currentPath = await copyE2EShowcaseRepository(visualRoot, 'stella-visual-qa');
+      const conflictPath = await copyE2EShowcaseRepository(visualRoot, 'stella-conflict');
+      const manualPath = await copyE2EShowcaseRepository(visualRoot, 'stella-manual');
+      await writeRepositoryFile(currentPath, 'README.md', '# Stella Visual QA\n');
+      await writeRepositoryFile(conflictPath, 'README.md', '# Stella Conflict\n');
       await runGit(currentPath, ['branch', 'feature/search']);
       await runGit(currentPath, ['branch', 'release']);
 

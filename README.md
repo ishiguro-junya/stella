@@ -68,6 +68,7 @@ mise run dev
 | `mise run test` | ユニットテストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
 | `mise run screenshot` | スクリーンショットを生成する。 |
+| `mise run fixture:reset` | 開発用リポジトリを初期状態へ戻す。 |
 
 ## 📁 ディレクトリ構成
 

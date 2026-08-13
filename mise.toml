@@ -8,16 +8,21 @@ rust = { version = "1.96.0", components = "clippy,rustfmt" }
 taplo = "0.10.0"
 
 [tasks.setup]
-description = "依存packageをinstallしてGit hooksを有効にする"
+description = "依存package、Git hooks、fixtureの基底を準備する"
 run = [
   "pnpm install --frozen-lockfile",
   "lefthook install",
   "node --import tsx scripts/toolchain.mts prepare",
+  "node --import tsx scripts/showcase-fixture.mts setup",
 ]
 
 [tasks.dev]
 description = "Tauri applicationを開発modeで起動する"
 run = "pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
+
+[tasks."fixture:reset"]
+description = "開発用fixtureを基底状態へ戻す"
+run = "node --import tsx scripts/showcase-fixture.mts reset"
 
 [tasks.build]
 description = "通常のTauri application bundleをbuildする"

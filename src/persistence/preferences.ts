@@ -297,6 +297,15 @@ export function updatePreferences(
   return next;
 }
 
+export function setDevelopmentRepository(path: string): StellaPreferences {
+  return updatePreferences((current) => ({
+    ...current,
+    registeredRepoPaths: [path],
+    openRepoPaths: [path],
+    selectedRepoPath: path,
+  }));
+}
+
 export function rememberRepositoryPath(path: string, name?: string): StellaPreferences {
   return updatePreferences((current) => ({
     ...current,

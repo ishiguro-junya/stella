@@ -8,6 +8,7 @@ import {
   recordRemoteHealthIssue,
   rememberRepositoryPath,
   replaceRepositoryPath,
+  setDevelopmentRepository,
   writePreferences,
 } from './preferences';
 
@@ -202,6 +203,23 @@ describe('appearance preferences', () => {
     );
 
     expect(readPreferences().registeredRepoPaths).toEqual(['/tmp/remote-clone', '/tmp/local']);
+  });
+
+  it('uses only the safe development repository without changing display preferences', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      appearance: 'dark',
+      registeredRepoPaths: ['/repo/stella'],
+      openRepoPaths: ['/repo/stella'],
+      selectedRepoPath: '/repo/stella',
+    });
+
+    expect(setDevelopmentRepository('/repo/.tmp/dev/ohtani-shohei')).toMatchObject({
+      appearance: 'dark',
+      registeredRepoPaths: ['/repo/.tmp/dev/ohtani-shohei'],
+      openRepoPaths: ['/repo/.tmp/dev/ohtani-shohei'],
+      selectedRepoPath: '/repo/.tmp/dev/ohtani-shohei',
+    });
   });
 
   it('moves a reopened repository to the front and does not duplicate it', () => {

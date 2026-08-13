@@ -1,0 +1,16 @@
+import {
+  resetDevelopmentShowcaseFixture,
+  setupShowcaseFixtureBase,
+} from '../tests/e2e/support/showcaseRepository.js';
+
+const command = process.argv[2];
+
+if (command === 'setup') {
+  const path = await setupShowcaseFixtureBase();
+  console.log(`基底fixtureを作成しました: ${path}`);
+} else if (command === 'reset') {
+  const path = await resetDevelopmentShowcaseFixture();
+  console.log(`開発用fixtureを初期状態へ戻しました: ${path}`);
+} else {
+  throw new Error('usage: node --import tsx scripts/showcase-fixture.mts <setup|reset>');
+}

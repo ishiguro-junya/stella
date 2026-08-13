@@ -7,28 +7,26 @@ import {
   openRepository,
   resetApp,
 } from './support/app.js';
-import {
-  configureRepository,
-  createEmptyRepository,
-  removeFixture,
-  writeRepositoryFile,
-} from './support/fixtures.js';
+import { createFixtureDirectory, removeFixture, writeRepositoryFile } from './support/fixtures.js';
+import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 describe('Activity', () => {
+  let fixturePath = '';
   let repositoryPath = '';
 
   beforeEach(async () => {
-    repositoryPath = await createEmptyRepository('activity');
+    fixturePath = await createFixtureDirectory('activity');
+    repositoryPath = await copyE2EShowcaseRepository(fixturePath);
     await resetApp({ language: 'ja', splitStageView: true });
     await openRepository(repositoryPath);
-    await configureRepository(repositoryPath);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Stella E2E\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await commitCurrentChange('E2Eリポジトリを初期化する');
   });
 
   afterEach(async () => {
-    await removeFixture(repositoryPath);
+    await removeFixture(fixturePath);
+    fixturePath = '';
     repositoryPath = '';
   });
 
