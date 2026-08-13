@@ -42,7 +42,7 @@ describe('Repository and Branch navigation', () => {
     await expect($('.repository-view-tabs')).not.toExist();
     expect(
       await $$('.titlebar-actions .titlebar-menu-button').map((button) => button.getText()),
-    ).toEqual(['変更差分', '操作履歴', 'アクティビティ', '設定']);
+    ).toEqual(['変更', '履歴', '活動', '設定']);
     expect(
       await browser.tauri.execute(() =>
         [...document.querySelectorAll('.titlebar-context, .titlebar-actions')].every((element) =>
@@ -50,7 +50,7 @@ describe('Repository and Branch navigation', () => {
         ),
       ),
     ).toBe(true);
-    await expect($('button[aria-label="変更差分"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
 
     const repositoryToggle = $(`.repository-toggle[title="${repositoryPath}"]`);
     await expect(repositoryToggle).toBeDisplayed();

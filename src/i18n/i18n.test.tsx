@@ -53,16 +53,19 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'uncommittedFileCount', { count: 2 })).toBe('2ファイル');
   });
 
-  it('localizes Japanese navigation, Commit form terms, and general UI terms', () => {
-    expect(translate('ja', 'appActivity')).toBe('アクティビティ');
+  it('uses natural Japanese for navigation, Git operations, and general UI terms', () => {
+    expect(translate('en', 'appActivity')).toBe('Activity');
+    expect(translate('ja', 'appActivity')).toBe('活動');
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
-    expect(translate('ja', 'changes')).toBe('変更差分');
-    expect(translate('ja', 'history')).toBe('操作履歴');
+    expect(translate('ja', 'changes')).toBe('変更');
+    expect(translate('ja', 'history')).toBe('履歴');
     expect(translate('ja', 'staged')).toBe('ステージ済み');
     expect(translate('ja', 'unstaged')).toBe('未ステージ');
     expect(translate('ja', 'uncommittedChanges')).toBe('未コミットの変更');
     expect(translate('ja', 'activityCommand')).toBe('コマンド');
-    expect(translate('ja', 'unified')).toBe('統合');
+    expect(translate('ja', 'diffLayout')).toBe('差分レイアウト');
+    expect(translate('ja', 'unified')).toBe('1列表示');
+    expect(translate('ja', 'split')).toBe('2列表示');
     expect(translate('ja', 'commit')).toBe('コミット');
     expect(translate('ja', 'description')).toBe('メッセージ');
     expect(translate('ja', 'type')).toBe('型');
@@ -72,9 +75,13 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitScopeInvalid')).toBe('スコープには括弧や改行を使用できません。');
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'commitMessageSingleLine')).toBe('メッセージは1行で入力してください。');
-    expect(translate('ja', 'conventionalCommitsEnabled')).toBe('使用する');
-    expect(translate('ja', 'conventionalCommitsDisabled')).toBe('使用しない');
-    expect(translate('ja', 'stage')).toBe('Stage');
+    expect(translate('ja', 'conventionalCommitsTitle')).toBe('コミットメッセージの形式');
+    expect(translate('ja', 'conventionalCommitsEnabled')).toBe('Conventional Commits形式');
+    expect(translate('ja', 'conventionalCommitsDisabled')).toBe('通常形式');
+    expect(translate('ja', 'stage')).toBe('ステージ');
+    expect(translate('ja', 'unstage')).toBe('ステージ解除');
+    expect(translate('ja', 'diff')).toBe('差分');
+    expect(translate('ja', 'conflicted')).toBe('競合');
     expect(translate('ja', 'pull')).toBe('プル');
     expect(translate('ja', 'push')).toBe('プッシュ');
     expect(translate('ja', 'fetch')).toBe('フェッチ');
@@ -90,6 +97,19 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'resetMenu')).toBe('リセットを実行');
     expect(translate('ja', 'resetMode')).toBe('リセット方法');
     expect(translate('ja', 'actionCheckoutBranch')).toBe('ブランチをチェックアウト');
+    expect(translate('ja', 'actionContinueOperation')).toBe('操作を続行');
+    expect(translate('ja', 'actionSkipOperation')).toBe('操作をスキップ');
+    expect(translate('ja', 'actionAbortOperation')).toBe('操作を中止');
+    expect(translate('ja', 'actionCloneRepository')).toBe('リポジトリをクローン');
+  });
+
+  it('uses natural Japanese for Activity actions and summaries', () => {
+    expect(translate('ja', 'actionStageFiles')).toBe('ファイルをステージ');
+    expect(translate('ja', 'actionUnstageFiles')).toBe('ファイルのステージを解除');
+    expect(translate('ja', 'backendChangesStaged')).toBe('変更をステージしました');
+    expect(translate('ja', 'backendChangesUnstaged')).toBe('変更のステージを解除しました');
+    expect(translate('ja', 'actionCommit')).toBe('コミット');
+    expect(translate('ja', 'backendCommitCreated')).toBe('コミットを作成しました');
   });
 
   it('uses the requested Japanese terms for Activity metrics', () => {
@@ -109,14 +129,14 @@ describe('Stella i18n', () => {
   });
 
   it('uses the requested Japanese Git toolchain copy', () => {
-    expect(translate('ja', 'toolchainTitle')).toBe('Gitツールチェイン');
+    expect(translate('ja', 'toolchainTitle')).toBe('Gitツールチェーン');
     expect(translate('ja', 'toolchainDescription')).toBe(
-      'Gitツールチェインが内蔵かこの端末にインストールされたもののどちらを使用するか選択します。',
+      '内蔵のGitツールチェーンまたはこの端末にインストールされたものを選択します。',
     );
     expect(translate('ja', 'toolchainRestartRequired')).toBe(
       '変更を反映するにはアプリを再起動してください。',
     );
-    expect(translate('ja', 'errorHookFailed')).toBe('Git Hookによって操作が拒否されました。');
+    expect(translate('ja', 'errorHookFailed')).toBe('Gitフックによって操作が拒否されました。');
   });
 
   it('uses localized Stage display copy without mixing Git terms', () => {

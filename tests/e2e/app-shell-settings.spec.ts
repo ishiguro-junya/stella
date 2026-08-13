@@ -251,7 +251,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The document language did not change to Japanese.' },
     );
     await expect($('#toolchain-description')).toHaveText(
-      'Gitツールチェインが内蔵かこの端末にインストールされたもののどちらを使用するか選択します。',
+      '内蔵のGitツールチェーンまたはこの端末にインストールされたものを選択します。',
     );
     await browser.waitUntil(
       async () =>

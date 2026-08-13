@@ -277,10 +277,10 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
 }
 
 export async function commitCurrentChange(description: string): Promise<void> {
-  const stage = $('input[aria-label^="Stage "]');
+  const stage = $('input[aria-label^="ステージ "]');
   await stage.waitForClickable({ timeout: 20_000 });
   await stage.click();
-  await $('input[aria-label^="Unstage "]').waitForDisplayed({ timeout: 10_000 });
+  await $('input[aria-label^="ステージ解除 "]').waitForDisplayed({ timeout: 10_000 });
   const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
   await trigger.waitForClickable();
   await trigger.click();

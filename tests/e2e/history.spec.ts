@@ -82,7 +82,7 @@ describe('History', () => {
     await $('button=設定').click();
     await selectSetting('editor-line-wrapping', 'enabled');
     await $('input[name="editor-wrap-column"]').setValue('80');
-    await $('button=操作履歴').click();
+    await $('button=履歴').click();
     await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
 
     await browser.waitUntil(
@@ -111,7 +111,7 @@ describe('History', () => {
     const paletteCommitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
     await writeRepositoryFile(repositoryPath, 'UNCOMMITTED.md', 'Uncommitted change\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
-    await $('button=操作履歴').click();
+    await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     const paletteCommit = $(`[data-history-commit-oid="${paletteCommitOid}"]`);
     await paletteCommit.waitForDisplayed({ timeout: 20_000 });
@@ -233,32 +233,32 @@ describe('History', () => {
   });
 
   it('searches history and creates Tags and Branches from a Commit', async () => {
-    await $('button=操作履歴').click();
+    await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
-    await expect($('button[aria-label="操作履歴"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('button[aria-label="履歴"]')).toHaveAttribute('aria-current', 'page');
     await expectInteractiveSelectedColors('.history-commit-item.is-current', {
       foreground: ['.row-action-trigger', '.ref-chip'],
       mutedForeground: ['.commit-metadata', '.commit-oid'],
     });
     await expect($('.repository-view-tabs')).not.toExist();
 
-    const historyResizer = $('[role="separator"][aria-label="操作履歴一覧の幅"]');
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '244');
+    const historyResizer = $('[role="separator"][aria-label="履歴一覧の幅"]');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '320');
     await historyResizer.click();
     await browser.keys(['ArrowLeft']);
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '236');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '312');
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: E2Eリポジトリを初期化する'),
     );
 
-    const historySearch = $('input[aria-label="操作履歴を検索"]');
+    const historySearch = $('input[aria-label="履歴を検索"]');
     await expect(historySearch).toBeDisplayed();
     await historySearch.setValue('E2Eリポジトリ');
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: E2Eリポジトリを初期化する'),
     );
     await historySearch.setValue('一致しない検索');
-    await expect($('.history-search-empty')).toHaveText('一致する操作履歴はありません。');
+    await expect($('.history-search-empty')).toHaveText('一致する履歴はありません。');
     await historySearch.setValue('');
     await browser.waitUntil(async () => (await historyDiffFileCount()) === 2, {
       timeout: 10_000,
@@ -446,7 +446,7 @@ describe('History', () => {
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
     await expect(branchDialog).toHaveText(
-      expect.stringContaining('現在のCommitからブランチを作成し、そのブランチへ切り替えます。'),
+      expect.stringContaining('現在のコミットからブランチを作成し、そのブランチへ切り替えます。'),
     );
     await branchDialog.$('input[aria-label="ブランチ名"]').setValue(branchName);
     await branchDialog.$('button=影響を確認').click();
@@ -472,7 +472,7 @@ describe('History', () => {
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe('main\n');
 
-    await $('button=変更差分').click();
+    await $('button=変更').click();
     await expect($('.changes-view')).toBeDisplayed();
   });
 });

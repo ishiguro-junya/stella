@@ -166,7 +166,7 @@ describe('Visual QA', () => {
         ),
       ).toBe(true);
       await setLogicalWindowSize(1180, 760);
-      await $('button[aria-label="変更差分"]').click();
+      await $('button[aria-label="変更"]').click();
       await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-1180x760.png'), 1180, 760);
       await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-860x560.png'), 860, 560);
       await settings.click();

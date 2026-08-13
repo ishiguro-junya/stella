@@ -82,7 +82,7 @@ describe('Changes', () => {
     await configureRepository(repositoryPath);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Stella E2E\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
-    await $('input[aria-label="Stage README.md"]').waitForClickable({ timeout: 20_000 });
+    await $('input[aria-label="ステージ README.md"]').waitForClickable({ timeout: 20_000 });
   });
 
   afterEach(async () => {
@@ -108,7 +108,7 @@ describe('Changes', () => {
     await selectSetting('editor-line-wrapping', 'enabled');
     const wrapColumn = $('input[name="editor-wrap-column"]');
     await wrapColumn.setValue('80');
-    await $('button=変更差分').click();
+    await $('button=変更').click();
 
     await browser.waitUntil(
       async () =>
@@ -147,7 +147,7 @@ describe('Changes', () => {
     ]);
     await expect($('[role="dialog"] [data-commit-field="description"]')).not.toExist();
 
-    await $('button=操作履歴').click();
+    await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     const uncommittedChanges = $('.history-working-tree-entry');
     await expect(uncommittedChanges).toBeDisplayed();
@@ -158,7 +158,7 @@ describe('Changes', () => {
       expect.stringContaining('--history-lane-color: var(--history-working-tree)'),
     );
     await uncommittedChanges.click();
-    await expect($('button[aria-label="変更差分"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
 
     const stagedGroup = $('section[aria-labelledby="area-staged"]');
     const unstagedGroup = $('section[aria-labelledby="area-worktree"]');
@@ -184,7 +184,7 @@ describe('Changes', () => {
     );
     expect(groupCountLayout?.trailingSpace).toBeGreaterThan(20);
 
-    const stage = $('input[aria-label="Stage README.md"]');
+    const stage = $('input[aria-label="ステージ README.md"]');
     await stage.waitForClickable();
     const changesPaneLayout = await browser.execute(() => {
       const sidebar = document.querySelector<HTMLElement>('.changes-sidebar-pane')!;
@@ -312,13 +312,13 @@ describe('Changes', () => {
     ).toBe('none');
 
     await stage.click();
-    await expect($('input[aria-label="Unstage README.md"]')).toBeDisplayed();
+    await expect($('input[aria-label="ステージ解除 README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('README.md\n');
-    await $('input[aria-label="Unstage README.md"]').click();
-    await expect($('input[aria-label="Stage README.md"]')).toBeDisplayed();
+    await $('input[aria-label="ステージ解除 README.md"]').click();
+    await expect($('input[aria-label="ステージ README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('');
-    await $('input[aria-label="Stage README.md"]').click();
-    await expect($('input[aria-label="Unstage README.md"]')).toBeDisplayed();
+    await $('input[aria-label="ステージ README.md"]').click();
+    await expect($('input[aria-label="ステージ解除 README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('README.md\n');
 
     const activeCommitTrigger = $(
@@ -340,7 +340,7 @@ describe('Changes', () => {
     await $('button=設定').click();
     await selectSetting('conventional-commits', 'enabled');
     await expect($('select[name="conventional-commits"]')).toHaveValue('enabled');
-    await $('button=変更差分').click();
+    await $('button=変更').click();
     const conventionalCommitTrigger = $(
       '.changes-action-bar .changes-action-button[aria-label="コミット"]',
     );
@@ -418,8 +418,8 @@ describe('Changes', () => {
       '.git/hooks/commit-msg',
       '#!/bin/sh\nprintf "hook-line-1\\nhook-line-2\\nhook-line-3\\nhook-line-4\\nhook-line-5\\nhook-line-6\\n" >&2\nexit 1\n',
     );
-    await $('input[aria-label="Stage README.md"]').click();
-    await $('input[aria-label="Unstage README.md"]').waitForDisplayed({ timeout: 10_000 });
+    await $('input[aria-label="ステージ README.md"]').click();
+    await $('input[aria-label="ステージ解除 README.md"]').waitForDisplayed({ timeout: 10_000 });
     const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
     await commitTrigger.waitForClickable({ timeout: 10_000 });
     await commitTrigger.click();
@@ -431,7 +431,7 @@ describe('Changes', () => {
     const errorDialog = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
     await errorDialog.waitForDisplayed({ timeout: 10_000 });
     await expect(errorDialog).toHaveText(
-      expect.stringContaining('Git Hookによって操作が拒否されました。'),
+      expect.stringContaining('Gitフックによって操作が拒否されました。'),
     );
     await expect(errorDialog.$('.eyebrow')).not.toExist();
     await expect(errorDialog.$('details')).not.toExist();
