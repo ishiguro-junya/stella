@@ -672,6 +672,10 @@ pub struct RepoSnapshot {
     pub upstream: Option<String>,
     pub ahead: u64,
     pub behind: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additions: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletions: Option<u64>,
     pub entries: Vec<StatusEntry>,
     pub operation: OperationState,
     #[serde(default)]

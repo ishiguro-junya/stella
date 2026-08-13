@@ -88,6 +88,19 @@ export const MESSAGES = {
   },
   stageDisplayShow: { en: 'Show', ja: '表示する' },
   stageDisplayHide: { en: 'Hide', ja: '表示しない' },
+  changeListDisplayTitle: { en: 'File Display Format', ja: 'ファイルの表示形式' },
+  changeListDisplayDescription: {
+    en: 'Choose the display format for changed files.',
+    ja: '変更されたファイルの表示形式を選択します。',
+  },
+  changeListDisplayNameAndPath: {
+    en: 'File Name and Path',
+    ja: 'ファイル名とパス',
+  },
+  changeListDisplayFullPath: { en: 'Full Path', ja: 'フルパス' },
+  changeListDisplayTree: { en: 'Tree', ja: 'ツリー' },
+  expandDirectory: { en: 'Expand {path}', ja: '{path}を展開' },
+  collapseDirectory: { en: 'Collapse {path}', ja: '{path}を折りたたむ' },
   conventionalCommitsTitle: { en: 'Conventional Commits', ja: 'コミットメッセージの形式' },
   conventionalCommitsDescription: {
     en: 'Choose whether to compose commit messages in Conventional Commits format. Repository Git Hooks continue to run.',
@@ -402,6 +415,13 @@ export const MESSAGES = {
     ja: (args) => `フェッチしました。${text(args, 'target')}をマージまたはリベースしてください。`,
   },
   changedFiles: { en: 'Changed files', ja: '変更されたファイル' },
+  selectedFilesSummary: {
+    en: (args, { number }) => {
+      const value = count(args, 'count');
+      return `${number(value)} ${value === 1 ? 'file' : 'files'} selected`;
+    },
+    ja: (args, { number }) => `${number(count(args, 'count'))}ファイルを選択中`,
+  },
   changesListWidth: { en: 'Changes list width', ja: '変更一覧の幅' },
   diffLayout: { en: 'Diff layout', ja: '差分レイアウト' },
   diffLayoutDescription: {

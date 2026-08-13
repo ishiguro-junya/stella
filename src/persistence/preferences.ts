@@ -14,6 +14,8 @@ export const EDITOR_WRAP_COLUMN_MIN = 40;
 export const EDITOR_WRAP_COLUMN_MAX = 400;
 export const DEFAULT_EDITOR_WRAP_COLUMN = 120;
 
+export type ChangeListDisplay = 'nameAndPath' | 'fullPath' | 'tree';
+
 export interface PaneWidths {
   left: number;
   right: number;
@@ -37,6 +39,7 @@ export interface StellaPreferences {
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
+  changeListDisplay: ChangeListDisplay;
   useConventionalCommits: boolean;
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
@@ -57,6 +60,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   automaticUpdateChecks: true,
   diffStyle: 'unified',
   splitStageView: false,
+  changeListDisplay: 'nameAndPath',
   useConventionalCommits: false,
   stickyFileHeaders: false,
   editorLineWrapping: false,
@@ -79,6 +83,10 @@ function isAppearance(value: unknown): value is Appearance {
 
 function isDiffStyle(value: unknown): value is DiffStyle {
   return value === 'unified' || value === 'split';
+}
+
+function isChangeListDisplay(value: unknown): value is ChangeListDisplay {
+  return value === 'nameAndPath' || value === 'fullPath' || value === 'tree';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -219,6 +227,9 @@ export function readPreferences(): StellaPreferences {
         typeof value.splitStageView === 'boolean'
           ? value.splitStageView
           : DEFAULT_PREFERENCES.splitStageView,
+      changeListDisplay: isChangeListDisplay(value.changeListDisplay)
+        ? value.changeListDisplay
+        : DEFAULT_PREFERENCES.changeListDisplay,
       useConventionalCommits:
         typeof value.useConventionalCommits === 'boolean'
           ? value.useConventionalCommits

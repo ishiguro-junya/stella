@@ -2077,6 +2077,33 @@ impl Workspace {
             .run(Some(&repo.root), GitCommand::Status, None, None)?
             .ensure_success()?;
         let mut parsed = parse_status(&output.stdout)?;
+        let mut total = Some(Numstat::default());
+        for target in [DiffTarget::Staged, DiffTarget::Unstaged] {
+            let Ok(numstat) = self
+                .git
+                .run(
+                    Some(&repo.root),
+                    GitCommand::DiffNumstat { target },
+                    None,
+                    None,
+                )
+                .and_then(GitOutput::ensure_success)
+            else {
+                // 行数は補助情報なので、読めないfileがあってもstatusの表示は止めない。
+                total = None;
+                break;
+            };
+            let Ok(stats) = parse_numstat(&numstat.stdout) else {
+                total = None;
+                break;
+            };
+            if let Some(total) = &mut total {
+                total.additions += stats.additions;
+                total.deletions += stats.deletions;
+            }
+        }
+        parsed.additions = total.map(|stats| stats.additions);
+        parsed.deletions = total.map(|stats| stats.deletions);
         let state_fingerprint =
             self.repository_generation_fingerprint(repo, &parsed, &output.stdout, None)?;
         let has_tracked_changes = parsed.entries.iter().any(|entry| !entry.untracked);
@@ -4807,6 +4834,8 @@ fn parse_status(bytes: &[u8]) -> WorkspaceResult<RepoSnapshot> {
         upstream,
         ahead,
         behind,
+        additions: None,
+        deletions: None,
         entries,
         operation: OperationState::None,
         git_flow_operation: None,
@@ -4862,6 +4891,37 @@ fn status_entry(
         untracked: false,
         submodule: submodule.to_owned(),
     }
+}
+
+#[derive(Clone, Copy, Default)]
+struct Numstat {
+    additions: u64,
+    deletions: u64,
+}
+
+fn parse_numstat(bytes: &[u8]) -> WorkspaceResult<Numstat> {
+    let mut stats = Numstat::default();
+    for record in bytes
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        let record = std::str::from_utf8(record).map_err(|_| {
+            WorkspaceError::new(
+                ErrorCode::UnsupportedRepository,
+                "Non-UTF-8 paths are not supported",
+            )
+        })?;
+        let mut fields = record.splitn(3, '\t');
+        let additions = fields.next().and_then(|value| value.parse::<u64>().ok());
+        let deletions = fields.next().and_then(|value| value.parse::<u64>().ok());
+        let path = fields.next();
+        let (Some(additions), Some(deletions), Some(_path)) = (additions, deletions, path) else {
+            continue;
+        };
+        stats.additions += additions;
+        stats.deletions += deletions;
+    }
+    Ok(stats)
 }
 
 fn parse_history(text: &str) -> Vec<CommitSummary> {
@@ -5943,6 +6003,41 @@ mod tests {
         .unwrap();
         assert_eq!(snapshot.entries.len(), 1);
         assert_eq!(snapshot.entries[0].path, "first line\n? looks-like-entry");
+    }
+
+    #[test]
+    fn numstat_sums_text_files_and_ignores_binary_files() {
+        let stats =
+            parse_numstat(b"8\t2\tsrc/app.ts\x005\t3\tsrc/other.ts\0-\t-\tassets/image.png\0")
+                .unwrap();
+
+        assert_eq!((stats.additions, stats.deletions), (13, 5));
+    }
+
+    #[test]
+    fn snapshot_includes_staged_and_unstaged_line_counts() {
+        let fixture = GitFixture::new();
+        fixture.write("app.txt", "base\n");
+        fixture.git(&["add", "--", "app.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.write("app.txt", "base\nstaged\n");
+        fixture.git(&["add", "--", "app.txt"]);
+        fixture.write("app.txt", "base\nstaged\nunstaged\n");
+
+        let attached = fixture
+            .workspace()
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(
+            (attached.snapshot.additions, attached.snapshot.deletions),
+            (Some(2), Some(0))
+        );
     }
 
     #[test]

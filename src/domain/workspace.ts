@@ -190,6 +190,8 @@ export interface RepoSnapshot {
   branch: BranchStatus;
   operation: OperationState;
   changes: ChangeEntry[];
+  additions?: number;
+  deletions?: number;
   history: CommitSummary[];
   selectedPath?: string;
   selectedCommitOid?: string;

@@ -103,6 +103,7 @@ import {
   rememberRepositoryPath,
   replaceRepositoryPath,
   updatePreferences,
+  type ChangeListDisplay,
   type PaneWidthPreferences,
 } from './persistence/preferences';
 import {
@@ -353,6 +354,9 @@ export function App({
   );
   const [diffStyle, setDiffStyle] = useState<DiffStyle>(initialPreferences.diffStyle);
   const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
+  const [changeListDisplay, setChangeListDisplay] = useState<ChangeListDisplay>(
+    initialPreferences.changeListDisplay,
+  );
   const [useConventionalCommits, setUseConventionalCommits] = useState(
     initialPreferences.useConventionalCommits,
   );
@@ -657,6 +661,7 @@ export function App({
       automaticUpdateChecks,
       diffStyle,
       splitStageView,
+      changeListDisplay,
       useConventionalCommits,
       stickyFileHeaders,
       editorLineWrapping,
@@ -668,6 +673,7 @@ export function App({
   }, [
     appearance,
     automaticUpdateChecks,
+    changeListDisplay,
     diffStyle,
     editorLineWrapping,
     editorWrapColumn,
@@ -1851,6 +1857,7 @@ export function App({
               automaticUpdateChecks={automaticUpdateChecks}
               diffStyle={diffStyle}
               splitStageView={splitStageView}
+              changeListDisplay={changeListDisplay}
               useConventionalCommits={useConventionalCommits}
               stickyFileHeaders={stickyFileHeaders}
               editorLineWrapping={editorLineWrapping}
@@ -1862,6 +1869,7 @@ export function App({
               onAutomaticUpdateChecksChange={setAutomaticUpdateChecks}
               onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}
+              onChangeListDisplayChange={setChangeListDisplay}
               onUseConventionalCommitsChange={setUseConventionalCommits}
               onStickyFileHeadersChange={setStickyFileHeaders}
               onEditorLineWrappingChange={setEditorLineWrapping}
@@ -1968,6 +1976,7 @@ export function App({
                       paneWidths={paneWidths.changes}
                       diffStyle={diffStyle}
                       splitStageView={splitStageView}
+                      changeListDisplay={changeListDisplay}
                       useConventionalCommits={useConventionalCommits}
                       stickyFileHeaders={stickyFileHeaders}
                       editorLineWrapping={editorLineWrapping}

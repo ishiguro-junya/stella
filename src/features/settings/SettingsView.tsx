@@ -7,6 +7,7 @@ import {
   EDITOR_WRAP_COLUMN_MAX,
   EDITOR_WRAP_COLUMN_MIN,
   normalizeEditorWrapColumn,
+  type ChangeListDisplay,
 } from '../../persistence/preferences';
 import { APPEARANCE_OPTIONS, type Appearance } from '../../theme/appearance';
 import { SelectControl } from '../../ui/SelectControl';
@@ -17,6 +18,7 @@ export interface SettingsViewProps {
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
+  changeListDisplay: ChangeListDisplay;
   useConventionalCommits: boolean;
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
@@ -28,6 +30,7 @@ export interface SettingsViewProps {
   onAutomaticUpdateChecksChange: (enabled: boolean) => void;
   onDiffStyleChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
+  onChangeListDisplayChange: (display: ChangeListDisplay) => void;
   onUseConventionalCommitsChange: (enabled: boolean) => void;
   onStickyFileHeadersChange: (sticky: boolean) => void;
   onEditorLineWrappingChange: (enabled: boolean) => void;
@@ -47,6 +50,10 @@ function isDiffStyle(value: string): value is DiffStyle {
   return value === 'unified' || value === 'split';
 }
 
+function isChangeListDisplay(value: string): value is ChangeListDisplay {
+  return value === 'nameAndPath' || value === 'fullPath' || value === 'tree';
+}
+
 function isToolchainMode(value: string): value is ToolchainMode {
   return value === 'bundled' || value === 'system';
 }
@@ -57,6 +64,7 @@ export function SettingsView({
   automaticUpdateChecks,
   diffStyle,
   splitStageView,
+  changeListDisplay,
   useConventionalCommits,
   stickyFileHeaders,
   editorLineWrapping,
@@ -68,6 +76,7 @@ export function SettingsView({
   onAutomaticUpdateChecksChange,
   onDiffStyleChange,
   onSplitStageViewChange,
+  onChangeListDisplayChange,
   onUseConventionalCommitsChange,
   onStickyFileHeadersChange,
   onEditorLineWrappingChange,
@@ -212,6 +221,36 @@ export function SettingsView({
               {([true, false] as const).map((option) => (
                 <option key={String(option)} value={option ? 'show' : 'hide'}>
                   {t(option ? 'stageDisplayShow' : 'stageDisplayHide')}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="change-list-display-title">
+            <div className="settings-row-copy">
+              <h2 id="change-list-display-title">{t('changeListDisplayTitle')}</h2>
+              <p id="change-list-display-description">{t('changeListDisplayDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="change-list-display"
+              value={changeListDisplay}
+              aria-labelledby="change-list-display-title"
+              aria-describedby="change-list-display-description"
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (isChangeListDisplay(value)) onChangeListDisplayChange(value);
+              }}
+            >
+              {(['nameAndPath', 'fullPath', 'tree'] as const).map((option) => (
+                <option key={option} value={option}>
+                  {t(
+                    option === 'nameAndPath'
+                      ? 'changeListDisplayNameAndPath'
+                      : option === 'fullPath'
+                        ? 'changeListDisplayFullPath'
+                        : 'changeListDisplayTree',
+                  )}
                 </option>
               ))}
             </SelectControl>

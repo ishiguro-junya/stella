@@ -6,10 +6,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
+import type { ChangeListDisplay } from '../../persistence/preferences';
 import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 
@@ -39,6 +40,17 @@ interface ChangeGroup {
   entries: ChangeEntry[];
 }
 
+interface ChangeTreeDirectory {
+  name: string;
+  path: string;
+  directories: Map<string, ChangeTreeDirectory>;
+  entries: ChangeEntry[];
+}
+
+type ChangeListRow =
+  | { kind: 'directory'; name: string; path: string; depth: number }
+  | { kind: 'file'; entry: ChangeEntry; depth: number };
+
 export interface StageTransitionRequest {
   kind: 'stage' | 'unstage';
   paths: string[];
@@ -63,6 +75,7 @@ export interface ChangeListProps {
   generation: number;
   entries: ChangeEntry[];
   splitStageView?: boolean | undefined;
+  display?: ChangeListDisplay | undefined;
   selectedKey: string;
   selectionKeys?: readonly string[] | undefined;
   unsavedFileKey?: string | undefined;
@@ -108,11 +121,58 @@ function settleTransition(promise: Promise<unknown>): void {
   void promise.catch(() => undefined);
 }
 
+function directoryKey(group: DisplayGroup, path: string): string {
+  return `${group}:${path}`;
+}
+
+function changeListRows(
+  entries: ChangeEntry[],
+  group: DisplayGroup,
+  display: ChangeListDisplay,
+  collapsedDirectories: ReadonlySet<string>,
+): ChangeListRow[] {
+  if (display !== 'tree') return entries.map((entry) => ({ kind: 'file', entry, depth: 0 }));
+
+  const root: ChangeTreeDirectory = {
+    name: '',
+    path: '',
+    directories: new Map(),
+    entries: [],
+  };
+  for (const entry of entries) {
+    const parts = entry.path.split('/');
+    let directory = root;
+    let path = '';
+    for (const name of parts.slice(0, -1)) {
+      path = path ? `${path}/${name}` : name;
+      let child = directory.directories.get(name);
+      if (!child) {
+        child = { name, path, directories: new Map(), entries: [] };
+        directory.directories.set(name, child);
+      }
+      directory = child;
+    }
+    directory.entries.push(entry);
+  }
+
+  const rows: ChangeListRow[] = [];
+  const append = (directory: ChangeTreeDirectory, depth: number): void => {
+    for (const child of directory.directories.values()) {
+      rows.push({ kind: 'directory', name: child.name, path: child.path, depth });
+      if (!collapsedDirectories.has(directoryKey(group, child.path))) append(child, depth + 1);
+    }
+    for (const entry of directory.entries) rows.push({ kind: 'file', entry, depth });
+  };
+  append(root, 0);
+  return rows;
+}
+
 export function ChangeList({
   repoId,
   generation,
   entries,
   splitStageView = true,
+  display = 'nameAndPath',
   selectedKey,
   selectionKeys,
   unsavedFileKey,
@@ -134,6 +194,7 @@ export function ChangeList({
     { key: string; point: FileActionMenuPoint } | undefined
   >();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<CollapsibleGroup>>(() => new Set());
+  const [collapsedDirectories, setCollapsedDirectories] = useState<Set<string>>(() => new Set());
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(selectedKey ? [selectedKey] : []),
   );
@@ -187,7 +248,19 @@ export function ChangeList({
           entries: entries.filter((entry) => entry.area !== 'conflicted'),
         },
       ];
-  const orderedEntryKeys = groups.flatMap((group) => group.entries.map(entryKey));
+  const rowsByGroup = new Map(
+    groups.map((group) => [
+      group.id,
+      changeListRows(group.entries, group.id, display, collapsedDirectories),
+    ]),
+  );
+  const orderedEntryKeys = groups.flatMap(
+    (group) =>
+      rowsByGroup
+        .get(group.id)
+        ?.flatMap((row) => (row.kind === 'file' ? [entryKey(row.entry)] : [])) ?? [],
+  );
+  const allEntryKeys = groups.flatMap((group) => group.entries.map(entryKey));
 
   const selectFile = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
     const commandSelection = event.metaKey || event.ctrlKey;
@@ -234,8 +307,8 @@ export function ChangeList({
   const selectAllFiles = (event: ReactKeyboardEvent<HTMLFieldSetElement>): void => {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
     event.preventDefault();
-    updateSelectedKeys(new Set(orderedEntryKeys));
-    const anchor = selectedKey || orderedEntryKeys[0];
+    updateSelectedKeys(new Set(allEntryKeys));
+    const anchor = selectedKey || allEntryKeys[0];
     selectionAnchorRef.current = anchor;
     if (!selectedKey && anchor) onSelect(anchor);
   };
@@ -244,9 +317,14 @@ export function ChangeList({
     key: string,
     offset: -1 | 1,
   ): void => {
-    const groupEntryKeys = groups
-      .find((group) => group.entries.some((entry) => entryKey(entry) === key))
-      ?.entries.map(entryKey);
+    const group = groups.find((candidate) =>
+      candidate.entries.some((entry) => entryKey(entry) === key),
+    );
+    const groupEntryKeys = group
+      ? rowsByGroup
+          .get(group.id)
+          ?.flatMap((row) => (row.kind === 'file' ? [entryKey(row.entry)] : []))
+      : undefined;
     if (!groupEntryKeys) return;
     const currentIndex = groupEntryKeys.indexOf(key);
     if (currentIndex < 0) return;
@@ -274,6 +352,8 @@ export function ChangeList({
     selectionAnchorRef.current = selectedKey || undefined;
     setCollapsedGroups(new Set());
   }, [repoId, selectedKey]);
+
+  useEffect(() => setCollapsedDirectories(new Set()), [display, repoId]);
 
   useEffect(() => {
     const available = new Set(entries.map(entryKey));
@@ -487,94 +567,130 @@ export function ChangeList({
           <section
             key={id}
             className={`change-group change-group-${id}${groupCollapsed ? ' is-collapsed' : ''}`}
-            aria-labelledby={titleId}
+            aria-label={id === 'combined' ? label : undefined}
+            aria-labelledby={id === 'combined' ? undefined : titleId}
           >
-            <div className={`change-group-header${collapsibleGroup ? ' is-collapsible' : ''}`}>
-              {stageGroup && splitStageView ? (
-                <label className="stage-toggle-hitbox">
-                  <input
+            {id === 'combined' ? null : (
+              <div className={`change-group-header${collapsibleGroup ? ' is-collapsible' : ''}`}>
+                {stageGroup && splitStageView ? (
+                  <label className="stage-toggle-hitbox">
+                    <input
+                      ref={(element) => {
+                        if (element) {
+                          groupCheckboxRefs.current.set(stageGroup, element);
+                          element.indeterminate =
+                            stageGroup === 'combined' &&
+                            groupEntries.some((entry) => entry.area === 'staged') &&
+                            !allStaged;
+                        } else groupCheckboxRefs.current.delete(stageGroup);
+                      }}
+                      className="stage-toggle"
+                      type="checkbox"
+                      checked={groupEntries.length > 0 && (stageGroup === 'staged' || allStaged)}
+                      disabled={interactionsDisabled || !actionableGroupEntries.length}
+                      aria-label={t('changeAllAria', {
+                        action: actionLabel ?? '',
+                        count: actionableGroupEntries.length,
+                        area: label,
+                      })}
+                      aria-describedby={disabledReasonId}
+                      onChange={() => {
+                        if (!action) return;
+                        settleTransition(
+                          runTransition(
+                            {
+                              kind: action,
+                              paths: actionableGroupEntries.map((entry) => entry.path),
+                              sourceArea,
+                            },
+                            { target: targetForTransition(action) },
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                ) : splitStageView ? (
+                  <span className="change-group-header-spacer" aria-hidden="true" />
+                ) : null}
+                <h3 id={titleId}>
+                  <span
                     ref={(element) => {
-                      if (element) {
-                        groupCheckboxRefs.current.set(stageGroup, element);
-                        element.indeterminate =
-                          stageGroup === 'combined' &&
-                          groupEntries.some((entry) => entry.area === 'staged') &&
-                          !allStaged;
-                      } else groupCheckboxRefs.current.delete(stageGroup);
+                      if (element) groupFocusRefs.current.set(id, element);
+                      else groupFocusRefs.current.delete(id);
                     }}
-                    className="stage-toggle"
-                    type="checkbox"
-                    checked={groupEntries.length > 0 && (stageGroup === 'staged' || allStaged)}
-                    disabled={interactionsDisabled || !actionableGroupEntries.length}
-                    aria-label={t('changeAllAria', {
-                      action: actionLabel ?? '',
-                      count: actionableGroupEntries.length,
+                    className="change-group-title"
+                    tabIndex={-1}
+                  >
+                    {label}
+                  </span>
+                  <span className="change-count" aria-hidden="true">
+                    {groupEntries.length}
+                  </span>
+                </h3>
+                {collapsibleGroup ? (
+                  <button
+                    className="change-group-collapse-toggle"
+                    type="button"
+                    aria-expanded={!groupCollapsed}
+                    aria-controls={contentId}
+                    aria-label={t(groupCollapsed ? 'expandChangeGroup' : 'collapseChangeGroup', {
                       area: label,
                     })}
-                    aria-describedby={disabledReasonId}
-                    onChange={() => {
-                      if (!action) return;
-                      settleTransition(
-                        runTransition(
-                          {
-                            kind: action,
-                            paths: actionableGroupEntries.map((entry) => entry.path),
-                            sourceArea,
-                          },
-                          { target: targetForTransition(action) },
-                        ),
-                      );
+                    onClick={() => {
+                      setCollapsedGroups((current) => {
+                        const next = new Set(current);
+                        if (next.has(collapsibleGroup)) next.delete(collapsibleGroup);
+                        else next.add(collapsibleGroup);
+                        return next;
+                      });
                     }}
-                  />
-                </label>
-              ) : splitStageView ? (
-                <span className="change-group-header-spacer" aria-hidden="true" />
-              ) : null}
-              <h3 id={titleId}>
-                <span
-                  ref={(element) => {
-                    if (element) groupFocusRefs.current.set(id, element);
-                    else groupFocusRefs.current.delete(id);
-                  }}
-                  className="change-group-title"
-                  tabIndex={-1}
-                >
-                  {label}
-                </span>
-                <span className="change-count" aria-hidden="true">
-                  {groupEntries.length}
-                </span>
-              </h3>
-              {collapsibleGroup ? (
-                <button
-                  className="change-group-collapse-toggle"
-                  type="button"
-                  aria-expanded={!groupCollapsed}
-                  aria-controls={contentId}
-                  aria-label={t(groupCollapsed ? 'expandChangeGroup' : 'collapseChangeGroup', {
-                    area: label,
-                  })}
-                  onClick={() => {
-                    setCollapsedGroups((current) => {
-                      const next = new Set(current);
-                      if (next.has(collapsibleGroup)) next.delete(collapsibleGroup);
-                      else next.add(collapsibleGroup);
-                      return next;
-                    });
-                  }}
-                >
-                  {groupCollapsed ? (
-                    <ChevronRight aria-hidden="true" focusable="false" />
-                  ) : (
-                    <ChevronDown aria-hidden="true" focusable="false" />
-                  )}
-                </button>
-              ) : null}
-            </div>
+                  >
+                    {groupCollapsed ? (
+                      <ChevronRight aria-hidden="true" focusable="false" />
+                    ) : (
+                      <ChevronDown aria-hidden="true" focusable="false" />
+                    )}
+                  </button>
+                ) : null}
+              </div>
+            )}
             <div id={contentId} className="change-group-content" hidden={groupCollapsed}>
               {groupEntries.length ? (
-                <ul className="change-list">
-                  {groupEntries.map((entry) => {
+                <ul className={`change-list${display === 'tree' ? ' is-tree' : ''}`}>
+                  {rowsByGroup.get(id)?.map((row) => {
+                    if (row.kind === 'directory') {
+                      const key = directoryKey(id, row.path);
+                      const collapsed = collapsedDirectories.has(key);
+                      return (
+                        <li key={key} className="change-tree-directory">
+                          <button
+                            type="button"
+                            aria-expanded={!collapsed}
+                            aria-label={t(collapsed ? 'expandDirectory' : 'collapseDirectory', {
+                              path: row.path,
+                            })}
+                            style={{ paddingLeft: 16 + row.depth * 14 }}
+                            onClick={() =>
+                              setCollapsedDirectories((current) => {
+                                const next = new Set(current);
+                                if (next.has(key)) next.delete(key);
+                                else next.add(key);
+                                return next;
+                              })
+                            }
+                          >
+                            {collapsed ? (
+                              <ChevronRight aria-hidden="true" focusable="false" />
+                            ) : (
+                              <ChevronDown aria-hidden="true" focusable="false" />
+                            )}
+                            <Folder aria-hidden="true" focusable="false" />
+                            <span>{row.name}</span>
+                          </button>
+                        </li>
+                      );
+                    }
+                    const entry = row.entry;
                     const key = entryKey(entry);
                     const entryStageableArea = isStageableArea(entry.area) ? entry.area : undefined;
                     const entryAction = entryStageableArea
@@ -644,7 +760,10 @@ export function ChangeList({
                             else rowRefs.current.delete(key);
                           }}
                           type="button"
-                          className="change-row"
+                          className={`change-row${display === 'nameAndPath' ? '' : ' is-single-line'}`}
+                          style={
+                            display === 'tree' ? { paddingLeft: 26 + row.depth * 14 } : undefined
+                          }
                           aria-label={t('changeStatusAria', {
                             status: t(STATUS_LABELS[entry.status]),
                             path: entry.path,
@@ -662,14 +781,20 @@ export function ChangeList({
                           }}
                         >
                           <FileStatusIcon status={entry.status} />
-                          <span className="file-path">
+                          <span
+                            className={`file-path${display === 'nameAndPath' ? '' : ' is-single-line'}`}
+                          >
                             <span className="file-name">
-                              <strong>{fileName(entry.path)}</strong>
+                              <strong>
+                                {display === 'fullPath' ? entry.path : fileName(entry.path)}
+                              </strong>
                               {unsavedFileKey === key ? (
                                 <output className="unsaved-file-dot" aria-label={t('unsaved')} />
                               ) : null}
                             </span>
-                            <small>{parentPath(entry.path)}</small>
+                            {display === 'nameAndPath' ? (
+                              <small>{parentPath(entry.path)}</small>
+                            ) : null}
                           </span>
                           {entry.additions !== undefined || entry.deletions !== undefined ? (
                             <span className="diff-stat">

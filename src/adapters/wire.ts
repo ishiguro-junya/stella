@@ -224,6 +224,8 @@ export interface WireRepoSnapshot {
   upstream: string | null;
   ahead: number;
   behind: number;
+  additions?: number | null;
+  deletions?: number | null;
   entries: WireStatusEntry[];
   operation: WireOperationState;
   gitFlowOperation?: string | null;

@@ -155,6 +155,9 @@ pub(crate) enum GitCommand {
         target: DiffTarget,
         paths: Vec<String>,
     },
+    DiffNumstat {
+        target: DiffTarget,
+    },
     UntrackedDiff {
         path: String,
     },
@@ -392,6 +395,24 @@ impl GitCommand {
                     DiffTarget::Unstaged => {}
                 }
                 push_paths(&mut args, paths);
+                args
+            }
+            Self::DiffNumstat { target } => {
+                let mut args = strings([
+                    "--no-optional-locks",
+                    "diff",
+                    "--numstat",
+                    "-z",
+                    "--no-renames",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                ]);
+                match target {
+                    DiffTarget::Staged => args.push("--cached".into()),
+                    DiffTarget::Head => args.push("HEAD".into()),
+                    DiffTarget::Unstaged => {}
+                }
+                args.push("--".into());
                 args
             }
             Self::UntrackedDiff { path } => {
@@ -816,6 +837,7 @@ impl GitCommand {
                 | Self::CommonDir
                 | Self::IsBare
                 | Self::Status
+                | Self::DiffNumstat { .. }
                 | Self::AttributeFiles
                 | Self::CommitActivity { .. }
                 | Self::CommitMetadata { .. }

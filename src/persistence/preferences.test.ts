@@ -32,6 +32,7 @@ describe('appearance preferences', () => {
       automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: false,
+      changeListDisplay: 'nameAndPath',
       useConventionalCommits: false,
       stickyFileHeaders: false,
       editorLineWrapping: false,
@@ -106,6 +107,18 @@ describe('appearance preferences', () => {
     expect(DEFAULT_PREFERENCES.splitStageView).toBe(false);
     writePreferences({ ...DEFAULT_PREFERENCES, splitStageView: true });
     expect(readPreferences().splitStageView).toBe(true);
+  });
+
+  it('defaults the file list to two lines and round-trips the selected display', () => {
+    expect(DEFAULT_PREFERENCES.changeListDisplay).toBe('nameAndPath');
+    writePreferences({ ...DEFAULT_PREFERENCES, changeListDisplay: 'tree' });
+    expect(readPreferences().changeListDisplay).toBe('tree');
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({ ...DEFAULT_PREFERENCES, changeListDisplay: 'invalid' }),
+    );
+    expect(readPreferences().changeListDisplay).toBe('nameAndPath');
   });
 
   it('defaults Conventional Commits to off and round-trips the enabled preference', () => {

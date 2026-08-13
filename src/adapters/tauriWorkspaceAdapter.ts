@@ -268,6 +268,8 @@ function mapRepoSnapshot(snapshot: WireRepoSnapshot, history: CommitSummary[]): 
       branch,
       operation: { kind: 'none' },
       changes,
+      ...(snapshot.additions != null ? { additions: snapshot.additions } : {}),
+      ...(snapshot.deletions != null ? { deletions: snapshot.deletions } : {}),
       history,
     };
   }
@@ -302,6 +304,8 @@ function mapRepoSnapshot(snapshot: WireRepoSnapshot, history: CommitSummary[]): 
       canAbort: kind !== 'unknown',
     },
     changes,
+    ...(snapshot.additions != null ? { additions: snapshot.additions } : {}),
+    ...(snapshot.deletions != null ? { deletions: snapshot.deletions } : {}),
     history,
   };
 }

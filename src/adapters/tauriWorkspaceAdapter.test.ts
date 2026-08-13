@@ -202,6 +202,30 @@ describe('tauriWorkspaceAdapter', () => {
     expect(attachCall?.[1]?.request).toEqual({ kind: 'openExisting', path: '/tmp/stella' });
   });
 
+  it('maps the changed-line summary without adding counts to each file row', async () => {
+    const current = snapshot({ kind: 'none' }, [
+      {
+        path: 'src/app.ts',
+        originalPath: null,
+        indexStatus: 'M',
+        worktreeStatus: 'M',
+        conflict: false,
+        untracked: false,
+        submodule: 'N...',
+      },
+    ]);
+    invokeMock.mockImplementation(baseInvoke({ ...current, additions: 13, deletions: 5 }));
+    const adapter = createTauriWorkspaceAdapter();
+
+    const attached = await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    expect(attached.repos[0]).toEqual(expect.objectContaining({ additions: 13, deletions: 5 }));
+    expect(attached.repos[0]?.changes).toEqual([
+      expect.not.objectContaining({ additions: expect.any(Number) }),
+      expect.not.objectContaining({ additions: expect.any(Number) }),
+    ]);
+  });
+
   it('binds Clone progress to a generated operation id and keeps it in Activity', async () => {
     invokeMock.mockImplementation(async (command, args) => {
       if (command === 'workspace_attach') {

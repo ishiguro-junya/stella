@@ -341,6 +341,11 @@ describe('ChangesView diff lifecycle', () => {
     const actionSection = actions.closest('.changes-action-section');
     expect(sidebar.firstElementChild).toBe(actionSection);
     expect(actionSection?.nextElementSibling).toBe(changedFiles);
+    const footer = within(sidebar).getByRole('contentinfo');
+    expect(changedFiles.nextElementSibling).toBe(footer);
+    expect(within(footer).getByText('0 files')).toBeVisible();
+    expect(within(footer).getByText('+0')).toBeVisible();
+    expect(within(footer).getByText('−0')).toBeVisible();
     expect(within(sidebar).queryByRole('tablist')).not.toBeInTheDocument();
     expect(changedFiles).toBeVisible();
     const trigger = within(actions).getByRole('button', { name: 'Commit' });
@@ -363,7 +368,6 @@ describe('ChangesView diff lifecycle', () => {
     );
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/\d+ files/u)).not.toBeInTheDocument();
     expect(screen.queryByText('No selection')).not.toBeInTheDocument();
     expect(screen.queryByText('Select a change')).not.toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Diff' })).toBeVisible();
@@ -372,6 +376,42 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.queryByRole('dialog', { name: 'Commit' })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
+  });
+
+  it('keeps the change summary below every file list format and shows the selection count', () => {
+    const changes = [
+      {
+        path: 'src/first.ts',
+        area: 'unstaged' as const,
+        status: 'modified' as const,
+      },
+      {
+        path: 'src/second.ts',
+        area: 'unstaged' as const,
+        status: 'modified' as const,
+      },
+    ];
+    const props = {
+      repo: repoSnapshot({ changes, additions: 13, deletions: 5 }),
+      adapter: adapterWithDiff(),
+      onAction: async () => undefined,
+      paneWidths: { left: 240, right: 330 },
+      onPaneWidthsChange: () => undefined,
+    };
+    const view = render(<ChangesView {...props} changeListDisplay="tree" />);
+    const sidebar = screen.getByRole('complementary', { name: 'Changes' });
+    const footer = within(sidebar).getByRole('contentinfo');
+    expect(within(footer).getByText('2 files')).toBeVisible();
+    expect(within(footer).getByText('+13')).toBeVisible();
+    expect(within(footer).getByText('−5')).toBeVisible();
+
+    view.rerender(<ChangesView {...props} changeListDisplay="fullPath" />);
+    expect(within(footer).getByText('2 files')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified src/second.ts' }), {
+      metaKey: true,
+    });
+    expect(within(footer).getByText('2 files selected')).toBeVisible();
   });
 
   it('keeps the left pane resizable without changing the persisted History inspector width', async () => {

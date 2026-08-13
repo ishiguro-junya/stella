@@ -162,6 +162,52 @@ describe('ChangeList staging controls', () => {
     }
   });
 
+  it('switches between two-line, full-path, and collapsible tree displays', async () => {
+    const entries: ChangeEntry[] = [
+      { path: 'README.md', area: 'unstaged', status: 'modified' },
+      { path: 'src/features/app.ts', area: 'unstaged', status: 'modified' },
+    ];
+    const twoLine = renderList({ entries, selectedKey: 'unstaged:src/features/app.ts' });
+    const twoLineRow = changeRow(/Modified src\/features\/app\.ts/u);
+    expect(within(twoLineRow).getByText('app.ts')).toBeVisible();
+    expect(within(twoLineRow).getByText('src/features')).toBeVisible();
+    twoLine.unmount();
+
+    const fullPath = renderList({
+      entries,
+      display: 'fullPath',
+      selectedKey: 'unstaged:src/features/app.ts',
+    });
+    const fullPathRow = changeRow(/Modified src\/features\/app\.ts/u);
+    expect(within(fullPathRow).getByText('src/features/app.ts')).toBeVisible();
+    expect(fullPathRow).toHaveClass('is-single-line');
+    fullPath.unmount();
+
+    const user = userEvent.setup();
+    renderList({
+      entries,
+      display: 'tree',
+      splitStageView: false,
+      selectedKey: 'unstaged:src/features/app.ts',
+    });
+    const srcDirectory = screen.getByRole('button', { name: 'Collapse src' });
+    const featuresDirectory = screen.getByRole('button', { name: 'Collapse src/features' });
+    const nestedFile = changeRow(/Modified src\/features\/app\.ts/u);
+    const rootFile = changeRow(/Modified README\.md/u);
+    expect(srcDirectory).toHaveStyle({ paddingLeft: '16px' });
+    expect(featuresDirectory).toHaveStyle({ paddingLeft: '30px' });
+    expect(rootFile).toHaveStyle({ paddingLeft: '26px' });
+    expect(nestedFile).toHaveStyle({ paddingLeft: '54px' });
+
+    await user.click(screen.getByRole('button', { name: 'Collapse src' }));
+    expect(screen.getByRole('button', { name: 'Expand src' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByRole('button', { name: 'Modified src/features/app.ts' })).toBeNull();
+    expect(changeRow(/Modified README\.md/u)).toBeVisible();
+  });
+
   it('always shows Staged and Unstaged as separate groups, including zero-count groups', () => {
     renderList({
       entries: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
@@ -696,6 +742,9 @@ describe('ChangeList Stage display', () => {
     expect(screen.queryByRole('region', { name: 'Staged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Unstaged' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Changes' })).toBeVisible();
+    expect(
+      document.querySelector('.change-group-combined .change-group-header'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(document.querySelector('.change-groups')).toHaveClass('is-stage-hidden');
     expect(onStageTransition).not.toHaveBeenCalled();

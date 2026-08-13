@@ -76,6 +76,10 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'commitMessageSingleLine')).toBe('メッセージは1行で入力してください。');
     expect(translate('ja', 'conventionalCommitsTitle')).toBe('コミットメッセージの形式');
+    expect(translate('ja', 'changeListDisplayTitle')).toBe('ファイルの表示形式');
+    expect(translate('ja', 'changeListDisplayDescription')).toBe(
+      '変更されたファイルの表示形式を選択します。',
+    );
     expect(translate('ja', 'conventionalCommitsEnabled')).toBe('Conventional Commits形式');
     expect(translate('ja', 'conventionalCommitsDisabled')).toBe('通常形式');
     expect(translate('ja', 'stage')).toBe('ステージ');

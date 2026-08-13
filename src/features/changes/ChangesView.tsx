@@ -39,6 +39,7 @@ import {
 import {
   CHANGES_PANE_MIN_WIDTH,
   DEFAULT_EDITOR_WRAP_COLUMN,
+  type ChangeListDisplay,
   type PaneWidths,
 } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
@@ -72,6 +73,7 @@ export interface ChangesViewProps {
   paneWidths: PaneWidths;
   diffStyle?: DiffStyle | undefined;
   splitStageView?: boolean | undefined;
+  changeListDisplay?: ChangeListDisplay | undefined;
   useConventionalCommits?: boolean | undefined;
   stickyFileHeaders?: boolean | undefined;
   editorLineWrapping?: boolean | undefined;
@@ -135,13 +137,14 @@ export function ChangesView({
   paneWidths,
   diffStyle = 'unified',
   splitStageView = true,
+  changeListDisplay = 'nameAndPath',
   useConventionalCommits = false,
   stickyFileHeaders = false,
   editorLineWrapping = false,
   editorWrapColumn = DEFAULT_EDITOR_WRAP_COLUMN,
   onPaneWidthsChange,
 }: ChangesViewProps) {
-  const { t, message } = useI18n();
+  const { t, message, formatNumber } = useI18n();
   const initialSelectedEntry =
     repo.changes.find((entry) => entry.path === repo.selectedPath) ?? repo.changes[0];
   const initialSelectedKey = initialSelectedEntry
@@ -231,6 +234,19 @@ export function ChangesView({
     return entries.length ? entries : selected ? [selected] : [];
   }, [repo.changes, selected, selectedFileKeys]);
   const multipleFilesSelected = selectedFileEntries.length > 1;
+  const changedFileCount = new Set(repo.changes.map((entry) => entry.path)).size;
+  const selectedFileCount = new Set(selectedFileEntries.map((entry) => entry.path)).size;
+  const entryTotals = repo.changes.reduce(
+    (totals, entry) => ({
+      additions: totals.additions + (entry.additions ?? 0),
+      deletions: totals.deletions + (entry.deletions ?? 0),
+    }),
+    { additions: 0, deletions: 0 },
+  );
+  const changeTotals = {
+    additions: repo.additions ?? entryTotals.additions,
+    deletions: repo.deletions ?? entryTotals.deletions,
+  };
   const unsavedDirty = conflictDirty || fileEditorDirty;
   const selectedFileKeysSignature = selectedFileKeys.join('\0');
   const selectedArea = selected?.area;
@@ -1277,6 +1293,7 @@ export function ChangesView({
             generation={repo.generation}
             entries={repo.changes}
             splitStageView={splitStageView}
+            display={changeListDisplay}
             selectedKey={selected ? `${selected.area}:${selected.path}` : ''}
             selectionKeys={selectedFileKeys}
             unsavedFileKey={
@@ -1296,6 +1313,17 @@ export function ChangesView({
             onFileAction={runFileAction}
           />
         </section>
+        <footer className="changes-list-footer" aria-live="polite">
+          {multipleFilesSelected ? (
+            t('selectedFilesSummary', { count: selectedFileCount })
+          ) : (
+            <>
+              <span>{t('uncommittedFileCount', { count: changedFileCount })}</span>
+              <span className="additions">+{formatNumber(changeTotals.additions)}</span>
+              <span className="deletions">−{formatNumber(changeTotals.deletions)}</span>
+            </>
+          )}
+        </footer>
       </aside>
       <PaneResizer
         label={t('changesListWidth')}

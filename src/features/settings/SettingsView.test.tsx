@@ -13,6 +13,8 @@ describe('SettingsView', () => {
     const onAutomaticUpdateChecksChange = vi.fn<(enabled: boolean) => void>();
     const onDiffStyleChange = vi.fn<(style: 'unified' | 'split') => void>();
     const onSplitStageViewChange = vi.fn<(split: boolean) => void>();
+    const onChangeListDisplayChange =
+      vi.fn<(display: 'nameAndPath' | 'fullPath' | 'tree') => void>();
     const onUseConventionalCommitsChange = vi.fn<(enabled: boolean) => void>();
     const onStickyFileHeadersChange = vi.fn<(sticky: boolean) => void>();
     const onEditorLineWrappingChange = vi.fn<(enabled: boolean) => void>();
@@ -24,6 +26,7 @@ describe('SettingsView', () => {
       automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: true,
+      changeListDisplay: 'nameAndPath',
       useConventionalCommits: false,
       stickyFileHeaders: false,
       editorLineWrapping: false,
@@ -42,6 +45,7 @@ describe('SettingsView', () => {
       onAutomaticUpdateChecksChange,
       onDiffStyleChange,
       onSplitStageViewChange,
+      onChangeListDisplayChange,
       onUseConventionalCommitsChange,
       onStickyFileHeadersChange,
       onEditorLineWrappingChange,
@@ -59,6 +63,7 @@ describe('SettingsView', () => {
       'Automatic Updates',
       'Diff layout',
       'Stage Display',
+      'File Display Format',
       'Conventional Commits',
       'Sticky File Headers',
       'Line Wrapping',
@@ -72,6 +77,9 @@ describe('SettingsView', () => {
     });
     const diffLayoutSelect = screen.getByRole('combobox', { name: 'Diff layout' });
     const stageDisplaySelect = screen.getByRole('combobox', { name: 'Stage Display' });
+    const changeListDisplaySelect = screen.getByRole('combobox', {
+      name: 'File Display Format',
+    });
     const conventionalCommitsSelect = screen.getByRole('combobox', {
       name: 'Conventional Commits',
     });
@@ -83,12 +91,13 @@ describe('SettingsView', () => {
     });
     const editorWrapColumnInput = screen.getByRole('spinbutton', { name: 'Wrap Length' });
     const toolchainSelect = screen.getByRole('combobox', { name: 'Git Toolchain' });
-    expect(screen.getAllByRole('combobox')).toHaveLength(9);
+    expect(screen.getAllByRole('combobox')).toHaveLength(10);
     expect(languageSelect).toHaveValue('en');
     expect(appearanceSelect).toHaveValue('system');
     expect(automaticUpdateChecksSelect).toHaveValue('enabled');
     expect(diffLayoutSelect).toHaveValue('unified');
     expect(stageDisplaySelect).toHaveValue('show');
+    expect(changeListDisplaySelect).toHaveValue('nameAndPath');
     expect(conventionalCommitsSelect).toHaveValue('disabled');
     expect(stickyFileHeadersSelect).toHaveValue('disabled');
     expect(editorLineWrappingSelect).toHaveValue('disabled');
@@ -134,6 +143,13 @@ describe('SettingsView', () => {
     expect(within(stageDisplaySelect).getByRole('option', { name: 'Hide' })).toBeVisible();
     await user.selectOptions(stageDisplaySelect, 'hide');
     expect(onSplitStageViewChange).toHaveBeenCalledWith(false);
+    expect(
+      within(changeListDisplaySelect)
+        .getAllByRole('option')
+        .map((item) => item.textContent),
+    ).toEqual(['File Name and Path', 'Full Path', 'Tree']);
+    await user.selectOptions(changeListDisplaySelect, 'tree');
+    expect(onChangeListDisplayChange).toHaveBeenCalledWith('tree');
     await user.selectOptions(conventionalCommitsSelect, 'enabled');
     expect(onUseConventionalCommitsChange).toHaveBeenCalledWith(true);
     await user.selectOptions(stickyFileHeadersSelect, 'enabled');
