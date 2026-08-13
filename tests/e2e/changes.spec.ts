@@ -526,12 +526,21 @@ describe('Changes', () => {
     await expectInteractiveSelectedColors(
       '.diff-file-toolbar [role="tab"][aria-label="表示"][aria-selected="true"]',
     );
-    const diffFontSize = await browser.execute(() => {
-      const root = document.querySelector<HTMLElement>('.diff-surface diffs-container')?.shadowRoot;
-      const line = root?.querySelector<HTMLElement>('[data-line]');
-      return line ? getComputedStyle(line).fontSize : '';
-    });
-    expect(diffFontSize).toBe('13px');
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          const line = root?.querySelector<HTMLElement>('[data-line]');
+          return line ? getComputedStyle(line).fontSize : '';
+        })) === '13px',
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The Diff line did not render at the shared 13px font size.',
+      },
+    );
+    const diffFontSize = '13px';
     await editTab.waitForClickable({ timeout: 10_000 });
     await expect(editTab).toHaveAttribute('title', '編集');
     await expect(editTab).toHaveText('');
