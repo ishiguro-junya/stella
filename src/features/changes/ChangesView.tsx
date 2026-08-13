@@ -42,7 +42,7 @@ import {
   type PaneWidths,
 } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import {
   RowActionMenu,
@@ -1524,13 +1524,13 @@ export function ChangesView({
       {commitDialogOpen ? (
         <Dialog
           labelledBy="commit-dialog-title"
-          className="form-dialog commit-dialog"
+          dismissible={!busy}
           onDismiss={() => {
             if (!busy) setCommitDialogOpen(false);
           }}
           role="dialog"
         >
-          <h2 id="commit-dialog-title">{t('commit')}</h2>
+          <DialogHeader titleId="commit-dialog-title" title={t('commit')} />
           <CommitForm
             key={repo.path}
             draftKey={repo.path}
@@ -1551,13 +1551,15 @@ export function ChangesView({
       {pendingSelectedKey ? (
         <Dialog
           labelledBy="leave-edited-file-title"
+          role="alertdialog"
           onDismiss={() => setPendingSelectedKey(undefined)}
         >
-          <h2 id="leave-edited-file-title">
-            {t(fileEditorDirty ? 'unsavedChanges' : 'unsavedResult')}
-          </h2>
-          <p>{t('saveOrDiscardBeforeChangingFile')}</p>
-          <div className="button-row end">
+          <DialogHeader
+            titleId="leave-edited-file-title"
+            title={t(fileEditorDirty ? 'unsavedChanges' : 'unsavedResult')}
+            description={t('saveOrDiscardBeforeChangingFile')}
+          />
+          <DialogFooter>
             <button
               type="button"
               data-dialog-initial-focus
@@ -1579,7 +1581,7 @@ export function ChangesView({
             >
               {t('saveAndLeave')}
             </button>
-          </div>
+          </DialogFooter>
         </Dialog>
       ) : null}
     </div>

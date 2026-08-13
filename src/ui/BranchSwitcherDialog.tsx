@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 
 import type { BranchSummary, RepoSnapshot } from '../domain/workspace';
 import { useI18n, type I18nValue } from '../i18n/i18n';
-import { Dialog } from './Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
 import { SwitcherDialog, type SwitcherDialogItem } from './SwitcherDialog';
 
 export interface BranchSwitcherDialogProps {
@@ -16,6 +16,47 @@ export interface BranchSwitcherDialogProps {
   onDismiss: () => void;
   onCheckout: (branchName: string) => void;
   onCreate: (branchName: string, startOid: string) => void;
+}
+
+const BASE_BRANCH_NAMES = [
+  'main',
+  'master',
+  'trunk',
+  'production',
+  'prod',
+  'staging',
+  'stage',
+  'develop',
+  'development',
+  'integration',
+  'release',
+] as const;
+
+function orderBranches(
+  branches: readonly BranchSummary[],
+  currentBranchName: string | undefined,
+): BranchSummary[] {
+  const localBranches = branches.filter((branch) => !branch.remote);
+  const currentBranch = currentBranchName
+    ? (localBranches.find((branch) => branch.shortName === currentBranchName) ?? {
+        fullName: `refs/heads/${currentBranchName}`,
+        shortName: currentBranchName,
+        oid: '',
+        current: true,
+        remote: false,
+      })
+    : undefined;
+  const remaining = localBranches.filter(
+    (branch) => !currentBranchName || branch.shortName !== currentBranchName,
+  );
+  const baseBranches = BASE_BRANCH_NAMES.flatMap((name) =>
+    remaining.filter((branch) => branch.shortName === name),
+  );
+  const baseBranchNames = new Set<string>(BASE_BRANCH_NAMES);
+  const otherBranches = remaining.filter((branch) => !baseBranchNames.has(branch.shortName));
+  return currentBranch
+    ? [{ ...currentBranch, current: true }, ...baseBranches, ...otherBranches]
+    : [...baseBranches, ...otherBranches];
 }
 
 function checkoutDisabledReason(
@@ -47,21 +88,8 @@ export function BranchSwitcherDialog({
   const [creating, setCreating] = useState(false);
   const [branchName, setBranchName] = useState('');
   const disabledReason = checkoutDisabledReason(repo, busy, t, message);
-  const localBranches = branches.filter((branch) => !branch.remote);
-  const currentBranchName = repo.branch.detached ? undefined : repo.branch.name;
-  const selectableBranches =
-    currentBranchName && !localBranches.some((branch) => branch.shortName === currentBranchName)
-      ? [
-          {
-            fullName: `refs/heads/${currentBranchName}`,
-            shortName: currentBranchName,
-            oid: '',
-            current: true,
-            remote: false,
-          },
-          ...localBranches,
-        ]
-      : localBranches;
+  const currentBranchName = repo.branch.detached ? undefined : (repo.branch.name ?? undefined);
+  const selectableBranches = orderBranches(branches, currentBranchName);
   const startOid = repo.branch.oid ?? selectableBranches.find((branch) => branch.current)?.oid;
   const createDisabledReason = startOid ? disabledReason : t('createBranchRequiresCommit');
   const hint =
@@ -74,6 +102,14 @@ export function BranchSwitcherDialog({
     icon: <GitBranch />,
     current: branch.current,
     disabled: !branch.current && Boolean(disabledReason),
+    actions: [
+      {
+        action: 'select',
+        label: t('switchBranch'),
+        icon: <GitBranch aria-hidden="true" focusable="false" />,
+        disabled: branch.current || Boolean(disabledReason),
+      },
+    ],
   }));
 
   if (creating) {
@@ -88,23 +124,30 @@ export function BranchSwitcherDialog({
       <Dialog
         labelledBy="create-branch-title"
         describedBy="create-branch-description"
+        dismissible={!busy}
         onDismiss={() => setCreating(false)}
         onSubmit={submit}
         role="dialog"
       >
-        <h2 id="create-branch-title">{t('createBranch')}</h2>
-        <p id="create-branch-description">{t('createAndCheckoutBranchDescription')}</p>
-        <label>
-          <span>{t('branchName')}</span>
-          <input
-            data-dialog-initial-focus
-            value={branchName}
-            aria-label={t('branchName')}
-            disabled={Boolean(disabledReason)}
-            onChange={(event) => setBranchName(event.currentTarget.value)}
-          />
-        </label>
-        <div className="button-row end">
+        <DialogHeader
+          titleId="create-branch-title"
+          title={t('createBranch')}
+          descriptionId="create-branch-description"
+          description={t('createAndCheckoutBranchDescription')}
+        />
+        <DialogBody>
+          <label>
+            <span>{t('branchName')}</span>
+            <input
+              data-dialog-initial-focus
+              value={branchName}
+              aria-label={t('branchName')}
+              disabled={Boolean(disabledReason)}
+              onChange={(event) => setBranchName(event.currentTarget.value)}
+            />
+          </label>
+        </DialogBody>
+        <DialogFooter>
           <button type="button" onClick={() => setCreating(false)}>
             {t('cancel')}
           </button>
@@ -115,7 +158,7 @@ export function BranchSwitcherDialog({
           >
             {t('reviewImpact')}
           </button>
-        </div>
+        </DialogFooter>
       </Dialog>
     );
   }
@@ -142,12 +185,12 @@ export function BranchSwitcherDialog({
       onDismiss={onDismiss}
       onSelect={(item) => {
         const branch = selectableBranches.find((candidate) => candidate.fullName === item.id);
-        if (!branch) return;
-        if (branch.current) {
-          onDismiss();
-          return;
-        }
-        onCheckout(branch.shortName);
+        if (branch && !branch.current) onCheckout(branch.shortName);
+      }}
+      onAction={(item, action) => {
+        if (action !== 'select') return;
+        const branch = selectableBranches.find((candidate) => candidate.fullName === item.id);
+        if (branch && !branch.current) onCheckout(branch.shortName);
       }}
     />
   );

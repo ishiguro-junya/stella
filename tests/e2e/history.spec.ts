@@ -460,7 +460,8 @@ describe('History', () => {
 
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
-    await switcher.$('[role="option"]*=main').click();
+    await expect(switcher.$('[data-switcher-item-label="main"]')).toBeDisplayed();
+    await dispatchDoubleClick('[data-switcher-item-label="main"]');
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
     await expect($('.history-commit-item.is-current .history-action-trigger')).toBeEnabled();
 

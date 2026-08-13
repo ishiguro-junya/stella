@@ -1,4 +1,4 @@
-import { FolderPlus, Link2 } from 'lucide-react';
+import { FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
 
 import type { RepoSnapshot } from '../domain/workspace';
 import { RepositoryLogo, type RepositoryListItem } from '../features/repositories/RepositoryLogo';
@@ -14,6 +14,7 @@ export interface RepositorySwitcherDialogProps {
   onSelectOpen: (repoId: string) => void;
   onSelectRegistered: (path: string) => void;
   onManageRemotes: (path: string) => void;
+  onForget: (path: string) => void;
   onAdd: () => void;
 }
 
@@ -57,12 +58,17 @@ export function RepositorySwitcherDialog({
   onSelectOpen,
   onSelectRegistered,
   onManageRemotes,
+  onForget,
   onAdd,
 }: RepositorySwitcherDialogProps) {
   const { t, message } = useI18n();
   const openPaths = new Set(repos.map((repo) => repo.path));
+  const currentRepo = repos.find((repo) => repo.repoId === selectedRepoId);
+  const orderedRepos = currentRepo
+    ? [currentRepo, ...repos.filter((repo) => repo.repoId !== selectedRepoId)]
+    : repos;
   const items: SwitcherDialogItem[] = [
-    ...repos.map((repo) => {
+    ...orderedRepos.map((repo) => {
       const registration = registeredRepositories.find((candidate) => candidate.path === repo.path);
       const displayName = registration?.name ?? repo.name;
       const branch = repo.branch.detached ? t('detachedHead') : repo.branch.name;
@@ -80,6 +86,28 @@ export function RepositorySwitcherDialog({
         searchText: `${displayName}\n${repo.path}\n${branch ?? ''}`,
         icon: <RepositoryLogo logoUrl={registration?.logoUrl} />,
         current: repo.repoId === selectedRepoId,
+        actions: [
+          {
+            action: 'select',
+            label: t('switchRepository'),
+            icon: <FolderGit2 aria-hidden="true" focusable="false" />,
+            disabled: repo.repoId === selectedRepoId,
+          },
+          {
+            action: 'remotes',
+            label: t('manageRemotes'),
+            icon: <Link2 aria-hidden="true" focusable="false" />,
+            disabled: busy,
+          },
+          {
+            action: 'forget',
+            label: t('deleteRepository'),
+            icon: <Trash2 aria-hidden="true" focusable="false" />,
+            disabled: busy || repo.operation.kind !== 'none',
+            danger: true,
+            separatorBefore: true,
+          },
+        ],
       };
       if (finalStatus) item.status = finalStatus;
       return item;
@@ -95,6 +123,28 @@ export function RepositorySwitcherDialog({
           searchText: `${repository.name}\n${repository.path}`,
           icon: <RepositoryLogo logoUrl={repository.logoUrl} />,
           disabled: busy,
+          actions: [
+            {
+              action: 'select',
+              label: t('switchRepository'),
+              icon: <FolderGit2 aria-hidden="true" focusable="false" />,
+              disabled: busy,
+            },
+            {
+              action: 'remotes',
+              label: t('manageRemotes'),
+              icon: <Link2 aria-hidden="true" focusable="false" />,
+              disabled: busy,
+            },
+            {
+              action: 'forget',
+              label: t('deleteRepository'),
+              icon: <Trash2 aria-hidden="true" focusable="false" />,
+              disabled: busy,
+              danger: true,
+              separatorBefore: true,
+            },
+          ],
         };
         if (status) item.status = status;
         return item;
@@ -119,26 +169,26 @@ export function RepositorySwitcherDialog({
         );
         if (registered) onSelectRegistered(registered.path);
       }}
+      onAction={(item, action) => {
+        const open = repos.find((repo) => item.id === `open:${repo.repoId}`);
+        const registered = registeredRepositories.find(
+          (repository) => item.id === `registered:${repository.path}`,
+        );
+        if (action === 'select') {
+          if (open) onSelectOpen(open.repoId);
+          else if (registered) onSelectRegistered(registered.path);
+          return;
+        }
+        const path = open?.path ?? registered?.path;
+        if (!path) return;
+        if (action === 'remotes') onManageRemotes(path);
+        else if (action === 'forget') onForget(path);
+      }}
       footer={
-        <>
-          {selectedRepoId ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                const selected = repos.find((repo) => repo.repoId === selectedRepoId);
-                if (selected) onManageRemotes(selected.path);
-              }}
-            >
-              <Link2 aria-hidden="true" focusable="false" />
-              <span>{t('manageRemotes')}</span>
-            </button>
-          ) : null}
-          <button type="button" disabled={busy} onClick={onAdd}>
-            <FolderPlus aria-hidden="true" focusable="false" />
-            <span>{t('addRepositoryEllipsis')}</span>
-          </button>
-        </>
+        <button type="button" disabled={busy} onClick={onAdd}>
+          <FolderPlus aria-hidden="true" focusable="false" />
+          <span>{t('addRepositoryEllipsis')}</span>
+        </button>
       }
     />
   );

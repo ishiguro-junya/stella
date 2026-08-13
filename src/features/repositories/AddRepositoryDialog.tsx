@@ -1,7 +1,8 @@
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogがformへmodal roleを渡してfocusを管理する。 */
 import { FolderOpen } from 'lucide-react';
 
 import { useI18n } from '../../i18n/i18n';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
 
 export type RepositorySource = 'url' | 'path';
 
@@ -41,15 +42,16 @@ export function AddRepositoryDialog({
   return (
     <Dialog
       labelledBy="add-repository-title"
-      className="form-dialog add-repository-dialog"
+      role="dialog"
+      dismissible={!busy}
       onDismiss={onDismiss}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
       }}
     >
-      <h2 id="add-repository-title">{t('addRepository')}</h2>
-      <div className="dialog-form add-repository-form">
+      <DialogHeader titleId="add-repository-title" title={t('addRepository')} />
+      <DialogBody className="dialog-form add-repository-form">
         <div
           className="segmented add-repository-source"
           role="tablist"
@@ -119,20 +121,19 @@ export function AddRepositoryDialog({
             onChange={(event) => onNameChange(event.target.value)}
           />
         </label>
-
-        <div className="dialog-form-actions button-row end">
-          <button type="button" onClick={onDismiss}>
-            {t('cancel')}
-          </button>
-          <button
-            type="submit"
-            className="primary"
-            disabled={busy || !(source === 'url' ? url : path).trim()}
-          >
-            {t('add')}
-          </button>
-        </div>
-      </div>
+      </DialogBody>
+      <DialogFooter>
+        <button type="button" onClick={onDismiss}>
+          {t('cancel')}
+        </button>
+        <button
+          type="submit"
+          className="primary"
+          disabled={busy || !(source === 'url' ? url : path).trim()}
+        >
+          {t('add')}
+        </button>
+      </DialogFooter>
     </Dialog>
   );
 }

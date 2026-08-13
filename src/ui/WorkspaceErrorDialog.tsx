@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n/i18n';
-import { Dialog } from './Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
 import type { WorkspaceErrorContent } from './WorkspaceErrorDetails';
 import { WorkspaceErrorDetails } from './WorkspaceErrorDetails';
 
@@ -29,17 +29,18 @@ export function WorkspaceErrorDialog({ title, error, onDismiss }: WorkspaceError
     <Dialog
       labelledBy="runtime-error-title"
       describedBy="runtime-error-description"
+      role="alertdialog"
       onDismiss={onDismiss}
     >
-      <h2 id="runtime-error-title">{title}</h2>
-      <div id="runtime-error-description">
+      <DialogHeader titleId="runtime-error-title" title={title} />
+      <DialogBody id="runtime-error-description">
         <WorkspaceErrorDetails error={error} />
-      </div>
-      <div className="button-row end">
+      </DialogBody>
+      <DialogFooter>
         <button type="button" className="primary" data-dialog-initial-focus onClick={onDismiss}>
           {t('close')}
         </button>
-      </div>
+      </DialogFooter>
     </Dialog>
   );
 }

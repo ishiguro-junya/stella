@@ -42,6 +42,9 @@ export interface RowActionMenuProps<Action extends string> {
   getActionFocusTarget?:
     | ((trigger: HTMLButtonElement) => HTMLElement | null | undefined)
     | undefined;
+  getCloseFocusTarget?:
+    | ((trigger: HTMLButtonElement) => HTMLElement | null | undefined)
+    | undefined;
 }
 
 type InitialFocus = 'first' | 'last';
@@ -81,6 +84,7 @@ export function RowActionMenu<Action extends string>({
   onTriggerOpen,
   onAction,
   getActionFocusTarget,
+  getCloseFocusTarget,
 }: RowActionMenuProps<Action>) {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -122,9 +126,10 @@ export function RowActionMenu<Action extends string>({
     (restoreFocus: boolean): void => {
       onOpenChange(false);
       setPosition(undefined);
-      if (restoreFocus) triggerRef.current?.focus();
+      const trigger = triggerRef.current;
+      if (restoreFocus && trigger) (getCloseFocusTarget?.(trigger) ?? trigger).focus();
     },
-    [onOpenChange],
+    [getCloseFocusTarget, onOpenChange],
   );
 
   const openMenu = (initialFocus: InitialFocus): void => {

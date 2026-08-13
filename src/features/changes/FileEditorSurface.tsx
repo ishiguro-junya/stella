@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import type { ChangeEntry, FileDocument } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { TextEditor } from '../../ui/TextEditor';
 import { describeWorkspaceError, WorkspaceErrorDetails } from '../../ui/WorkspaceErrorDetails';
@@ -266,11 +266,16 @@ export function FileEditorSurface({
         <Dialog
           labelledBy="file-editor-display-title"
           describedBy="file-editor-display-description"
+          role="alertdialog"
           onDismiss={() => setConfirmDisplay(false)}
         >
-          <h2 id="file-editor-display-title">{t('unsavedChanges')}</h2>
-          <p id="file-editor-display-description">{t('saveOrDiscardBeforeDisplay')}</p>
-          <div className="button-row end">
+          <DialogHeader
+            titleId="file-editor-display-title"
+            title={t('unsavedChanges')}
+            descriptionId="file-editor-display-description"
+            description={t('saveOrDiscardBeforeDisplay')}
+          />
+          <DialogFooter>
             <button
               type="button"
               data-dialog-initial-focus
@@ -296,21 +301,28 @@ export function FileEditorSurface({
             >
               {t('saveAndDisplay')}
             </button>
-          </div>
+          </DialogFooter>
         </Dialog>
       ) : null}
       {confirmReload ? (
-        <Dialog labelledBy="file-editor-reload-title" onDismiss={() => setConfirmReload(false)}>
-          <h2 id="file-editor-reload-title">{t('fileEditDiscardTitle')}</h2>
-          <p>{t('fileEditDiscardDescription')}</p>
-          <div className="button-row end">
+        <Dialog
+          labelledBy="file-editor-reload-title"
+          role="alertdialog"
+          onDismiss={() => setConfirmReload(false)}
+        >
+          <DialogHeader
+            titleId="file-editor-reload-title"
+            title={t('fileEditDiscardTitle')}
+            description={t('fileEditDiscardDescription')}
+          />
+          <DialogFooter>
             <button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
               {t('cancel')}
             </button>
             <button type="button" className="danger" onClick={() => void reload()}>
               {t('discardAndReload')}
             </button>
-          </div>
+          </DialogFooter>
         </Dialog>
       ) : null}
     </main>

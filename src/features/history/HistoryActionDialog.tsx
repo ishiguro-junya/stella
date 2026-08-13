@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import type { WorkspaceAction } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { SelectControl } from '../../ui/SelectControl';
 import type { HistoryActionKind, HistoryActionTarget } from './HistoryActionMenu';
 
@@ -108,101 +108,104 @@ export function HistoryActionDialog({
   return (
     <Dialog
       labelledBy={titleId}
+      dismissible={!submitting}
       onDismiss={onDismiss}
       onSubmit={(event) => void submit(event)}
       role="dialog"
     >
-      <h2 id={titleId}>{dialogTitle}</h2>
-      <div className="history-action-target" aria-label={t('targetCommit')}>
-        <span>{t('targetCommit')}</span>
-        <strong>{request.target.subject}</strong>
-        <code>{request.target.shortOid}</code>
-      </div>
-      {disabledReason ? (
-        <p id="history-action-disabled-reason" className="remote-action-hint">
-          {disabledReason}
-        </p>
-      ) : null}
+      <DialogHeader titleId={titleId} title={dialogTitle} />
+      <DialogBody>
+        <div className="history-action-target" aria-label={t('targetCommit')}>
+          <span>{t('targetCommit')}</span>
+          <strong>{request.target.subject}</strong>
+          <code>{request.target.shortOid}</code>
+        </div>
+        {disabledReason ? (
+          <p id="history-action-disabled-reason" className="remote-action-hint">
+            {disabledReason}
+          </p>
+        ) : null}
 
-      {request.kind === 'createBranch' ? (
-        <label>
-          <span>{t('branchName')}</span>
-          <input
-            data-dialog-initial-focus
-            value={name}
-            aria-label={t('branchName')}
-            disabled={fieldDisabled}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-        </label>
-      ) : null}
-      {request.kind === 'createTag' ? (
-        <label>
-          <span>{t('tagName')}</span>
-          <input
-            data-dialog-initial-focus
-            value={name}
-            aria-label={t('tagName')}
-            aria-describedby="create-tag-help"
-            disabled={fieldDisabled}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-          <small id="create-tag-help">{t('localTagHelp')}</small>
-        </label>
-      ) : null}
-      {request.kind === 'merge' || request.kind === 'rebase' ? (
-        <label>
-          <span>{t('sourceRef')}</span>
-          <input
-            data-dialog-initial-focus
-            value={sourceRef}
-            aria-label={t('sourceRef')}
-            disabled={fieldDisabled}
-            onChange={(event) => setSourceRef(event.currentTarget.value)}
-          />
-        </label>
-      ) : null}
-      {(request.kind === 'cherryPick' || request.kind === 'revert') && needsMainline ? (
-        <label>
-          <span>{t('mainlineParent')}</span>
-          <SelectControl
-            data-dialog-initial-focus
-            aria-label={t('mainlineParent')}
-            aria-describedby="merge-mainline-help"
-            value={mainline}
-            disabled={fieldDisabled}
-            onChange={(event) => setMainline(Number(event.currentTarget.value))}
-          >
-            {request.target.parents.map((parent, index) => (
-              <option key={parent} value={index + 1}>
-                {t('parentNumber', { number: index + 1 })} · {parent.slice(0, 7)}
-              </option>
-            ))}
-          </SelectControl>
-          <small id="merge-mainline-help">{t('mainlineHelp')}</small>
-        </label>
-      ) : null}
-      {request.kind === 'reset' ? (
-        <label>
-          <span>{t('resetMode')}</span>
-          <SelectControl
-            data-dialog-initial-focus
-            aria-label={t('resetMode')}
-            value={resetMode}
-            disabled={fieldDisabled}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              if (value === 'soft' || value === 'mixed' || value === 'hard') setResetMode(value);
-            }}
-          >
-            <option value="soft">{t('soft')}</option>
-            <option value="mixed">{t('mixed')}</option>
-            <option value="hard">{t('hard')}</option>
-          </SelectControl>
-        </label>
-      ) : null}
+        {request.kind === 'createBranch' ? (
+          <label>
+            <span>{t('branchName')}</span>
+            <input
+              data-dialog-initial-focus
+              value={name}
+              aria-label={t('branchName')}
+              disabled={fieldDisabled}
+              onChange={(event) => setName(event.currentTarget.value)}
+            />
+          </label>
+        ) : null}
+        {request.kind === 'createTag' ? (
+          <label>
+            <span>{t('tagName')}</span>
+            <input
+              data-dialog-initial-focus
+              value={name}
+              aria-label={t('tagName')}
+              aria-describedby="create-tag-help"
+              disabled={fieldDisabled}
+              onChange={(event) => setName(event.currentTarget.value)}
+            />
+            <small id="create-tag-help">{t('localTagHelp')}</small>
+          </label>
+        ) : null}
+        {request.kind === 'merge' || request.kind === 'rebase' ? (
+          <label>
+            <span>{t('sourceRef')}</span>
+            <input
+              data-dialog-initial-focus
+              value={sourceRef}
+              aria-label={t('sourceRef')}
+              disabled={fieldDisabled}
+              onChange={(event) => setSourceRef(event.currentTarget.value)}
+            />
+          </label>
+        ) : null}
+        {(request.kind === 'cherryPick' || request.kind === 'revert') && needsMainline ? (
+          <label>
+            <span>{t('mainlineParent')}</span>
+            <SelectControl
+              data-dialog-initial-focus
+              aria-label={t('mainlineParent')}
+              aria-describedby="merge-mainline-help"
+              value={mainline}
+              disabled={fieldDisabled}
+              onChange={(event) => setMainline(Number(event.currentTarget.value))}
+            >
+              {request.target.parents.map((parent, index) => (
+                <option key={parent} value={index + 1}>
+                  {t('parentNumber', { number: index + 1 })} · {parent.slice(0, 7)}
+                </option>
+              ))}
+            </SelectControl>
+            <small id="merge-mainline-help">{t('mainlineHelp')}</small>
+          </label>
+        ) : null}
+        {request.kind === 'reset' ? (
+          <label>
+            <span>{t('resetMode')}</span>
+            <SelectControl
+              data-dialog-initial-focus
+              aria-label={t('resetMode')}
+              value={resetMode}
+              disabled={fieldDisabled}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (value === 'soft' || value === 'mixed' || value === 'hard') setResetMode(value);
+              }}
+            >
+              <option value="soft">{t('soft')}</option>
+              <option value="mixed">{t('mixed')}</option>
+              <option value="hard">{t('hard')}</option>
+            </SelectControl>
+          </label>
+        ) : null}
+      </DialogBody>
 
-      <div className="button-row end">
+      <DialogFooter>
         <button type="button" disabled={submitting} onClick={onDismiss}>
           {t('cancel')}
         </button>
@@ -217,7 +220,7 @@ export function HistoryActionDialog({
         >
           {t('reviewImpact')}
         </button>
-      </div>
+      </DialogFooter>
     </Dialog>
   );
 }

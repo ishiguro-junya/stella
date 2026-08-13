@@ -3,6 +3,7 @@ import '@wdio/tauri-service';
 import { rename } from 'node:fs/promises';
 
 import {
+  dispatchDoubleClick,
   expectInteractiveSelectedColors,
   openRepository,
   resetApp,
@@ -72,15 +73,44 @@ describe('Repository and Branch navigation', () => {
     let switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
     await expect(switcher.$('[role="option"][aria-current="true"]')).toBeDisplayed();
-    await expectInteractiveSelectedColors(
-      '[role="dialog"] .switcher-option[aria-selected="true"]',
-      {
-        foreground: ['.switcher-check', '.switcher-option-icon'],
-        mutedForeground: ['.switcher-option-copy small'],
-      },
-    );
+    await expect(switcher.$('input[placeholder="リポジトリ名で検索"]')).toBeDisplayed();
+    expect(
+      await browser.execute(() => {
+        const list = document.querySelector<HTMLElement>('.switcher-list')!;
+        const option = document.querySelector<HTMLElement>('[role="option"][aria-current="true"]')!;
+        const row = option.closest<HTMLElement>('.switcher-option-row')!;
+        return {
+          active: document.activeElement === option,
+          listPadding: getComputedStyle(list).padding,
+          optionBackground: getComputedStyle(option).backgroundColor,
+          optionOutline: getComputedStyle(option).outlineStyle,
+          rowRadius: getComputedStyle(row).borderRadius,
+          rowFocus: getComputedStyle(row).boxShadow !== 'none',
+        };
+      }),
+    ).toEqual({
+      active: true,
+      listPadding: '0px',
+      optionBackground: 'rgba(0, 0, 0, 0)',
+      optionOutline: 'none',
+      rowRadius: '0px',
+      rowFocus: true,
+    });
+    await expect(
+      switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger'),
+    ).toBeDisplayed();
+    await expectInteractiveSelectedColors('[role="dialog"] .switcher-option-row.is-selected', {
+      foreground: ['.switcher-check', '.switcher-option-icon'],
+      mutedForeground: ['.switcher-option-copy small'],
+    });
     expect(await switcher.getText()).not.toMatch(/Open repositories|Recent|[⌘⇧]/u);
-    await browser.keys(['Escape']);
+    await expect(switcher.$('button=リポジトリを追加')).toBeDisplayed();
+    await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
+    await $('button=リポジトリを削除').click();
+    const deleteConfirmation = $('[role="alertdialog"][aria-labelledby="forget-repository-title"]');
+    await expect(deleteConfirmation.$('button=登録だけ解除')).toBeDisplayed();
+    await expect(deleteConfirmation.$('button=リポジトリを削除')).toBeDisplayed();
+    await deleteConfirmation.$('button=キャンセル').click();
 
     const branchToggle = $('.branch-toggle');
     await branchToggle.click();
@@ -89,6 +119,12 @@ describe('Repository and Branch navigation', () => {
     await expect(switcher.$('[role="option"][aria-current="true"]')).toHaveText(
       expect.stringContaining('main'),
     );
+    await expect(switcher.$('input[placeholder="ブランチ名で検索"]')).toBeDisplayed();
+    expect(
+      await browser.execute(
+        () => document.activeElement?.matches('[role="option"][aria-current="true"]') ?? false,
+      ),
+    ).toBe(true);
     await expect(switcher.$('button=ブランチを作成')).toBeDisplayed();
     await expect(switcher.$('button=ブランチを作成')).toBeDisabled();
     await expect(switcher.$('button=Git Flow')).not.toExist();
@@ -131,9 +167,13 @@ describe('Repository and Branch navigation', () => {
     await openRepository(repositoryPath, { language: 'ja' });
     await $('.branch-toggle').click();
     let switcher = $('[role="dialog"][aria-labelledby]');
-    await expect(switcher.$('[role="option"]*=target')).toBeEnabled();
+    const targetOption = switcher.$('[data-switcher-item-label="target"]');
+    await expect(targetOption).toBeEnabled();
     await expect(switcher.$('button=ブランチを作成')).toBeEnabled();
-    await switcher.$('[role="option"]*=target').click();
+    await targetOption.click();
+    await expect(switcher).toBeDisplayed();
+    await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
+    await dispatchDoubleClick('[data-switcher-item-label="target"]');
     await switcher.waitForDisplayed({ reverse: true });
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('target'));
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
@@ -219,18 +259,15 @@ describe('Repository and Branch navigation', () => {
     await $('.repository-toggle').click();
     const switcher = $('[role="dialog"]');
     await expect(switcher).toHaveText(expect.stringContaining('リモートを確認'));
-    await switcher.$('button=リモートURL').click();
+    await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
+    await $('button=リモートURLを変更').click();
     const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
-    await expect(manager).toHaveText(expect.stringContaining(missingRemote));
-    const firstUrlRow = manager.$$('.remote-url-row')[0];
-    if (!firstUrlRow) throw new Error('The remote URL row was not displayed.');
-    await firstUrlRow.$('button=変更').click();
-    await firstUrlRow.$('input').setValue(remotePath);
-    await manager.$('button=変更内容を確認').click();
-
-    const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
-    await expect(confirmation).toBeDisplayed();
-    await confirmation.$('button=URLを変更').click();
+    const firstUrlInput = manager.$$('input')[0];
+    if (!firstUrlInput) throw new Error('The remote URL input was not displayed.');
+    await expect(firstUrlInput).toHaveValue(missingRemote);
+    await firstUrlInput.setValue(remotePath);
+    await manager.$('button=保存').click();
+    await expect($('[role="alertdialog"][aria-labelledby="action-preview-title"]')).not.toExist();
     await browser.waitUntil(
       async () =>
         (await runGit(repositoryPath, ['remote', 'get-url', 'origin'])).trim() === remotePath,
@@ -239,6 +276,6 @@ describe('Repository and Branch navigation', () => {
         timeoutMsg: 'The updated remote URL was not retained.',
       },
     );
-    await expect(manager).not.toHaveText(expect.stringContaining('リモートを確認'));
+    await expect(manager).not.toExist();
   });
 });

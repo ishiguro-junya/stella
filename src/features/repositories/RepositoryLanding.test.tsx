@@ -46,7 +46,9 @@ describe('RepositoryLanding', () => {
     );
 
     const list = screen.getByRole('list', { name: 'Repositories' });
-    const rows = within(list).getAllByRole('button', { name: /Most Recent|Older/u });
+    const rows = within(list)
+      .getAllByRole('button')
+      .filter((button) => button.classList.contains('registered-repository-row'));
     expect(rows[0]).toHaveTextContent('Most Recent');
     expect(rows[0]).toHaveTextContent('/Users/stella/most-recent');
     expect(rows[0]?.querySelector('img')).toHaveAttribute('src', 'asset://recent/logo.svg');
@@ -85,7 +87,7 @@ describe('RepositoryLanding', () => {
     expect(screen.getByText('Check location')).toBeVisible();
     expect(screen.getByText('Check authentication')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Choose Location' }));
-    await user.click(screen.getByRole('button', { name: 'Remote URLs' }));
+    await user.click(screen.getByRole('button', { name: 'Change Remote URLs' }));
     expect(onRepair).toHaveBeenCalledWith('/missing');
     expect(onManageRemotes).toHaveBeenCalledWith('/remote');
   });

@@ -625,14 +625,14 @@ export const MESSAGES = {
     ja: (args) => `${text(args, 'subject')} ${text(args, 'oid')}の操作`,
   },
   switchRepository: { en: 'Switch Repository', ja: 'リポジトリを切り替える' },
-  searchRepositories: { en: 'Search repositories', ja: 'リポジトリを検索' },
+  searchRepositories: { en: 'Search by repository name', ja: 'リポジトリ名で検索' },
   noRepositorySearchResults: {
     en: 'No repositories match your search.',
     ja: '検索に一致するリポジトリはありません。',
   },
-  addRepositoryEllipsis: { en: 'Add Repository…', ja: 'リポジトリを追加…' },
+  addRepositoryEllipsis: { en: 'Add Repository', ja: 'リポジトリを追加' },
   switchBranch: { en: 'Switch Branch', ja: 'ブランチを切り替える' },
-  searchBranches: { en: 'Search branches', ja: 'ブランチを検索' },
+  searchBranches: { en: 'Search by branch name', ja: 'ブランチ名で検索' },
   noBranchSearchResults: {
     en: 'No local branches match your search.',
     ja: '検索に一致するローカルブランチはありません。',
@@ -1135,17 +1135,18 @@ export const MESSAGES = {
   },
   openRegisteredRepository: { en: 'Open Registered Repository', ja: '登録済みの方を開く' },
   forgetOldRepository: { en: 'Remove Previous Registration', ja: '以前の登録を解除' },
-  forgetRepository: { en: 'Remove', ja: '登録を解除' },
+  deleteRepository: { en: 'Delete Repository', ja: 'リポジトリを削除' },
+  forgetRepository: { en: 'Remove Registration Only', ja: '登録だけ解除' },
   forgetNamedRepository: {
-    en: () => 'Remove repository from the list',
-    ja: () => 'リポジトリの登録を解除',
+    en: (args) => `Delete repository ${text(args, 'repository')}`,
+    ja: (args) => `${text(args, 'repository')}を削除`,
   },
-  forgetRepositoryTitle: { en: 'Remove Repository', ja: 'リポジトリの登録を解除' },
+  forgetRepositoryTitle: { en: 'Delete Repository', ja: 'リポジトリを削除' },
   forgetRepositoryDescription: {
     en: (args) =>
-      `Remove ${text(args, 'repository')} from the list? Local files will not be deleted.`,
+      `Choose whether to remove ${text(args, 'repository')} only from the list or move its local files to Trash.`,
     ja: (args) =>
-      `${text(args, 'repository')}を一覧から解除しますか。ローカルファイルは削除しません。`,
+      `リポジトリ「${text(args, 'repository')}」の登録だけ解除するか、ローカルファイルをゴミ箱へ移動するか選択してください。`,
   },
   unsavedChangesWillBeDiscarded: {
     en: 'Unsaved editing will be discarded.',
@@ -1163,14 +1164,21 @@ export const MESSAGES = {
     en: 'The repository registration was not changed.',
     ja: 'リポジトリの登録は変更されていません。',
   },
-  manageRemotes: { en: 'Remote URLs', ja: 'リモートURL' },
+  deleteRepositoryFailedTitle: {
+    en: 'Could not delete repository',
+    ja: 'リポジトリを削除できませんでした',
+  },
+  deleteRepositoryFailed: {
+    en: 'The repository was not moved to Trash, and its registration was not changed.',
+    ja: 'リポジトリはゴミ箱へ移動されず、登録も変更されていません。',
+  },
+  manageRemotes: { en: 'Change Remote URLs', ja: 'リモートURLを変更' },
   manageRemotesDescription: {
     en: 'Review existing fetch and push URLs. Adding, removing, and renaming remotes are not supported.',
     ja: '既存のフェッチURLとプッシュURLを確認・変更できます。リモートの追加・削除・名称変更はできません。',
   },
   fetchUrls: { en: 'Fetch URLs', ja: 'フェッチURL' },
   pushUrls: { en: 'Push URLs', ja: 'プッシュURL' },
-  fetchRemote: { en: 'Fetch', ja: 'フェッチ' },
   noRemotes: { en: 'No remotes are configured.', ja: 'リモートが設定されていません。' },
   loadRemotesFailed: {
     en: 'Could not load remote URLs.',
@@ -1519,6 +1527,7 @@ export const MESSAGES = {
     ja: '整形された差分を読み込めなかったため、プレーンテキストで表示します。',
   },
   close: { en: 'Close', ja: '閉じる' },
+  closeDialog: { en: 'Close dialog', ja: 'ダイアログを閉じる' },
   exitCode: {
     en: (args) => `Exit code: ${text(args, 'code')}`,
     ja: (args) => `終了コード: ${text(args, 'code')}`,

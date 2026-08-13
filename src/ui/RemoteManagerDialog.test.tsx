@@ -16,13 +16,11 @@ function JapaneseRemoteManagerHost() {
       {open ? (
         <RemoteManagerDialog
           remotes={[]}
-          healthIssues={[]}
           loading={false}
           busy={false}
           onDismiss={() => setOpen(false)}
           onReload={() => undefined}
-          onFetch={() => undefined}
-          onChangeUrl={() => undefined}
+          onSave={() => undefined}
         />
       ) : null}
     </I18nProvider>
@@ -30,10 +28,9 @@ function JapaneseRemoteManagerHost() {
 }
 
 describe('RemoteManagerDialog', () => {
-  it('shows every fetch and push URL and submits an explicit URL replacement', async () => {
+  it('shows every URL as an input and saves all changed URLs together', async () => {
     const user = userEvent.setup();
-    const onChangeUrl = vi.fn<RemoteManagerDialogProps['onChangeUrl']>();
-    const onFetch = vi.fn<RemoteManagerDialogProps['onFetch']>();
+    const onSave = vi.fn<RemoteManagerDialogProps['onSave']>();
     render(
       <RemoteManagerDialog
         remotes={[
@@ -43,38 +40,47 @@ describe('RemoteManagerDialog', () => {
             pushUrls: ['ssh://example.test/repo.git'],
           },
         ]}
-        healthIssues={[{ kind: 'remote', remote: 'origin', reason: 'network' }]}
         loading={false}
         busy={false}
         onDismiss={() => undefined}
         onReload={() => undefined}
-        onFetch={onFetch}
-        onChangeUrl={onChangeUrl}
+        onSave={onSave}
       />,
     );
 
-    const dialog = screen.getByRole('dialog', { name: 'Remote URLs' });
-    expect(dialog).toHaveTextContent('https://example.test/repo.git');
-    expect(dialog).toHaveTextContent('https://mirror.test/repo.git');
-    expect(dialog).toHaveTextContent('ssh://example.test/repo.git');
-    expect(dialog).toHaveTextContent('Check connection');
-
-    await user.click(within(dialog).getByRole('button', { name: 'Fetch' }));
-    expect(onFetch).toHaveBeenCalledWith('origin');
-    await user.click(
-      within(dialog).getAllByRole('button', { name: 'Change a URL for origin' })[0]!,
-    );
-    const input = within(dialog).getByRole('textbox', { name: 'New remote URL' });
-    expect(input).toHaveFocus();
-    await user.clear(input);
-    await user.type(input, 'https://example.test/new.git');
-    await user.click(within(dialog).getByRole('button', { name: 'Review Change' }));
-    expect(onChangeUrl).toHaveBeenCalledWith({
-      remote: 'origin',
-      urlKind: 'fetch',
-      expectedUrl: 'https://example.test/repo.git',
-      newUrl: 'https://example.test/new.git',
-    });
+    const dialog = screen.getByRole('dialog', { name: 'Change Remote URLs' });
+    expect(dialog).not.toHaveTextContent('origin');
+    expect(within(dialog).queryByRole('button', { name: 'Fetch' })).not.toBeInTheDocument();
+    const inputs = within(dialog).getAllByRole('textbox');
+    expect(inputs).toHaveLength(3);
+    expect(inputs[0]).toHaveFocus();
+    expect(inputs.map((input) => input.getAttribute('value'))).toEqual([
+      'https://example.test/repo.git',
+      'https://mirror.test/repo.git',
+      'ssh://example.test/repo.git',
+    ]);
+    const save = within(dialog).getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    await user.clear(inputs[0]!);
+    expect(save).toBeDisabled();
+    await user.type(inputs[0]!, 'https://example.test/new.git');
+    await user.clear(inputs[2]!);
+    await user.type(inputs[2]!, 'ssh://example.test/new.git');
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith([
+      {
+        remote: 'origin',
+        urlKind: 'fetch',
+        expectedUrl: 'https://example.test/repo.git',
+        newUrl: 'https://example.test/new.git',
+      },
+      {
+        remote: 'origin',
+        urlKind: 'push',
+        expectedUrl: 'ssh://example.test/repo.git',
+        newUrl: 'ssh://example.test/new.git',
+      },
+    ]);
   });
 
   it('renders Japanese recovery copy and restores focus after Escape', async () => {
@@ -82,7 +88,7 @@ describe('RemoteManagerDialog', () => {
     render(<JapaneseRemoteManagerHost />);
     const opener = screen.getByRole('button', { name: '元の操作' });
     await user.click(opener);
-    expect(screen.getByRole('dialog', { name: 'リモートURL' })).toHaveTextContent(
+    expect(screen.getByRole('dialog', { name: 'リモートURLを変更' })).toHaveTextContent(
       'リモートが設定されていません。',
     );
     await user.keyboard('{Escape}');

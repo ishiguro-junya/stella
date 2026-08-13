@@ -7,7 +7,7 @@ import type {
   GitFlowStrategy,
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { SelectControl } from '../../ui/SelectControl';
 
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogがformへmodal roleを渡してfocusを管理します。 */
@@ -260,325 +260,327 @@ export function GitFlowSheet({
     <Dialog
       labelledBy="git-flow-sheet-title"
       describedBy="git-flow-sheet-description"
-      className="git-flow-sheet"
       role="dialog"
+      dismissible={!busy}
       onDismiss={onDismiss}
       onSubmit={submit}
     >
-      <header className="git-flow-sheet-header">
-        <div>
-          <p className="eyebrow">Git Flow</p>
-          <h2 id="git-flow-sheet-title">{t('gitFlowTitle')}</h2>
-          <p id="git-flow-sheet-description">{t('gitFlowDescription')}</p>
-        </div>
-        <button type="button" onClick={onReload} disabled={loading || busy}>
-          {t('reload')}
-        </button>
-      </header>
+      <DialogHeader
+        titleId="git-flow-sheet-title"
+        title={t('gitFlowTitle')}
+        descriptionId="git-flow-sheet-description"
+        description={t('gitFlowDescription')}
+      />
+      <DialogBody>
+        <section className="git-flow-overview" aria-labelledby="git-flow-overview-title">
+          <div className="git-flow-section-header">
+            <h3 id="git-flow-overview-title">{t('gitFlowOverview')}</h3>
+            <button type="button" onClick={onReload} disabled={loading || busy}>
+              {t('reload')}
+            </button>
+          </div>
+          {loading ? (
+            <p>{t('loading')}</p>
+          ) : overview?.available ? (
+            <dl>
+              <div>
+                <dt>{t('gitFlowHealth')}</dt>
+                <dd>
+                  {overview.initialized
+                    ? (overviewFields.health ?? t('available'))
+                    : t('notInitialized')}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('gitFlowBaseBranch')}</dt>
+                <dd>{overviewFields.base ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>{t('gitFlowTopicType')}</dt>
+                <dd>{overviewFields.topic ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>{t('gitFlowActiveBranch')}</dt>
+                <dd>{overviewFields.active ?? '—'}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="settings-error">{overview?.output || error || t('gitFlowUnavailable')}</p>
+          )}
+          {error ? <p className="settings-error">{error}</p> : null}
+        </section>
 
-      <section className="git-flow-overview" aria-labelledby="git-flow-overview-title">
-        <h3 id="git-flow-overview-title">{t('gitFlowOverview')}</h3>
-        {loading ? (
-          <p>{t('loading')}</p>
-        ) : overview?.available ? (
-          <dl>
-            <div>
-              <dt>{t('gitFlowHealth')}</dt>
-              <dd>
-                {overview.initialized
-                  ? (overviewFields.health ?? t('available'))
-                  : t('notInitialized')}
-              </dd>
-            </div>
-            <div>
-              <dt>{t('gitFlowBaseBranch')}</dt>
-              <dd>{overviewFields.base ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>{t('gitFlowTopicType')}</dt>
-              <dd>{overviewFields.topic ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>{t('gitFlowActiveBranch')}</dt>
-              <dd>{overviewFields.active ?? '—'}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="settings-error">{overview?.output || error || t('gitFlowUnavailable')}</p>
-        )}
-        {error ? <p className="settings-error">{error}</p> : null}
-      </section>
-
-      <section className="git-flow-operation" aria-labelledby="git-flow-operation-title">
-        <h3 id="git-flow-operation-title">{t('gitFlowOperation')}</h3>
-        <div className="git-flow-fields">
-          <label>
-            <span>{t('gitFlowCommand')}</span>
-            <SelectControl
-              data-dialog-initial-focus
-              value={command}
-              onChange={(event) => {
-                if (isGitFlowCommand(event.target.value)) field('command', event.target.value);
-              }}
-            >
-              {COMMANDS.map((value) => (
-                <option key={value} value={value}>
-                  {commandLabel(value)}
-                </option>
-              ))}
-            </SelectControl>
-          </label>
-
-          {command === 'init' ? (
-            <>
-              <label>
-                <span>{t('gitFlowPreset')}</span>
-                <SelectControl
-                  value={form.preset}
-                  onChange={(event) => field('preset', event.target.value)}
-                >
-                  <option value="classic">Classic</option>
-                  <option value="github">GitHub</option>
-                  <option value="gitlab">GitLab</option>
-                  <option value="custom">Custom (defaults + config)</option>
-                </SelectControl>
-              </label>
-              <label className="checkbox-field git-flow-check">
-                <input
-                  type="checkbox"
-                  checked={form.shared}
-                  onChange={(event) => field('shared', event.target.checked)}
-                />
-                <span>{t('gitFlowSharedConfig')}</span>
-              </label>
-            </>
-          ) : null}
-
-          {TOPIC_COMMANDS.has(command) ? (
+        <section className="git-flow-operation" aria-labelledby="git-flow-operation-title">
+          <h3 id="git-flow-operation-title">{t('gitFlowOperation')}</h3>
+          <div className="git-flow-fields">
             <label>
-              <span>{t('gitFlowTopicType')}</span>
-              <input
-                value={form.topicType}
-                onChange={(event) => field('topicType', event.target.value)}
-                required
-              />
+              <span>{t('gitFlowCommand')}</span>
+              <SelectControl
+                data-dialog-initial-focus
+                value={command}
+                onChange={(event) => {
+                  if (isGitFlowCommand(event.target.value)) field('command', event.target.value);
+                }}
+              >
+                {COMMANDS.map((value) => (
+                  <option key={value} value={value}>
+                    {commandLabel(value)}
+                  </option>
+                ))}
+              </SelectControl>
             </label>
-          ) : null}
 
-          {!resumable && NAME_COMMANDS.has(command) ? (
-            <label>
-              <span>{t('gitFlowName')}</span>
-              <input
-                value={form.name}
-                onChange={(event) => field('name', event.target.value)}
-                required={!['list', 'update', 'publish', 'finish', 'integrate'].includes(command)}
-              />
-            </label>
-          ) : null}
-
-          {SECONDARY_NAME_COMMANDS.has(command) ? (
-            <label>
-              <span>{t('gitFlowNewName')}</span>
-              <input
-                value={form.secondaryName}
-                onChange={(event) => field('secondaryName', event.target.value)}
-                required
-              />
-            </label>
-          ) : null}
-
-          {command === 'start' ? (
-            <label>
-              <span>{t('gitFlowBaseBranch')}</span>
-              <input value={form.base} onChange={(event) => field('base', event.target.value)} />
-            </label>
-          ) : null}
-
-          {CONFIG_MUTATIONS.has(command) ? (
-            <>
-              {command === 'configAddBase' || command === 'configAddTopic' ? (
+            {command === 'init' ? (
+              <>
                 <label>
-                  <span>{t('gitFlowParent')}</span>
-                  <input
-                    value={form.parent}
-                    onChange={(event) => field('parent', event.target.value)}
-                    required={command === 'configAddTopic'}
-                  />
+                  <span>{t('gitFlowPreset')}</span>
+                  <SelectControl
+                    value={form.preset}
+                    onChange={(event) => field('preset', event.target.value)}
+                  >
+                    <option value="classic">Classic</option>
+                    <option value="github">GitHub</option>
+                    <option value="gitlab">GitLab</option>
+                    <option value="custom">Custom (defaults + config)</option>
+                  </SelectControl>
                 </label>
-              ) : null}
-              {topicConfig ? (
-                <>
+                <label className="checkbox-field git-flow-check">
+                  <input
+                    type="checkbox"
+                    checked={form.shared}
+                    onChange={(event) => field('shared', event.target.checked)}
+                  />
+                  <span>{t('gitFlowSharedConfig')}</span>
+                </label>
+              </>
+            ) : null}
+
+            {TOPIC_COMMANDS.has(command) ? (
+              <label>
+                <span>{t('gitFlowTopicType')}</span>
+                <input
+                  value={form.topicType}
+                  onChange={(event) => field('topicType', event.target.value)}
+                  required
+                />
+              </label>
+            ) : null}
+
+            {!resumable && NAME_COMMANDS.has(command) ? (
+              <label>
+                <span>{t('gitFlowName')}</span>
+                <input
+                  value={form.name}
+                  onChange={(event) => field('name', event.target.value)}
+                  required={!['list', 'update', 'publish', 'finish', 'integrate'].includes(command)}
+                />
+              </label>
+            ) : null}
+
+            {SECONDARY_NAME_COMMANDS.has(command) ? (
+              <label>
+                <span>{t('gitFlowNewName')}</span>
+                <input
+                  value={form.secondaryName}
+                  onChange={(event) => field('secondaryName', event.target.value)}
+                  required
+                />
+              </label>
+            ) : null}
+
+            {command === 'start' ? (
+              <label>
+                <span>{t('gitFlowBaseBranch')}</span>
+                <input value={form.base} onChange={(event) => field('base', event.target.value)} />
+              </label>
+            ) : null}
+
+            {CONFIG_MUTATIONS.has(command) ? (
+              <>
+                {command === 'configAddBase' || command === 'configAddTopic' ? (
                   <label>
-                    <span>{t('gitFlowPrefix')}</span>
+                    <span>{t('gitFlowParent')}</span>
                     <input
-                      value={form.prefix}
-                      onChange={(event) => field('prefix', event.target.value)}
+                      value={form.parent}
+                      onChange={(event) => field('parent', event.target.value)}
+                      required={command === 'configAddTopic'}
                     />
                   </label>
+                ) : null}
+                {topicConfig ? (
+                  <>
+                    <label>
+                      <span>{t('gitFlowPrefix')}</span>
+                      <input
+                        value={form.prefix}
+                        onChange={(event) => field('prefix', event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>{t('gitFlowStartingPoint')}</span>
+                      <input
+                        value={form.startingPoint}
+                        onChange={(event) => field('startingPoint', event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>{t('tag')}</span>
+                      <SelectControl
+                        value={form.tag}
+                        onChange={(event) => field('tag', event.target.value)}
+                      >
+                        <option value="">{t('gitFlowUseDefault')}</option>
+                        <option value="true">{t('enabled')}</option>
+                        <option value="false">{t('disabled')}</option>
+                      </SelectControl>
+                    </label>
+                  </>
+                ) : (
                   <label>
-                    <span>{t('gitFlowStartingPoint')}</span>
-                    <input
-                      value={form.startingPoint}
-                      onChange={(event) => field('startingPoint', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>{t('tag')}</span>
+                    <span>{t('gitFlowAutoUpdate')}</span>
                     <SelectControl
-                      value={form.tag}
-                      onChange={(event) => field('tag', event.target.value)}
+                      value={form.autoUpdate}
+                      onChange={(event) => field('autoUpdate', event.target.value)}
                     >
                       <option value="">{t('gitFlowUseDefault')}</option>
                       <option value="true">{t('enabled')}</option>
                       <option value="false">{t('disabled')}</option>
                     </SelectControl>
                   </label>
-                </>
-              ) : (
+                )}
                 <label>
-                  <span>{t('gitFlowAutoUpdate')}</span>
+                  <span>{t('gitFlowDownstreamStrategy')}</span>
                   <SelectControl
-                    value={form.autoUpdate}
-                    onChange={(event) => field('autoUpdate', event.target.value)}
+                    value={form.downstreamStrategy}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === 'merge' || value === 'rebase') {
+                        field('downstreamStrategy', value);
+                      }
+                    }}
                   >
-                    <option value="">{t('gitFlowUseDefault')}</option>
-                    <option value="true">{t('enabled')}</option>
-                    <option value="false">{t('disabled')}</option>
+                    <option value="merge">{t('merge')}</option>
+                    <option value="rebase">{t('rebase')}</option>
                   </SelectControl>
                 </label>
-              )}
+                <label className="checkbox-field git-flow-check">
+                  <input
+                    type="checkbox"
+                    checked={form.shared}
+                    onChange={(event) => field('shared', event.target.checked)}
+                  />
+                  <span>{t('gitFlowSharedConfig')}</span>
+                </label>
+              </>
+            ) : null}
+
+            {FETCH_COMMANDS.has(command) ? (
+              <label className="checkbox-field git-flow-check">
+                <input
+                  type="checkbox"
+                  checked={form.fetch}
+                  onChange={(event) => field('fetch', event.target.checked)}
+                />
+                <span>{t('fetch')}</span>
+              </label>
+            ) : null}
+
+            {command === 'delete' ? (
+              <label className="checkbox-field git-flow-check">
+                <input
+                  type="checkbox"
+                  checked={form.remote}
+                  onChange={(event) => field('remote', event.target.checked)}
+                />
+                <span>{t('gitFlowDeleteRemote')}</span>
+              </label>
+            ) : null}
+
+            {FINISH_COMMANDS.has(command) || command === 'update' || configMutation ? (
               <label>
-                <span>{t('gitFlowDownstreamStrategy')}</span>
+                <span>{t(command === 'update' ? 'gitFlowUpdateStrategy' : 'gitFlowStrategy')}</span>
                 <SelectControl
-                  value={form.downstreamStrategy}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (value === 'merge' || value === 'rebase') {
-                      field('downstreamStrategy', value);
-                    }
-                  }}
+                  value={form.strategy}
+                  onChange={(event) => field('strategy', event.target.value)}
                 >
-                  <option value="merge">{t('merge')}</option>
+                  <option value="merge">
+                    {command === 'update' ? t('gitFlowConfiguredStrategy') : t('merge')}
+                  </option>
                   <option value="rebase">{t('rebase')}</option>
+                  {command === 'update' ? null : <option value="squash">{t('squash')}</option>}
                 </SelectControl>
               </label>
-              <label className="checkbox-field git-flow-check">
-                <input
-                  type="checkbox"
-                  checked={form.shared}
-                  onChange={(event) => field('shared', event.target.checked)}
-                />
-                <span>{t('gitFlowSharedConfig')}</span>
-              </label>
-            </>
-          ) : null}
+            ) : null}
 
-          {FETCH_COMMANDS.has(command) ? (
-            <label className="checkbox-field git-flow-check">
-              <input
-                type="checkbox"
-                checked={form.fetch}
-                onChange={(event) => field('fetch', event.target.checked)}
-              />
-              <span>{t('fetch')}</span>
-            </label>
-          ) : null}
-
-          {command === 'delete' ? (
-            <label className="checkbox-field git-flow-check">
-              <input
-                type="checkbox"
-                checked={form.remote}
-                onChange={(event) => field('remote', event.target.checked)}
-              />
-              <span>{t('gitFlowDeleteRemote')}</span>
-            </label>
-          ) : null}
-
-          {FINISH_COMMANDS.has(command) || command === 'update' || configMutation ? (
-            <label>
-              <span>{t(command === 'update' ? 'gitFlowUpdateStrategy' : 'gitFlowStrategy')}</span>
-              <SelectControl
-                value={form.strategy}
-                onChange={(event) => field('strategy', event.target.value)}
-              >
-                <option value="merge">
-                  {command === 'update' ? t('gitFlowConfiguredStrategy') : t('merge')}
-                </option>
-                <option value="rebase">{t('rebase')}</option>
-                {command === 'update' ? null : <option value="squash">{t('squash')}</option>}
-              </SelectControl>
-            </label>
-          ) : null}
-
-          {FINISH_COMMANDS.has(command) ? (
-            <>
-              <label>
-                <span>{t('gitFlowTagName')}</span>
-                <input
-                  value={form.tagName}
-                  onChange={(event) => field('tagName', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>{t('gitFlowTagMessage')}</span>
-                <input
-                  value={form.tagMessage}
-                  onChange={(event) => field('tagMessage', event.target.value)}
-                />
-              </label>
-              <label className="checkbox-field git-flow-check">
-                <input
-                  type="checkbox"
-                  checked={form.sign}
-                  disabled={!gpgAvailable || !form.tagName}
-                  onChange={(event) => field('sign', event.target.checked)}
-                />
-                <span>{t('gitFlowSignTag')}</span>
-              </label>
-              {form.sign ? (
+            {FINISH_COMMANDS.has(command) ? (
+              <>
                 <label>
-                  <span>{t('gitFlowSigningKey')}</span>
+                  <span>{t('gitFlowTagName')}</span>
                   <input
-                    value={form.signingKey}
-                    onChange={(event) => field('signingKey', event.target.value)}
+                    value={form.tagName}
+                    onChange={(event) => field('tagName', event.target.value)}
                   />
                 </label>
-              ) : null}
-              {command === 'finish' ? (
-                <>
-                  <label className="checkbox-field git-flow-check">
+                <label>
+                  <span>{t('gitFlowTagMessage')}</span>
+                  <input
+                    value={form.tagMessage}
+                    onChange={(event) => field('tagMessage', event.target.value)}
+                  />
+                </label>
+                <label className="checkbox-field git-flow-check">
+                  <input
+                    type="checkbox"
+                    checked={form.sign}
+                    disabled={!gpgAvailable || !form.tagName}
+                    onChange={(event) => field('sign', event.target.checked)}
+                  />
+                  <span>{t('gitFlowSignTag')}</span>
+                </label>
+                {form.sign ? (
+                  <label>
+                    <span>{t('gitFlowSigningKey')}</span>
                     <input
-                      type="checkbox"
-                      checked={form.keep}
-                      onChange={(event) => field('keep', event.target.checked)}
+                      value={form.signingKey}
+                      onChange={(event) => field('signingKey', event.target.value)}
                     />
-                    <span>{t('gitFlowKeepBranch')}</span>
                   </label>
-                  <label className="checkbox-field git-flow-check">
-                    <input
-                      type="checkbox"
-                      checked={form.push}
-                      onChange={(event) => field('push', event.target.checked)}
-                    />
-                    <span>{t('gitFlowPushAfterFinish')}</span>
-                  </label>
-                </>
-              ) : null}
-              {!gpgAvailable ? <p className="field-hint">{t('gitFlowGpgUnavailable')}</p> : null}
-            </>
-          ) : null}
-        </div>
-      </section>
+                ) : null}
+                {command === 'finish' ? (
+                  <>
+                    <label className="checkbox-field git-flow-check">
+                      <input
+                        type="checkbox"
+                        checked={form.keep}
+                        onChange={(event) => field('keep', event.target.checked)}
+                      />
+                      <span>{t('gitFlowKeepBranch')}</span>
+                    </label>
+                    <label className="checkbox-field git-flow-check">
+                      <input
+                        type="checkbox"
+                        checked={form.push}
+                        onChange={(event) => field('push', event.target.checked)}
+                      />
+                      <span>{t('gitFlowPushAfterFinish')}</span>
+                    </label>
+                  </>
+                ) : null}
+                {!gpgAvailable ? <p className="field-hint">{t('gitFlowGpgUnavailable')}</p> : null}
+              </>
+            ) : null}
+          </div>
+        </section>
+      </DialogBody>
 
-      <div className="button-row end">
+      <DialogFooter>
         <button type="button" onClick={onDismiss} disabled={busy}>
           {t('cancel')}
         </button>
         <button type="submit" className="primary" disabled={busy || !overview?.available}>
           {busy ? t('running') : t('run')}
         </button>
-      </div>
+      </DialogFooter>
     </Dialog>
   );
 }

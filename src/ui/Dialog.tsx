@@ -1,4 +1,13 @@
-import { useEffect, useRef, type FormEventHandler, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  type FormEventHandler,
+  type HTMLAttributes,
+  type ReactNode,
+} from 'react';
+
+import { useI18n } from '../i18n/i18n';
 
 export interface DialogProps {
   labelledBy: string;
@@ -9,6 +18,34 @@ export interface DialogProps {
   onSubmit?: FormEventHandler<HTMLFormElement> | undefined;
   role?: 'alertdialog' | 'dialog';
   variant?: 'confirmation' | 'switcher';
+  dismissible?: boolean;
+}
+
+export function DialogHeader({
+  titleId,
+  title,
+  descriptionId,
+  description,
+}: {
+  titleId: string;
+  title: ReactNode;
+  descriptionId?: string | undefined;
+  description?: ReactNode;
+}) {
+  return (
+    <header className="dialog-header">
+      <h2 id={titleId}>{title}</h2>
+      {description ? <p id={descriptionId}>{description}</p> : null}
+    </header>
+  );
+}
+
+export function DialogBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={`dialog-body${className ? ` ${className}` : ''}`} {...props} />;
+}
+
+export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLElement>) {
+  return <footer className={`dialog-footer${className ? ` ${className}` : ''}`} {...props} />;
 }
 
 const FOCUSABLE = [
@@ -43,10 +80,15 @@ export function Dialog({
   onSubmit,
   role = 'alertdialog',
   variant = 'confirmation',
+  dismissible = true,
 }: DialogProps) {
+  const { t } = useI18n();
   const dialogRef = useRef<HTMLElement | null>(null);
+  const dialogId = useRef(Symbol(labelledBy));
   const dismissRef = useRef(onDismiss);
+  const dismissibleRef = useRef(dismissible);
   dismissRef.current = onDismiss;
+  dismissibleRef.current = dismissible;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -54,7 +96,7 @@ export function Dialog({
     const previous = dialogStack.at(-1);
     const returnFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const entry = { id: Symbol(labelledBy), element: dialog, returnFocus };
+    const entry = { id: dialogId.current, element: dialog, returnFocus };
     if (previous) setDialogInteractive(previous.element, false);
     dialogStack.push(entry);
     const initial =
@@ -67,7 +109,7 @@ export function Dialog({
       if (event.defaultPrevented || event.isComposing) return;
       if (event.key === 'Escape') {
         event.preventDefault();
-        dismissRef.current();
+        if (dismissibleRef.current) dismissRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -113,7 +155,12 @@ export function Dialog({
       className={`modal-backdrop${variant === 'switcher' ? ' switcher-backdrop' : ''}`}
       role="presentation"
       onClick={(event) => {
-        if (variant === 'switcher' && event.target === event.currentTarget) onDismiss();
+        if (
+          dismissible &&
+          event.target === event.currentTarget &&
+          dialogStack.at(-1)?.id === dialogId.current
+        )
+          onDismiss();
       }}
     >
       {onSubmit ? (
@@ -130,6 +177,17 @@ export function Dialog({
           onSubmit={onSubmit}
         >
           {children}
+          {variant !== 'switcher' ? (
+            <button
+              type="button"
+              className="dialog-close-button"
+              aria-label={t('closeDialog')}
+              disabled={!dismissible}
+              onClick={onDismiss}
+            >
+              <X aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
         </form>
       ) : (
         <section
@@ -144,6 +202,17 @@ export function Dialog({
           tabIndex={-1}
         >
           {children}
+          {variant !== 'switcher' ? (
+            <button
+              type="button"
+              className="dialog-close-button"
+              aria-label={t('closeDialog')}
+              disabled={!dismissible}
+              onClick={onDismiss}
+            >
+              <X aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
         </section>
       )}
     </div>

@@ -247,13 +247,13 @@ export async function openRepository(
 ): Promise<void> {
   const language = options.language ?? 'ja';
   await $(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
-  const dialog = $('[role="alertdialog"]');
+  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
   if (options.inspectDialog) {
     await expect(dialog.$('button=URL')).toHaveAttribute('aria-selected', 'true');
-    await expectAttachedTabs('[role="alertdialog"] .add-repository-source');
+    await expectAttachedTabs('[role="dialog"] .add-repository-source');
     await expectInteractiveSelectedColors(
-      '[role="alertdialog"] .add-repository-source [aria-selected="true"]',
+      '[role="dialog"] .add-repository-source [aria-selected="true"]',
     );
     await expect(dialog.$('#repository-display-name')).toExist();
   }
@@ -267,8 +267,8 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
   await $('.repository-toggle').click();
   const switcher = $('[role="dialog"]');
   await expect(switcher).toBeDisplayed();
-  await switcher.$(`button=${language === 'ja' ? 'リポジトリを追加…' : 'Add Repository…'}`).click();
-  const dialog = $('[role="alertdialog"]');
+  await switcher.$(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
+  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
   await dialog.$(`button=${language === 'ja' ? 'パス' : 'Path'}`).click();
   await dialog.$('#repository-location').setValue(path);

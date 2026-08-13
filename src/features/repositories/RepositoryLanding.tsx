@@ -115,7 +115,7 @@ export function RepositoryLanding({
                       onClick={() => onForget(repository.path)}
                     >
                       <Trash2 aria-hidden="true" focusable="false" />
-                      {t('forgetRepository')}
+                      {t('deleteRepository')}
                     </button>
                   </div>
                 </li>

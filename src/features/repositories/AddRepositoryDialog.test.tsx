@@ -27,7 +27,7 @@ describe('AddRepositoryDialog', () => {
       />,
     );
 
-    const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+    const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
     expect(within(dialog).getByRole('tab', { name: 'URL' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -62,7 +62,7 @@ describe('AddRepositoryDialog', () => {
       />,
     );
 
-    const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+    const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
     const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
     const name = within(dialog).getByRole('textbox', { name: 'Repository name' });
     expect(path).not.toHaveAttribute('placeholder');

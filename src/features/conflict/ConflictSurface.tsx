@@ -25,7 +25,7 @@ import type { ConflictChoice, ConflictDocument, DiffStyle } from '../../domain/w
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import { useI18n, type I18nValue, type LocalizedMessage } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
-import { Dialog } from '../../ui/Dialog';
+import { Dialog, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import {
   describeWorkspaceError,
@@ -774,17 +774,24 @@ export function ConflictSurface({
       </p>
 
       {confirmReload ? (
-        <Dialog labelledBy="reload-title" onDismiss={() => setConfirmReload(false)}>
-          <h3 id="reload-title">{t('conflictDiscardUnsaved')}</h3>
-          <p>{t('conflictReloadDiscardDescription')}</p>
-          <div className="button-row end">
+        <Dialog
+          labelledBy="reload-title"
+          role="alertdialog"
+          onDismiss={() => setConfirmReload(false)}
+        >
+          <DialogHeader
+            titleId="reload-title"
+            title={t('conflictDiscardUnsaved')}
+            description={t('conflictReloadDiscardDescription')}
+          />
+          <DialogFooter>
             <button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
               {t('cancel')}
             </button>
             <button type="button" className="danger" onClick={() => void reloadExternal()}>
               {t('conflictDiscardReload')}
             </button>
-          </div>
+          </DialogFooter>
         </Dialog>
       ) : null}
     </section>

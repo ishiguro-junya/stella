@@ -20,6 +20,7 @@ import {
   type WorkspaceErrorContent,
 } from '../../ui/WorkspaceErrorDetails';
 import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
+import { DialogBody, DialogFooter } from '../../ui/Dialog';
 
 export interface CommitFormProps {
   disabled?: boolean;
@@ -216,111 +217,113 @@ export function CommitForm({
       onSubmit={(event) => void submit(event)}
       noValidate
     >
-      {showHeading || headerActions ? (
-        <div className={`pane-toolbar${showHeading ? '' : ' actions-only'}`}>
-          {showHeading ? <h2 id="commit-title">{t('commit')}</h2> : null}
-          {headerActions}
-        </div>
-      ) : null}
+      <DialogBody className="commit-form-body">
+        {showHeading || headerActions ? (
+          <div className={`pane-toolbar${showHeading ? '' : ' actions-only'}`}>
+            {showHeading ? <h2 id="commit-title">{t('commit')}</h2> : null}
+            {headerActions}
+          </div>
+        ) : null}
 
-      <label className="dialog-form-field">
-        <span>{t('description')}</span>
-        <input
-          data-commit-field="description"
-          data-dialog-initial-focus
-          autoComplete="off"
-          value={useConventionalCommits ? draft.conventional.description : draft.plainMessage}
-          aria-invalid={showsError('description')}
-          aria-describedby={showsError('description') ? ERROR_IDS.description : undefined}
-          onChange={(event) =>
-            useConventionalCommits
-              ? update('description', event.target.value)
-              : updatePlainMessage(event.target.value)
-          }
-        />
-        <small
-          id={ERROR_IDS.description}
-          className={`field-error commit-field-error${showsError('description') ? '' : ' is-placeholder'}`}
-          aria-hidden={!showsError('description')}
-        >
-          {showsError('description') && errors.description ? t(errors.description) : null}
-        </small>
-      </label>
-
-      {useConventionalCommits ? (
-        <div className="commit-meta-grid">
-          <label className="dialog-form-field">
-            <span>{t('type')}</span>
-            <input
-              data-commit-field="type"
-              list="commit-types"
-              value={draft.conventional.type}
-              aria-invalid={showsError('type')}
-              aria-describedby={showsError('type') ? ERROR_IDS.type : undefined}
-              onChange={(event) => update('type', event.target.value)}
-            />
-            <datalist id="commit-types">
-              {DEFAULT_COMMIT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </datalist>
-            <small
-              id={ERROR_IDS.type}
-              className={`field-error commit-field-error${showsError('type') ? '' : ' is-placeholder'}`}
-              aria-hidden={!showsError('type')}
-            >
-              {showsError('type') && errors.type ? t(errors.type) : null}
-            </small>
-          </label>
-
-          <label className="dialog-form-field">
-            <span>{t('scope')}</span>
-            <input
-              data-commit-field="scope"
-              value={draft.conventional.scope ?? ''}
-              aria-invalid={showsError('scope')}
-              aria-describedby={showsError('scope') ? ERROR_IDS.scope : undefined}
-              onChange={(event) => update('scope', event.target.value)}
-            />
-            <small
-              id={ERROR_IDS.scope}
-              className={`field-error commit-field-error${showsError('scope') ? '' : ' is-placeholder'}`}
-              aria-hidden={!showsError('scope')}
-            >
-              {showsError('scope') && errors.scope ? t(errors.scope) : null}
-            </small>
-          </label>
-        </div>
-      ) : null}
-
-      {useConventionalCommits ? (
-        <label className="checkbox-field commit-breaking">
+        <label className="dialog-form-field">
+          <span>{t('description')}</span>
           <input
-            type="checkbox"
-            checked={draft.conventional.breaking}
-            onChange={(event) => update('breaking', event.target.checked)}
+            data-commit-field="description"
+            data-dialog-initial-focus
+            autoComplete="off"
+            value={useConventionalCommits ? draft.conventional.description : draft.plainMessage}
+            aria-invalid={showsError('description')}
+            aria-describedby={showsError('description') ? ERROR_IDS.description : undefined}
+            onChange={(event) =>
+              useConventionalCommits
+                ? update('description', event.target.value)
+                : updatePlainMessage(event.target.value)
+            }
           />
-          <span>{t('breakingChange')}</span>
+          <small
+            id={ERROR_IDS.description}
+            className={`field-error commit-field-error${showsError('description') ? '' : ' is-placeholder'}`}
+            aria-hidden={!showsError('description')}
+          >
+            {showsError('description') && errors.description ? t(errors.description) : null}
+          </small>
         </label>
-      ) : null}
 
-      {error ? (
-        <div className="inline-alert error" role="alert">
-          <WorkspaceErrorDetails error={error} />
-        </div>
-      ) : null}
-      {disabled && disabledReason ? (
-        <output
-          id="commit-disabled-reason"
-          className={`commit-disabled-reason${hideDisabledReason ? ' sr-only' : ''}`}
-        >
-          {disabledReason}
-        </output>
-      ) : null}
+        {useConventionalCommits ? (
+          <div className="commit-meta-grid">
+            <label className="dialog-form-field">
+              <span>{t('type')}</span>
+              <input
+                data-commit-field="type"
+                list="commit-types"
+                value={draft.conventional.type}
+                aria-invalid={showsError('type')}
+                aria-describedby={showsError('type') ? ERROR_IDS.type : undefined}
+                onChange={(event) => update('type', event.target.value)}
+              />
+              <datalist id="commit-types">
+                {DEFAULT_COMMIT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </datalist>
+              <small
+                id={ERROR_IDS.type}
+                className={`field-error commit-field-error${showsError('type') ? '' : ' is-placeholder'}`}
+                aria-hidden={!showsError('type')}
+              >
+                {showsError('type') && errors.type ? t(errors.type) : null}
+              </small>
+            </label>
 
-      <div className="commit-submit dialog-form-actions button-row end">
+            <label className="dialog-form-field">
+              <span>{t('scope')}</span>
+              <input
+                data-commit-field="scope"
+                value={draft.conventional.scope ?? ''}
+                aria-invalid={showsError('scope')}
+                aria-describedby={showsError('scope') ? ERROR_IDS.scope : undefined}
+                onChange={(event) => update('scope', event.target.value)}
+              />
+              <small
+                id={ERROR_IDS.scope}
+                className={`field-error commit-field-error${showsError('scope') ? '' : ' is-placeholder'}`}
+                aria-hidden={!showsError('scope')}
+              >
+                {showsError('scope') && errors.scope ? t(errors.scope) : null}
+              </small>
+            </label>
+          </div>
+        ) : null}
+
+        {useConventionalCommits ? (
+          <label className="checkbox-field commit-breaking">
+            <input
+              type="checkbox"
+              checked={draft.conventional.breaking}
+              onChange={(event) => update('breaking', event.target.checked)}
+            />
+            <span>{t('breakingChange')}</span>
+          </label>
+        ) : null}
+
+        {error ? (
+          <div className="inline-alert error" role="alert">
+            <WorkspaceErrorDetails error={error} />
+          </div>
+        ) : null}
+        {disabled && disabledReason ? (
+          <output
+            id="commit-disabled-reason"
+            className={`commit-disabled-reason${hideDisabledReason ? ' sr-only' : ''}`}
+          >
+            {disabledReason}
+          </output>
+        ) : null}
+      </DialogBody>
+
+      <DialogFooter className="commit-submit">
         {onCancel ? (
           <button type="button" disabled={busy} onClick={onCancel}>
             {t('cancel')}
@@ -335,7 +338,7 @@ export function CommitForm({
         >
           {busy ? t('committing') : t('commit')}
         </button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

@@ -1,9 +1,18 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 検索可能なswitcherは共通modalのfocus trap内でARIA combobox/listbox patternを使用する。 */
 import { Check, Search } from 'lucide-react';
-import { useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 
 import { useI18n } from '../i18n/i18n';
 import { Dialog } from './Dialog';
+import { RowActionMenu, type RowActionMenuItem, type RowActionMenuPoint } from './RowActionMenu';
 
 export interface SwitcherDialogItem {
   id: string;
@@ -13,6 +22,7 @@ export interface SwitcherDialogItem {
   icon: ReactNode;
   current?: boolean;
   disabled?: boolean;
+  actions?: readonly RowActionMenuItem<string>[];
   status?: {
     label: string;
     tone: 'danger' | 'muted' | 'warning';
@@ -29,6 +39,12 @@ export interface SwitcherDialogProps {
   footer?: ReactNode;
   onDismiss: () => void;
   onSelect: (item: SwitcherDialogItem) => void;
+  onAction?: (item: SwitcherDialogItem, action: string) => void;
+}
+
+interface OpenItemMenu {
+  itemId: string;
+  point?: RowActionMenuPoint;
 }
 
 function matchingItems(items: readonly SwitcherDialogItem[], query: string): SwitcherDialogItem[] {
@@ -51,13 +67,17 @@ export function SwitcherDialog({
   footer,
   onDismiss,
   onSelect,
+  onAction,
 }: SwitcherDialogProps) {
   const { t } = useI18n();
   const titleId = useId();
   const listId = useId();
   const hintId = useId();
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | undefined>(() => initialActiveId(items));
+  const [focusedId, setFocusedId] = useState<string>();
+  const [openMenu, setOpenMenu] = useState<OpenItemMenu>();
   const filteredItems = useMemo(() => matchingItems(items, query), [items, query]);
   const effectiveActiveId = filteredItems.some((item) => item.id === activeId)
     ? activeId
@@ -68,6 +88,17 @@ export function SwitcherDialog({
   const moveActive = (nextIndex: number): void => {
     const next = filteredItems[nextIndex];
     if (next) setActiveId(next.id);
+  };
+
+  const focusOption = (nextIndex: number): void => {
+    const next = filteredItems[nextIndex];
+    if (!next) return;
+    setActiveId(next.id);
+    optionRefs.current.get(next.id)?.focus();
+  };
+
+  const selectItem = (item: SwitcherDialogItem): void => {
+    if (!item.disabled && !item.current) onSelect(item);
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
@@ -91,13 +122,52 @@ export function SwitcherDialog({
         break;
       case 'Enter': {
         const active = filteredItems[activeIndex];
-        if (!active || active.disabled) return;
+        if (!active) return;
         event.preventDefault();
-        onSelect(active);
+        selectItem(active);
         break;
       }
     }
   };
+
+  const handleOptionKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+    item: SwitcherDialogItem,
+  ): void => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusOption((index + 1) % filteredItems.length);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        focusOption((index - 1 + filteredItems.length) % filteredItems.length);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusOption(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        focusOption(filteredItems.length - 1);
+        break;
+      case 'Enter':
+        event.preventDefault();
+        selectItem(item);
+        break;
+    }
+  };
+
+  const openContextMenu = (event: MouseEvent<HTMLDivElement>, item: SwitcherDialogItem): void => {
+    if (!item.actions?.length || !onAction) return;
+    event.preventDefault();
+    setActiveId(item.id);
+    optionRefs.current.get(item.id)?.focus();
+    setOpenMenu({ itemId: item.id, point: { x: event.clientX, y: event.clientY } });
+  };
+
+  const initialFocusId = items.find((item) => item.current)?.id;
 
   return (
     <Dialog
@@ -122,14 +192,15 @@ export function SwitcherDialog({
           aria-activedescendant={activeOptionId}
           aria-describedby={hint ? hintId : undefined}
           autoComplete="off"
-          data-dialog-initial-focus
-          placeholder={title}
+          data-dialog-initial-focus={initialFocusId ? undefined : true}
+          placeholder={searchLabel}
           value={query}
           onChange={(event) => {
             const nextQuery = event.target.value;
             const nextItems = matchingItems(items, nextQuery);
             setQuery(nextQuery);
             setActiveId(initialActiveId(nextItems));
+            setOpenMenu(undefined);
           }}
           onKeyDown={handleSearchKeyDown}
         />
@@ -140,51 +211,88 @@ export function SwitcherDialog({
         </p>
       ) : null}
       <div id={listId} className="switcher-list" role="listbox" aria-label={title}>
-        {loading ? (
-          <output className="switcher-empty">{t('loading')}</output>
-        ) : filteredItems.length ? (
+        {filteredItems.length ? (
           filteredItems.map((item, index) => {
             const selected = item.id === effectiveActiveId;
             return (
-              <button
+              <div
                 key={item.id}
-                id={`${listId}-option-${index}`}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                aria-current={item.current ? 'true' : undefined}
-                aria-disabled={item.disabled || undefined}
-                className="switcher-option"
-                onMouseEnter={() => setActiveId(item.id)}
-                onClick={() => {
-                  if (!item.disabled) onSelect(item);
+                role="presentation"
+                className={`switcher-option-row${selected ? ' is-selected' : ''}${focusedId === item.id ? ' is-focused' : ''}${item.disabled ? ' is-disabled' : ''}${item.actions?.length ? ' has-actions' : ''}`}
+                onFocusCapture={() => setFocusedId(item.id)}
+                onBlurCapture={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setFocusedId(undefined);
                 }}
+                onMouseEnter={() => setActiveId(item.id)}
+                onContextMenu={(event) => openContextMenu(event, item)}
               >
-                <span className="switcher-check" aria-hidden="true">
-                  {item.current ? <Check /> : null}
-                </span>
-                <span className="switcher-option-icon" aria-hidden="true">
-                  {item.icon}
-                </span>
-                <span className="switcher-option-copy">
-                  <strong>{item.label}</strong>
-                  {item.description ? <small>{item.description}</small> : null}
-                </span>
-                {item.status ? (
-                  <span className="switcher-status">
-                    <span
-                      className={`switcher-status-dot ${item.status.tone}`}
-                      aria-hidden="true"
-                    />
-                    <small>{item.status.label}</small>
+                <button
+                  ref={(node) => {
+                    if (node) optionRefs.current.set(item.id, node);
+                    else optionRefs.current.delete(item.id);
+                  }}
+                  id={`${listId}-option-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  aria-current={item.current ? 'true' : undefined}
+                  aria-disabled={item.disabled || undefined}
+                  className="switcher-option"
+                  data-switcher-item-label={item.label}
+                  data-dialog-initial-focus={item.id === initialFocusId ? true : undefined}
+                  onFocus={() => setActiveId(item.id)}
+                  onClick={() => setActiveId(item.id)}
+                  onDoubleClick={() => selectItem(item)}
+                  onKeyDown={(event) => handleOptionKeyDown(event, index, item)}
+                >
+                  <span className="switcher-check" aria-hidden="true">
+                    {item.current ? <Check /> : null}
                   </span>
+                  <span className="switcher-option-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  <span className="switcher-option-copy">
+                    <strong>{item.label}</strong>
+                    {item.description ? <small>{item.description}</small> : null}
+                  </span>
+                  {item.status ? (
+                    <span className="switcher-status">
+                      <span
+                        className={`switcher-status-dot ${item.status.tone}`}
+                        aria-hidden="true"
+                      />
+                      <small>{item.status.label}</small>
+                    </span>
+                  ) : null}
+                </button>
+                {item.actions?.length && onAction ? (
+                  <RowActionMenu
+                    triggerLabel={t('moreActionsFor', { path: item.label })}
+                    triggerTitle={t('moreActions')}
+                    menuLabel={t('fileActionsFor', { path: item.label })}
+                    items={item.actions}
+                    open={openMenu?.itemId === item.id}
+                    disabled={false}
+                    contextPoint={openMenu?.itemId === item.id ? openMenu.point : undefined}
+                    triggerClassName="switcher-action-trigger is-persistent"
+                    onOpenChange={(open) => setOpenMenu(open ? { itemId: item.id } : undefined)}
+                    onTriggerOpen={() => setActiveId(item.id)}
+                    getActionFocusTarget={() => optionRefs.current.get(item.id)}
+                    getCloseFocusTarget={() => optionRefs.current.get(item.id)}
+                    onAction={(action) => onAction(item, action)}
+                  />
                 ) : null}
-              </button>
+              </div>
             );
           })
+        ) : loading ? (
+          <output className="switcher-empty">{t('loading')}</output>
         ) : (
           <p className="switcher-empty">{emptyMessage}</p>
         )}
+        {loading && filteredItems.length ? (
+          <output className="switcher-loading">{t('loading')}</output>
+        ) : null}
       </div>
       {footer ? <div className="switcher-footer">{footer}</div> : null}
     </Dialog>

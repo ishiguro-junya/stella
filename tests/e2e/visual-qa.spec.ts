@@ -3,6 +3,7 @@ import '@wdio/tauri-service';
 import { join } from 'node:path';
 
 import {
+  dispatchDoubleClick,
   openRepository,
   openRepositoryFromSwitcher,
   resetApp,
@@ -49,7 +50,7 @@ describe('Visual QA', () => {
       const currentOption =
         repositoryOptions[repositoryOptionTexts.findIndex((text) => text.includes(currentPath))];
       if (!currentOption) throw new Error('The visual QA repository was not in the switcher.');
-      await currentOption.click();
+      await dispatchDoubleClick('[data-switcher-item-label="stella-visual-qa"]');
       repositoryToggle = $(`.repository-toggle[title="${currentPath}"]`);
       await repositoryToggle.waitForDisplayed({ timeout: 10_000 });
       await expect($('.changes-view')).toBeDisplayed();
@@ -255,7 +256,7 @@ describe('Visual QA', () => {
         860,
         560,
       );
-      await $('[role="alertdialog"]').$('button=Cancel').click();
+      await $('[role="dialog"]').$('button=Cancel').click();
 
       await browser.execute(
         (registeredRepoPaths) => {

@@ -84,10 +84,10 @@ import {
   type LocalizedMessage,
 } from './i18n/i18n';
 import { applyNativeLanguage } from './i18n/nativeLanguage';
-import { Dialog } from './ui/Dialog';
+import { Dialog, DialogBody, DialogFooter, DialogHeader } from './ui/Dialog';
 import { BranchSwitcherDialog } from './ui/BranchSwitcherDialog';
 import { RepositorySwitcherDialog } from './ui/RepositorySwitcherDialog';
-import { RemoteManagerDialog } from './ui/RemoteManagerDialog';
+import { RemoteManagerDialog, type RemoteUrlChange } from './ui/RemoteManagerDialog';
 import {
   markWorkspaceErrorHandled,
   WorkspaceErrorDialog,
@@ -1113,7 +1113,7 @@ export function App({
 
   const requestForgetRepository = (path: string): void => {
     const attached = workspaceRef.current.repos.find((candidate) => candidate.path === path);
-    if (attached?.operation.kind !== 'none') {
+    if (attached && attached.operation.kind !== 'none') {
       showError(
         t('forgetRepositoryFailedTitle'),
         new WorkspaceAdapterError('operationInProgress', t('forgetRepositoryOperationBlocked')),
@@ -1124,12 +1124,16 @@ export function App({
     setPendingForgetPath(path);
   };
 
-  const confirmForgetRepository = async (): Promise<void> => {
+  const confirmRepositoryRemoval = async (deleteFiles: boolean): Promise<void> => {
     if (!pendingForgetPath) return;
     const path = pendingForgetPath;
     const attached = workspaceRef.current.repos.find((candidate) => candidate.path === path);
     setBusy(true);
     try {
+      if (deleteFiles) {
+        if (!adapter.deleteRepository) throw new Error(t('deleteRepositoryFailed'));
+        await adapter.deleteRepository(path);
+      }
       if (attached) await disconnectRepository(attached);
       const preferences = forgetRepositoryPath(path);
       setRegisteredPaths(preferences.registeredRepoPaths);
@@ -1147,7 +1151,11 @@ export function App({
       setPendingForgetPath(undefined);
       if (unavailableRepoPath === path) setUnavailableRepoPath(undefined);
     } catch (cause) {
-      showError(t('forgetRepositoryFailedTitle'), cause, t('forgetRepositoryFailed'));
+      showError(
+        t(deleteFiles ? 'deleteRepositoryFailedTitle' : 'forgetRepositoryFailedTitle'),
+        cause,
+        t(deleteFiles ? 'deleteRepositoryFailed' : 'forgetRepositoryFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -1332,6 +1340,56 @@ export function App({
       throw markWorkspaceErrorHandled(cause, t('previewFailed'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveRemoteUrls = async (
+    changes: readonly RemoteUrlChange[],
+    manager: RemoteManagerState,
+  ): Promise<void> => {
+    setBusy(true);
+    setNotice(undefined);
+    try {
+      for (const change of changes) {
+        const request: ActionRequest = {
+          repoId: manager.repoId,
+          action: { kind: 'setRemoteUrl', ...change },
+        };
+        let preview: ActionPreview;
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- 変更前URLを各変更の直前に検証する。
+          preview = await adapter.preview(request);
+        } catch (cause) {
+          showError(t('previewFailedTitle'), cause, t('previewFailed'));
+          throw markWorkspaceErrorHandled(cause, t('previewFailed'));
+        }
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- 変更を順番に適用し、最初の失敗で停止する。
+          const outcome = await adapter.execute({ ...request, preview });
+          applyOutcome(outcome.snapshot);
+        } catch (cause) {
+          showError(t('operationFailedTitle'), cause, t('operationFailed'));
+          throw markWorkspaceErrorHandled(cause, t('operationFailed'));
+        }
+      }
+    } catch (cause) {
+      await loadRemoteManager(manager.repoId, manager.path);
+      throw cause;
+    } finally {
+      setBusy(false);
+    }
+
+    setRemoteManager(undefined);
+    const remotesToFetch = new Set(
+      changes.filter((change) => change.urlKind === 'fetch').map((change) => change.remote),
+    );
+    for (const remote of remotesToFetch) {
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 共有busy状態を競合させずリモートごとに実行する。
+        await execute({ repoId: manager.repoId, action: { kind: 'fetch', remote } });
+      } catch {
+        // URL変更は完了済みのため、フェッチ失敗は通常のエラー表示に残す。
+      }
     }
   };
 
@@ -1960,31 +2018,39 @@ export function App({
             <Dialog
               labelledBy="app-update-title"
               describedBy="app-update-description"
+              role="alertdialog"
+              dismissible={!updateInstalling}
               onDismiss={() => {
                 if (!updateInstalling) setUpdateDialogOpen(false);
               }}
             >
-              <h2 id="app-update-title">{t('updateAvailableTitle')}</h2>
-              <p id="app-update-description">
-                {t('updateVersionDescription', {
+              <DialogHeader
+                titleId="app-update-title"
+                title={t('updateAvailableTitle')}
+                descriptionId="app-update-description"
+                description={t('updateVersionDescription', {
                   current: availableUpdate.currentVersion,
                   version: availableUpdate.version,
                 })}
-              </p>
-              {availableUpdate.notes ? (
-                <p className="app-update-notes">{availableUpdate.notes}</p>
-              ) : null}
-              {updateInstalling ? (
-                <div className="app-update-progress" aria-live="polite">
-                  <span>{t('downloadingUpdate')}</span>
-                  <progress
-                    value={updateProgress.downloaded}
-                    {...(updateProgress.total ? { max: updateProgress.total } : {})}
-                  />
-                </div>
-              ) : null}
-              {updateBlocked ? <p className="field-error">{t('finishWorkBeforeUpdate')}</p> : null}
-              <div className="button-row end">
+              />
+              <DialogBody>
+                {availableUpdate.notes ? (
+                  <p className="app-update-notes">{availableUpdate.notes}</p>
+                ) : null}
+                {updateInstalling ? (
+                  <div className="app-update-progress" aria-live="polite">
+                    <span>{t('downloadingUpdate')}</span>
+                    <progress
+                      value={updateProgress.downloaded}
+                      {...(updateProgress.total ? { max: updateProgress.total } : {})}
+                    />
+                  </div>
+                ) : null}
+                {updateBlocked ? (
+                  <p className="field-error">{t('finishWorkBeforeUpdate')}</p>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus={updateBlocked}
@@ -2002,21 +2068,25 @@ export function App({
                 >
                   {t('updateAndRestart')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
           {availableUpdate && pendingUpdateInstall ? (
             <Dialog
               labelledBy="unsaved-update-title"
+              role="alertdialog"
               onDismiss={() => {
                 setPendingUpdateInstall(false);
                 setUpdateDialogOpen(true);
               }}
             >
-              <h2 id="unsaved-update-title">{t('unsavedChanges')}</h2>
-              <p>{t('saveOrDiscardBeforeUpdate')}</p>
-              <div className="button-row end">
+              <DialogHeader
+                titleId="unsaved-update-title"
+                title={t('unsavedChanges')}
+                description={t('saveOrDiscardBeforeUpdate')}
+              />
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2041,7 +2111,7 @@ export function App({
                 >
                   {t('saveAndUpdate')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
@@ -2064,13 +2134,15 @@ export function App({
                 );
                 if (registration?.availability && registration.availability !== 'available') {
                   settleUiAction(chooseRelocatedRepository(path));
-                } else if (registration?.healthIssues?.some((issue) => issue.kind === 'remote')) {
-                  settleUiAction(openRemoteManager(path));
                 } else {
                   settleUiAction(attach({ kind: 'openExisting', path }));
                 }
               }}
               onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
+              onForget={(path) => {
+                setRepositorySwitcherOpen(false);
+                requestForgetRepository(path);
+              }}
               onAdd={openAddRepositoryDialog}
             />
           ) : null}
@@ -2078,7 +2150,6 @@ export function App({
           {remoteManager ? (
             <RemoteManagerDialog
               remotes={remoteManager.remotes}
-              healthIssues={repositoryHealthIssues[remoteManager.path] ?? []}
               loading={remoteManager.loading}
               busy={busy}
               {...(remoteManager.error ? { error: remoteManager.error } : {})}
@@ -2086,12 +2157,7 @@ export function App({
               onReload={() =>
                 settleUiAction(loadRemoteManager(remoteManager.repoId, remoteManager.path))
               }
-              onFetch={(remote) =>
-                settleUiAction(runAction({ kind: 'fetch', remote }, remoteManager.repoId))
-              }
-              onChangeUrl={(edit) =>
-                settleUiAction(runAction({ kind: 'setRemoteUrl', ...edit }, remoteManager.repoId))
-              }
+              onSave={(changes) => settleUiAction(saveRemoteUrls(changes, remoteManager))}
             />
           ) : null}
 
@@ -2099,21 +2165,29 @@ export function App({
             <Dialog
               labelledBy="repository-unavailable-title"
               describedBy="repository-unavailable-description"
+              role="alertdialog"
+              dismissible={!unavailableRepo && !unsavedDirtyRef.current}
               onDismiss={() => {
                 if (!unavailableRepo && !unsavedDirtyRef.current) setUnavailableRepoPath(undefined);
               }}
             >
-              <h2 id="repository-unavailable-title">{t('repositoryLocationUnavailableTitle')}</h2>
-              <p id="repository-unavailable-description">
-                {unavailableRepo && unsavedDirtyRef.current
-                  ? t('repositoryLocationUnavailableWithDraft')
-                  : t('repositoryLocationUnavailableDescription')}
-              </p>
-              <code className="repository-relocation-path">{unavailableRepoPath}</code>
-              {unavailableRepo?.operation.kind !== 'none' ? (
-                <p className="field-error">{t('forgetRepositoryOperationBlocked')}</p>
-              ) : null}
-              <div className="button-row end">
+              <DialogHeader
+                titleId="repository-unavailable-title"
+                title={t('repositoryLocationUnavailableTitle')}
+                descriptionId="repository-unavailable-description"
+                description={
+                  unavailableRepo && unsavedDirtyRef.current
+                    ? t('repositoryLocationUnavailableWithDraft')
+                    : t('repositoryLocationUnavailableDescription')
+                }
+              />
+              <DialogBody>
+                <code className="repository-relocation-path">{unavailableRepoPath}</code>
+                {unavailableRepo?.operation.kind !== 'none' ? (
+                  <p className="field-error">{t('forgetRepositoryOperationBlocked')}</p>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
                 {!unavailableRepo || !unsavedDirtyRef.current ? (
                   <button
                     type="button"
@@ -2150,7 +2224,7 @@ export function App({
                     {t('discardAndCloseRepository')}
                   </button>
                 ) : null}
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
@@ -2158,33 +2232,41 @@ export function App({
             <Dialog
               labelledBy="repository-relocation-title"
               describedBy="repository-relocation-description"
+              role="alertdialog"
+              dismissible={!busy}
               onDismiss={() => setRelocation(undefined)}
             >
-              <h2 id="repository-relocation-title">
-                {relocation.duplicate
-                  ? t('repositoryAlreadyRegisteredTitle')
-                  : t('confirmRepositoryRelocation')}
-              </h2>
-              <p id="repository-relocation-description">
-                {relocation.duplicate
-                  ? t('repositoryAlreadyRegisteredDescription')
-                  : t('repositoryRelocationDescription')}
-              </p>
-              <dl className="repository-relocation-paths">
-                <div>
-                  <dt>{t('oldRepositoryLocation')}</dt>
-                  <dd>
-                    <code>{relocation.oldPath}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('newRepositoryLocation')}</dt>
-                  <dd>
-                    <code>{relocation.newPath}</code>
-                  </dd>
-                </div>
-              </dl>
-              <div className="button-row end">
+              <DialogHeader
+                titleId="repository-relocation-title"
+                title={
+                  relocation.duplicate
+                    ? t('repositoryAlreadyRegisteredTitle')
+                    : t('confirmRepositoryRelocation')
+                }
+                descriptionId="repository-relocation-description"
+                description={
+                  relocation.duplicate
+                    ? t('repositoryAlreadyRegisteredDescription')
+                    : t('repositoryRelocationDescription')
+                }
+              />
+              <DialogBody>
+                <dl className="repository-relocation-paths">
+                  <div>
+                    <dt>{t('oldRepositoryLocation')}</dt>
+                    <dd>
+                      <code>{relocation.oldPath}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('newRepositoryLocation')}</dt>
+                    <dd>
+                      <code>{relocation.newPath}</code>
+                    </dd>
+                  </div>
+                </dl>
+              </DialogBody>
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2229,7 +2311,7 @@ export function App({
                     {t('replaceRepositoryLocation')}
                   </button>
                 )}
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
@@ -2237,23 +2319,29 @@ export function App({
             <Dialog
               labelledBy="forget-repository-title"
               describedBy="forget-repository-description"
+              role="alertdialog"
+              dismissible={!busy}
               onDismiss={() => setPendingForgetPath(undefined)}
             >
-              <h2 id="forget-repository-title">{t('forgetRepositoryTitle')}</h2>
-              <p id="forget-repository-description">
-                {t('forgetRepositoryDescription', {
+              <DialogHeader
+                titleId="forget-repository-title"
+                title={t('forgetRepositoryTitle')}
+                descriptionId="forget-repository-description"
+                description={t('forgetRepositoryDescription', {
                   repository: pendingForgetRepository?.name ?? pendingForgetPath,
                 })}
-              </p>
-              {workspace.repos.some(
-                (candidate) =>
-                  candidate.path === pendingForgetPath &&
-                  candidate.repoId === workspace.selectedRepoId &&
-                  unsavedDirtyRef.current,
-              ) ? (
-                <p className="field-error">{t('unsavedChangesWillBeDiscarded')}</p>
-              ) : null}
-              <div className="button-row end">
+              />
+              <DialogBody>
+                {workspace.repos.some(
+                  (candidate) =>
+                    candidate.path === pendingForgetPath &&
+                    candidate.repoId === workspace.selectedRepoId &&
+                    unsavedDirtyRef.current,
+                ) ? (
+                  <p className="field-error">{t('unsavedChangesWillBeDiscarded')}</p>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2264,13 +2352,25 @@ export function App({
                 </button>
                 <button
                   type="button"
-                  className="danger"
+                  className="danger-quiet"
                   disabled={busy}
-                  onClick={() => settleUiAction(confirmForgetRepository())}
+                  onClick={() => settleUiAction(confirmRepositoryRemoval(false))}
                 >
                   {t('forgetRepository')}
                 </button>
-              </div>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={
+                    busy ||
+                    (pendingForgetRepository?.availability !== undefined &&
+                      pendingForgetRepository.availability !== 'available')
+                  }
+                  onClick={() => settleUiAction(confirmRepositoryRemoval(true))}
+                >
+                  {t('deleteRepository')}
+                </button>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
@@ -2299,73 +2399,81 @@ export function App({
           ) : null}
 
           {pendingAction ? (
-            <Dialog labelledBy="action-preview-title" onDismiss={() => setPendingAction(undefined)}>
-              <p className="eyebrow">{t('impactPreview')}</p>
-              <h2 id="action-preview-title">{message(pendingAction.preview.title)}</h2>
-              <p>{message(pendingAction.preview.summary)}</p>
-              {pendingAction.preview.resolvedTargets.length ? (
-                <dl className="preview-targets">
-                  {pendingAction.preview.resolvedTargets.map((target) => (
-                    <div key={`${target.input}:${target.oid}`}>
-                      <dt>{target.input}</dt>
-                      <dd>
-                        <code>{target.oid.slice(0, 12)}</code>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
-              {pendingAction.preview.affectedPaths.length ? (
-                <section aria-labelledby="affected-paths-title">
-                  <h3 id="affected-paths-title">{t('affectedPaths')}</h3>
-                  <ul className="affected-paths">
-                    {pendingAction.preview.affectedPaths.map((path) => (
-                      <li key={path}>
-                        <code>{path}</code>
-                      </li>
+            <Dialog
+              labelledBy="action-preview-title"
+              role="alertdialog"
+              onDismiss={() => setPendingAction(undefined)}
+            >
+              <DialogHeader
+                titleId="action-preview-title"
+                title={message(pendingAction.preview.title)}
+                description={message(pendingAction.preview.summary)}
+              />
+              <DialogBody>
+                {pendingAction.preview.resolvedTargets.length ? (
+                  <dl className="preview-targets">
+                    {pendingAction.preview.resolvedTargets.map((target) => (
+                      <div key={`${target.input}:${target.oid}`}>
+                        <dt>{target.input}</dt>
+                        <dd>
+                          <code>{target.oid.slice(0, 12)}</code>
+                        </dd>
+                      </div>
                     ))}
-                  </ul>
-                </section>
-              ) : null}
-              {pendingAction.preview.affectedCommits.length ? (
-                <section aria-labelledby="affected-commits-title">
-                  <h3 id="affected-commits-title">{t('affectedCommits')}</h3>
-                  <ul className="affected-commits">
-                    {pendingAction.preview.affectedCommits.map((oid) => (
-                      <li key={oid}>
-                        <code>{oid.slice(0, 12)}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              {pendingAction.preview.lostCommitOids.length ? (
-                <section aria-labelledby="lost-commits-title">
-                  <h3 id="lost-commits-title">{t('removedCommits')}</h3>
-                  <ul className="affected-commits">
-                    {pendingAction.preview.lostCommitOids.map((oid) => (
-                      <li key={oid}>
-                        <code>{oid.slice(0, 12)}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              {pendingAction.preview.remoteEffect ? (
-                <p>{message(pendingAction.preview.remoteEffect)}</p>
-              ) : null}
-              {pendingAction.preview.typedConfirmation ? (
-                <label>
-                  <span>
-                    {t('typeToConfirm', { value: pendingAction.preview.typedConfirmation })}
-                  </span>
-                  <input
-                    value={typedConfirmation}
-                    onChange={(event) => setTypedConfirmation(event.target.value)}
-                  />
-                </label>
-              ) : null}
-              <div className="button-row end">
+                  </dl>
+                ) : null}
+                {pendingAction.preview.affectedPaths.length ? (
+                  <section aria-labelledby="affected-paths-title">
+                    <h3 id="affected-paths-title">{t('affectedPaths')}</h3>
+                    <ul className="affected-paths">
+                      {pendingAction.preview.affectedPaths.map((path) => (
+                        <li key={path}>
+                          <code>{path}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {pendingAction.preview.affectedCommits.length ? (
+                  <section aria-labelledby="affected-commits-title">
+                    <h3 id="affected-commits-title">{t('affectedCommits')}</h3>
+                    <ul className="affected-commits">
+                      {pendingAction.preview.affectedCommits.map((oid) => (
+                        <li key={oid}>
+                          <code>{oid.slice(0, 12)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {pendingAction.preview.lostCommitOids.length ? (
+                  <section aria-labelledby="lost-commits-title">
+                    <h3 id="lost-commits-title">{t('removedCommits')}</h3>
+                    <ul className="affected-commits">
+                      {pendingAction.preview.lostCommitOids.map((oid) => (
+                        <li key={oid}>
+                          <code>{oid.slice(0, 12)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {pendingAction.preview.remoteEffect ? (
+                  <p>{message(pendingAction.preview.remoteEffect)}</p>
+                ) : null}
+                {pendingAction.preview.typedConfirmation ? (
+                  <label>
+                    <span>
+                      {t('typeToConfirm', { value: pendingAction.preview.typedConfirmation })}
+                    </span>
+                    <input
+                      value={typedConfirmation}
+                      onChange={(event) => setTypedConfirmation(event.target.value)}
+                    />
+                  </label>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2384,18 +2492,22 @@ export function App({
                 >
                   {confirmationActionLabel(pendingAction.request.action, t)}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
           {pendingNavigation ? (
             <Dialog
               labelledBy="leave-conflict-title"
+              role="alertdialog"
               onDismiss={() => setPendingNavigation(undefined)}
             >
-              <h2 id="leave-conflict-title">{t('unsavedChanges')}</h2>
-              <p>{t('saveOrDiscardBeforeLeaving')}</p>
-              <div className="button-row end">
+              <DialogHeader
+                titleId="leave-conflict-title"
+                title={t('unsavedChanges')}
+                description={t('saveOrDiscardBeforeLeaving')}
+              />
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2417,26 +2529,28 @@ export function App({
                 >
                   {t('saveAndLeave')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
           {pendingOperationAction ? (
             <Dialog
               labelledBy="leave-operation-title"
+              role="alertdialog"
               onDismiss={() => setPendingOperationAction(undefined)}
             >
-              <h2 id="leave-operation-title">{t('unsavedResult')}</h2>
-              <p>
-                {t(
+              <DialogHeader
+                titleId="leave-operation-title"
+                title={t('unsavedResult')}
+                description={t(
                   pendingOperationAction.kind === 'continueOperation'
                     ? 'discardBeforeContinue'
                     : pendingOperationAction.kind === 'skipOperation'
                       ? 'discardBeforeSkip'
                       : 'discardBeforeAbort',
                 )}
-              </p>
-              <div className="button-row end">
+              />
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2455,18 +2569,22 @@ export function App({
                       ? t('discardAndSkip')
                       : t('discardAndAbort')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
           {pendingUnsavedAction ? (
             <Dialog
               labelledBy="unsaved-action-title"
+              role="alertdialog"
               onDismiss={() => setPendingUnsavedAction(undefined)}
             >
-              <h2 id="unsaved-action-title">{t('unsavedChanges')}</h2>
-              <p>{t('saveOrDiscardBeforeAction')}</p>
-              <div className="button-row end">
+              <DialogHeader
+                titleId="unsaved-action-title"
+                title={t('unsavedChanges')}
+                description={t('saveOrDiscardBeforeAction')}
+              />
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2488,15 +2606,22 @@ export function App({
                 >
                   {t('saveAndLeave')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 
           {pendingWindowClose ? (
-            <Dialog labelledBy="unsaved-close-title" onDismiss={() => setPendingWindowClose(false)}>
-              <h2 id="unsaved-close-title">{t('unsavedChanges')}</h2>
-              <p>{t('saveOrDiscardBeforeClosing')}</p>
-              <div className="button-row end">
+            <Dialog
+              labelledBy="unsaved-close-title"
+              role="alertdialog"
+              onDismiss={() => setPendingWindowClose(false)}
+            >
+              <DialogHeader
+                titleId="unsaved-close-title"
+                title={t('unsavedChanges')}
+                description={t('saveOrDiscardBeforeClosing')}
+              />
+              <DialogFooter>
                 <button
                   type="button"
                   data-dialog-initial-focus
@@ -2518,7 +2643,7 @@ export function App({
                 >
                   {t('saveAndClose')}
                 </button>
-              </div>
+              </DialogFooter>
             </Dialog>
           ) : null}
 

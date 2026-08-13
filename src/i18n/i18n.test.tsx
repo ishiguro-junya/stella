@@ -101,6 +101,11 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'actionSkipOperation')).toBe('操作をスキップ');
     expect(translate('ja', 'actionAbortOperation')).toBe('操作を中止');
     expect(translate('ja', 'actionCloneRepository')).toBe('リポジトリをクローン');
+    expect(translate('ja', 'searchRepositories')).toBe('リポジトリ名で検索');
+    expect(translate('ja', 'searchBranches')).toBe('ブランチ名で検索');
+    expect(translate('ja', 'forgetRepositoryDescription', { repository: 'xxxx' })).toBe(
+      'リポジトリ「xxxx」の登録だけ解除するか、ローカルファイルをゴミ箱へ移動するか選択してください。',
+    );
   });
 
   it('uses natural Japanese for Activity actions and summaries', () => {

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +32,16 @@ const BRANCHES: BranchSummary[] = [
   },
 ];
 
+function branchSummary(shortName: string, current = false): BranchSummary {
+  return {
+    fullName: `refs/heads/${shortName}`,
+    shortName,
+    oid: `${shortName}-oid`,
+    current,
+    remote: false,
+  };
+}
+
 describe('RepositorySwitcherDialog', () => {
   it('dismisses on a backdrop click but stays open when the dialog is clicked', async () => {
     const user = userEvent.setup();
@@ -44,11 +54,13 @@ describe('RepositorySwitcherDialog', () => {
         onSelectOpen={() => undefined}
         onSelectRegistered={() => undefined}
         onManageRemotes={() => undefined}
+        onForget={() => undefined}
         onAdd={() => undefined}
       />,
     );
 
     const dialog = screen.getByRole('dialog', { name: 'Switch Repository' });
+    expect(within(dialog).queryByRole('button', { name: 'Close dialog' })).not.toBeInTheDocument();
     await user.click(dialog);
     expect(onDismiss).not.toHaveBeenCalled();
     if (!dialog.parentElement) throw new Error('Repository switcher backdrop was not rendered.');
@@ -74,18 +86,21 @@ describe('RepositorySwitcherDialog', () => {
           { path: '/tmp/second', name: 'second' },
           { path: '/tmp/recent', name: 'Saved Custom', logoUrl: 'asset://recent/logo.svg' },
         ]}
-        selectedRepoId={first.repoId}
+        selectedRepoId={second.repoId}
         onDismiss={() => undefined}
         onSelectOpen={() => undefined}
         onSelectRegistered={onSelectRegistered}
         onManageRemotes={() => undefined}
+        onForget={() => undefined}
         onAdd={() => undefined}
       />,
     );
 
     const dialog = screen.getByRole('dialog', { name: 'Switch Repository' });
     expect(within(dialog).getAllByRole('option')).toHaveLength(3);
-    expect(within(dialog).getByRole('option', { name: /first/u })).toHaveAttribute(
+    const options = within(dialog).getAllByRole('option');
+    expect(options[0]).toHaveAccessibleName(/second.*topic.*Modified/u);
+    expect(within(dialog).getByRole('option', { name: /second/u })).toHaveAttribute(
       'aria-current',
       'true',
     );
@@ -98,10 +113,18 @@ describe('RepositorySwitcherDialog', () => {
         .querySelector('img'),
     ).toHaveAttribute('src', 'asset://recent/logo.svg');
 
-    const search = within(dialog).getByRole('combobox', { name: 'Search repositories' });
-    expect(search).toHaveFocus();
+    expect(options[0]).toHaveFocus();
+    expect(options[0]?.closest('.switcher-option-row')).toHaveClass('is-focused');
+    const search = within(dialog).getByRole('combobox', {
+      name: 'Search by repository name',
+    });
+    expect(search).toHaveAttribute('placeholder', 'Search by repository name');
+    await user.click(search);
     await user.type(search, 'recent');
     expect(within(dialog).getAllByRole('option')).toHaveLength(1);
+    await user.click(within(dialog).getByRole('option', { name: /Saved Custom/u }));
+    expect(onSelectRegistered).not.toHaveBeenCalled();
+    search.focus();
     await user.keyboard('{Enter}');
     expect(onSelectRegistered).toHaveBeenCalledWith('/tmp/recent');
   });
@@ -123,12 +146,68 @@ describe('RepositorySwitcherDialog', () => {
         onSelectOpen={onSelectOpen}
         onSelectRegistered={() => undefined}
         onManageRemotes={() => undefined}
+        onForget={() => undefined}
         onAdd={() => undefined}
       />,
     );
 
     await user.keyboard('{End}{ArrowUp}{Home}{ArrowDown}{Enter}');
     expect(onSelectOpen).toHaveBeenCalledWith('repo-2');
+  });
+
+  it('opens the same repository actions from right-click and the persistent ellipsis', async () => {
+    const user = userEvent.setup();
+    const first = repoSnapshot({ repoId: 'repo-1', name: 'first', path: '/tmp/first' });
+    const second = repoSnapshot({ repoId: 'repo-2', name: 'second', path: '/tmp/second' });
+    const onManageRemotes = vi.fn<(path: string) => void>();
+    const onForget = vi.fn<(path: string) => void>();
+    const onSelectOpen = vi.fn<(repoId: string) => void>();
+    render(
+      <RepositorySwitcherDialog
+        repos={[first, second]}
+        registeredRepositories={[
+          { path: first.path, name: first.name },
+          { path: second.path, name: second.name },
+        ]}
+        selectedRepoId={first.repoId}
+        onDismiss={() => undefined}
+        onSelectOpen={onSelectOpen}
+        onSelectRegistered={() => undefined}
+        onManageRemotes={onManageRemotes}
+        onForget={onForget}
+        onAdd={() => undefined}
+      />,
+    );
+
+    await user.dblClick(screen.getByRole('option', { name: /first/u }));
+    expect(onSelectOpen).not.toHaveBeenCalled();
+    const secondOption = screen.getByRole('option', { name: /second/u });
+    fireEvent.contextMenu(secondOption, { clientX: 120, clientY: 180 });
+    let menu = screen.getByRole('menu', { name: 'second actions' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Switch Repository', 'Change Remote URLs', 'Delete Repository']);
+    await user.keyboard('{Escape}');
+    expect(secondOption).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'More actions for second' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Switch Repository' }));
+    expect(onSelectOpen).toHaveBeenCalledWith('repo-2');
+    expect(secondOption).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'More actions for second' }));
+    menu = screen.getByRole('menu', { name: 'second actions' });
+    await user.click(within(menu).getByRole('menuitem', { name: 'Change Remote URLs' }));
+    expect(onManageRemotes).toHaveBeenCalledWith('/tmp/second');
+
+    await user.click(screen.getByRole('button', { name: 'More actions for second' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Repository' }));
+    expect(onForget).toHaveBeenCalledWith('/tmp/second');
+
+    await user.click(screen.getByRole('button', { name: 'More actions for first' }));
+    expect(screen.getByRole('menuitem', { name: 'Switch Repository' })).toBeDisabled();
   });
 });
 
@@ -165,7 +244,9 @@ describe('BranchSwitcherDialog', () => {
       />,
     );
 
-    expect(screen.getByRole('option', { name: 'main' })).toHaveAttribute('aria-current', 'true');
+    const current = screen.getByRole('option', { name: 'main' });
+    expect(current).toHaveAttribute('aria-current', 'true');
+    expect(current).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
     expect(
       screen.getByText('Create the first commit before creating another branch.'),
@@ -188,7 +269,9 @@ describe('BranchSwitcherDialog', () => {
     const dialog = screen.getByRole('dialog', { name: 'Switch Branch' });
     expect(within(dialog).getAllByRole('option')).toHaveLength(2);
     expect(within(dialog).queryByRole('option', { name: /remote-only/u })).not.toBeInTheDocument();
-    const search = within(dialog).getByRole('combobox', { name: 'Search branches' });
+    const search = within(dialog).getByRole('combobox', { name: 'Search by branch name' });
+    expect(search).toHaveAttribute('placeholder', 'Search by branch name');
+    await user.click(search);
     await user.type(search, 'feature');
     await user.keyboard('{Enter}');
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
@@ -213,10 +296,114 @@ describe('BranchSwitcherDialog', () => {
     expect(feature).not.toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('button', { name: 'Create branch' })).toBeEnabled();
     await user.click(feature);
+    expect(onCheckout).not.toHaveBeenCalled();
+    await user.dblClick(feature);
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
 
     await user.click(screen.getByRole('button', { name: 'Create branch' }));
     expect(screen.getByRole('textbox', { name: 'Branch name' })).toBeEnabled();
+  });
+
+  it('opens branch switching from right-click and the persistent ellipsis', async () => {
+    const user = userEvent.setup();
+    const onCheckout = vi.fn<(branchName: string) => void>();
+    render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot()}
+        branches={BRANCHES}
+        onDismiss={() => undefined}
+        onCheckout={onCheckout}
+        onCreate={() => undefined}
+      />,
+    );
+
+    const feature = screen.getByRole('option', { name: 'feature/search' });
+    fireEvent.contextMenu(feature, { clientX: 80, clientY: 120 });
+    let menu = screen.getByRole('menu', { name: 'feature/search actions' });
+    expect(within(menu).getByRole('menuitem', { name: 'Switch Branch' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(feature).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'More actions for feature/search' }));
+    menu = screen.getByRole('menu', { name: 'feature/search actions' });
+    await user.click(within(menu).getByRole('menuitem', { name: 'Switch Branch' }));
+    expect(onCheckout).toHaveBeenCalledWith('feature/search');
+
+    await user.click(screen.getByRole('button', { name: 'More actions for main' }));
+    expect(screen.getByRole('menuitem', { name: 'Switch Branch' })).toBeDisabled();
+  });
+
+  it('orders the current and exact base branches before the remaining Git order', () => {
+    render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot({
+          branch: {
+            name: 'feature/current',
+            oid: 'current-oid',
+            detached: false,
+            ahead: 0,
+            behind: 0,
+          },
+        })}
+        branches={[
+          branchSummary('feature/z'),
+          branchSummary('release/next'),
+          branchSummary('develop'),
+          branchSummary('main'),
+          branchSummary('feature/current', true),
+          branchSummary('master'),
+          branchSummary('staging'),
+          branchSummary('feature/a'),
+        ]}
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'feature/current',
+      'main',
+      'master',
+      'staging',
+      'develop',
+      'feature/z',
+      'release/next',
+      'feature/a',
+    ]);
+    expect(screen.getAllByRole('option')[0]).toHaveFocus();
+  });
+
+  it('shows and focuses the known current branch while the remaining branches load', () => {
+    render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot()}
+        branches={[]}
+        loading
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('option', { name: 'main' })).toHaveFocus();
+    expect(screen.getByText('Loading…')).toBeVisible();
+  });
+
+  it('focuses search when detached HEAD has no current branch item', () => {
+    render(
+      <BranchSwitcherDialog
+        repo={repoSnapshot({
+          branch: { name: null, detached: true, oid: 'detached-oid', ahead: 0, behind: 0 },
+        })}
+        branches={[]}
+        onDismiss={() => undefined}
+        onCheckout={() => undefined}
+        onCreate={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('combobox', { name: 'Search by branch name' })).toHaveFocus();
   });
 
   it('continues to block branch changes during another Git operation or busy state', () => {

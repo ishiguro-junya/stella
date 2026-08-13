@@ -1806,13 +1806,7 @@ button:where(:has(> .lucide)) > span {
   display: flex;
 }
 .commit-submit {
-  position: sticky;
-  bottom: 0;
   margin-top: auto;
-  padding: 11px 12px 12px;
-  border-top: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--surface-inspector) 92%, transparent);
-  backdrop-filter: blur(16px);
 }
 .commit-disabled-reason {
   display: block;
@@ -1824,31 +1818,12 @@ button:where(:has(> .lucide)) > span {
   font-size: 11px;
 }
 .confirmation-sheet > .commit-form {
+  display: grid;
   min-height: 0;
-}
-.form-dialog {
-  gap: 20px;
-  width: min(580px, 100%);
-  padding: 28px;
-}
-.form-dialog > h2 {
-  margin-bottom: 0;
-}
-.form-dialog .commit-field-error.is-placeholder {
-  display: none;
-}
-.form-dialog .dialog-form-actions {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
-}
-.confirmation-sheet > .commit-form .commit-submit {
-  position: static;
-  margin-right: 0;
-  margin-bottom: 0;
-  margin-left: 0;
-  background: transparent;
-  backdrop-filter: none;
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
 }
 .add-repository-source {
   width: fit-content;
@@ -2879,18 +2854,14 @@ button:where(:has(> .lucide)) > span {
   gap: 4px;
   padding-right: 7px;
 }
-.registered-repository-actions button,
-.remote-definition header button,
-.remote-url-row button {
+.registered-repository-actions button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 5px 7px;
   font-size: 11px;
 }
-.registered-repository-actions button > svg,
-.remote-definition header button > svg,
-.remote-url-row button > svg {
+.registered-repository-actions button > svg {
   width: 13px;
   height: 13px;
 }
@@ -2952,69 +2923,26 @@ button:where(:has(> .lucide)) > span {
     padding-top: 36px;
   }
 }
-.remote-manager-sheet {
-  width: min(720px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow: auto;
-}
-.remote-manager-header,
-.remote-definition > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.remote-manager-header h2,
-.remote-manager-header p,
-.remote-definition h3,
-.remote-definition h4,
 .remote-manager-error p {
   margin: 0;
 }
-.remote-manager-header p {
-  margin-top: 5px;
-  color: var(--text-secondary);
-}
 .remote-manager-list {
   display: grid;
-  gap: 12px;
-}
-.remote-definition {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  background: var(--surface-raised);
-}
-.remote-definition > header > div {
-  display: grid;
-  gap: 3px;
+  gap: 16px;
 }
 .remote-url-group {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
-.remote-url-group h4 {
+.remote-url-group h3 {
+  margin: 0;
   color: var(--text-secondary);
   font-size: 11px;
 }
-.remote-url-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
-}
-.remote-url-row code,
-.remote-url-row label,
-.remote-url-row input {
+.remote-url-field,
+.remote-url-field input {
   min-width: 0;
   width: 100%;
-}
-.remote-url-row code {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .remote-manager-error {
   display: flex;
@@ -3035,19 +2963,74 @@ button:where(:has(> .lucide)) > span {
   backdrop-filter: blur(4px);
 }
 .confirmation-sheet {
-  display: grid;
-  gap: 12px;
-  width: min(520px, 100%);
+  position: relative;
+  display: flex;
+  width: min(580px, 100%);
   max-height: calc(100vh - 48px);
-  padding: 22px;
-  overflow: auto;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   background: var(--surface-overlay);
   box-shadow: var(--shadow-sheet);
 }
-.confirmation-sheet > p {
-  margin-bottom: 0;
+.dialog-header {
+  flex: none;
+  padding: 22px 56px 12px 24px;
+}
+.dialog-header h2,
+.dialog-header p {
+  margin: 0;
+}
+.dialog-header p {
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+.dialog-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 24px 20px;
+  overflow: auto;
+}
+.dialog-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 20px;
+}
+.dialog-close-button {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  right: 14px;
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  place-items: center;
+}
+.dialog-close-button:hover:not(:disabled) {
+  border: 0;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.dialog-close-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.dialog-close-button > svg {
+  width: 16px;
+  height: 16px;
 }
 .switcher-backdrop {
   place-items: start center;
@@ -3104,39 +3087,60 @@ button:where(:has(> .lucide)) > span {
   font-size: 12px;
 }
 .switcher-list {
+  flex: none;
+  height: calc(56px * 5);
   min-height: 0;
-  padding: 5px;
+  padding: 0;
   overflow: auto;
 }
-.switcher-option {
+.switcher-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  border-radius: 0;
+}
+.switcher-option-row.has-actions {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+.switcher-option,
+.switcher-option:hover:not(:disabled) {
   display: grid;
   grid-template-columns: 20px 24px minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
   min-height: 56px;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 7px 4px 7px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
   text-align: left;
 }
-.switcher-option:hover:not([aria-disabled='true']) {
+.switcher-option-row:hover:not(.is-disabled) {
   background: var(--selection-muted);
 }
-.switcher-option[aria-selected='true'] {
+.switcher-option-row.is-selected {
   background: var(--interactive-selected-surface);
   color: var(--interactive-selected-foreground);
 }
-.switcher-option[aria-selected='true']:hover:not([aria-disabled='true']) {
+.switcher-option-row.is-selected:hover:not(.is-disabled) {
   background: var(--interactive-selected-hover);
 }
-.switcher-option:focus-visible {
-  outline-offset: -2px;
+.switcher-option-row.is-selected .switcher-option {
+  color: inherit;
 }
-.switcher-option[aria-selected='true']:focus-visible {
-  outline-color: var(--interactive-selected-foreground);
+.switcher-option:focus-visible {
+  outline: none;
+}
+.switcher-option-row:focus-within,
+.switcher-option-row.is-focused {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.switcher-option-row.is-selected:focus-within,
+.switcher-option-row.is-selected.is-focused {
+  box-shadow: inset 0 0 0 2px var(--interactive-selected-foreground);
 }
 .switcher-option[aria-disabled='true'] {
   opacity: 0.48;
@@ -3151,10 +3155,10 @@ button:where(:has(> .lucide)) > span {
 .switcher-check {
   color: var(--accent);
 }
-.switcher-option[aria-selected='true'] :is(.switcher-check, .switcher-option-icon) {
+.switcher-option-row.is-selected :is(.switcher-check, .switcher-option-icon) {
   color: var(--interactive-selected-foreground);
 }
-.switcher-option[aria-selected='true'] .switcher-status-dot {
+.switcher-option-row.is-selected .switcher-status-dot {
   background: var(--interactive-selected-foreground);
 }
 .switcher-check > svg,
@@ -3191,8 +3195,17 @@ button:where(:has(> .lucide)) > span {
   color: var(--text-tertiary);
   font-size: 11px;
 }
-.switcher-option[aria-selected='true'] :is(.switcher-option-copy small, .switcher-status small) {
+.switcher-option-row.is-selected :is(.switcher-option-copy small, .switcher-status small) {
   color: var(--interactive-selected-muted-foreground);
+}
+.switcher-option-row .switcher-action-trigger {
+  margin-right: 4px;
+}
+.switcher-option-row.is-selected .switcher-action-trigger {
+  color: var(--interactive-selected-foreground);
+}
+.switcher-option-row.is-selected .switcher-action-trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--interactive-selected-foreground) 18%, transparent);
 }
 .switcher-status {
   display: inline-flex;
@@ -3208,10 +3221,19 @@ button:where(:has(> .lucide)) > span {
   color: var(--text-secondary);
   text-align: center;
 }
+.switcher-loading {
+  display: block;
+  padding: 8px 16px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-align: center;
+}
 .switcher-footer {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   flex: none;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
   border-top: 1px solid var(--border-subtle);
 }
 .switcher-footer button {
@@ -3219,45 +3241,26 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 42px;
+  min-height: 32px;
   gap: 7px;
-  padding: 6px 9px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-secondary);
-  font-size: 11.5px;
   white-space: nowrap;
-}
-.switcher-footer button + button {
-  border-left: 1px solid var(--border-subtle);
-}
-.switcher-footer button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  color: var(--text-primary);
 }
 .switcher-footer button > svg {
   flex: none;
   width: 15px;
   height: 15px;
 }
-.git-flow-sheet {
-  width: min(760px, 100%);
-  max-height: calc(100vh - 32px);
-}
-.git-flow-sheet-header {
+.git-flow-section-header {
   display: flex;
   align-items: start;
   justify-content: space-between;
   gap: 16px;
 }
-.git-flow-sheet-header h2,
-.git-flow-sheet-header p,
-.git-flow-sheet h3 {
+.git-flow-overview h3,
+.git-flow-operation h3 {
   margin: 0;
 }
-.git-flow-sheet-header > button {
+.git-flow-section-header > button {
   flex: none;
 }
 .git-flow-overview,
@@ -3271,7 +3274,7 @@ button:where(:has(> .lucide)) > span {
 }
 .git-flow-overview dl {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
 }
@@ -3297,7 +3300,7 @@ button:where(:has(> .lucide)) > span {
 }
 .git-flow-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px 12px;
 }
 .git-flow-fields > label:not(.git-flow-check) {
@@ -3317,7 +3320,7 @@ button:where(:has(> .lucide)) > span {
   align-self: center;
   margin: 0;
 }
-@media (max-width: 720px) {
+@media (max-width: 520px) {
   .git-flow-overview dl,
   .git-flow-fields {
     grid-template-columns: 1fr;

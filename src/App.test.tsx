@@ -106,20 +106,22 @@ async function selectRepository(
 ): Promise<void> {
   await user.click(screen.getByRole('button', { name: /Switch repository/u }));
   const dialog = screen.getByRole('dialog', { name: 'Switch Repository' });
-  await user.click(within(dialog).getByRole('option', { name: new RegExp(repositoryName, 'u') }));
+  await user.dblClick(
+    within(dialog).getByRole('option', { name: new RegExp(repositoryName, 'u') }),
+  );
 }
 
 async function openAddRepositoryDialog(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole('button', { name: /Switch repository/u }));
   const dialog = screen.getByRole('dialog', { name: 'Switch Repository' });
-  await user.click(within(dialog).getByRole('button', { name: 'Add Repository…' }));
+  await user.click(within(dialog).getByRole('button', { name: 'Add Repository' }));
 }
 
 async function enterRepositoryPath(
   user: ReturnType<typeof userEvent.setup>,
   path: string,
 ): Promise<void> {
-  const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+  const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
   const pathTab = within(dialog).getByRole('tab', { name: 'Path' });
   if (pathTab.getAttribute('aria-selected') !== 'true') await user.click(pathTab);
   await user.type(within(dialog).getByRole('textbox', { name: 'Repository path' }), path);
@@ -559,7 +561,9 @@ describe('App repository attach', () => {
     };
     render(<App adapter={adapter} />);
 
-    await user.click(screen.getByRole('button', { name: /registered-stella/u }));
+    await user.click(
+      screen.getByRole('button', { name: 'registered-stella/tmp/registered-stella' }),
+    );
 
     await waitFor(() =>
       expect(adapter.attach).toHaveBeenCalledWith({
@@ -607,6 +611,179 @@ describe('App repository attach', () => {
     expect(
       await screen.findByRole('button', { name: /Current repository restored-stella/u }),
     ).toBeVisible();
+  });
+
+  it('saves changed remote URLs without confirmation and fetches each changed remote once', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot({ name: 'remote-stella', path: '/tmp/remote-stella' });
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [repo.path],
+      openRepoPaths: [repo.path],
+      selectedRepoPath: repo.path,
+    });
+    const preview = vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
+      repoId: request.repoId,
+      title: { id: 'actionSetRemoteUrl' },
+      summary: { id: 'actionSetRemoteUrl' },
+      affectedPaths: [],
+      affectedCommits: [],
+      lostCommitOids: [],
+      resolvedTargets: [],
+      destructive: false,
+    }));
+    const execute = vi.fn<WorkspaceAdapter['execute']>(async (request) => ({
+      repoId: request.repoId,
+      generation: repo.generation,
+      snapshot: repo,
+      summary: {
+        id:
+          request.action.kind === 'fetch'
+            ? ('backendFetchCompleted' as const)
+            : ('backendRemoteUrlUpdated' as const),
+      },
+    }));
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'remotes') {
+          return {
+            kind: 'remotes',
+            generation: repo.generation,
+            remotes: [
+              {
+                name: 'origin',
+                fetchUrls: ['https://example.test/old.git'],
+                pushUrls: ['ssh://example.test/old.git'],
+              },
+            ],
+          };
+        }
+        return { kind: 'activity', entries: [] };
+      }),
+      preview,
+      execute,
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(
+      await screen.findByRole('button', { name: /Current repository remote-stella/u }),
+    );
+    const switcher = screen.getByRole('dialog', { name: 'Switch Repository' });
+    await user.click(
+      within(switcher).getByRole('button', { name: 'More actions for remote-stella' }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Change Remote URLs' }));
+    const manager = await screen.findByRole('dialog', { name: 'Change Remote URLs' });
+    const inputs = within(manager).getAllByRole('textbox');
+    await user.clear(inputs[0]!);
+    await user.type(inputs[0]!, 'https://example.test/new.git');
+    await user.clear(inputs[1]!);
+    await user.type(inputs[1]!, 'ssh://example.test/new.git');
+    await user.click(within(manager).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.map(([request]) => request.action)).toEqual([
+      {
+        kind: 'setRemoteUrl',
+        remote: 'origin',
+        urlKind: 'fetch',
+        expectedUrl: 'https://example.test/old.git',
+        newUrl: 'https://example.test/new.git',
+      },
+      {
+        kind: 'setRemoteUrl',
+        remote: 'origin',
+        urlKind: 'push',
+        expectedUrl: 'ssh://example.test/old.git',
+        newUrl: 'ssh://example.test/new.git',
+      },
+      { kind: 'fetch', remote: 'origin' },
+    ]);
+    expect(
+      screen.queryByRole('alertdialog', { name: 'Change remote URL' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Change Remote URLs' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the remote URL dialog open and reloads URLs after a save failure', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot({ name: 'remote-stella', path: '/tmp/remote-stella' });
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [repo.path],
+      openRepoPaths: [repo.path],
+      selectedRepoPath: repo.path,
+    });
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'remotes') {
+        return {
+          kind: 'remotes',
+          generation: repo.generation,
+          remotes: [
+            {
+              name: 'origin',
+              fetchUrls: ['https://example.test/old.git'],
+              pushUrls: [],
+            },
+          ],
+        };
+      }
+      return { kind: 'activity', entries: [] };
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query,
+      preview: vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
+        repoId: request.repoId,
+        title: { id: 'actionSetRemoteUrl' },
+        summary: { id: 'actionSetRemoteUrl' },
+        affectedPaths: [],
+        affectedCommits: [],
+        lostCommitOids: [],
+        resolvedTargets: [],
+        destructive: false,
+      })),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('save failed');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(
+      await screen.findByRole('button', { name: /Current repository remote-stella/u }),
+    );
+    const switcher = screen.getByRole('dialog', { name: 'Switch Repository' });
+    await user.click(
+      within(switcher).getByRole('button', { name: 'More actions for remote-stella' }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Change Remote URLs' }));
+    const manager = await screen.findByRole('dialog', { name: 'Change Remote URLs' });
+    const input = within(manager).getByRole('textbox');
+    await user.clear(input);
+    await user.type(input, 'https://example.test/new.git');
+    await user.click(within(manager).getByRole('button', { name: 'Save' }));
+
+    const error = await screen.findByRole('alertdialog', { name: 'Operation failed' });
+    await waitFor(() =>
+      expect(query.mock.calls.filter(([request]) => request.kind === 'remotes')).toHaveLength(2),
+    );
+    await user.click(within(error).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog', { name: 'Change Remote URLs' })).toBeVisible();
+    expect(screen.getByRole('textbox')).toHaveValue('https://example.test/old.git');
   });
 
   it('前回のリポジトリを復元している間は Repository Landing を表示しない', async () => {
@@ -755,7 +932,7 @@ describe('App repository attach', () => {
 
     expect(directoryPicker).toHaveBeenCalledWith('Choose Clone Location');
     expect(adapter.attach).not.toHaveBeenCalled();
-    expect(screen.getByRole('alertdialog', { name: 'Add Repository' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Add Repository' })).toBeVisible();
   });
 
   it('updates repository analytics after switching through peer titlebar navigation', async () => {
@@ -948,7 +1125,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await user.click(await screen.findByRole('button', { name: /Current branch main/u }));
     const dialog = await screen.findByRole('dialog', { name: 'Switch Branch' });
-    await user.click(within(dialog).getByRole('option', { name: 'feature' }));
+    await user.dblClick(within(dialog).getByRole('option', { name: 'feature' }));
 
     expect(execute).toHaveBeenCalledWith({
       repoId: repo.repoId,
@@ -1094,7 +1271,7 @@ describe('App repository attach', () => {
     await screen.findByRole('button', { name: /Current repository stella/u });
 
     await openAddRepositoryDialog(user);
-    const dialog = screen.getByRole('alertdialog', { name: 'Add Repository' });
+    const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
     expect(within(dialog).getByRole('textbox', { name: 'Repository URL' })).toBeVisible();
     expect(within(dialog).getByRole('textbox', { name: 'Repository name' })).toBeVisible();
     await user.click(within(dialog).getByRole('tab', { name: 'Path' }));
@@ -1159,7 +1336,7 @@ describe('App repository attach', () => {
     await openAddRepositoryDialog(user);
     await enterRepositoryPath(user, second.path);
     await user.click(
-      within(screen.getByRole('alertdialog', { name: 'Add Repository' })).getByRole('button', {
+      within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
         name: 'Add',
       }),
     );
@@ -1240,7 +1417,7 @@ describe('App repository attach', () => {
     await openAddRepositoryDialog(user);
     await enterRepositoryPath(user, second.path);
     await user.click(
-      within(screen.getByRole('alertdialog', { name: 'Add Repository' })).getByRole('button', {
+      within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
         name: 'Add',
       }),
     );
@@ -1604,9 +1781,9 @@ describe('App repository attach', () => {
     expect(screen.getByRole('heading', { name: 'Repositories' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
-    expect(screen.getByRole('alertdialog', { name: 'Add Repository' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Add Repository' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.queryByRole('alertdialog', { name: 'Add Repository' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Add Repository' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Repository' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: 'Repositories' }));
@@ -2146,6 +2323,49 @@ describe('App repository attach', () => {
 });
 
 describe('App repository recovery', () => {
+  it('asks whether to remove only the registration or delete the local repository', async () => {
+    const user = userEvent.setup();
+    const path = '/tmp/repository-to-delete';
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [path],
+      repositoryNames: { [path]: 'Repository to Delete' },
+    });
+    const deleteRepository = vi.fn<NonNullable<WorkspaceAdapter['deleteRepository']>>(
+      async () => undefined,
+    );
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? { kind: 'repositoryAvailability', path: request.path, availability: 'available' }
+          : { kind: 'activity', entries: [] },
+      ),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      deleteRepository,
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete repository Repository to Delete' }),
+    );
+    const confirmation = screen.getByRole('alertdialog', { name: 'Delete Repository' });
+    expect(
+      within(confirmation).getByRole('button', { name: 'Remove Registration Only' }),
+    ).toBeVisible();
+    await user.click(within(confirmation).getByRole('button', { name: 'Delete Repository' }));
+
+    await waitFor(() => expect(deleteRepository).toHaveBeenCalledWith(path));
+    expect(readPreferences().registeredRepoPaths).toEqual([]);
+  });
+
   it('validates and confirms a relocated registered repository before migrating its settings', async () => {
     const user = userEvent.setup();
     const oldPath = '/tmp/old-repository';
