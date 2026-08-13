@@ -4,7 +4,6 @@ import type { ActivityEntry } from '../../domain/workspace';
 import {
   ACTIVITY_STORAGE_KEY,
   ACTIVITY_SUMMARY_TTL_MS,
-  MAX_PERSISTED_ACTIVITIES,
   mergeActivityEntries,
   persistTerminalActivities,
   readPersistedActivities,
@@ -96,7 +95,7 @@ describe('activity persistence', () => {
     expect(localStorage.getItem(ACTIVITY_STORAGE_KEY)).toBeNull();
   });
 
-  it('expires summaries older than 30 days while keeping the exact boundary', () => {
+  it('expires summaries older than one year while keeping the exact boundary', () => {
     const boundary = new Date(NOW - ACTIVITY_SUMMARY_TTL_MS).toISOString();
     const expired = new Date(NOW - ACTIVITY_SUMMARY_TTL_MS - 1).toISOString();
     persistTerminalActivities(
@@ -137,8 +136,8 @@ describe('activity persistence', () => {
     expect(() => persistTerminalActivities([activity()], unavailableStorage, NOW)).not.toThrow();
   });
 
-  it('drops malformed records, deduplicates ids by newest finish time, and caps at 500', () => {
-    const entries = Array.from({ length: MAX_PERSISTED_ACTIVITIES + 2 }, (_, index) =>
+  it('drops malformed records and deduplicates ids by newest finish time without a count limit', () => {
+    const entries = Array.from({ length: 502 }, (_, index) =>
       activity({
         id: `operation-${index}`,
         startedAt: new Date(NOW - index * 1_000 - 100).toISOString(),
@@ -159,11 +158,11 @@ describe('activity persistence', () => {
     );
 
     const restored = readPersistedActivities(localStorage, NOW);
-    expect(restored).toHaveLength(MAX_PERSISTED_ACTIVITIES);
+    expect(restored).toHaveLength(502);
     expect(restored[0]?.summary).toEqual({ id: 'backendPushCompleted' });
-    expect(restored.some((entry) => entry.id === 'operation-501')).toBe(false);
+    expect(restored.some((entry) => entry.id === 'operation-501')).toBe(true);
     const normalized: unknown = JSON.parse(localStorage.getItem(ACTIVITY_STORAGE_KEY) ?? 'null');
-    expect(normalized).toHaveLength(MAX_PERSISTED_ACTIVITIES);
+    expect(normalized).toHaveLength(502);
     expect(JSON.stringify(normalized)).not.toContain('malformed');
   });
 

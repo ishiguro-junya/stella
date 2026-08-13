@@ -2,8 +2,7 @@ import type { ActivityEntry } from '../../domain/workspace';
 import { isLocalizedMessage, type LocalizedMessage } from '../../i18n/i18n';
 
 export const ACTIVITY_STORAGE_KEY = 'stella.activity.v2';
-export const ACTIVITY_SUMMARY_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
-export const MAX_PERSISTED_ACTIVITIES = 500;
+export const ACTIVITY_SUMMARY_TTL_MS = 365 * 24 * 60 * 60 * 1_000;
 
 type TerminalActivityStatus = Exclude<ActivityEntry['status'], 'running'>;
 
@@ -76,8 +75,7 @@ function normalizeSummaries(
     if (!current || Date.parse(current.finishedAt) <= finishedAt) byId.set(summary.id, summary);
   }
   return [...byId.values()]
-    .toSorted((left, right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt))
-    .slice(0, MAX_PERSISTED_ACTIVITIES);
+    .toSorted((left, right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt));
 }
 
 function hydratedEntry(summary: PersistedActivitySummary): ActivityEntry {
