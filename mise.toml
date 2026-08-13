@@ -23,7 +23,7 @@ run = "pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
 description = "通常のTauri application bundleをbuildする"
 run = "pnpm exec tauri build"
 
-[tasks."install:app"]
+[tasks."install"]
 description = "ApplicationをbuildしてApplications folderへinstallする"
 depends = [ "build" ]
 run = "node --import tsx scripts/install-app.mts"
