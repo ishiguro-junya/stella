@@ -349,7 +349,7 @@ export type WorkspaceAction =
   | { kind: 'stageSelection'; selection: DiffSelection }
   | { kind: 'unstageSelection'; selection: DiffSelection }
   | { kind: 'discardSelection'; selection: DiffSelection }
-  | { kind: 'commit'; input: CommitInput }
+  | { kind: 'commit'; input: CommitInput; includeAllChanges: boolean }
   | { kind: 'fetch'; remote?: string }
   | { kind: 'pullFastForward' }
   | { kind: 'push' }

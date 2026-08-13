@@ -2692,10 +2692,16 @@ impl Workspace {
                     ))
                 }
             },
-            Action::Commit { input } => {
+            Action::Commit {
+                input,
+                include_all_changes,
+            } => {
                 self.ensure_pending_journal_effect(repo, before, control)?;
                 let message = build_message(input)?;
                 let file = MessageFile::create(&repo.git_dir, &message)?;
+                if *include_all_changes {
+                    self.run_checked(repo, GitCommand::AddAll, None, control)?;
+                }
                 let output = self.run_checked(
                     repo,
                     GitCommand::Commit {
@@ -10861,7 +10867,6 @@ mod tests {
         fixture.git(&["add", "--", "f.txt"]);
         fixture.git(&["commit", "-m", "feat: base"]);
         fixture.write("f.txt", "changed\n");
-        fixture.git(&["add", "--", "f.txt"]);
 
         let workspace = fixture.workspace();
         let attached = workspace
@@ -10896,6 +10901,7 @@ mod tests {
                         body: None,
                         footers: Vec::new(),
                     },
+                    include_all_changes: true,
                 },
                 confirmation_token: None,
             })
@@ -10907,6 +10913,11 @@ mod tests {
                 .get("stderr")
                 .is_some_and(|stderr| stderr.contains("policy denied this commit"))
         );
+        assert_eq!(
+            fixture.git_output(&["diff", "--cached", "--name-only"]),
+            "f.txt"
+        );
+        assert_eq!(fixture.git_output(&["diff", "--name-only"]), "");
         let refreshed_generation: u64 = error.details["repoGeneration"].parse().unwrap();
         assert!(refreshed_generation > attached.snapshot.repo_generation);
         assert!(fixture.repo.join("hook-side-effect.txt").is_file());
@@ -11966,6 +11977,7 @@ mod tests {
         let fixture = GitFixture::new();
         fixture.write("message.txt", "plain\n");
         fixture.git(&["add", "--", "message.txt"]);
+        fixture.write("unstaged.txt", "leave me\n");
         let workspace = fixture.workspace();
         let attached = workspace
             .attach(
@@ -11985,6 +11997,7 @@ mod tests {
                     input: CommitInput::Plain {
                         message: "  日本語の通常メッセージ  ".into(),
                     },
+                    include_all_changes: false,
                 },
                 confirmation_token: None,
             })
@@ -11994,6 +12007,61 @@ mod tests {
             fixture.git_output(&["log", "-1", "--pretty=%B"]).trim(),
             "日本語の通常メッセージ"
         );
+        assert_eq!(
+            fixture.git_output(&["status", "--short"]),
+            "?? unstaged.txt"
+        );
+    }
+
+    #[test]
+    fn include_all_changes_commits_the_entire_worktree() {
+        let fixture = GitFixture::new();
+        fixture.write(".gitignore", "ignored.txt\n");
+        fixture.write("partial.txt", "base\n");
+        fixture.write("deleted.txt", "base\n");
+        fixture.git(&["add", "--all"]);
+        fixture.git(&["commit", "-m", "test: base"]);
+
+        fixture.write("partial.txt", "staged\n");
+        fixture.git(&["add", "--", "partial.txt"]);
+        fixture.write("partial.txt", "worktree\n");
+        fs::remove_file(fixture.repo.join("deleted.txt")).unwrap();
+        fixture.write("untracked.txt", "new\n");
+        fixture.write("ignored.txt", "ignored\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "commit-all".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::Commit {
+                    input: CommitInput::Plain {
+                        message: "すべてコミット".into(),
+                    },
+                    include_all_changes: true,
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+
+        assert_eq!(
+            fixture.git_output(&["show", "HEAD:partial.txt"]),
+            "worktree"
+        );
+        assert_eq!(fixture.git_output(&["show", "HEAD:untracked.txt"]), "new");
+        fixture.git_fails(&["cat-file", "-e", "HEAD:deleted.txt"]);
+        assert_eq!(fixture.git_output(&["status", "--short"]), "");
+        assert!(fixture.repo.join("ignored.txt").is_file());
     }
 
     struct GitFixture {
@@ -12182,6 +12250,7 @@ mod tests {
                 body: None,
                 footers: Vec::new(),
             },
+            include_all_changes: false,
         }
     }
 }

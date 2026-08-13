@@ -218,6 +218,7 @@ pub(crate) enum GitCommand {
     Add {
         paths: Vec<String>,
     },
+    AddAll,
     Remove {
         paths: Vec<String>,
     },
@@ -559,6 +560,7 @@ impl GitCommand {
                 push_paths(&mut args, paths);
                 args
             }
+            Self::AddAll => strings(["add", "--all"]),
             Self::Remove { paths } => {
                 let mut args = strings(["rm", "--ignore-unmatch"]);
                 push_paths(&mut args, paths);

@@ -211,6 +211,10 @@ export const MESSAGES = {
     en: 'Stage changes to commit.',
     ja: 'コミットする変更をステージしてください。',
   },
+  noChangesToCommit: {
+    en: 'There are no changes to commit.',
+    ja: 'コミットする変更はありません。',
+  },
   regularCommitUnavailable: {
     en: (args) =>
       `${text(args, 'operation')}. Regular commits are unavailable; use Continue, Skip, or Abort.`,

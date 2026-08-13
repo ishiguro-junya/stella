@@ -129,6 +129,29 @@ describe('Changes', () => {
     await expect($('.diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  it('commits every change when Stage display is hidden', async () => {
+    await $('button=設定').click();
+    await selectSetting('stage-display', 'hide');
+    await $('button=変更').click();
+    await expect($('input[aria-label^="ステージ "]')).not.toExist();
+
+    const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    await trigger.click();
+    const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    await dialog.$('[data-commit-field="description"]').setValue('全変更をコミットする');
+    await dialog.$('.commit-form button[type="submit"]').click();
+
+    await expect(dialog).not.toExist();
+    await browser.waitUntil(
+      async () => (await runGit(repositoryPath, ['status', '--short'])) === '',
+      {
+        timeout: 10_000,
+        timeoutMsg: 'Stage displayなしのCommit後も変更が残っています。',
+      },
+    );
+    expect(await runGit(repositoryPath, ['show', 'HEAD:README.md'])).toBe('# Stella E2E\n');
+  });
+
   it('shows, stages, and commits a working tree change', async () => {
     const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
     await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');

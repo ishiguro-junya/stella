@@ -129,7 +129,7 @@ export type WireAction =
       target: 'unstaged' | 'untracked';
       selection: WirePatchSelection | null;
     }
-  | { kind: 'commit'; input: WireCommitInput }
+  | { kind: 'commit'; input: WireCommitInput; includeAllChanges: boolean }
   | { kind: 'fetch'; remote: string }
   | { kind: 'pull'; remote: string; remoteBranch: string }
   | {

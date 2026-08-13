@@ -502,7 +502,11 @@ async function mapAction(
         selection: mapPatchSelection(action.selection),
       };
     case 'commit':
-      return { kind: 'commit', input: commitInput(action.input) };
+      return {
+        kind: 'commit',
+        input: commitInput(action.input),
+        includeAllChanges: action.includeAllChanges,
+      };
     case 'fetch':
       return { kind: 'fetch', remote: action.remote ?? upstream.remote };
     case 'pullFastForward':

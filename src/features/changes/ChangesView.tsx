@@ -85,12 +85,18 @@ function settleAction(promise: Promise<unknown>): void {
 
 function commitDisabledReason(
   repo: RepoSnapshot,
+  splitStageView: boolean,
   t: I18nValue['t'],
   message: I18nValue['message'],
 ): string | undefined {
   if (repo.operation.kind === 'merge' && repo.changes.some((entry) => entry.area === 'conflicted'))
     return t('resolveConflictsBeforeCommit');
-  if (!repo.changes.some((entry) => entry.area === 'staged')) return t('stageChangesToCommit');
+  if (
+    !repo.changes.some((entry) =>
+      splitStageView ? entry.area === 'staged' : entry.area !== 'conflicted',
+    )
+  )
+    return t(splitStageView ? 'stageChangesToCommit' : 'noChangesToCommit');
   switch (repo.operation.kind) {
     case 'none':
     case 'merge':
@@ -236,7 +242,7 @@ export function ChangesView({
       ? conflict
       : undefined;
   const pullTarget = repo.branch.upstream;
-  const disabledCommitReason = commitDisabledReason(repo, t, message);
+  const disabledCommitReason = commitDisabledReason(repo, splitStageView, t, message);
   const operationActionDisabledReason =
     repo.operation.kind === 'none'
       ? undefined
@@ -1544,7 +1550,9 @@ export function ChangesView({
             onCancel={() => setCommitDialogOpen(false)}
             onCommitted={() => setCommitDialogOpen(false)}
             onError={reportRuntimeError}
-            onCommit={(input) => onAction({ kind: 'commit', input })}
+            onCommit={(input) =>
+              onAction({ kind: 'commit', input, includeAllChanges: !splitStageView })
+            }
           />
         </Dialog>
       ) : null}

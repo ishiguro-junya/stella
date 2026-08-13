@@ -896,6 +896,38 @@ describe('ChangesView diff lifecycle', () => {
     expect(description).toHaveValue('handle commit errors');
   });
 
+  it('commits every change when Stage display is hidden', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          path: '/tmp/commit-all',
+          changes: [
+            { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/new.ts', area: 'untracked', status: 'added' },
+          ],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={onAction}
+        paneWidths={{ left: 240, right: 330 }}
+        splitStageView={false}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await openCommit(user);
+    const dialog = screen.getByRole('dialog', { name: 'Commit' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Message' }), 'commit all');
+    await user.click(within(dialog).getByRole('button', { name: 'Commit' }));
+
+    expect(onAction).toHaveBeenCalledWith({
+      kind: 'commit',
+      input: { format: 'plain', message: 'commit all' },
+      includeAllChanges: true,
+    });
+  });
+
   it('preserves a cancelled draft and closes with a cleared draft after success', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
@@ -931,6 +963,7 @@ describe('ChangesView diff lifecycle', () => {
         format: 'plain',
         message: 'preserve this draft',
       },
+      includeAllChanges: false,
     });
 
     await openCommit(user);

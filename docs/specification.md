@@ -92,6 +92,8 @@ Conventional Commits形式の場合はメッセージ、型、任意のスコー
 通常形式とConventional形式の下書きはRepositoryごとに分けて保持し、Commit成功時は使用した形式の下書きだけを消去します。  
 RepositoryのGit Hookは設定にかかわらず実行し、Hookが要求するメッセージ形式を迂回しません。  
 
+ステージ表示が「なし」の場合は、Gitの無視対象を除くステージ済み、未ステージ、未追跡の全変更をCommit直前にStageしてCommitします。  
+
 ## 差分表示
 
 通常diffと競合中のBase↔Current／Base↔Incomingを表示します。  

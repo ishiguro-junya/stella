@@ -631,7 +631,11 @@ describe('tauriWorkspaceAdapter', () => {
 
     await adapter.execute({
       repoId: 'repo-1',
-      action: { kind: 'commit', input: { format: 'plain', message: 'ordinary message' } },
+      action: {
+        kind: 'commit',
+        input: { format: 'plain', message: 'ordinary message' },
+        includeAllChanges: false,
+      },
     });
     await adapter.execute({
       repoId: 'repo-1',
@@ -645,6 +649,7 @@ describe('tauriWorkspaceAdapter', () => {
           description: 'structured message',
           footer: 'Refs: #123',
         },
+        includeAllChanges: true,
       },
     });
 
@@ -654,7 +659,11 @@ describe('tauriWorkspaceAdapter', () => {
       .filter(isRecord)
       .map((request) => request.action);
     expect(actions).toEqual([
-      { kind: 'commit', input: { format: 'plain', message: 'ordinary message' } },
+      {
+        kind: 'commit',
+        input: { format: 'plain', message: 'ordinary message' },
+        includeAllChanges: false,
+      },
       {
         kind: 'commit',
         input: {
@@ -666,6 +675,7 @@ describe('tauriWorkspaceAdapter', () => {
           body: null,
           footers: [{ token: 'Refs', value: '#123' }],
         },
+        includeAllChanges: true,
       },
     ]);
   });

@@ -322,6 +322,7 @@ pub enum Action {
     },
     Commit {
         input: CommitInput,
+        include_all_changes: bool,
     },
     Fetch {
         remote: String,
@@ -1438,6 +1439,7 @@ mod tests {
                 input: CommitInput::Plain {
                     message: "ordinary message".into(),
                 },
+                include_all_changes: false,
             })
             .unwrap(),
             json!({
@@ -1445,7 +1447,8 @@ mod tests {
                 "input": {
                     "format": "plain",
                     "message": "ordinary message"
-                }
+                },
+                "includeAllChanges": false
             })
         );
         assert_eq!(
@@ -1458,6 +1461,7 @@ mod tests {
                     body: None,
                     footers: Vec::new(),
                 },
+                include_all_changes: true,
             })
             .unwrap(),
             json!({
@@ -1470,7 +1474,8 @@ mod tests {
                     "description": "structured message",
                     "body": null,
                     "footers": []
-                }
+                },
+                "includeAllChanges": true
             })
         );
     }
