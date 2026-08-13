@@ -74,8 +74,9 @@ function normalizeSummaries(
     const current = byId.get(summary.id);
     if (!current || Date.parse(current.finishedAt) <= finishedAt) byId.set(summary.id, summary);
   }
-  return [...byId.values()]
-    .toSorted((left, right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt));
+  return [...byId.values()].toSorted(
+    (left, right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt),
+  );
 }
 
 function hydratedEntry(summary: PersistedActivitySummary): ActivityEntry {
