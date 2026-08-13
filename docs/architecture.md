@@ -1,7 +1,8 @@
 # アーキテクチャ
 
 利用者から見える動作、制約、対応範囲は[仕様](specification.md)に定義します。  
-この文書では、その仕様を実現するモジュール境界、状態管理、検証方式を説明します。  
+画面構成、文言、視覚表現とその検証結果は[デザイン](../DESIGN.md)に定義します。  
+この文書では、それらを実現するモジュール境界、状態管理、永続化、検証方式を説明します。  
 
 ## モジュール構成
 
@@ -23,7 +24,7 @@ Repositoryを開く処理は、選択したpathを解決する`Open`、登録済
 `SetRemoteUrl`は変更前URLを対象結合へ含め、プレビューと実行の間に設定が変わった場合は`previewMismatch`で停止します。  
 Gitはシェルを介さず固定した引数配列で`remote set-url`を実行し、更新後に設定を読み直します。  
 リモート警告の永続化はフロントエンドの設定境界で行い、リモート名、分類、失敗日時以外を保存しません。  
-通常のGitエラー詳細は既存の一時的なエラー画面とアクティビティに残します。  
+通常のGitエラー詳細は既存の一時的なエラー画面と活動に残します。  
 
 `ToolchainManager`はFrontendの`localStorage`とは独立したnative設定をApplication config directoryへatomic保存します。  
 起動時に内蔵またはSystemを一度だけ解決し、`Workspace`はその`GitExecutor`だけを保持します。  
@@ -104,6 +105,9 @@ Rust側の`app_update`モジュールがTauri Updaterを所有し、更新の確
 Repository mutationはRepository単位で直列化し、operation IDを付けます。  
 Cloneを含む長時間operationはChannel eventでstarted、progress、completed、failed、cancelledを通知し、FrontendのActivityへ反映します。  
 cancel時はGitのprocess groupを停止し、全mutation終了後はhookの成功・失敗にかかわらずGitの実状態を再取得します。  
+活動は現在のセッションの詳細と、直近1年分の復元済み要約を分けて永続化します。  
+復元済み要約には件数上限を設けません。  
+活動画面とRechartsのグラフは別々の遅延読込み単位とし、ワークスペース用のバンドルではRechartsを先読みしません。  
 開発buildでは起動時のnative実行fileのdevice、inode、size、mtimeを保持し、executeの直前に現在の実行fileと照合します。  
 再buildによって実行fileが変わっている場合は古いCore processで操作を続けず、Applicationの再起動を求めます。  
 release buildにはこの照合を含めません。  

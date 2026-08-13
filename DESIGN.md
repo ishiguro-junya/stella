@@ -1,5 +1,8 @@
 # デザイン
 
+この文書では、画面の構成、視覚表現、操作時のフィードバック、およびその検証結果を扱います。  
+利用者に提供する機能と制約は[仕様](docs/specification.md)、それを実現する状態管理とモジュール境界は[アーキテクチャ](docs/architecture.md)に定義します。  
+
 ## 検証資料
 
 - 参照UI: `/Users/ishiguro/.codex/visualizations/2026/08/08/019fdfab-f0b3-7273-b559-a0e4acc24a7d/stella-commit-left-audit-post.png`
@@ -99,9 +102,9 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
   影響previewを確認して作成し、そのブランチへ切り替えます。  
   Git Flow導線は表示しません。
 - HistoryのCommit Diffは各file headerにpathを表示し、省略した未変更行数の文言は表示しません。  
-  変更差分と操作履歴の右paneでは、header左端の矢印からfile単位でDiffを開閉できます。
-- 画面名は日本語でChangesを「変更差分」、Historyを「操作履歴」と表示します。
-- 操作履歴はlocal Branchに加えてoriginを含むremote-tracking BranchのCommitを同じgraphに表示し、一覧末尾が近づくと次のpageを自動で読み込みます。
+  変更と履歴の右paneでは、header左端の矢印からfile単位でDiffを開閉できます。
+- 画面名は日本語でChangesを「変更」、Historyを「履歴」と表示します。
+- 履歴はlocal Branchに加えてoriginを含むremote-tracking BranchのCommitを同じgraphに表示し、一覧末尾が近づくと次のpageを自動で読み込みます。
 - 手動の「さらに読み込む」は表示しません。
 - 左paneの検索欄はCommit件名、Author、hash、refを読込済みに限らず全履歴から検索し、Command-Fでfocusします。
 - 矢印、Home、End、Enter、Escape、Tabのfocus trap、triggerへのfocus復元をcomponent testで確認しました。
@@ -120,19 +123,12 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 - 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。
-- 現在のsessionの操作にはcommand、終了code、stdout、stderrを表示します。  
-  復元した30日間の項目はsummaryだけを表示します。
-- 選択したrepositoryについて、7日、30日、90日、180日、1年のCommit、Contributor、local Branch tip分析、empty、loading、error、truncatedの各状態を表示します。
-  指標select、期間selectの順で隣接して表示し、視覚的な見出しは表示しません。
-- chart data tableは常時表示して内部をscroll可能にし、開閉toggleは設けません。
-  Period、Commits、Contributors、Branchesを固定列として単位付きで日別表示します。
-  table左右端のセルは14pxの余白を確保します。
-  chartは90日を週単位、180日と1年を月単位で集約し、Contributorは重複加算を避けるため日単位で表示します。
+- 指標select、期間selectの順で隣接して表示し、視覚的な見出しは表示しません。
+- chart data tableの左右端のセルは14pxの余白を確保します。
 - nativeの860 x 560 captureでも2 columnの分割を維持します。  
   操作一覧と分析の間はpointerとkeyboardでresizeでき、各領域は内部でscrollします。
 - Changes、History、Activityのpane幅は画面別の値として保存し、他画面のresizeでは変更しません。
 - LightとDarkの明示指定、macOSのliveなSystem appearance、semantic AX table構造、increased-contrast用のborder tokenを確認しました。
-- Activity画面とRecharts chartを別々のlazy chunkとして読み込み、workspace bundleではRechartsを先読みしません。
 
 ## 比較履歴
 
