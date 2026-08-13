@@ -55,16 +55,17 @@ describe('appearance preferences', () => {
       }),
     );
 
-    expect(readPreferences()).toMatchObject({
+    const preferences = readPreferences();
+    expect(preferences).toMatchObject({
       language: 'ja',
       appearance: 'dark',
       registeredRepoPaths: ['/tmp/stella'],
       repositoryNames: {},
       openRepoPaths: ['/tmp/stella'],
       selectedRepoPath: '/tmp/stella',
-      view: 'history',
       paneWidths: DEFAULT_PREFERENCES.paneWidths,
     });
+    expect(preferences).not.toHaveProperty('view');
   });
 
   it('round-trips independent pane widths for Changes, History, and Activity', () => {

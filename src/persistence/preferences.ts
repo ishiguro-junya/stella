@@ -3,7 +3,6 @@ import type {
   DiffStyle,
   RepositoryHealthIssue,
   RemoteHealthReason,
-  WorkspaceView,
 } from '../domain/workspace';
 import { detectLanguage, isLanguage, type Language } from '../i18n/i18n';
 import type { Appearance } from '../theme/appearance';
@@ -47,7 +46,6 @@ export interface StellaPreferences {
   repositoryHealthIssues: Record<string, RepositoryHealthIssue[]>;
   openRepoPaths: string[];
   selectedRepoPath?: string;
-  view: WorkspaceView;
   paneWidths: PaneWidthPreferences;
   commitDrafts: Record<string, CommitDraft>;
 }
@@ -67,7 +65,6 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   repositoryNames: {},
   repositoryHealthIssues: {},
   openRepoPaths: [],
-  view: 'changes',
   paneWidths: {
     changes: { left: 320, right: 336 },
     history: { left: 320 },
@@ -78,10 +75,6 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
 
 function isAppearance(value: unknown): value is Appearance {
   return value === 'system' || value === 'light' || value === 'dark';
-}
-
-function isView(value: unknown): value is WorkspaceView {
-  return value === 'changes' || value === 'history';
 }
 
 function isDiffStyle(value: unknown): value is DiffStyle {
@@ -246,7 +239,6 @@ export function readPreferences(): StellaPreferences {
       ...(typeof value.selectedRepoPath === 'string'
         ? { selectedRepoPath: value.selectedRepoPath }
         : {}),
-      view: isView(value.view) ? value.view : DEFAULT_PREFERENCES.view,
       paneWidths: {
         changes: {
           left: boundedWidth(

@@ -345,7 +345,7 @@ export function App({
   const toolchainAdapter = providedToolchainAdapter ?? defaultToolchainAdapterRef.current;
   const initialPreferences = useMemo(readPreferences, []);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(EMPTY_WORKSPACE);
-  const [view, setView] = useState<WorkspaceView>(initialPreferences.view);
+  const [view, setView] = useState<WorkspaceView>('changes');
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
   const [automaticUpdateChecks, setAutomaticUpdateChecks] = useState(
@@ -663,7 +663,6 @@ export function App({
       editorWrapColumn,
       openRepoPaths: workspace.repos.map((candidate) => candidate.path),
       ...(repo ? { selectedRepoPath: repo.path } : {}),
-      view,
       paneWidths,
     }));
   }, [
@@ -679,7 +678,6 @@ export function App({
     splitStageView,
     useConventionalCommits,
     stickyFileHeaders,
-    view,
     workspace,
   ]);
 

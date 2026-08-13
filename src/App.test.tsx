@@ -573,14 +573,18 @@ describe('App repository attach', () => {
     );
   });
 
-  it('restores the previously open repository with OpenExisting', async () => {
+  it('restores the previously open repository on Changes despite a legacy History view', async () => {
     const repo = repoSnapshot({ path: '/tmp/restored-stella' });
-    writePreferences({
-      ...DEFAULT_PREFERENCES,
-      registeredRepoPaths: [repo.path],
-      openRepoPaths: [repo.path],
-      selectedRepoPath: repo.path,
-    });
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...DEFAULT_PREFERENCES,
+        registeredRepoPaths: [repo.path],
+        openRepoPaths: [repo.path],
+        selectedRepoPath: repo.path,
+        view: 'history',
+      }),
+    );
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
         repos: [repo],
@@ -611,6 +615,8 @@ describe('App repository attach', () => {
     expect(
       await screen.findByRole('button', { name: /Current repository restored-stella/u }),
     ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'History' })).not.toHaveAttribute('aria-current');
   });
 
   it('saves changed remote URLs without confirmation and fetches each changed remote once', async () => {
