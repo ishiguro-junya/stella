@@ -31,7 +31,7 @@
     },
     "MD013": false,
     "MD033": {
-      "allowed_elements": ["details", "summary", "kbd", "h1", "p", "img"],
+      "allowed_elements": ["details", "summary", "kbd", "h1", "p", "img", "br"],
     },
     "japanese-sentence-per-line": true,
     "paragraph-line-end-spaces": true,
