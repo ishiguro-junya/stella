@@ -406,10 +406,10 @@ export const MESSAGES = {
   diffLayout: { en: 'Diff layout', ja: '差分レイアウト' },
   diffLayoutDescription: {
     en: 'Choose whether file diffs use a unified or split layout.',
-    ja: 'ファイルの差分を1列表示または2列表示のどちらにするか選択します。',
+    ja: 'ファイルの差分をインラインまたは左右に分割して表示します。',
   },
-  unified: { en: 'Unified', ja: '1列表示' },
-  split: { en: 'Split', ja: '2列表示' },
+  unified: { en: 'Unified', ja: 'インライン' },
+  split: { en: 'Split', ja: '左右に分割' },
   binaryWholeFileOnly: {
     en: 'Binary files can be managed only as whole files.',
     ja: 'バイナリファイルはファイル全体のみ操作できます。',

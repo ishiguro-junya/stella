@@ -232,7 +232,7 @@ export function SettingsView({
                 onUseConventionalCommitsChange(event.currentTarget.value === 'enabled')
               }
             >
-              {([true, false] as const).map((option) => (
+              {([false, true] as const).map((option) => (
                 <option key={String(option)} value={option ? 'enabled' : 'disabled'}>
                   {t(option ? 'conventionalCommitsEnabled' : 'conventionalCommitsDisabled')}
                 </option>

@@ -64,8 +64,8 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'uncommittedChanges')).toBe('未コミットの変更');
     expect(translate('ja', 'activityCommand')).toBe('コマンド');
     expect(translate('ja', 'diffLayout')).toBe('差分レイアウト');
-    expect(translate('ja', 'unified')).toBe('1列表示');
-    expect(translate('ja', 'split')).toBe('2列表示');
+    expect(translate('ja', 'unified')).toBe('インライン');
+    expect(translate('ja', 'split')).toBe('左右に分割');
     expect(translate('ja', 'commit')).toBe('コミット');
     expect(translate('ja', 'description')).toBe('メッセージ');
     expect(translate('ja', 'type')).toBe('型');

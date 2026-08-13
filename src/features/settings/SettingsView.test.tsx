@@ -101,7 +101,7 @@ describe('SettingsView', () => {
       within(conventionalCommitsSelect)
         .getAllByRole('option')
         .map((item) => item.textContent),
-    ).toEqual(['Use', "Don't Use"]);
+    ).toEqual(["Don't Use", 'Use']);
     expect(
       within(stickyFileHeadersSelect)
         .getAllByRole('option')
