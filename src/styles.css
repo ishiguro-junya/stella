@@ -345,7 +345,7 @@ kbd {
 .settings-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 28px;
   padding: 18px 20px;
 }
@@ -2427,6 +2427,9 @@ button:where(:has(> .lucide)) > span {
 }
 .activity-metric-select {
   min-width: 132px;
+}
+.activity-range-select {
+  color: light-dark(var(--text-primary), var(--accent-contrast));
 }
 .activity-operations-body {
   display: grid;
