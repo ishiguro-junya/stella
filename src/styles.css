@@ -1802,6 +1802,9 @@ button:where(:has(> .lucide)) > span {
 .commit-field-error.is-placeholder {
   visibility: hidden;
 }
+.commit-form-body .commit-field-error.is-placeholder {
+  display: none;
+}
 .commit-breaking {
   display: flex;
 }
