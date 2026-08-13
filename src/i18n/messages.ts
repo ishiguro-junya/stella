@@ -648,15 +648,15 @@ export const MESSAGES = {
     en: (args) => `${text(args, 'subject')} ${text(args, 'oid')} actions`,
     ja: (args) => `${text(args, 'subject')} ${text(args, 'oid')}の操作`,
   },
-  switchRepository: { en: 'Switch Repository', ja: 'リポジトリを切り替える' },
-  searchRepositories: { en: 'Search by repository name', ja: 'リポジトリ名で検索' },
+  switchRepository: { en: 'Switch Repository', ja: 'リポジトリを切り替え' },
+  searchRepositories: { en: 'Search by repository name', ja: 'リポジトリを検索' },
   noRepositorySearchResults: {
     en: 'No repositories match your search.',
     ja: '検索に一致するリポジトリはありません。',
   },
   addRepositoryEllipsis: { en: 'Add Repository', ja: 'リポジトリを追加' },
   switchBranch: { en: 'Switch Branch', ja: 'ブランチを切り替える' },
-  searchBranches: { en: 'Search by branch name', ja: 'ブランチ名で検索' },
+  searchBranches: { en: 'Search by branch name', ja: 'ブランチを検索' },
   noBranchSearchResults: {
     en: 'No local branches match your search.',
     ja: '検索に一致するローカルブランチはありません。',

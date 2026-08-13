@@ -73,7 +73,7 @@ describe('Repository and Branch navigation', () => {
     let switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
     await expect(switcher.$('[role="option"][aria-current="true"]')).toBeDisplayed();
-    await expect(switcher.$('input[placeholder="リポジトリ名で検索"]')).toBeDisplayed();
+    await expect(switcher.$('input[placeholder="リポジトリを検索"]')).toBeDisplayed();
     expect(
       await browser.execute(() => {
         const list = document.querySelector<HTMLElement>('.switcher-list')!;
@@ -119,7 +119,7 @@ describe('Repository and Branch navigation', () => {
     await expect(switcher.$('[role="option"][aria-current="true"]')).toHaveText(
       expect.stringContaining('main'),
     );
-    await expect(switcher.$('input[placeholder="ブランチ名で検索"]')).toBeDisplayed();
+    await expect(switcher.$('input[placeholder="ブランチを検索"]')).toBeDisplayed();
     expect(
       await browser.execute(
         () => document.activeElement?.matches('[role="option"][aria-current="true"]') ?? false,
