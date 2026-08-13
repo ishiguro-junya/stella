@@ -107,6 +107,6 @@ mise run dev
 - [Lefthook](https://lefthook.dev/)
 - [Homebrew](https://brew.sh/ja/)
 
-## ライセンス
+## ⚖️ ライセンス
 
 [Sustainable Use License 1.0](LICENSE)
