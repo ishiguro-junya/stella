@@ -85,3 +85,10 @@ run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
   "pnpm exec wdio run wdio.conf.ts",
 ]
+
+[tasks."screenshot"]
+description = "README用のスクリーンショットを生成する"
+run = [
+  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "STELLA_VISUAL_QA_DIR=docs/assets pnpm exec wdio run wdio.conf.ts --spec tests/e2e/readme-screenshots.spec.ts",
+]
