@@ -142,8 +142,8 @@ describe('App shell and Settings', () => {
     await expect(conventionalCommits).toHaveValue('disabled');
     const conventionalCommitOptions = conventionalCommits.$$('option');
     expect(await conventionalCommitOptions.map((option) => option.getText())).toEqual([
-      'Use',
       "Don't Use",
+      'Use',
     ]);
     await selectSetting('conventional-commits', 'enabled');
     await browser.waitUntil(
