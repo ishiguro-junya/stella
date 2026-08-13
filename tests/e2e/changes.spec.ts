@@ -160,7 +160,9 @@ describe('Changes', () => {
     const remotePath = `${fixturePath}/layout-shift-remote.git`;
     await ensureLocalBareRemote(repositoryPath, remotePath);
     await runGit(repositoryPath, ['update-ref', '-d', 'refs/remotes/origin/main']);
+    await writeRepositoryFile(repositoryPath, 'refresh-generation.txt', 'refresh\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ refresh-generation.txt"]').waitForExist();
     await browser.execute(() => {
       const observer = new MutationObserver(() => {
         const dialog = document.querySelector<HTMLElement>(
@@ -263,7 +265,9 @@ describe('Changes', () => {
         () => document.documentElement.dataset.pullDialogRefreshShifted === 'true',
       ),
     ).toBe(false);
-    await expect($('#pull-remote-branch')).toHaveValue('origin/main');
+    const refreshedRemoteBranch = $('#pull-remote-branch');
+    await refreshedRemoteBranch.waitForExist();
+    await expect(refreshedRemoteBranch).toHaveValue('origin/main');
     expect(
       await browser.execute(() => {
         const localBranch = document.querySelector<HTMLElement>('#pull-local-branch');
