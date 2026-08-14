@@ -11,6 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 import { Ellipsis } from 'lucide-react';
 
+import { Button } from './Button';
+
 export interface RowActionMenuPoint {
   x: number;
   y: number;
@@ -245,10 +247,11 @@ export function RowActionMenu<Action extends string>({
   return (
     <>
       {contextOnly ? null : (
-        <button
+        <Button
           ref={triggerRef}
           type="button"
-          className={`row-action-trigger quiet${triggerClassName ? ` ${triggerClassName}` : ''}`}
+          variant="quiet"
+          className={`row-action-trigger${triggerClassName ? ` ${triggerClassName}` : ''}`}
           aria-label={triggerLabel}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -279,7 +282,7 @@ export function RowActionMenu<Action extends string>({
           }}
         >
           <Ellipsis aria-hidden="true" focusable="false" size={16} />
-        </button>
+        </Button>
       )}
       {tooltipPosition && !open
         ? createPortal(
@@ -309,7 +312,7 @@ export function RowActionMenu<Action extends string>({
               {items.map((item) => (
                 <div key={item.action} className="row-action-menu-entry">
                   {item.separatorBefore ? <hr className="row-action-menu-separator" /> : null}
-                  <button
+                  <Button
                     type="button"
                     className={item.danger ? 'danger-menu-item' : undefined}
                     role="menuitem"
@@ -318,7 +321,7 @@ export function RowActionMenu<Action extends string>({
                   >
                     {item.icon}
                     <span>{item.label}</span>
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>,

@@ -50,7 +50,8 @@
       "../licenses/tauri-plugin-updater-LICENSE.spdx": "licenses/tauri-plugin-updater-LICENSE.spdx",
       "../node_modules/lucide-react/LICENSE": "licenses/lucide-react-LICENSE",
       "../node_modules/react-is/LICENSE": "licenses/react-is-LICENSE",
-      "../node_modules/recharts/LICENSE": "licenses/recharts-LICENSE"
+      "../node_modules/recharts/LICENSE": "licenses/recharts-LICENSE",
+      "infoplist/ja.lproj/InfoPlist.strings": "ja.lproj/InfoPlist.strings"
     },
     "macOS": {
       "minimumSystemVersion": "26.0"

@@ -2,6 +2,8 @@
 import { GitBranch, GitBranchPlus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
+import { Button } from './Button';
+import { Input } from './Input';
 import type { BranchSummary, RepoSnapshot } from '../domain/workspace';
 import { useI18n, type I18nValue } from '../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
@@ -148,7 +150,7 @@ export function BranchSwitcherDialog({
         <DialogBody>
           <label>
             <span>{t('branchName')}</span>
-            <input
+            <Input
               data-dialog-initial-focus
               value={branchName}
               aria-label={t('branchName')}
@@ -158,16 +160,16 @@ export function BranchSwitcherDialog({
           </label>
         </DialogBody>
         <DialogFooter>
-          <button type="button" onClick={() => setCreating(false)}>
+          <Button type="button" onClick={() => setCreating(false)}>
             {t('cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="primary"
+            variant="primary"
             disabled={!branchName.trim() || Boolean(disabledReason)}
           >
             {t('reviewImpact')}
-          </button>
+          </Button>
         </DialogFooter>
       </Dialog>
     );
@@ -182,7 +184,7 @@ export function BranchSwitcherDialog({
       emptyMessage={error ?? t('noBranchSearchResults')}
       {...(hint ? { hint } : {})}
       footer={
-        <button
+        <Button
           type="button"
           disabled={loading || Boolean(error) || Boolean(createDisabledReason)}
           title={createDisabledReason}
@@ -190,7 +192,7 @@ export function BranchSwitcherDialog({
         >
           <GitBranchPlus aria-hidden="true" focusable="false" />
           {t('createBranch')}
-        </button>
+        </Button>
       }
       onDismiss={onDismiss}
       onSelect={(item) => {

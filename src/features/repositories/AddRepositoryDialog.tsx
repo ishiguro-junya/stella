@@ -1,6 +1,7 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogがformへmodal roleを渡してfocusを管理する。 */
-import { FolderOpen } from 'lucide-react';
-
+import { Button } from '../../ui/Button';
+import { DirectoryInput } from '../../ui/DirectoryInput';
+import { Input } from '../../ui/Input';
 import { useI18n } from '../../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
 
@@ -64,7 +65,7 @@ export function AddRepositoryDialog({
           <>
             <label className="dialog-form-field" htmlFor="repository-url">
               <span>{t('repositoryUrl')}</span>
-              <input
+              <Input
                 id="repository-url"
                 value={url}
                 aria-invalid={Boolean(error && errorField === 'url') || undefined}
@@ -87,28 +88,19 @@ export function AddRepositoryDialog({
             </label>
             <div className="dialog-form-field">
               <label htmlFor="repository-clone-parent">{t('repositoryPath')}</label>
-              <span className="repository-location-control">
-                <input
-                  id="repository-clone-parent"
-                  value={cloneParentPath}
-                  aria-invalid={Boolean(error && errorField === 'path') || undefined}
-                  aria-describedby={
-                    error && errorField === 'path' ? 'repository-clone-parent-error' : undefined
-                  }
-                  autoComplete="off"
-                  onChange={(event) => onCloneParentPathChange(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="repository-path-picker"
-                  aria-label={t('chooseRepositoryDirectory')}
-                  title={t('chooseRepositoryDirectory')}
-                  disabled={busy}
-                  onClick={onChoosePath}
-                >
-                  <FolderOpen aria-hidden="true" focusable="false" />
-                </button>
-              </span>
+              <DirectoryInput
+                id="repository-clone-parent"
+                value={cloneParentPath}
+                aria-invalid={Boolean(error && errorField === 'path') || undefined}
+                aria-describedby={
+                  error && errorField === 'path' ? 'repository-clone-parent-error' : undefined
+                }
+                autoComplete="off"
+                pickerLabel={t('chooseRepositoryDirectory')}
+                pickerDisabled={busy}
+                onChange={(event) => onCloneParentPathChange(event.target.value)}
+                onPick={onChoosePath}
+              />
               {error && errorField === 'path' ? (
                 <small
                   id="repository-clone-parent-error"
@@ -123,27 +115,18 @@ export function AddRepositoryDialog({
         ) : (
           <div className="dialog-form-field">
             <label htmlFor="repository-location">{t('repositoryPath')}</label>
-            <span className="repository-location-control">
-              <input
-                id="repository-location"
-                value={localPath}
-                aria-invalid={Boolean(error) || undefined}
-                aria-describedby={error ? 'repository-location-error' : undefined}
-                autoComplete="off"
-                data-dialog-initial-focus
-                onChange={(event) => onLocalPathChange(event.target.value)}
-              />
-              <button
-                type="button"
-                className="repository-path-picker"
-                aria-label={t('chooseRepositoryDirectory')}
-                title={t('chooseRepositoryDirectory')}
-                disabled={busy}
-                onClick={onChoosePath}
-              >
-                <FolderOpen aria-hidden="true" focusable="false" />
-              </button>
-            </span>
+            <DirectoryInput
+              id="repository-location"
+              value={localPath}
+              aria-invalid={Boolean(error) || undefined}
+              aria-describedby={error ? 'repository-location-error' : undefined}
+              autoComplete="off"
+              data-dialog-initial-focus
+              pickerLabel={t('chooseRepositoryDirectory')}
+              pickerDisabled={busy}
+              onChange={(event) => onLocalPathChange(event.target.value)}
+              onPick={onChoosePath}
+            />
             {error ? (
               <small
                 id="repository-location-error"
@@ -158,7 +141,7 @@ export function AddRepositoryDialog({
 
         <label className="dialog-form-field" htmlFor="repository-display-name">
           <span>{t('repositoryDisplayName')}</span>
-          <input
+          <Input
             id="repository-display-name"
             value={name}
             autoComplete="off"
@@ -167,18 +150,18 @@ export function AddRepositoryDialog({
         </label>
       </DialogBody>
       <DialogFooter>
-        <button type="button" onClick={onDismiss}>
+        <Button type="button" onClick={onDismiss}>
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           disabled={
             busy || (source === 'url' ? !url.trim() || !cloneParentPath.trim() : !localPath.trim())
           }
         >
           {t(source === 'url' ? 'cloneRepository' : 'add')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

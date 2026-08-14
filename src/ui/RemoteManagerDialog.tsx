@@ -1,6 +1,8 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 設定画面は共通Dialogのfocus trapを使い、警告Dialogとはroleを分ける。 */
 import { useEffect, useMemo, useState } from 'react';
 
+import { Button } from './Button';
+import { Input } from './Input';
 import type { RemoteDefinition } from '../domain/workspace';
 import { useI18n } from '../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
@@ -89,9 +91,9 @@ export function RemoteManagerDialog({
         {error ? (
           <div className="remote-manager-error">
             <p>{error}</p>
-            <button type="button" disabled={busy} onClick={onReload}>
+            <Button type="button" disabled={busy} onClick={onReload}>
               {t('retry')}
-            </button>
+            </Button>
           </div>
         ) : null}
         {!loading && !error && !remotes.length ? <p>{t('noRemotes')}</p> : null}
@@ -106,7 +108,7 @@ export function RemoteManagerDialog({
                   return (
                     <label key={key} className="remote-url-field">
                       <span className="sr-only">{label}</span>
-                      <input
+                      <Input
                         data-dialog-initial-focus={urlKind === 'fetch' && index === 0}
                         value={values[key] ?? entry.expectedUrl}
                         disabled={busy}
@@ -123,17 +125,17 @@ export function RemoteManagerDialog({
         </div>
       </DialogBody>
       <DialogFooter>
-        <button type="button" disabled={busy} onClick={onDismiss}>
+        <Button type="button" disabled={busy} onClick={onDismiss}>
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="primary"
+          variant="primary"
           disabled={busy || loading || Boolean(error) || hasEmptyUrl || changes.length === 0}
           onClick={() => onSave(changes)}
         >
           {t('save')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

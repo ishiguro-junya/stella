@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { Button } from './Button';
 import { useI18n } from '../i18n/i18n';
 
 export interface DialogProps {
@@ -178,7 +179,7 @@ export function Dialog({
         >
           {children}
           {variant !== 'switcher' ? (
-            <button
+            <Button
               type="button"
               className="dialog-close-button"
               aria-label={t('closeDialog')}
@@ -186,7 +187,7 @@ export function Dialog({
               onClick={onDismiss}
             >
               <X aria-hidden="true" focusable="false" />
-            </button>
+            </Button>
           ) : null}
         </form>
       ) : (
@@ -203,7 +204,7 @@ export function Dialog({
         >
           {children}
           {variant !== 'switcher' ? (
-            <button
+            <Button
               type="button"
               className="dialog-close-button"
               aria-label={t('closeDialog')}
@@ -211,7 +212,7 @@ export function Dialog({
               onClick={onDismiss}
             >
               <X aria-hidden="true" focusable="false" />
-            </button>
+            </Button>
           ) : null}
         </section>
       )}

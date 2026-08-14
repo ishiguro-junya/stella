@@ -5,6 +5,7 @@
   --font-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   --code-font-size: 0.8125rem;
   --code-line-height: 1.25rem;
+  --control-height: 36px;
   --surface-base: light-dark(#eff0f2, #111215);
   --surface-toolbar: light-dark(rgb(249 249 251 / 92%), rgb(28 29 33 / 92%));
   --surface-sidebar: light-dark(#f5f5f7, #17181c);
@@ -152,8 +153,8 @@ body {
 }
 
 button,
-input:not([type='checkbox'], [type='radio']),
-select,
+.app-input:not([type='checkbox'], [type='radio']),
+.app-select,
 textarea {
   color: inherit;
   font: inherit;
@@ -174,6 +175,10 @@ button {
   cursor: default;
   box-shadow: var(--shadow-control);
   font-weight: 500;
+}
+
+.app-button {
+  min-height: var(--control-height);
 }
 
 button:hover:not(:disabled) {
@@ -270,23 +275,22 @@ input:not([type='checkbox'], [type='radio']),
 select,
 textarea {
   width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 6px 9px;
   box-shadow: inset 0 1px 1px rgb(0 0 0 / 4%);
 }
 
-input:not([type='checkbox'], [type='radio']),
-select {
-  height: 36px;
+.app-input:not([type='checkbox'], [type='radio']),
+.app-select {
+  height: var(--control-height);
 }
 
-select {
-  min-height: 36px;
+.app-select {
   padding: 6px 30px 6px 9px;
 }
 
-input:disabled:not([type='checkbox'], [type='radio']),
-select:disabled,
+.app-input:disabled:not([type='checkbox'], [type='radio']),
+.app-select:disabled,
 textarea:disabled {
   border-color: var(--border-subtle);
   background: var(--surface-sunken);
@@ -495,6 +499,10 @@ kbd {
   border-top: 1px solid var(--border-subtle);
 }
 
+.settings-permission-row {
+  row-gap: 10px;
+}
+
 .settings-row-copy h3,
 .settings-row-copy p {
   margin: 0;
@@ -508,6 +516,19 @@ kbd {
   margin-top: 3px;
   color: var(--text-secondary);
   font-size: 0.75rem;
+}
+
+.settings-row-copy .settings-permission-warning {
+  margin-top: 8px;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.settings-permission-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .settings-select {
@@ -536,9 +557,12 @@ kbd {
 
 .settings-wide-row .settings-path-control,
 .settings-wide-row .settings-path-input,
-.settings-wide-row .settings-select,
 .settings-wide-row .settings-toolchain-control {
   width: 100%;
+}
+
+.settings-permission-row .settings-path-control {
+  max-width: 560px;
 }
 
 .settings-toolchain-row {
@@ -2170,21 +2194,21 @@ button:where(:has(> .lucide)) > span {
   gap: 0;
   overflow: hidden;
 }
-.repository-location-control {
+.directory-input-control {
   display: grid;
   width: 100%;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
 }
-.repository-location-control > input {
+.directory-input-control > input {
   width: 100%;
 }
-.repository-path-picker {
+.directory-picker-button.is-icon-only {
   width: 36px;
   padding: 0;
 }
-.repository-path-picker > svg {
+.directory-picker-button > svg {
   width: 15px;
   height: 15px;
 }
@@ -2682,7 +2706,6 @@ button:where(:has(> .lucide)) > span {
 .block-selector {
   display: flex;
   width: 100%;
-  min-height: 36px;
   align-items: center;
   justify-content: space-between;
   min-width: 0;
@@ -3410,10 +3433,6 @@ button:where(:has(> .lucide)) > span {
   padding: 10px 24px 20px;
   overflow: auto;
 }
-.dialog-body button,
-.dialog-footer button {
-  min-height: 36px;
-}
 .dialog-footer {
   display: flex;
   flex: none;
@@ -3668,7 +3687,6 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 36px;
   gap: 7px;
   white-space: nowrap;
 }

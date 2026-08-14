@@ -24,6 +24,7 @@ import { profileConflictDocument } from '../../domain/performance';
 import type { ConflictChoice, ConflictDocument, DiffStyle } from '../../domain/workspace';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import { useI18n, type I18nValue, type LocalizedMessage } from '../../i18n/i18n';
+import { Button } from '../../ui/Button';
 import { DiffSurface } from '../diff/DiffSurface';
 import { Dialog, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { isWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
@@ -525,12 +526,12 @@ export function ConflictSurface({
             <p>{t('conflictExternalChangesPreserved')}</p>
           </div>
           <div className="button-row">
-            <button type="button" onClick={() => void copyDraft()}>
+            <Button type="button" onClick={() => void copyDraft()}>
               {t('conflictCopyResult')}
-            </button>
-            <button type="button" className="danger-quiet" onClick={() => setConfirmReload(true)}>
+            </Button>
+            <Button type="button" variant="dangerQuiet" onClick={() => setConfirmReload(true)}>
               {t('conflictReloadExternalChanges')}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -565,7 +566,7 @@ export function ConflictSurface({
           </p>
           <div className="button-row">
             {wholeFileChoices.map((choice) => (
-              <button
+              <Button
                 key={choice}
                 type="button"
                 disabled={Boolean(busy)}
@@ -578,30 +579,30 @@ export function ConflictSurface({
                     : choice === 'both'
                       ? t('conflictBoth')
                       : t('delete')}
-              </button>
+              </Button>
             ))}
             {workingDocument.capabilities.externalEditor ? (
-              <button
+              <Button
                 type="button"
-                className="primary"
+                variant="primary"
                 disabled={Boolean(busy)}
                 onClick={() => void openExternal()}
               >
                 {t('conflictOpenExternalEditor')}
-              </button>
+              </Button>
             ) : null}
-            <button type="button" disabled={Boolean(busy)} onClick={() => void reloadExternal()}>
+            <Button type="button" disabled={Boolean(busy)} onClick={() => void reloadExternal()}>
               {t('conflictReloadGitStatus')}
-            </button>
-            <button
+            </Button>
+            <Button
               ref={markResolvedRef}
               type="button"
-              className="primary"
+              variant="primary"
               disabled={!markEnabled}
               onClick={() => void markResolved()}
             >
               {t('conflictMarkResolved')}
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -611,7 +612,7 @@ export function ConflictSurface({
               <h3 id="comparison-title">{t('conflictCompareBase')}</h3>
               <div className="segmented" role="tablist" aria-label={t('conflictComparisonSide')}>
                 {(['current', 'incoming'] as const).map((side) => (
-                  <button
+                  <Button
                     key={side}
                     ref={(element) => {
                       comparisonTabRefs.current[side] = element;
@@ -624,7 +625,7 @@ export function ConflictSurface({
                     onKeyDown={(event) => handleComparisonTabKey(event, side)}
                   >
                     {t(side === 'current' ? 'conflictCurrent' : 'conflictIncoming')}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -650,7 +651,7 @@ export function ConflictSurface({
             <ol className="conflict-block-list" aria-label={t('conflictBlocks')}>
               {history.present.blocks.map((block, index) => (
                 <li key={block.id} data-state={block.state}>
-                  <button
+                  <Button
                     type="button"
                     className="block-selector"
                     aria-current={selectedBlockId === block.id ? 'true' : undefined}
@@ -663,7 +664,7 @@ export function ConflictSurface({
                       })}
                     </span>
                     <span>{blockStateLabel(block.state, t)}</span>
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ol>
@@ -676,35 +677,35 @@ export function ConflictSurface({
                 <span className="save-state">{t(dirty ? 'conflictUnsaved' : 'conflictSaved')}</span>
               </div>
               <div className="button-row compact">
-                <button
+                <Button
                   type="button"
                   aria-label={t('undo')}
                   disabled={!history.past.length || Boolean(busy)}
                   onClick={() => updateHistory(undoConflictHistory)}
                 >
                   {t('undo')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   aria-label={t('redo')}
                   disabled={!history.future.length || Boolean(busy)}
                   onClick={() => updateHistory(redoConflictHistory)}
                 >
                   {t('redo')}
-                </button>
-                <button type="button" disabled={!saveEnabled} onClick={() => void save()}>
+                </Button>
+                <Button type="button" disabled={!saveEnabled} onClick={() => void save()}>
                   {t('save')} <kbd>⌘S</kbd>
-                </button>
-                <button
+                </Button>
+                <Button
                   ref={markResolvedRef}
                   type="button"
-                  className="primary"
+                  variant="primary"
                   disabled={!markEnabled}
                   aria-describedby="mark-resolved-condition"
                   onClick={() => void markResolved()}
                 >
                   {t('conflictMarkResolved')}
-                </button>
+                </Button>
               </div>
             </div>
             {selectedBlock && selectedBlockIndex >= 0 ? (
@@ -721,7 +722,7 @@ export function ConflictSurface({
                 </legend>
                 <div className="choice-buttons">
                   {(['current', 'incoming', 'both'] as const).map((choice) => (
-                    <button
+                    <Button
                       key={choice}
                       type="button"
                       disabled={
@@ -742,7 +743,7 @@ export function ConflictSurface({
                         : choice === 'incoming'
                           ? t('conflictUseIncoming')
                           : t('conflictUseBoth')}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </fieldset>
@@ -785,12 +786,12 @@ export function ConflictSurface({
             description={t('conflictReloadDiscardDescription')}
           />
           <DialogFooter>
-            <button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
+            <Button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
               {t('cancel')}
-            </button>
-            <button type="button" className="danger" onClick={() => void reloadExternal()}>
+            </Button>
+            <Button type="button" variant="danger" onClick={() => void reloadExternal()}>
               {t('conflictDiscardReload')}
-            </button>
+            </Button>
           </DialogFooter>
         </Dialog>
       ) : null}

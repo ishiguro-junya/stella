@@ -27,6 +27,7 @@ import { CodeView, FileDiff, PatchDiff, WorkerPoolContextProvider } from '@pierr
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 
 import type { DiffStyle } from '../../domain/workspace';
+import { Button } from '../../ui/Button';
 import {
   DEFAULT_EDITOR_WRAP_COLUMN,
   normalizeEditorWrapColumn,
@@ -174,8 +175,18 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   flex: 1 1 auto;
   align-items: center;
   justify-content: flex-end;
-  gap: 5px;
   font: 0.625rem var(--diffs-header-font-family, var(--diffs-header-font-fallback));
+}
+
+[data-stella-hunk-actions] {
+  position: sticky;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex: none;
+  gap: 5px;
+  padding-left: 5px;
+  background-color: var(--diffs-bg-separator);
 }
 
 [data-stella-hunk-label] {
@@ -546,6 +557,9 @@ function appendHunkControls(
   rangeLabel.dataset.stellaHunkLabel = '';
   rangeLabel.textContent = controlsState.current.labels.range(hunkNumber, start, end);
   controls.append(rangeLabel);
+  const actions = document.createElement('div');
+  actions.dataset.stellaHunkActions = '';
+  controls.append(actions);
   const addActionButton = (
     label: string,
     ariaLabel: string,
@@ -565,7 +579,7 @@ function appendHunkControls(
       event.stopPropagation();
       onAction();
     });
-    controls.append(button);
+    actions.append(button);
   };
 
   const config = controlsState.current.action;
@@ -759,7 +773,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   const effectiveSingleFileCollapsed =
     collapsed ?? (previousSourceKeyRef.current === source.cacheKey ? singleFileCollapsed : false);
   const renderCollapseToggle = (path: string, isCollapsed: boolean, onToggle: () => void) => (
-    <button
+    <Button
       type="button"
       className="diff-file-collapse-toggle"
       style={DIFF_FILE_COLLAPSE_TOGGLE_STYLE}
@@ -771,7 +785,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       }}
     >
       {isCollapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-    </button>
+    </Button>
   );
   const renderFileHeader = (fileDiff: FileDiffMetadata) => {
     const additions = fileDiff.hunks.reduce((total, hunk) => total + hunk.additionLines, 0);

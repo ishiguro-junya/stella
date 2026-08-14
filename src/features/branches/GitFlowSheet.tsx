@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import type {
   GitFlowCommand,
   GitFlowOverview,
@@ -279,9 +281,9 @@ export function GitFlowSheet({
         >
           <div className="git-flow-section-header">
             <h3 id="git-flow-overview-title">{t('gitFlowOverview')}</h3>
-            <button type="button" onClick={onReload} disabled={loading || busy}>
+            <Button type="button" onClick={onReload} disabled={loading || busy}>
               {t('reload')}
-            </button>
+            </Button>
           </div>
           {loading ? (
             <dl className="git-flow-overview-loading" aria-hidden="true">
@@ -360,7 +362,7 @@ export function GitFlowSheet({
                   </SelectControl>
                 </label>
                 <label className="checkbox-field git-flow-check">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={form.shared}
                     onChange={(event) => field('shared', event.target.checked)}
@@ -373,7 +375,7 @@ export function GitFlowSheet({
             {TOPIC_COMMANDS.has(command) ? (
               <label>
                 <span>{t('gitFlowTopicType')}</span>
-                <input
+                <Input
                   value={form.topicType}
                   onChange={(event) => field('topicType', event.target.value)}
                   required
@@ -384,7 +386,7 @@ export function GitFlowSheet({
             {!resumable && NAME_COMMANDS.has(command) ? (
               <label>
                 <span>{t('gitFlowName')}</span>
-                <input
+                <Input
                   value={form.name}
                   onChange={(event) => field('name', event.target.value)}
                   required={!['list', 'update', 'publish', 'finish', 'integrate'].includes(command)}
@@ -395,7 +397,7 @@ export function GitFlowSheet({
             {SECONDARY_NAME_COMMANDS.has(command) ? (
               <label>
                 <span>{t('gitFlowNewName')}</span>
-                <input
+                <Input
                   value={form.secondaryName}
                   onChange={(event) => field('secondaryName', event.target.value)}
                   required
@@ -406,7 +408,7 @@ export function GitFlowSheet({
             {command === 'start' ? (
               <label>
                 <span>{t('gitFlowBaseBranch')}</span>
-                <input value={form.base} onChange={(event) => field('base', event.target.value)} />
+                <Input value={form.base} onChange={(event) => field('base', event.target.value)} />
               </label>
             ) : null}
 
@@ -415,7 +417,7 @@ export function GitFlowSheet({
                 {command === 'configAddBase' || command === 'configAddTopic' ? (
                   <label>
                     <span>{t('gitFlowParent')}</span>
-                    <input
+                    <Input
                       value={form.parent}
                       onChange={(event) => field('parent', event.target.value)}
                       required={command === 'configAddTopic'}
@@ -426,14 +428,14 @@ export function GitFlowSheet({
                   <>
                     <label>
                       <span>{t('gitFlowPrefix')}</span>
-                      <input
+                      <Input
                         value={form.prefix}
                         onChange={(event) => field('prefix', event.target.value)}
                       />
                     </label>
                     <label>
                       <span>{t('gitFlowStartingPoint')}</span>
-                      <input
+                      <Input
                         value={form.startingPoint}
                         onChange={(event) => field('startingPoint', event.target.value)}
                       />
@@ -479,7 +481,7 @@ export function GitFlowSheet({
                   </SelectControl>
                 </label>
                 <label className="checkbox-field git-flow-check">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={form.shared}
                     onChange={(event) => field('shared', event.target.checked)}
@@ -491,7 +493,7 @@ export function GitFlowSheet({
 
             {FETCH_COMMANDS.has(command) ? (
               <label className="checkbox-field git-flow-check">
-                <input
+                <Input
                   type="checkbox"
                   checked={form.fetch}
                   onChange={(event) => field('fetch', event.target.checked)}
@@ -502,7 +504,7 @@ export function GitFlowSheet({
 
             {command === 'delete' ? (
               <label className="checkbox-field git-flow-check">
-                <input
+                <Input
                   type="checkbox"
                   checked={form.remote}
                   onChange={(event) => field('remote', event.target.checked)}
@@ -531,20 +533,20 @@ export function GitFlowSheet({
               <>
                 <label>
                   <span>{t('gitFlowTagName')}</span>
-                  <input
+                  <Input
                     value={form.tagName}
                     onChange={(event) => field('tagName', event.target.value)}
                   />
                 </label>
                 <label>
                   <span>{t('gitFlowTagMessage')}</span>
-                  <input
+                  <Input
                     value={form.tagMessage}
                     onChange={(event) => field('tagMessage', event.target.value)}
                   />
                 </label>
                 <label className="checkbox-field git-flow-check">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={form.sign}
                     disabled={!gpgAvailable || !form.tagName}
@@ -555,7 +557,7 @@ export function GitFlowSheet({
                 {form.sign ? (
                   <label>
                     <span>{t('gitFlowSigningKey')}</span>
-                    <input
+                    <Input
                       value={form.signingKey}
                       onChange={(event) => field('signingKey', event.target.value)}
                     />
@@ -564,7 +566,7 @@ export function GitFlowSheet({
                 {command === 'finish' ? (
                   <>
                     <label className="checkbox-field git-flow-check">
-                      <input
+                      <Input
                         type="checkbox"
                         checked={form.keep}
                         onChange={(event) => field('keep', event.target.checked)}
@@ -572,7 +574,7 @@ export function GitFlowSheet({
                       <span>{t('gitFlowKeepBranch')}</span>
                     </label>
                     <label className="checkbox-field git-flow-check">
-                      <input
+                      <Input
                         type="checkbox"
                         checked={form.push}
                         onChange={(event) => field('push', event.target.checked)}
@@ -589,12 +591,12 @@ export function GitFlowSheet({
       </DialogBody>
 
       <DialogFooter>
-        <button type="button" onClick={onDismiss} disabled={busy}>
+        <Button type="button" onClick={onDismiss} disabled={busy}>
           {t('cancel')}
-        </button>
-        <button type="submit" className="primary" disabled={busy || !overview?.available}>
+        </Button>
+        <Button type="submit" variant="primary" disabled={busy || !overview?.available}>
           {busy ? t('running') : t('run')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

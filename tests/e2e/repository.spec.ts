@@ -50,7 +50,7 @@ describe('Repository and Branch navigation', () => {
     await expect(dialog).toBeDisplayed();
     await expect(dialog.$('#repository-url')).toBeDisplayed();
     await expect(dialog.$('#repository-clone-parent')).toBeDisplayed();
-    await expect(dialog.$('.repository-path-picker')).toExist();
+    await expect(dialog.$('.directory-picker-button')).toExist();
     await expect(dialog.$('[role="tab"]')).not.toExist();
     expect(await dialog.$('#repository-clone-parent').getValue()).toMatch(/\/Documents\/?$/u);
     expect(
@@ -167,11 +167,9 @@ describe('Repository and Branch navigation', () => {
     ).toEqual(['変更', '履歴', '活動', '設定']);
     expect(
       await browser.tauri.execute(() =>
-        [...document.querySelectorAll('.titlebar-context, .titlebar-actions')].every((element) =>
-          element.hasAttribute('data-tauri-drag-region'),
-        ),
+        document.querySelector('.app-header')?.getAttribute('data-tauri-drag-region'),
       ),
-    ).toBe(true);
+    ).toBe('deep');
     expect(
       await browser.execute(() => {
         const header = document.querySelector<HTMLElement>('.app-header')!;

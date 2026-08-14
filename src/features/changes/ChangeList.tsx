@@ -7,6 +7,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
@@ -582,8 +584,9 @@ export function ChangeList({
             {id === 'combined' ? null : (
               <div className={`change-group-header${collapsibleGroup ? ' is-collapsible' : ''}`}>
                 {stageGroup && splitStageView ? (
-                  <label className="stage-toggle-hitbox">
-                    <input
+                  <label className="stage-toggle-hitbox" htmlFor={`stage-group-${id}`}>
+                    <Input
+                      id={`stage-group-${id}`}
                       ref={(element) => {
                         if (element) {
                           groupCheckboxRefs.current.set(stageGroup, element);
@@ -637,7 +640,7 @@ export function ChangeList({
                   </span>
                 </h3>
                 {collapsibleGroup ? (
-                  <button
+                  <Button
                     className="change-group-collapse-toggle"
                     type="button"
                     aria-expanded={!groupCollapsed}
@@ -659,7 +662,7 @@ export function ChangeList({
                     ) : (
                       <ChevronDown aria-hidden="true" focusable="false" />
                     )}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             )}
@@ -672,7 +675,7 @@ export function ChangeList({
                       const collapsed = collapsedDirectories.has(key);
                       return (
                         <li key={key} className="change-tree-directory">
-                          <button
+                          <Button
                             type="button"
                             aria-expanded={!collapsed}
                             aria-label={t(collapsed ? 'expandDirectory' : 'collapseDirectory', {
@@ -695,7 +698,7 @@ export function ChangeList({
                             )}
                             <Folder aria-hidden="true" focusable="false" />
                             <span>{row.name}</span>
-                          </button>
+                          </Button>
                         </li>
                       );
                     }
@@ -724,14 +727,16 @@ export function ChangeList({
                         (candidate) =>
                           candidate.area !== 'unstaged' || candidate.status === 'deleted',
                       );
+                    const stageToggleId = `stage-entry-${encodeURIComponent(key)}`;
                     return (
                       <li
                         key={key}
                         className={`change-item${selectedKeys.has(key) ? ' is-selected' : ''}${selectedKey === key ? ' is-current' : ''}`}
                       >
                         {entryStageableArea && splitStageView ? (
-                          <label className="stage-toggle-hitbox">
-                            <input
+                          <label className="stage-toggle-hitbox" htmlFor={stageToggleId}>
+                            <Input
+                              id={stageToggleId}
                               ref={(element) => {
                                 if (element) checkboxRefs.current.set(key, element);
                                 else checkboxRefs.current.delete(key);
@@ -763,7 +768,7 @@ export function ChangeList({
                         ) : splitStageView ? (
                           <span className="change-row-spacer" aria-hidden="true" />
                         ) : null}
-                        <button
+                        <Button
                           ref={(element) => {
                             if (element) rowRefs.current.set(key, element);
                             else rowRefs.current.delete(key);
@@ -811,7 +816,7 @@ export function ChangeList({
                               <b>−{entry.deletions ?? 0}</b>
                             </span>
                           ) : null}
-                        </button>
+                        </Button>
                         <FileActionMenu
                           path={entry.path}
                           selectedPaths={selectedPaths}

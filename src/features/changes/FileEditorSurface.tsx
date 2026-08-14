@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { Button } from '../../ui/Button';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import type { ChangeEntry, FileDocument } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
@@ -226,12 +227,12 @@ export function FileEditorSurface({
             <p>{t('fileEditExternalDescription')}</p>
           </div>
           <div className="button-row">
-            <button type="button" onClick={() => void copyDraft()}>
+            <Button type="button" onClick={() => void copyDraft()}>
               {t('copyDraft')}
-            </button>
-            <button type="button" onClick={() => setConfirmReload(true)}>
+            </Button>
+            <Button type="button" onClick={() => setConfirmReload(true)}>
               {t('reload')}
-            </button>
+            </Button>
           </div>
         </section>
       ) : null}
@@ -273,31 +274,31 @@ export function FileEditorSurface({
             description={t('saveOrDiscardBeforeDisplay')}
           />
           <DialogFooter>
-            <button
+            <Button
               type="button"
               data-dialog-initial-focus
               onClick={() => setConfirmDisplay(false)}
             >
               {t('cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="danger-quiet"
+              variant="dangerQuiet"
               onClick={() => {
                 setConfirmDisplay(false);
                 onDisplay();
               }}
             >
               {t('displayWithoutSaving')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="primary"
+              variant="primary"
               disabled={!canSave}
               onClick={() => void saveAndDisplay()}
             >
               {t('saveAndDisplay')}
-            </button>
+            </Button>
           </DialogFooter>
         </Dialog>
       ) : null}
@@ -313,12 +314,12 @@ export function FileEditorSurface({
             description={t('fileEditDiscardDescription')}
           />
           <DialogFooter>
-            <button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
+            <Button type="button" data-dialog-initial-focus onClick={() => setConfirmReload(false)}>
               {t('cancel')}
-            </button>
-            <button type="button" className="danger" onClick={() => void reload()}>
+            </Button>
+            <Button type="button" variant="danger" onClick={() => void reload()}>
               {t('discardAndReload')}
-            </button>
+            </Button>
           </DialogFooter>
         </Dialog>
       ) : null}

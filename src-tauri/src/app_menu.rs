@@ -15,6 +15,9 @@ const MENU_EVENT_TARGET: &str = "main";
 const OPEN_SETTINGS_EVENT: &str = "stella://open-settings";
 const CHECK_UPDATES_EVENT: &str = "stella://check-updates";
 const LICENSE_NAME: &str = "Sustainable Use License 1.0";
+const FILES_AND_FOLDERS_SETTINGS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
+const PRIVACY_SETTINGS_URL: &str = "x-apple.systempreferences:com.apple.preference.security";
 const ABOUT_ICON: Image<'static> = tauri::include_image!("./icons/about-icon.png");
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -205,6 +208,35 @@ pub(crate) fn set_app_language(app: AppHandle, language: AppLanguage) -> Result<
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn open_system_settings_url(url: &str) -> Result<(), String> {
+    let status = Command::new("/usr/bin/open")
+        .arg(url)
+        .status()
+        .map_err(|error| format!("システム設定を開けませんでした: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "システム設定を開けませんでした（終了コード: {}）",
+            status
+                .code()
+                .map_or_else(|| "不明".to_owned(), |code| code.to_string())
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_system_settings_url(_url: &str) -> Result<(), String> {
+    Err("システム設定はmacOSでのみ開けます。".to_owned())
+}
+
+#[tauri::command]
+pub(crate) fn open_files_and_folders_settings() -> Result<(), String> {
+    open_system_settings_url(FILES_AND_FOLDERS_SETTINGS_URL)
+        .or_else(|_| open_system_settings_url(PRIVACY_SETTINGS_URL))
+}
+
 pub(crate) fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let event_name = if is_settings_event(event.id()) {
         OPEN_SETTINGS_EVENT
@@ -277,6 +309,18 @@ mod tests {
         assert_eq!(MENU_EVENT_TARGET, "main");
         assert_eq!(OPEN_SETTINGS_EVENT, "stella://open-settings");
         assert_eq!(CHECK_UPDATES_EVENT, "stella://check-updates");
+    }
+
+    #[test]
+    fn files_and_folders_settings_uses_the_privacy_pane_contract() {
+        assert_eq!(
+            FILES_AND_FOLDERS_SETTINGS_URL,
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
+        );
+        assert_eq!(
+            PRIVACY_SETTINGS_URL,
+            "x-apple.systempreferences:com.apple.preference.security"
+        );
     }
 
     #[test]

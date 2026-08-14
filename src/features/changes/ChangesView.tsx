@@ -20,6 +20,7 @@ import {
   Upload,
 } from 'lucide-react';
 
+import { Button } from '../../ui/Button';
 import { isPullDivergenceError, type WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { editorLineForDiffSelection, patchContainsMultipleFiles } from '../../domain/diffProfile';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
@@ -1154,9 +1155,10 @@ export function ChangesView({
 
   const repositoryActions = (
     <fieldset className="changes-action-bar" aria-label={t('actions')}>
-      <button
+      <Button
         type="button"
-        className="changes-action-button quiet"
+        variant="quiet"
+        className="changes-action-button"
         aria-label={t('commit')}
         aria-haspopup="dialog"
         aria-expanded={commitDialogOpen}
@@ -1165,10 +1167,11 @@ export function ChangesView({
         onClick={() => setCommitDialogOpen(true)}
       >
         <GitCommitHorizontal aria-hidden="true" focusable="false" size={14} />
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        className="changes-action-button quiet"
+        variant="quiet"
+        className="changes-action-button"
         aria-label={t('pull')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'pull'}
@@ -1180,10 +1183,11 @@ export function ChangesView({
         onClick={() => setRemoteDialog('pull')}
       >
         <Download aria-hidden="true" focusable="false" size={14} />
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        className="changes-action-button quiet"
+        variant="quiet"
+        className="changes-action-button"
         aria-label={t('push')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'push'}
@@ -1195,10 +1199,11 @@ export function ChangesView({
         onClick={() => setRemoteDialog('push')}
       >
         <Upload aria-hidden="true" focusable="false" size={14} />
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        className="changes-action-button quiet"
+        variant="quiet"
+        className="changes-action-button"
         aria-label={t('fetch')}
         title={t('fetch')}
         disabled={repositoryActionsDisabled}
@@ -1208,7 +1213,7 @@ export function ChangesView({
         onClick={() => settleAction(onAction({ kind: 'fetch' }))}
       >
         <RefreshCw aria-hidden="true" focusable="false" size={14} />
-      </button>
+      </Button>
     </fieldset>
   );
   const pullResolution = divergedPull ? (
@@ -1221,7 +1226,7 @@ export function ChangesView({
         <p>{t('fetchCompleteResolve', { target: divergedPull.target })}</p>
       </div>
       <div className="button-row">
-        <button
+        <Button
           type="button"
           disabled={repositoryActionsDisabled}
           aria-describedby={
@@ -1230,8 +1235,8 @@ export function ChangesView({
           onClick={() => settleAction(resolveDivergedPull('merge'))}
         >
           {t('merge')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           disabled={repositoryActionsDisabled}
           aria-describedby={
@@ -1240,7 +1245,7 @@ export function ChangesView({
           onClick={() => settleAction(resolveDivergedPull('rebase'))}
         >
           {t('rebase')}
-        </button>
+        </Button>
       </div>
     </section>
   ) : null;
@@ -1285,7 +1290,7 @@ export function ChangesView({
       >
         <div className="selected-file-heading">
           {onToggle ? (
-            <button
+            <Button
               type="button"
               className="selected-file-toggle"
               aria-expanded={!collapsed}
@@ -1295,7 +1300,7 @@ export function ChangesView({
               onClick={onToggle}
             >
               {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-            </button>
+            </Button>
           ) : null}
           <FileStatusIcon status={entry.status} />
           <h2 {...(titleId ? { id: titleId } : {})} aria-label={entry.path}>
@@ -1689,27 +1694,27 @@ export function ChangesView({
               description={t('saveOrDiscardBeforeChangingFile')}
             />
             <DialogFooter>
-              <button
+              <Button
                 type="button"
                 data-dialog-initial-focus
                 onClick={() => setPendingSelectedKey(undefined)}
               >
                 {t('cancel')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="danger-quiet"
+                variant="dangerQuiet"
                 onClick={() => completeFileSelection(pendingSelectedKey)}
               >
                 {t('leaveWithoutSaving')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="primary"
+                variant="primary"
                 onClick={() => settleAction(saveAndSelectFile())}
               >
                 {t('saveAndLeave')}
-              </button>
+              </Button>
             </DialogFooter>
           </Dialog>
         ) : null}

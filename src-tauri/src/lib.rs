@@ -69,6 +69,7 @@ pub fn run() {
             app_update::app_update_check,
             app_update::app_update_install,
             app_menu::set_app_language,
+            app_menu::open_files_and_folders_settings,
             toolchain::toolchain_status,
             toolchain::toolchain_set_mode
         ])

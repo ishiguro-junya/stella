@@ -1,11 +1,13 @@
 import { ChevronDown } from 'lucide-react';
-import type { ComponentPropsWithoutRef } from 'react';
+import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 
-export function SelectControl({ className, ...props }: ComponentPropsWithoutRef<'select'>) {
-  return (
-    <span className={className ? `select-control ${className}` : 'select-control'}>
-      <select {...props} />
-      <ChevronDown aria-hidden="true" focusable="false" />
-    </span>
-  );
-}
+export const SelectControl = forwardRef<HTMLSelectElement, ComponentPropsWithoutRef<'select'>>(
+  function SelectControl({ className, ...props }, ref) {
+    return (
+      <span className={className ? `select-control ${className}` : 'select-control'}>
+        <select ref={ref} className="app-select" {...props} />
+        <ChevronDown aria-hidden="true" focusable="false" />
+      </span>
+    );
+  },
+);

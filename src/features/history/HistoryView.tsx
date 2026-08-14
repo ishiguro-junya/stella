@@ -12,6 +12,8 @@ import { GitBranch, GitCommitHorizontal, LoaderCircle, Search, Tag } from 'lucid
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { patchContainsMultipleFiles } from '../../domain/diffProfile';
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import {
   assignHistoryLanes,
   HISTORY_PAGE_SIZE,
@@ -800,7 +802,7 @@ export function HistoryView({
   const historySearchControl = (
     <label className="history-search">
       <Search className="history-search-icon" aria-hidden="true" focusable="false" />
-      <input
+      <Input
         ref={historySearchRef}
         type="search"
         value={historySearch}
@@ -830,7 +832,7 @@ export function HistoryView({
         >
           {changedFileCount > 0 ? (
             <li className="history-working-tree-item">
-              <button
+              <Button
                 type="button"
                 className="commit-row history-working-tree-entry"
                 aria-label={`${t('uncommittedChanges')}, ${t('uncommittedFileCount', {
@@ -846,7 +848,7 @@ export function HistoryView({
                   <strong>{t('uncommittedChanges')}</strong>
                   <small>{t('uncommittedFileCount', { count: changedFileCount })}</small>
                 </span>
-              </button>
+              </Button>
             </li>
           ) : null}
           {visibleHistory.map((commit, index) => {
@@ -857,7 +859,7 @@ export function HistoryView({
                 key={commit.oid}
                 className={`history-commit-item${selected ? ' is-current' : ''}`}
               >
-                <button
+                <Button
                   type="button"
                   className="commit-row"
                   data-history-commit-oid={commit.oid}
@@ -896,7 +898,7 @@ export function HistoryView({
                     </span>
                     <HistoryRefs refs={commit.refs} />
                   </span>
-                </button>
+                </Button>
                 <HistoryActionMenu
                   target={target}
                   open={openMenu?.source === 'list' && openMenu.oid === commit.oid}

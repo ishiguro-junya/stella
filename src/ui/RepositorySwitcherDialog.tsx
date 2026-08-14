@@ -1,5 +1,6 @@
 import { Download, FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
 
+import { Button } from './Button';
 import type { RepoSnapshot } from '../domain/workspace';
 import { RepositoryLogo, type RepositoryListItem } from '../features/repositories/RepositoryLogo';
 import { useI18n } from '../i18n/i18n';
@@ -193,14 +194,14 @@ export function RepositorySwitcherDialog({
       }}
       footer={
         <>
-          <button type="button" disabled={busy} onClick={onAddLocal}>
+          <Button type="button" disabled={busy} onClick={onAddLocal}>
             <FolderPlus aria-hidden="true" focusable="false" />
             <span>{t('addLocalRepository')}</span>
-          </button>
-          <button type="button" disabled={busy} onClick={onClone}>
+          </Button>
+          <Button type="button" disabled={busy} onClick={onClone}>
             <Download aria-hidden="true" focusable="false" />
             <span>{t('cloneRepository')}</span>
-          </button>
+          </Button>
         </>
       }
     />

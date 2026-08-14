@@ -1,6 +1,16 @@
-import { Code2, Files, GitBranch, Palette, Settings as SettingsIcon } from 'lucide-react';
+import {
+  Code2,
+  Files,
+  GitBranch,
+  Palette,
+  Settings as SettingsIcon,
+  ShieldCheck,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { Button } from '../../ui/Button';
+import { DirectoryInput } from '../../ui/DirectoryInput';
+import { Input } from '../../ui/Input';
 import type { ToolchainMode, ToolchainStatus } from '../../adapters/toolchainAdapter';
 import { isAbsoluteLocalPath } from '../../domain/repositoryLocation';
 import type { DiffStyle } from '../../domain/workspace';
@@ -36,6 +46,7 @@ export interface SettingsViewProps {
   splitStageView: boolean;
   changeListDisplay: ChangeListDisplay;
   repositoryBasePath: string;
+  repositoryAccessNeedsAttention: boolean;
   useConventionalCommits: boolean;
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
@@ -52,6 +63,8 @@ export interface SettingsViewProps {
   onSplitStageViewChange: (split: boolean) => void;
   onChangeListDisplayChange: (display: ChangeListDisplay) => void;
   onRepositoryBasePathChange: (path: string) => void;
+  onChooseRepositoryBasePath: () => void;
+  onOpenFilesAndFoldersSettings: () => void;
   onUseConventionalCommitsChange: (enabled: boolean) => void;
   onStickyFileHeadersChange: (sticky: boolean) => void;
   onEditorLineWrappingChange: (enabled: boolean) => void;
@@ -59,7 +72,7 @@ export interface SettingsViewProps {
   onToolchainModeChange: (mode: ToolchainMode) => void;
 }
 
-type SettingsCategory = 'general' | 'appearance' | 'changes' | 'editor' | 'git';
+type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'changes' | 'editor' | 'git';
 
 function isLanguage(value: string): value is Language {
   return value === 'ja' || value === 'en';
@@ -92,6 +105,7 @@ export function SettingsView({
   splitStageView,
   changeListDisplay,
   repositoryBasePath,
+  repositoryAccessNeedsAttention,
   useConventionalCommits,
   stickyFileHeaders,
   editorLineWrapping,
@@ -108,6 +122,8 @@ export function SettingsView({
   onSplitStageViewChange,
   onChangeListDisplayChange,
   onRepositoryBasePathChange,
+  onChooseRepositoryBasePath,
+  onOpenFilesAndFoldersSettings,
   onUseConventionalCommitsChange,
   onStickyFileHeadersChange,
   onEditorLineWrappingChange,
@@ -121,6 +137,7 @@ export function SettingsView({
   const [repositoryBasePathError, setRepositoryBasePathError] = useState(false);
   const categories = [
     { id: 'general', label: t('settingsCategoryGeneral'), Icon: SettingsIcon },
+    { id: 'permissions', label: t('settingsCategoryPermissions'), Icon: ShieldCheck },
     { id: 'appearance', label: t('settingsCategoryAppearance'), Icon: Palette },
     { id: 'changes', label: t('settingsCategoryChanges'), Icon: Files },
     { id: 'editor', label: t('settingsCategoryEditor'), Icon: Code2 },
@@ -161,7 +178,7 @@ export function SettingsView({
           <h1 id="settings-title">{t('settingsTitle')}</h1>
           <nav className="settings-category-navigation" aria-label={t('settingsCategories')}>
             {categories.map(({ id, label, Icon }) => (
-              <button
+              <Button
                 key={id}
                 type="button"
                 className="settings-category-button"
@@ -172,7 +189,7 @@ export function SettingsView({
               >
                 <Icon aria-hidden="true" focusable="false" />
                 <span>{label}</span>
-              </button>
+              </Button>
             ))}
           </nav>
         </aside>
@@ -232,6 +249,78 @@ export function SettingsView({
                   <option value="enabled">{t('automaticUpdateChecksEnabled')}</option>
                   <option value="disabled">{t('automaticUpdateChecksDisabled')}</option>
                 </SelectControl>
+              </section>
+            </div>
+          </section>
+
+          <section
+            id="settings-category-permissions"
+            className="settings-category-panel"
+            aria-labelledby="settings-category-permissions-title"
+            hidden={category !== 'permissions'}
+          >
+            <h2 id="settings-category-permissions-title" className="settings-category-heading">
+              {t('settingsCategoryPermissions')}
+            </h2>
+            <div className="settings-panel">
+              <section
+                className="settings-row settings-wide-row settings-permission-row"
+                aria-labelledby="repository-base-path-title"
+              >
+                <div className="settings-row-copy">
+                  <h3 id="repository-base-path-title">{t('repositoryBasePathTitle')}</h3>
+                  <p id="repository-base-path-description">{t('repositoryBasePathDescription')}</p>
+                  {repositoryAccessNeedsAttention ? (
+                    <p
+                      id="files-and-folders-warning"
+                      className="settings-permission-warning"
+                      role="alert"
+                    >
+                      {t('filesAndFoldersPermissionNeedsAttention')}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="settings-path-control">
+                  <DirectoryInput
+                    className="settings-path-input"
+                    name="repository-base-path"
+                    value={repositoryBasePathDraft}
+                    aria-labelledby="repository-base-path-title"
+                    aria-describedby={
+                      repositoryBasePathError
+                        ? 'repository-base-path-description repository-base-path-error'
+                        : 'repository-base-path-description'
+                    }
+                    aria-invalid={repositoryBasePathError || undefined}
+                    autoComplete="off"
+                    pickerLabel={t('chooseRepositoryBasePath')}
+                    onPick={onChooseRepositoryBasePath}
+                    onChange={(event) => {
+                      setRepositoryBasePathDraft(event.currentTarget.value);
+                      setRepositoryBasePathError(false);
+                    }}
+                    onBlur={(event) => commitRepositoryBasePath(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                  />
+                  {repositoryBasePathError ? (
+                    <small id="repository-base-path-error" className="field-error" role="alert">
+                      {t('invalidRepositoryPath')}
+                    </small>
+                  ) : null}
+                </div>
+                <div className="settings-permission-actions">
+                  <Button
+                    type="button"
+                    aria-describedby={`repository-base-path-description${
+                      repositoryAccessNeedsAttention ? ' files-and-folders-warning' : ''
+                    }`}
+                    onClick={onOpenFilesAndFoldersSettings}
+                  >
+                    {t('checkSystemSettings')}
+                  </Button>
+                </div>
               </section>
             </div>
           </section>
@@ -529,7 +618,7 @@ export function SettingsView({
                   <h3 id="editor-wrap-column-title">{t('editorWrapColumnTitle')}</h3>
                   <p id="editor-wrap-column-description">{t('editorWrapColumnDescription')}</p>
                 </div>
-                <input
+                <Input
                   className="settings-number-input"
                   name="editor-wrap-column"
                   type="number"
@@ -572,44 +661,6 @@ export function SettingsView({
               {t('settingsCategoryGit')}
             </h2>
             <div className="settings-panel">
-              <section
-                className="settings-row settings-wide-row"
-                aria-labelledby="repository-base-path-title"
-              >
-                <div className="settings-row-copy">
-                  <h3 id="repository-base-path-title">{t('repositoryBasePathTitle')}</h3>
-                  <p id="repository-base-path-description">{t('repositoryBasePathDescription')}</p>
-                </div>
-                <div className="settings-path-control">
-                  <input
-                    className="settings-path-input"
-                    name="repository-base-path"
-                    value={repositoryBasePathDraft}
-                    aria-labelledby="repository-base-path-title"
-                    aria-describedby={
-                      repositoryBasePathError
-                        ? 'repository-base-path-description repository-base-path-error'
-                        : 'repository-base-path-description'
-                    }
-                    aria-invalid={repositoryBasePathError || undefined}
-                    autoComplete="off"
-                    onChange={(event) => {
-                      setRepositoryBasePathDraft(event.currentTarget.value);
-                      setRepositoryBasePathError(false);
-                    }}
-                    onBlur={(event) => commitRepositoryBasePath(event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') event.currentTarget.blur();
-                    }}
-                  />
-                  {repositoryBasePathError ? (
-                    <small id="repository-base-path-error" className="field-error" role="alert">
-                      {t('invalidRepositoryPath')}
-                    </small>
-                  ) : null}
-                </div>
-              </section>
-
               <section
                 className="settings-row settings-wide-row settings-toolchain-row"
                 aria-labelledby="toolchain-title"

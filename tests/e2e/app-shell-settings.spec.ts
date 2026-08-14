@@ -3,7 +3,7 @@ import '@wdio/tauri-service';
 
 import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js';
 
-type SettingsCategory = 'general' | 'appearance' | 'changes' | 'editor' | 'git';
+type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'changes' | 'editor' | 'git';
 
 async function openSettingsCategory(category: SettingsCategory): Promise<void> {
   const button = $(`button[data-settings-category="${category}"]`);
@@ -27,6 +27,7 @@ describe('App shell and Settings', () => {
     );
     expect(headerButtonLabels).toHaveLength(1);
     expect(['Settings', '設定']).toContain(headerButtonLabels[0]);
+    await expect($('.app-header')).toHaveAttribute('data-tauri-drag-region', 'deep');
   });
 
   it('exposes the Tauri execute API in the E2E-only build', async () => {
@@ -132,7 +133,7 @@ describe('App shell and Settings', () => {
             .height,
       ),
     ).toBe(36);
-    await openSettingsCategory('git');
+    await openSettingsCategory('permissions');
     const repositoryBasePath = $('input[name="repository-base-path"]');
     await browser.waitUntil(
       async () => /\/Documents\/?$/u.test(await repositoryBasePath.getValue()),

@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { RefreshCw } from 'lucide-react';
 
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import type {
   BranchSummary,
@@ -239,7 +241,7 @@ export function RemoteOperationDialog({
         {loadError ? (
           <div className="remote-manager-error">
             <p>{t('loadRemoteTargetsFailed')}</p>
-            <button
+            <Button
               type="button"
               disabled={locked}
               onClick={() => {
@@ -248,13 +250,13 @@ export function RemoteOperationDialog({
               }}
             >
               {t('retry')}
-            </button>
+            </Button>
           </div>
         ) : null}
         {!loading && !loadError ? (
           <div className="dialog-form-field">
             <label htmlFor={`${kind}-local-branch`}>{t('localBranch')}</label>
-            <input
+            <Input
               id={`${kind}-local-branch`}
               className="remote-operation-source"
               value={repo.branch.name ?? 'HEAD'}
@@ -286,7 +288,7 @@ export function RemoteOperationDialog({
                       </option>
                     ))}
                   </SelectControl>
-                  <button
+                  <Button
                     type="button"
                     className="remote-operation-refresh-button"
                     aria-label={t('refreshBranches')}
@@ -296,12 +298,12 @@ export function RemoteOperationDialog({
                     onClick={() => void refreshBranches()}
                   >
                     <RefreshCw aria-hidden="true" focusable="false" />
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="remote-operation-empty-row">
                   <p>{t('noRemoteBranches')}</p>
-                  <button
+                  <Button
                     type="button"
                     className="remote-operation-refresh-button"
                     aria-label={t('refreshBranches')}
@@ -311,12 +313,12 @@ export function RemoteOperationDialog({
                     onClick={() => void refreshBranches()}
                   >
                     <RefreshCw aria-hidden="true" focusable="false" />
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
             <label className="checkbox-field">
-              <input
+              <Input
                 type="checkbox"
                 checked={commitMergeImmediately}
                 disabled={locked}
@@ -333,7 +335,7 @@ export function RemoteOperationDialog({
                 <div className="dialog-form-field">
                   <label htmlFor="push-remote">{t('remote')}</label>
                   <div className="remote-operation-control-row">
-                    <select
+                    <SelectControl
                       id="push-remote"
                       value={pushRemote}
                       disabled={locked}
@@ -352,8 +354,8 @@ export function RemoteOperationDialog({
                           {remote.name}
                         </option>
                       ))}
-                    </select>
-                    <button
+                    </SelectControl>
+                    <Button
                       type="button"
                       className="remote-operation-refresh-button"
                       aria-label={t('refreshBranches')}
@@ -363,12 +365,12 @@ export function RemoteOperationDialog({
                       onClick={() => void refreshBranches()}
                     >
                       <RefreshCw aria-hidden="true" focusable="false" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <label className="dialog-form-field">
                   <span>{t('remoteBranch')}</span>
-                  <input
+                  <Input
                     list="push-remote-branches"
                     value={pushBranch}
                     disabled={locked}
@@ -383,7 +385,7 @@ export function RemoteOperationDialog({
                   </datalist>
                 </label>
                 <label className="checkbox-field">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={forceWithLease}
                     disabled={locked}
@@ -393,7 +395,7 @@ export function RemoteOperationDialog({
                   <span>{t('forceWithLease')}</span>
                 </label>
                 <label className="checkbox-field">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={pushTags}
                     disabled={locked}
@@ -418,12 +420,12 @@ export function RemoteOperationDialog({
         ) : null}
       </DialogBody>
       <DialogFooter>
-        <button type="button" onClick={onDismiss}>
+        <Button type="button" onClick={onDismiss}>
           {t(locked ? 'close' : 'cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           data-dialog-initial-focus={
             !locked &&
             !loading &&
@@ -440,7 +442,7 @@ export function RemoteOperationDialog({
           }
         >
           {t(kind)}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

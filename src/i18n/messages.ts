@@ -68,10 +68,24 @@ export const MESSAGES = {
   settingsTitle: { en: 'Settings', ja: '設定' },
   settingsCategories: { en: 'Settings categories', ja: '設定カテゴリ' },
   settingsCategoryGeneral: { en: 'General', ja: '一般' },
+  settingsCategoryPermissions: { en: 'Permissions', ja: '権限' },
   settingsCategoryAppearance: { en: 'Appearance', ja: '外観' },
   settingsCategoryChanges: { en: 'Changes', ja: '変更' },
   settingsCategoryEditor: { en: 'Editor', ja: 'エディタ' },
   settingsCategoryGit: { en: 'Git', ja: 'Git' },
+  filesAndFoldersPermissionNeedsAttention: {
+    en: 'One or more registered repositories cannot be accessed. Check the macOS permission.',
+    ja: 'アクセスできない登録済みリポジトリがあります。macOSの権限を確認してください。',
+  },
+  checkSystemSettings: { en: 'Check System Settings', ja: 'システム設定で確認' },
+  openSystemSettingsFailedTitle: {
+    en: 'Could not open System Settings',
+    ja: 'システム設定を開けませんでした',
+  },
+  openSystemSettingsFailed: {
+    en: 'Open Privacy & Security in System Settings and check Files and Folders.',
+    ja: 'システム設定の「プライバシーとセキュリティ」で「ファイルとフォルダ」を確認してください。',
+  },
   appearanceTitle: { en: 'Appearance', ja: '外観' },
   appearanceDescription: {
     en: 'Follow the macOS appearance or use a fixed theme.',
@@ -1313,9 +1327,10 @@ export const MESSAGES = {
     ja: 'リポジトリの保存先',
   },
   repositoryBasePathDescription: {
-    en: 'Base path used when adding a repository from a URL. Enter an absolute path.',
-    ja: 'URLから追加するリポジトリの保存先となるベースパスです。絶対パスで入力します。',
+    en: 'Parent folder used to store repositories. Choosing it grants access to repositories under that folder.',
+    ja: 'リポジトリを保存する親フォルダです。選択すると、その配下のリポジトリへまとめてアクセスできるようになります。',
   },
+  chooseRepositoryBasePath: { en: 'Choose Location', ja: '保存先を選択' },
   add: { en: 'Add', ja: '追加' },
   impactPreview: { en: 'Impact preview', ja: '影響のプレビュー' },
   affectedPaths: { en: 'Affected paths', ja: '影響を受けるパス' },

@@ -149,9 +149,8 @@ describe('switcher layout', () => {
     expect(styles).toMatch(
       /\.switcher-footer\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;[^}]*gap:\s*8px;[^}]*padding:\s*10px 12px;/u,
     );
-    expect(styles).toMatch(
-      /\.switcher-footer button\s*\{[^}]*min-height:\s*36px;[^}]*white-space:\s*nowrap;/u,
-    );
+    expect(styles).toMatch(/\.app-button\s*\{[^}]*min-height:\s*var\(--control-height\);/u);
+    expect(styles).toMatch(/\.switcher-footer button\s*\{[^}]*white-space:\s*nowrap;/u);
     expect(styles).not.toMatch(/\.switcher-footer button\s*\{[^}]*border:\s*0;/u);
   });
 
@@ -175,5 +174,19 @@ describe('loading layout stability', () => {
     expect(styles).toMatch(/\.settings-toolchain-components dd\s*\{[^}]*min-height:\s*36px;/u);
     expect(styles).toMatch(/\.settings-toolchain-modes\s*\{[^}]*min-height:\s*35px;/u);
     expect(styles).toMatch(/\.settings-toolchain-components\s*\{[^}]*min-height:\s*120px;/u);
+  });
+});
+
+describe('settings control widths', () => {
+  it('keeps the Git toolchain select at the standard settings width', () => {
+    expect(styles).toMatch(/\.settings-select\s*\{[^}]*width:\s*220px;/u);
+    expect(styles).not.toMatch(/\.settings-wide-row \.settings-select/u);
+  });
+
+  it('limits only the repository location control in Permissions', () => {
+    expect(styles).toMatch(
+      /\.settings-permission-row \.settings-path-control\s*\{[^}]*max-width:\s*560px;/u,
+    );
+    expect(styles).not.toMatch(/\.directory-input-control\s*\{[^}]*max-width:/u);
   });
 });

@@ -1392,15 +1392,18 @@ describe('Changes', () => {
   });
 
   it('places Hunk actions at the right edge and opens line actions from a blue selection', async () => {
+    const longOldLine = `old-a-${'x'.repeat(500)}`;
     const base = [
       ...Array.from({ length: 30 }, (_, index) => {
-        if (index === 7) return 'old-a';
+        if (index === 7) return longOldLine;
         if (index === 21) return 'old-b';
         return `line-${index + 1}`;
       }),
       '',
     ].join('\n');
-    const changed = base.replace('old-a', 'new-a-1\nnew-a-2\nnew-a-3').replace('old-b', 'new-b');
+    const changed = base
+      .replace(longOldLine, `new-a-${'y'.repeat(500)}\nnew-a-2\nnew-a-3`)
+      .replace('old-b', 'new-b');
     await writeRepositoryFile(repositoryPath, 'README.md', base);
     await runGit(repositoryPath, ['add', '--', 'README.md']);
     await runGit(repositoryPath, ['commit', '-m', 'test: Hunk操作の基準を作る']);
@@ -1432,6 +1435,7 @@ describe('Changes', () => {
     if (separatorDiagnostics.controlCount !== 2) {
       throw new Error(`Unexpected separators: ${JSON.stringify(separatorDiagnostics)}`);
     }
+    await setLogicalWindowSize(860, 760);
 
     const hunkLayout = await browser.execute(() => {
       const root = document.querySelector<HTMLElement>(
@@ -1441,6 +1445,9 @@ describe('Changes', () => {
       const content = controls.closest<HTMLElement>('[data-content]')!;
       const controlsRect = controls.getBoundingClientRect();
       const contentRect = content.getBoundingClientRect();
+      const paneRect = document
+        .querySelector<HTMLElement>('.changes-content-pane')!
+        .getBoundingClientRect();
       const actionButtons = [...controls.querySelectorAll<HTMLButtonElement>('button')];
       const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];
       const firstLabel = hunkLabels[0]!;
@@ -1457,6 +1464,10 @@ describe('Changes', () => {
             getComputedStyle(button).borderRightStyle !== 'none' &&
             Number.parseFloat(getComputedStyle(button).borderRightWidth) > 0,
         ),
+        actionsInsidePane: actionButtons.every((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.left >= paneRect.left - 1 && rect.right <= paneRect.right + 1;
+        }),
         inContentColumn: controls.closest('[data-gutter]') === null,
         leftIsVisible: controlsRect.left >= contentRect.left - 1,
         labelAtLeft: firstLabel.getBoundingClientRect().left - contentRect.left <= 8,
@@ -1474,6 +1485,7 @@ describe('Changes', () => {
       actionLabels: ['ハンクを編集', 'ハンクをステージ', 'ハンクを破棄'],
       hunkLabels: ['ハンク1 行5–13', 'ハンク2 行21–27'],
       bordered: true,
+      actionsInsidePane: true,
       inContentColumn: true,
       leftIsVisible: true,
       labelAtLeft: true,

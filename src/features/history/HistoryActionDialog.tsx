@@ -1,6 +1,8 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus管理を維持したまま非破壊操作をdialogとして公開する。 */
 import { useEffect, useState, type FormEvent } from 'react';
 
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import type { WorkspaceAction } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
@@ -131,7 +133,7 @@ export function HistoryActionDialog({
         {request.kind === 'createBranch' ? (
           <label>
             <span>{t('branchName')}</span>
-            <input
+            <Input
               data-dialog-initial-focus
               value={name}
               aria-label={t('branchName')}
@@ -143,7 +145,7 @@ export function HistoryActionDialog({
         {request.kind === 'createTag' ? (
           <label>
             <span>{t('tagName')}</span>
-            <input
+            <Input
               data-dialog-initial-focus
               value={name}
               aria-label={t('tagName')}
@@ -157,7 +159,7 @@ export function HistoryActionDialog({
         {request.kind === 'merge' || request.kind === 'rebase' ? (
           <label>
             <span>{t('sourceRef')}</span>
-            <input
+            <Input
               data-dialog-initial-focus
               value={sourceRef}
               aria-label={t('sourceRef')}
@@ -208,12 +210,12 @@ export function HistoryActionDialog({
       </DialogBody>
 
       <DialogFooter>
-        <button type="button" disabled={submitting} onClick={onDismiss}>
+        <Button type="button" disabled={submitting} onClick={onDismiss}>
           {t('cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className="primary"
+          variant="primary"
           data-dialog-initial-focus={
             request.kind === 'cherryPick' || request.kind === 'revert' ? true : undefined
           }
@@ -221,7 +223,7 @@ export function HistoryActionDialog({
           aria-describedby={disabledReason ? 'history-action-disabled-reason' : undefined}
         >
           {t('next')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

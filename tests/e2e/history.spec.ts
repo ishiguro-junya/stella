@@ -892,11 +892,11 @@ describe('History', () => {
         const active = document.activeElement;
         return {
           tagName: active?.tagName,
-          className: active?.getAttribute('class'),
+          isCommitRow: active?.classList.contains('commit-row'),
           ariaLabel: active?.getAttribute('aria-label'),
         };
       }),
-    ).toEqual({ tagName: 'BUTTON', className: 'commit-row', ariaLabel: null });
+    ).toEqual({ tagName: 'BUTTON', isCommitRow: true, ariaLabel: null });
 
     const branchName = 'history-double-click';
     await $('.branch-toggle').click();

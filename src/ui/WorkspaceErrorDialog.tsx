@@ -1,3 +1,4 @@
+import { Button } from './Button';
 import { useI18n } from '../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
 import type { WorkspaceErrorContent } from './WorkspaceErrorDetails';
@@ -37,9 +38,9 @@ export function WorkspaceErrorDialog({ title, error, onDismiss }: WorkspaceError
         <WorkspaceErrorDetails error={error} />
       </DialogBody>
       <DialogFooter>
-        <button type="button" className="primary" data-dialog-initial-focus onClick={onDismiss}>
+        <Button type="button" variant="primary" data-dialog-initial-focus onClick={onDismiss}>
           {t('close')}
-        </button>
+        </Button>
       </DialogFooter>
     </Dialog>
   );

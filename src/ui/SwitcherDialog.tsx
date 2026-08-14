@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 
+import { Button } from './Button';
+import { Input } from './Input';
 import { useI18n } from '../i18n/i18n';
 import { Dialog } from './Dialog';
 import { RowActionMenu, type RowActionMenuItem, type RowActionMenuPoint } from './RowActionMenu';
@@ -187,7 +189,7 @@ export function SwitcherDialog({
       <label className="switcher-search">
         <Search aria-hidden="true" focusable="false" />
         <span className="sr-only">{searchLabel}</span>
-        <input
+        <Input
           type="search"
           role="combobox"
           aria-autocomplete="list"
@@ -236,7 +238,7 @@ export function SwitcherDialog({
                 onMouseEnter={() => setActiveId(item.id)}
                 onContextMenu={(event) => openContextMenu(event, item)}
               >
-                <button
+                <Button
                   ref={(node) => {
                     if (node) optionRefs.current.set(item.id, node);
                     else optionRefs.current.delete(item.id);
@@ -279,7 +281,7 @@ export function SwitcherDialog({
                       {item.badge.count}
                     </span>
                   ) : null}
-                </button>
+                </Button>
                 {item.actions?.length && onAction ? (
                   <RowActionMenu
                     triggerLabel={t('moreActionsFor', { path: item.label })}

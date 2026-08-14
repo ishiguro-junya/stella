@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceAdapterError, type WorkspaceAdapter } from './adapters/workspaceAdapter';
 import { App } from './App';
-import type { QueryResult, RepoSnapshot, WorkspaceSnapshot } from './domain/workspace';
+import type {
+  QueryResult,
+  RepositoryAvailability,
+  RepoSnapshot,
+  WorkspaceSnapshot,
+} from './domain/workspace';
 import type { AppUpdateInfo, AppUpdateInstallEvent } from './features/update/appUpdate';
 import { DEFAULT_PREFERENCES, readPreferences, writePreferences } from './persistence/preferences';
 import { conflictDocument, repoSnapshot } from './test/fixtures';
@@ -192,12 +197,16 @@ describe('App repository attach', () => {
     expect(screen.queryByRole('button', { name: 'Forward' })).not.toBeInTheDocument();
     const settings = screen.getByRole('button', { name: 'Settings' });
     expect(settings).toBeVisible();
+    expect(container.querySelector('.app-header')).toHaveAttribute(
+      'data-tauri-drag-region',
+      'deep',
+    );
     const titlebarActions = container.querySelector('.titlebar-actions');
     if (!(titlebarActions instanceof HTMLElement)) throw new Error('Titlebar actions are missing.');
     const titlebarContext = container.querySelector('.titlebar-context');
     if (!(titlebarContext instanceof HTMLElement)) throw new Error('Titlebar context is missing.');
-    expect(titlebarContext).toHaveAttribute('data-tauri-drag-region');
-    expect(titlebarActions).toHaveAttribute('data-tauri-drag-region');
+    expect(titlebarContext).not.toHaveAttribute('data-tauri-drag-region');
+    expect(titlebarActions).not.toHaveAttribute('data-tauri-drag-region');
     expect(settings).not.toHaveAttribute('data-tauri-drag-region');
     expect(within(titlebarActions).getAllByRole('button')).toEqual([settings]);
     expect(container).not.toHaveTextContent('Workspace Log');
@@ -2443,6 +2452,65 @@ describe('App repository attach', () => {
 });
 
 describe('App repository recovery', () => {
+  it('rechecks registered repository access when the app regains focus', async () => {
+    const user = userEvent.setup();
+    const path = '/tmp/protected-repository';
+    const repositoryBasePath = '/tmp/repositories';
+    let availability: RepositoryAvailability = 'inaccessible';
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [path],
+    });
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'repositoryAvailability') {
+        return { kind: 'repositoryAvailability', path: request.path, availability };
+      }
+      if (request.kind === 'activity') return { kind: 'activity', entries: [] };
+      throw new Error(`Unexpected query: ${request.kind}`);
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query,
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    const directoryPicker = vi.fn<() => Promise<string>>(async () => repositoryBasePath);
+    render(<App adapter={adapter} directoryPicker={directoryPicker} />);
+
+    await waitFor(() =>
+      expect(query).toHaveBeenCalledWith({ kind: 'repositoryAvailability', path }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Permissions' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'One or more registered repositories cannot be accessed.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Choose Location' }));
+    expect(directoryPicker).toHaveBeenCalledWith('Choose Location');
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Repository Location' })).toHaveValue(
+        repositoryBasePath,
+      ),
+    );
+
+    const checksBeforeReturn = query.mock.calls.filter(
+      ([request]) => request.kind === 'repositoryAvailability',
+    ).length;
+    availability = 'available';
+    window.dispatchEvent(new Event('focus'));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(
+      query.mock.calls.filter(([request]) => request.kind === 'repositoryAvailability').length,
+    ).toBe(checksBeforeReturn + 1);
+  });
+
   it('asks whether to remove only the registration or delete the local repository', async () => {
     const user = userEvent.setup();
     const path = '/tmp/repository-to-delete';

@@ -12,6 +12,7 @@ import {
 import { Ban, CircleCheck, CircleX, LoaderCircle, RotateCw } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
+import { Button } from '../../ui/Button';
 import type {
   ActivityEntry,
   ActivityRange,
@@ -372,10 +373,10 @@ function ActivityDetail({
         {selected.detailAvailability === 'currentSession' &&
         selected.status === 'running' &&
         selected.cancellable ? (
-          <button type="button" onClick={() => void onCancel(selected)}>
+          <Button type="button" onClick={() => void onCancel(selected)}>
             <CircleX aria-hidden="true" focusable="false" />
             <span>{t('cancel')}</span>
-          </button>
+          </Button>
         ) : null}
       </div>
       <dl className="activity-metadata-list">
@@ -476,10 +477,10 @@ function AnalyticsPanel({
         ) : analytics.kind === 'error' ? (
           <ActivityState title={t('activityUnavailable')}>
             {t('activityLoadFailed')}
-            <button type="button" onClick={onRetry}>
+            <Button type="button" onClick={onRetry}>
               <RotateCw aria-hidden="true" focusable="false" />
               <span>{t('retry')}</span>
-            </button>
+            </Button>
           </ActivityState>
         ) : analytics.series.totals.commits === 0 ? (
           <>

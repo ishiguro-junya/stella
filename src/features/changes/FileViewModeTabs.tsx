@@ -1,5 +1,6 @@
 import { Lock, Pencil } from 'lucide-react';
 
+import { Button } from '../../ui/Button';
 import { useI18n } from '../../i18n/i18n';
 
 export type FileViewMode = 'display' | 'edit';
@@ -23,7 +24,7 @@ export function FileViewModeTabs({
 
   return (
     <div className="segmented file-view-mode-tabs" role="tablist" aria-label={t('fileViewMode')}>
-      <button
+      <Button
         type="button"
         role="tab"
         aria-selected={mode === 'display'}
@@ -33,8 +34,8 @@ export function FileViewModeTabs({
         onClick={onDisplay}
       >
         <Lock aria-hidden="true" focusable="false" size={14} />
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         role="tab"
         aria-selected={mode === 'edit'}
@@ -44,7 +45,7 @@ export function FileViewModeTabs({
         onClick={onEdit}
       >
         <Pencil aria-hidden="true" focusable="false" size={14} />
-      </button>
+      </Button>
     </div>
   );
 }

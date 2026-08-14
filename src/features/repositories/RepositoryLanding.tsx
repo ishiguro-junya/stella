@@ -1,5 +1,6 @@
 import { Download, FolderGit2, FolderPlus, Link2, Trash2, Wrench } from 'lucide-react';
 
+import { Button } from '../../ui/Button';
 import { useI18n } from '../../i18n/i18n';
 import { RepositoryLogo, type RepositoryListItem } from './RepositoryLogo';
 
@@ -58,14 +59,14 @@ export function RepositoryLanding({
             <p>{t('repositoriesDescription')}</p>
           </div>
           <div className="repository-landing-actions">
-            <button type="button" className="primary" disabled={busy} onClick={onAddLocal}>
+            <Button type="button" variant="primary" disabled={busy} onClick={onAddLocal}>
               <FolderPlus aria-hidden="true" focusable="false" />
               {t('addLocalRepository')}
-            </button>
-            <button type="button" disabled={busy} onClick={onClone}>
+            </Button>
+            <Button type="button" disabled={busy} onClick={onClone}>
               <Download aria-hidden="true" focusable="false" />
               {t('cloneRepository')}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -76,7 +77,7 @@ export function RepositoryLanding({
               const remoteIssue = remoteHealthLabel(repository, t);
               return (
                 <li key={repository.path} className="registered-repository-item">
-                  <button
+                  <Button
                     type="button"
                     className="registered-repository-row"
                     disabled={busy}
@@ -94,37 +95,37 @@ export function RepositoryLanding({
                         </small>
                       ) : null}
                     </span>
-                  </button>
+                  </Button>
                   <div className="registered-repository-actions">
                     {localIssue ? (
-                      <button
+                      <Button
                         type="button"
                         disabled={busy}
                         onClick={() => onRepair(repository.path)}
                       >
                         <Wrench aria-hidden="true" focusable="false" />
                         {t('repairRepositoryLocation')}
-                      </button>
+                      </Button>
                     ) : remoteIssue ? (
-                      <button
+                      <Button
                         type="button"
                         disabled={busy}
                         onClick={() => onManageRemotes(repository.path)}
                       >
                         <Link2 aria-hidden="true" focusable="false" />
                         {t('manageRemotes')}
-                      </button>
+                      </Button>
                     ) : null}
-                    <button
+                    <Button
                       type="button"
-                      className="danger-quiet"
+                      variant="dangerQuiet"
                       disabled={busy}
                       aria-label={t('forgetNamedRepository', { repository: repository.name })}
                       onClick={() => onForget(repository.path)}
                     >
                       <Trash2 aria-hidden="true" focusable="false" />
                       {t('deleteRepository')}
-                    </button>
+                    </Button>
                   </div>
                 </li>
               );

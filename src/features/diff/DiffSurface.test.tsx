@@ -910,6 +910,9 @@ describe('DiffSurface line selection', () => {
     expect(controls?.querySelector('[data-stella-hunk-label]')).toHaveTextContent(
       'Hunk 1 Lines 1–2',
     );
+    expect(controls?.querySelector('[data-stella-hunk-actions]')).toContainElement(edit);
+    expect(controls?.querySelector('[data-stella-hunk-actions]')).toContainElement(stage);
+    expect(controls?.querySelector('[data-stella-hunk-actions]')).toContainElement(discard);
     expect(controls?.closest('[data-content]')).not.toBeNull();
     expect(controls?.closest('[data-gutter]')).toBeNull();
     expect(controls?.querySelector('[data-stella-hunk-toggle]')).toBeNull();
@@ -925,6 +928,9 @@ describe('DiffSurface line selection', () => {
     );
     expect(props?.options.unsafeCSS).toContain(
       '[data-stella-hunk-label] {\n  min-width: 0;\n  margin-right: auto;\n  overflow: hidden;',
+    );
+    expect(props?.options.unsafeCSS).toContain(
+      '[data-stella-hunk-actions] {\n  position: sticky;\n  right: 0;',
     );
     expect(props?.options.unsafeCSS).toContain(
       'transform: translateX(calc(0px - var(--stella-hunk-left-offset, 0px)));',

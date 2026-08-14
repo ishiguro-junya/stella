@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
+import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 import {
   DEFAULT_COMMIT_TYPES,
   hasCommitErrors,
@@ -227,7 +229,7 @@ export function CommitForm({
 
         <label className="dialog-form-field">
           <span>{t('description')}</span>
-          <input
+          <Input
             data-commit-field="description"
             data-dialog-initial-focus
             autoComplete="off"
@@ -253,7 +255,7 @@ export function CommitForm({
           <div className="commit-meta-grid">
             <label className="dialog-form-field">
               <span>{t('type')}</span>
-              <input
+              <Input
                 data-commit-field="type"
                 list="commit-types"
                 value={draft.conventional.type}
@@ -279,7 +281,7 @@ export function CommitForm({
 
             <label className="dialog-form-field">
               <span>{t('scope')}</span>
-              <input
+              <Input
                 data-commit-field="scope"
                 value={draft.conventional.scope ?? ''}
                 aria-invalid={showsError('scope')}
@@ -299,7 +301,7 @@ export function CommitForm({
 
         {useConventionalCommits ? (
           <label className="checkbox-field commit-breaking">
-            <input
+            <Input
               type="checkbox"
               checked={draft.conventional.breaking}
               onChange={(event) => update('breaking', event.target.checked)}
@@ -325,19 +327,20 @@ export function CommitForm({
 
       <DialogFooter className="commit-submit">
         {onCancel ? (
-          <button type="button" disabled={busy} onClick={onCancel}>
+          <Button type="button" disabled={busy} onClick={onCancel}>
             {t('cancel')}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
           type="submit"
-          className={`primary${onCancel ? '' : ' full'}`}
+          variant="primary"
+          className={onCancel ? undefined : 'full'}
           title={disabledReason}
           aria-describedby={disabled && disabledReason ? 'commit-disabled-reason' : undefined}
           disabled={disabled || busy}
         >
           {busy ? t('committing') : t('commit')}
-        </button>
+        </Button>
       </DialogFooter>
     </form>
   );

@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { documentDir } from '@tauri-apps/api/path';
 
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 import { pickDirectory, type DirectoryPicker } from './ui/directoryPicker';
 import {
   isPullDivergenceError,
@@ -64,6 +66,7 @@ import { mergeActivityEntries } from './features/activity/activityPersistence';
 import { HistoryView } from './features/history/HistoryView';
 import { SettingsView } from './features/settings/SettingsView';
 import { listenForOpenSettings } from './features/settings/settingsMenu';
+import { openFilesAndFoldersSystemSettings } from './features/settings/systemSettings';
 import {
   checkForAppUpdate,
   installAppUpdate,
@@ -474,6 +477,9 @@ export function App({
       repositoryNames,
     ],
   );
+  const repositoryAccessNeedsAttention = registeredRepositories.some(
+    (candidate) => candidate.availability === 'inaccessible',
+  );
   const repoDisplayName = repo
     ? (registeredRepositories.find((candidate) => candidate.path === repo.path)?.name ?? repo.name)
     : undefined;
@@ -489,6 +495,11 @@ export function App({
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
   }, []);
+  const openFilesAndFoldersSettings = useCallback((): void => {
+    void openFilesAndFoldersSystemSettings().catch((cause: unknown) =>
+      showError(t('openSystemSettingsFailedTitle'), cause, t('openSystemSettingsFailed')),
+    );
+  }, [showError, t]);
 
   const checkAppUpdate = useCallback(
     async (manual = false): Promise<void> => {
@@ -1027,6 +1038,11 @@ export function App({
       showError(t('openRepositoryFailedTitle'), cause, t('chooseDirectoryFailed'));
       return null;
     }
+  };
+
+  const chooseRepositoryBasePath = async (): Promise<void> => {
+    const path = await chooseDirectory(t('chooseRepositoryBasePath'));
+    if (path) setRepositoryBasePath(path);
   };
 
   const chooseRelocatedRepository = async (oldPath: string): Promise<void> => {
@@ -1737,7 +1753,7 @@ export function App({
     : undefined;
   const sidebarControlLabel = t(sidebarOpen ? 'closeSidebar' : 'openSidebar');
   const sidebarControl = (
-    <button
+    <Button
       type="button"
       className="icon-button sidebar-toggle-button"
       aria-label={sidebarControlLabel}
@@ -1750,7 +1766,7 @@ export function App({
       ) : (
         <PanelLeftOpen aria-hidden="true" focusable="false" />
       )}
-    </button>
+    </Button>
   );
 
   if (restoringWorkspace) {
@@ -1758,7 +1774,7 @@ export function App({
       <I18nProvider language={language}>
         <AppearanceProvider appearance={appearance}>
           <div className="app-shell" data-testid="app-shell" aria-busy="true" style={appShellStyle}>
-            <header className="app-header" data-tauri-drag-region />
+            <header className="app-header" data-tauri-drag-region="deep" />
           </div>
         </AppearanceProvider>
       </I18nProvider>
@@ -1773,19 +1789,15 @@ export function App({
           data-testid="app-shell"
           style={appShellStyle}
         >
-          <header className="app-header" data-tauri-drag-region>
+          <header className="app-header" data-tauri-drag-region="deep">
             {sidebarAvailable ? sidebarControl : null}
-            <div className="window-header-content" data-tauri-drag-region>
-              <div className="window-header-leading" data-tauri-drag-region>
+            <div className="window-header-content">
+              <div className="window-header-leading">
                 {page !== 'settings' ? (
-                  <nav
-                    className="titlebar-context"
-                    aria-label={t('workspaceContext')}
-                    data-tauri-drag-region
-                  >
+                  <nav className="titlebar-context" aria-label={t('workspaceContext')}>
                     {repo ? (
                       <>
-                        <button
+                        <Button
                           type="button"
                           className="titlebar-context-toggle repository-toggle"
                           aria-label={t('switchRepositoryCurrent', {
@@ -1808,8 +1820,8 @@ export function App({
                             />
                           ) : null}
                           <ChevronDown aria-hidden="true" focusable="false" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
                           className="titlebar-context-toggle branch-toggle"
                           aria-label={t('switchBranchCurrent', {
@@ -1829,19 +1841,15 @@ export function App({
                           <GitBranch aria-hidden="true" focusable="false" />
                           <span>{repo.branch.detached ? t('detachedHead') : repo.branch.name}</span>
                           <ChevronDown aria-hidden="true" focusable="false" />
-                        </button>
+                        </Button>
                       </>
                     ) : null}
                   </nav>
                 ) : null}
               </div>
-              <nav
-                className="titlebar-actions"
-                aria-label={t('appNavigation')}
-                data-tauri-drag-region
-              >
+              <nav className="titlebar-actions" aria-label={t('appNavigation')}>
                 {availableUpdate ? (
-                  <button
+                  <Button
                     type="button"
                     className="titlebar-menu-button titlebar-update-button"
                     aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
@@ -1849,11 +1857,11 @@ export function App({
                   >
                     <RefreshCw aria-hidden="true" focusable="false" />
                     <span>{t('update')}</span>
-                  </button>
+                  </Button>
                 ) : null}
                 {repo ? (
                   <>
-                    <button
+                    <Button
                       type="button"
                       className="titlebar-menu-button"
                       aria-label={t('changes')}
@@ -1869,8 +1877,8 @@ export function App({
                     >
                       <Files aria-hidden="true" focusable="false" />
                       <span>{t('changes')}</span>
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       className="titlebar-menu-button"
                       aria-label={t('history')}
@@ -1886,10 +1894,10 @@ export function App({
                     >
                       <HistoryIcon aria-hidden="true" focusable="false" />
                       <span>{t('history')}</span>
-                    </button>
+                    </Button>
                   </>
                 ) : showRepositoryMenu ? (
-                  <button
+                  <Button
                     type="button"
                     className="titlebar-menu-button"
                     aria-label={t('repositoriesTitle')}
@@ -1900,10 +1908,10 @@ export function App({
                   >
                     <FolderGit2 aria-hidden="true" focusable="false" />
                     <span>{t('repositoriesTitle')}</span>
-                  </button>
+                  </Button>
                 ) : null}
                 {showActivityMenu ? (
-                  <button
+                  <Button
                     type="button"
                     className="titlebar-menu-button activity-toggle"
                     aria-label={t('appActivity')}
@@ -1914,9 +1922,9 @@ export function App({
                   >
                     <ChartNoAxesCombined aria-hidden="true" focusable="false" />
                     <span>{t('appActivity')}</span>
-                  </button>
+                  </Button>
                 ) : null}
-                <button
+                <Button
                   ref={settingsButtonRef}
                   type="button"
                   className="titlebar-menu-button"
@@ -1928,7 +1936,7 @@ export function App({
                 >
                   <SettingsIcon aria-hidden="true" focusable="false" />
                   <span>{t('appSettings')}</span>
-                </button>
+                </Button>
               </nav>
             </div>
           </header>
@@ -1953,6 +1961,7 @@ export function App({
               splitStageView={splitStageView}
               changeListDisplay={changeListDisplay}
               repositoryBasePath={repositoryBasePath}
+              repositoryAccessNeedsAttention={repositoryAccessNeedsAttention}
               useConventionalCommits={useConventionalCommits}
               stickyFileHeaders={stickyFileHeaders}
               editorLineWrapping={editorLineWrapping}
@@ -1969,6 +1978,8 @@ export function App({
               onSplitStageViewChange={setSplitStageView}
               onChangeListDisplayChange={setChangeListDisplay}
               onRepositoryBasePathChange={setRepositoryBasePath}
+              onChooseRepositoryBasePath={() => settleUiAction(chooseRepositoryBasePath())}
+              onOpenFilesAndFoldersSettings={openFilesAndFoldersSettings}
               onUseConventionalCommitsChange={setUseConventionalCommits}
               onStickyFileHeadersChange={setStickyFileHeaders}
               onEditorLineWrappingChange={setEditorLineWrapping}
@@ -2021,30 +2032,30 @@ export function App({
                       </span>
                     </div>
                     <div className="button-row compact">
-                      <button
+                      <Button
                         type="button"
                         disabled={!operationActions.canContinue || busy || repositoryUnavailable}
                         onClick={() => requestOperationAction({ kind: 'continueOperation' })}
                       >
                         {t('continueAction')}
-                      </button>
+                      </Button>
                       {operationActions.canSkip ? (
-                        <button
+                        <Button
                           type="button"
                           disabled={busy || repositoryUnavailable}
                           onClick={() => requestOperationAction({ kind: 'skipOperation' })}
                         >
                           {t('skipAction')}
-                        </button>
+                        </Button>
                       ) : null}
-                      <button
+                      <Button
                         type="button"
-                        className="danger-quiet"
+                        variant="dangerQuiet"
                         disabled={!operationActions.canAbort || busy || repositoryUnavailable}
                         onClick={() => requestOperationAction({ kind: 'abortOperation' })}
                       >
                         {t('abortAction')}
-                      </button>
+                      </Button>
                     </div>
                   </section>
                 ) : null}
@@ -2158,23 +2169,23 @@ export function App({
                 ) : null}
               </DialogBody>
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus={updateBlocked}
                   disabled={updateInstalling}
                   onClick={() => setUpdateDialogOpen(false)}
                 >
                   {t('later')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   data-dialog-initial-focus={!updateBlocked}
                   disabled={updateBlocked || updateInstalling}
                   onClick={requestAppUpdate}
                 >
                   {t('updateAndRestart')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2194,7 +2205,7 @@ export function App({
                 description={t('saveOrDiscardBeforeUpdate')}
               />
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => {
@@ -2203,21 +2214,21 @@ export function App({
                   }}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger-quiet"
+                  variant="dangerQuiet"
                   onClick={() => settleUiAction(beginAppUpdate(false, true))}
                 >
                   {t('updateWithoutSaving')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   onClick={() => settleUiAction(beginAppUpdate(true))}
                 >
                   {t('saveAndUpdate')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2297,26 +2308,26 @@ export function App({
               </DialogBody>
               <DialogFooter>
                 {!unavailableRepo || !unsavedDirtyRef.current ? (
-                  <button
+                  <Button
                     type="button"
                     data-dialog-initial-focus
                     onClick={() => setUnavailableRepoPath(undefined)}
                   >
                     {t('cancel')}
-                  </button>
+                  </Button>
                 ) : null}
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus={Boolean(unavailableRepo && unsavedDirtyRef.current)}
                   disabled={busy}
                   onClick={() => settleUiAction(chooseRelocatedRepository(unavailableRepoPath))}
                 >
                   {t('repairRepositoryLocation')}
-                </button>
+                </Button>
                 {unavailableRepo ? (
-                  <button
+                  <Button
                     type="button"
-                    className="danger"
+                    variant="danger"
                     disabled={busy || unavailableRepo.operation.kind !== 'none'}
                     onClick={() =>
                       settleUiAction(
@@ -2330,7 +2341,7 @@ export function App({
                     }
                   >
                     {t('discardAndCloseRepository')}
-                  </button>
+                  </Button>
                 ) : null}
               </DialogFooter>
             </Dialog>
@@ -2375,17 +2386,17 @@ export function App({
                 </dl>
               </DialogBody>
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   disabled={busy}
                   onClick={() => setRelocation(undefined)}
                 >
                   {t('cancel')}
-                </button>
+                </Button>
                 {relocation.duplicate ? (
                   <>
-                    <button
+                    <Button
                       type="button"
                       disabled={busy}
                       onClick={() => {
@@ -2395,10 +2406,10 @@ export function App({
                       }}
                     >
                       {t('openRegisteredRepository')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className="danger-quiet"
+                      variant="dangerQuiet"
                       disabled={busy}
                       onClick={() => {
                         const path = relocation.oldPath;
@@ -2407,17 +2418,17 @@ export function App({
                       }}
                     >
                       {t('forgetOldRepository')}
-                    </button>
+                    </Button>
                   </>
                 ) : (
-                  <button
+                  <Button
                     type="button"
-                    className="primary"
+                    variant="primary"
                     disabled={busy}
                     onClick={() => settleUiAction(confirmRepositoryRelocation())}
                   >
                     {t('replaceRepositoryLocation')}
-                  </button>
+                  </Button>
                 )}
               </DialogFooter>
             </Dialog>
@@ -2450,25 +2461,25 @@ export function App({
                 ) : null}
               </DialogBody>
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   disabled={busy}
                   onClick={() => setPendingForgetPath(undefined)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger-quiet"
+                  variant="dangerQuiet"
                   disabled={busy}
                   onClick={() => settleUiAction(confirmRepositoryRemoval(false))}
                 >
                   {t('forgetRepository')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger"
+                  variant="danger"
                   disabled={
                     busy ||
                     (pendingForgetRepository?.availability !== undefined &&
@@ -2477,7 +2488,7 @@ export function App({
                   onClick={() => settleUiAction(confirmRepositoryRemoval(true))}
                 >
                   {t('moveRepositoryToTrash')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2579,7 +2590,7 @@ export function App({
                     <span>
                       {t('typeToConfirm', { value: pendingAction.preview.typedConfirmation })}
                     </span>
-                    <input
+                    <Input
                       value={typedConfirmation}
                       onChange={(event) => setTypedConfirmation(event.target.value)}
                     />
@@ -2587,16 +2598,16 @@ export function App({
                 ) : null}
               </DialogBody>
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => setPendingAction(undefined)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className={pendingAction.preview.destructive ? 'danger' : 'primary'}
+                  variant={pendingAction.preview.destructive ? 'danger' : 'primary'}
                   disabled={
                     Boolean(pendingAction.preview.typedConfirmation) &&
                     typedConfirmation !== pendingAction.preview.typedConfirmation
@@ -2604,7 +2615,7 @@ export function App({
                   onClick={() => settleUiAction(confirmAction())}
                 >
                   {confirmationActionLabel(pendingAction.request.action, t)}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2621,27 +2632,27 @@ export function App({
                 description={t('saveOrDiscardBeforeLeaving')}
               />
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => setPendingNavigation(undefined)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger-quiet"
+                  variant="dangerQuiet"
                   onClick={() => performNavigation(pendingNavigation, true)}
                 >
                   {t('leaveWithoutSaving')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   onClick={() => settleUiAction(saveAndNavigate())}
                 >
                   {t('saveAndLeave')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2664,16 +2675,16 @@ export function App({
                 )}
               />
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => setPendingOperationAction(undefined)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger"
+                  variant="danger"
                   onClick={() => settleUiAction(runPendingOperationAction(true))}
                 >
                   {pendingOperationAction.kind === 'continueOperation'
@@ -2681,7 +2692,7 @@ export function App({
                     : pendingOperationAction.kind === 'skipOperation'
                       ? t('discardAndSkip')
                       : t('discardAndAbort')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2698,27 +2709,27 @@ export function App({
                 description={t('saveOrDiscardBeforeAction')}
               />
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => setPendingUnsavedAction(undefined)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger-quiet"
+                  variant="dangerQuiet"
                   onClick={() => settleUiAction(runPendingUnsavedAction(false))}
                 >
                   {t('leaveWithoutSaving')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   onClick={() => settleUiAction(runPendingUnsavedAction(true))}
                 >
                   {t('saveAndLeave')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}
@@ -2735,27 +2746,27 @@ export function App({
                 description={t('saveOrDiscardBeforeClosing')}
               />
               <DialogFooter>
-                <button
+                <Button
                   type="button"
                   data-dialog-initial-focus
                   onClick={() => setPendingWindowClose(false)}
                 >
                   {t('cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger-quiet"
+                  variant="dangerQuiet"
                   onClick={() => settleUiAction(completeWindowClose(false))}
                 >
                   {t('closeWithoutSaving')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="primary"
+                  variant="primary"
                   onClick={() => settleUiAction(completeWindowClose(true))}
                 >
                   {t('saveAndClose')}
-                </button>
+                </Button>
               </DialogFooter>
             </Dialog>
           ) : null}

@@ -266,7 +266,7 @@ export async function openRepository(
   if (options.inspectDialog) {
     await expect(dialog.$('[role="tab"]')).not.toExist();
     await expect(dialog.$('#repository-location')).toExist();
-    await expect(dialog.$('.repository-path-picker')).toExist();
+    await expect(dialog.$('.directory-picker-button')).toExist();
     await expect(dialog.$('#repository-display-name')).toExist();
   }
   await dialog.$('#repository-location').setValue(path);
