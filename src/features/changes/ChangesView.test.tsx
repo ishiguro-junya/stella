@@ -1021,7 +1021,7 @@ describe('ChangesView diff lifecycle', () => {
 
     act(() => rejectCommit?.(new Error('Commit hook failed.')));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Commit hook failed.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Commit failed.');
     expect(screen.getByRole('dialog', { name: 'Commit' })).toBeVisible();
     expect(description).toHaveValue('handle commit errors');
   });

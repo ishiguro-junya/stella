@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { CodeViewLineSelection, SelectedLineRange } from '@pierre/diffs';
 import { StrictMode, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface MockCodeViewProps {
@@ -104,7 +105,7 @@ vi.mock('@pierre/diffs/worker/worker.js?worker', () => ({
 
 import { DiffSurface, type SurfaceHunkSelection, type SurfaceSelection } from './DiffSurface';
 import { I18nProvider } from '../../i18n/i18n';
-import { MESSAGES } from '../../i18n/messages';
+import { resources } from '../../i18n/messages';
 import { AppearanceProvider } from '../../theme/appearance';
 
 const PATCH = `diff --git a/example.txt b/example.txt
@@ -115,6 +116,13 @@ const PATCH = `diff --git a/example.txt b/example.txt
 +new
  context
 `;
+
+let mountedI18n: ReturnType<typeof useTranslation>['i18n'] | undefined;
+
+function CaptureI18n() {
+  mountedI18n = useTranslation().i18n;
+  return null;
+}
 
 beforeEach(() => {
   codeViewPropsMock.mockReset();
@@ -1104,8 +1112,9 @@ describe('DiffSurface line selection', () => {
       path: 'example.txt',
       cacheKey: 'revision-1',
     };
-    const { rerender } = render(
+    render(
       <I18nProvider language="ja">
+        <CaptureI18n />
         <DiffSurface source={source} hunkAction={hunkAction} />
       </I18nProvider>,
     );
@@ -1132,25 +1141,25 @@ describe('DiffSurface line selection', () => {
       },
       'mount',
     );
-    const descriptor = Object.getOwnPropertyDescriptor(MESSAGES.editHunk, 'ja');
-    if (!descriptor) throw new Error('The Japanese Hunk edit label is missing.');
+    if (!mountedI18n) throw new Error('The test i18n instance is missing.');
 
     try {
-      Object.defineProperty(MESSAGES.editHunk, 'ja', {
-        ...descriptor,
-        value: 'HMR後のハンクを編集',
+      act(() => {
+        mountedI18n?.addResource('ja', 'translation', 'editHunk', 'HMR後のハンクを編集');
       });
-      rerender(
-        <I18nProvider language="ja">
-          <DiffSurface source={source} hunkAction={hunkAction} />
-        </I18nProvider>,
-      );
 
       expect(root.querySelector('[data-stella-hunk-controls]')).toHaveTextContent(
         'HMR後のハンクを編集',
       );
     } finally {
-      Object.defineProperty(MESSAGES.editHunk, 'ja', descriptor);
+      act(() => {
+        mountedI18n?.addResource(
+          'ja',
+          'translation',
+          'editHunk',
+          resources.ja.translation.editHunk,
+        );
+      });
     }
   });
 

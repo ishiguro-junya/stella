@@ -416,7 +416,7 @@ fn unsupported_file(path: &str, reason: &str) -> WorkspaceError {
         ErrorCode::InvalidRequest,
         "The file cannot be edited in the app",
     )
-    .localized_message(LocalizedMessage::new("fileEditUnsupported").arg("reason", reason))
+    .localized_message(LocalizedMessage::new("fileEditUnsupported").arg("context", reason))
     .detail("path", path)
     .detail("reason", reason)
 }

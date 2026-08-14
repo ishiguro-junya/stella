@@ -158,7 +158,7 @@ describe('FileEditorSurface', () => {
     await user.click(screen.getByRole('tab', { name: 'Display' }));
     await user.click(screen.getByRole('button', { name: 'Save and Display' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('disk full');
+    expect(await screen.findByRole('alert')).toHaveTextContent('The file could not be saved.');
     expect(editor).toHaveValue('draft\n');
     expect(screen.queryByRole('alertdialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
     expect(props.onDisplay).not.toHaveBeenCalled();

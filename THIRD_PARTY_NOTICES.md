@@ -34,6 +34,22 @@ Stellaは、`@pierre/diffs` 1.3.5をApache License 2.0に基づいて同梱し�
 ライセンスの全文は、アプリケーションリソースの`licenses/pierre-diffs-LICENSE.md`に収録しています。  
 開発元プロジェクトは[diffs.com](https://diffs.com/)で公開されています。  
 
+## i18next
+
+Stellaは、`i18next` 26.3.6をMIT Licenseに基づいて同梱しています。  
+著作権者はi18nextです。  
+
+ライセンスの全文は、アプリケーションリソースの`licenses/i18next-LICENSE`に収録しています。  
+開発元プロジェクトは[i18next](https://www.i18next.com/)で公開されています。  
+
+## React i18next
+
+Stellaは、`react-i18next` 17.0.11をMIT Licenseに基づいて同梱しています。  
+著作権者はi18nextです。  
+
+ライセンスの全文は、アプリケーションリソースの`licenses/react-i18next-LICENSE`に収録しています。  
+開発元プロジェクトは[React i18next](https://react.i18next.com/)で公開されています。  
+
 ## Tauri Updater plugin
 
 Stellaは、`tauri-plugin-updater` 2.10.1をMIT LicenseまたはApache License 2.0に基づいて同梱しています。  

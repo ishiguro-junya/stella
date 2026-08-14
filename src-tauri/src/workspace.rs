@@ -859,7 +859,7 @@ impl Workspace {
                         "Conflicted files and submodules cannot be edited here",
                     )
                     .localized_message(LocalizedMessage::new("fileEditUnsupported").arg(
-                        "reason",
+                        "context",
                         if entry.conflict {
                             "conflict"
                         } else {

@@ -119,8 +119,11 @@ hook失敗が状態を変えていなければ`applied`を維持し、phaseを�
 
 ## 多言語境界
 
-Frontendの固定文言は型付きcatalogへ集約し、日時、件数、複数形、durationは`ja-JP`／`en-US`の`Intl`でformatします。  
-言語変更はReactの`I18nProvider`を更新して全画面を再描画し、`html[lang]`とmacOS menuも再起動なしで同期します。  
+フロントエンドの固定文言はi18nextの言語別JSONカタログへ集約し、react-i18nextを通して表示します。  
+日時と数値は`ja-JP`／`en-US`の`Intl`で整形し、複数形はi18nextへ委ねます。  
+選択中の言語に文言がない場合でも別の言語へ切り替えません。  
+言語変更はReactの`I18nProvider`を更新して全画面を再描画し、`html[lang]`とmacOSメニューも再起動なしで同期します。  
+macOSメニューはフロントエンドと同じJSONカタログを読み込みます。  
 
 RustからFrontendへ渡す結果、進捗、preview、Conflict label、errorは、翻訳済み文字列ではなくmessage IDと型付き引数を持つ`LocalizedMessage`とします。  
 Activity v2も同じ構造を保存するため、表示中または保存済みの項目を言語変更後に再翻訳できます。  

@@ -83,7 +83,7 @@ mise run dev
 │   ├── adapters/           # Tauriとの通信
 │   ├── domain/             # Gitの型とルール
 │   ├── features/           # 機能ごとの画面と操作
-│   ├── i18n/               # 多言語の制御
+│   ├── i18n/               # i18nextの設定と翻訳カタログ
 │   ├── persistence/        # アプリ設定の保存
 │   ├── test/               # ユニットテスト
 │   ├── theme/              # 外観テーマの制御

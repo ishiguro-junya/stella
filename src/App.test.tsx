@@ -1564,7 +1564,7 @@ describe('App repository attach', () => {
     expect(await screen.findByText('1234567890ab')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Run' }));
     expect(await screen.findByRole('alertdialog', { name: 'Operation failed' })).toHaveTextContent(
-      'Git operation failed.',
+      'The operation failed.',
     );
     expect(screen.getByLabelText('stderr')).toHaveTextContent('policy denied this operation');
   });
@@ -2064,7 +2064,9 @@ describe('App repository attach', () => {
     const errorDialog = screen.queryByRole('alertdialog', { name: 'Operation failed' });
     expect(Boolean(resolution)).toBe(expectedResolution);
     expect(Boolean(errorDialog)).toBe(!expectedResolution);
-    expect(errorDialog?.textContent ?? '').toContain(expectedResolution ? '' : failure.message);
+    expect(errorDialog?.textContent ?? '').toContain(
+      expectedResolution ? '' : 'The operation failed.',
+    );
   });
 
   it('guards Activity and Settings with cancel, discard, and save conflict leave paths', async () => {

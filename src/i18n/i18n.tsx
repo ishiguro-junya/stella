@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import i18next, { createInstance, use as registerI18nextPlugin, type i18n } from 'i18next';
+import { I18nextProvider, initReactI18next, useTranslation } from 'react-i18next';
+import { useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 
-import { isMessageKey, MESSAGES, type MessageArgs, type MessageKey } from './messages';
+import { defaultNS, isMessageKey, resources, type MessageArgs, type MessageKey } from './messages';
 
 export type Language = 'ja' | 'en';
 
@@ -34,23 +36,28 @@ export interface I18nValue {
   formatDate: (value: Date | number | string, options?: Intl.DateTimeFormatOptions) => string;
 }
 
-function createI18nValue(language: Language): I18nValue {
-  const locale = localeForLanguage(language);
-  const numberFormatter = new Intl.NumberFormat(locale);
-  return {
-    language,
-    locale,
-    t: (id, args) => translate(language, id, args),
-    message: (message) => translate(language, message.id, message.args),
-    formatNumber: (candidate) => numberFormatter.format(candidate),
-    formatDate: (candidate, options) =>
-      new Intl.DateTimeFormat(locale, options).format(
-        candidate instanceof Date ? candidate : new Date(candidate),
-      ),
-  };
+function initializeI18n(instance: i18n, language: Language): i18n {
+  void instance.init({
+    defaultNS,
+    fallbackLng: false,
+    initAsync: false,
+    interpolation: { escapeValue: false },
+    keySeparator: false,
+    lng: language,
+    react: { bindI18nStore: 'added removed', useSuspense: false },
+    resources: structuredClone(resources),
+    returnNull: false,
+    supportedLngs: ['ja', 'en'],
+  });
+  return instance;
 }
 
-const I18nContext = createContext<I18nValue>(createI18nValue('en'));
+registerI18nextPlugin(initReactI18next);
+const translationInstance = initializeI18n(i18next, 'en');
+
+function createI18n(language: Language): i18n {
+  return initializeI18n(createInstance(), language);
+}
 
 export function detectLanguage(languages?: readonly string[]): Language {
   const browserLanguages = globalThis.navigator?.languages;
@@ -78,39 +85,53 @@ export function applyDocumentLanguage(language: Language): void {
 }
 
 export function translate(language: Language, id: MessageKey, args: MessageArgs = {}): string {
-  const value = MESSAGES[id][language];
-  if (typeof value === 'function') {
-    const numberFormatter = new Intl.NumberFormat(localeForLanguage(language));
-    return value(args, { number: (candidate) => numberFormatter.format(candidate) });
-  }
-  return value.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/gu, (_, key: string) =>
-    args[key] === undefined ? `{${key}}` : String(args[key]),
-  );
+  return translationInstance.t(id, { ...args, lng: language });
 }
 
 export function I18nProvider({ language, children }: { language: Language; children: ReactNode }) {
-  const valueRef = useRef<{
-    language: Language;
-    messages: typeof MESSAGES;
-    value: I18nValue;
-  }>(undefined);
-  // 通常renderではContextを安定させ、React Refreshでcatalogが置き換わった時だけ再構築する。
-  if (
-    !valueRef.current ||
-    valueRef.current.language !== language ||
-    valueRef.current.messages !== MESSAGES
-  ) {
-    valueRef.current = { language, messages: MESSAGES, value: createI18nValue(language) };
-  }
-  const { value } = valueRef.current;
+  const instanceRef = useRef<i18n>(undefined);
+  if (!instanceRef.current) instanceRef.current = createI18n(language);
+  const instance = instanceRef.current;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    for (const candidate of ['en', 'ja'] as const) {
+      instance.addResourceBundle(candidate, defaultNS, resources[candidate][defaultNS], true, true);
+    }
+    void instance.changeLanguage(language);
     applyDocumentLanguage(language);
-  }, [language]);
+  }, [instance, language]);
 
-  return <I18nContext value={value}>{children}</I18nContext>;
+  return <I18nextProvider i18n={instance}>{children}</I18nextProvider>;
 }
 
 export function useI18n(): I18nValue {
-  return useContext(I18nContext);
+  const { t: i18nextT, i18n: instance } = useTranslation();
+  const language = isLanguage(instance.resolvedLanguage)
+    ? instance.resolvedLanguage
+    : isLanguage(instance.language)
+      ? instance.language
+      : 'en';
+  const locale = localeForLanguage(language);
+  const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const t = useCallback<I18nValue['t']>((id, args = {}) => i18nextT(id, args), [i18nextT]);
+  const message = useCallback<I18nValue['message']>(
+    (value) => i18nextT(value.id, value.args ?? {}),
+    [i18nextT],
+  );
+  const formatNumber = useCallback(
+    (candidate: number) => numberFormatter.format(candidate),
+    [numberFormatter],
+  );
+  const formatDate = useCallback<I18nValue['formatDate']>(
+    (candidate, options) =>
+      new Intl.DateTimeFormat(locale, options).format(
+        candidate instanceof Date ? candidate : new Date(candidate),
+      ),
+    [locale],
+  );
+
+  return useMemo(
+    () => ({ language, locale, t, message, formatNumber, formatDate }),
+    [formatDate, formatNumber, language, locale, message, t],
+  );
 }

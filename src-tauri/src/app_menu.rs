@@ -27,93 +27,44 @@ pub(crate) enum AppLanguage {
     En,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 struct MenuLabels {
-    about: &'static str,
-    check_updates: &'static str,
-    settings: &'static str,
-    services: &'static str,
-    hide: &'static str,
-    hide_others: &'static str,
-    show_all: &'static str,
-    quit: &'static str,
-    file: &'static str,
-    close_window: &'static str,
-    edit: &'static str,
-    undo: &'static str,
-    redo: &'static str,
-    cut: &'static str,
-    copy: &'static str,
-    paste: &'static str,
-    select_all: &'static str,
-    view: &'static str,
-    fullscreen: &'static str,
-    window: &'static str,
-    minimize: &'static str,
-    zoom: &'static str,
-    bring_all_to_front: &'static str,
-    help: &'static str,
+    native_menu_about: String,
+    native_menu_check_updates: String,
+    native_menu_settings: String,
+    native_menu_services: String,
+    native_menu_hide: String,
+    native_menu_hide_others: String,
+    native_menu_show_all: String,
+    native_menu_quit: String,
+    native_menu_file: String,
+    native_menu_close_window: String,
+    native_menu_edit: String,
+    native_menu_undo: String,
+    native_menu_redo: String,
+    native_menu_cut: String,
+    native_menu_copy: String,
+    native_menu_paste: String,
+    native_menu_select_all: String,
+    native_menu_view: String,
+    native_menu_fullscreen: String,
+    native_menu_window: String,
+    native_menu_minimize: String,
+    native_menu_zoom: String,
+    native_menu_bring_all_to_front: String,
+    native_menu_help: String,
 }
 
-const ENGLISH_LABELS: MenuLabels = MenuLabels {
-    about: "About Stella",
-    check_updates: "Check for Updates…",
-    settings: "Settings…",
-    services: "Services",
-    hide: "Hide Stella",
-    hide_others: "Hide Others",
-    show_all: "Show All",
-    quit: "Quit Stella",
-    file: "File",
-    close_window: "Close Window",
-    edit: "Edit",
-    undo: "Undo",
-    redo: "Redo",
-    cut: "Cut",
-    copy: "Copy",
-    paste: "Paste",
-    select_all: "Select All",
-    view: "View",
-    fullscreen: "Enter Full Screen",
-    window: "Window",
-    minimize: "Minimize",
-    zoom: "Zoom",
-    bring_all_to_front: "Bring All to Front",
-    help: "Help",
-};
+const ENGLISH_MESSAGES: &str = include_str!("../../src/i18n/locales/en.json");
+const JAPANESE_MESSAGES: &str = include_str!("../../src/i18n/locales/ja.json");
 
-const JAPANESE_LABELS: MenuLabels = MenuLabels {
-    about: "Stellaについて",
-    check_updates: "更新を確認…",
-    settings: "設定…",
-    services: "サービス",
-    hide: "Stellaを隠す",
-    hide_others: "ほかを隠す",
-    show_all: "すべてを表示",
-    quit: "Stellaを終了",
-    file: "ファイル",
-    close_window: "ウインドウを閉じる",
-    edit: "編集",
-    undo: "取り消す",
-    redo: "やり直す",
-    cut: "カット",
-    copy: "コピー",
-    paste: "ペースト",
-    select_all: "すべてを選択",
-    view: "表示",
-    fullscreen: "フルスクリーンにする",
-    window: "ウインドウ",
-    minimize: "しまう",
-    zoom: "拡大／縮小",
-    bring_all_to_front: "すべてを手前に移動",
-    help: "ヘルプ",
-};
-
-fn labels(language: AppLanguage) -> &'static MenuLabels {
-    match language {
-        AppLanguage::Ja => &JAPANESE_LABELS,
-        AppLanguage::En => &ENGLISH_LABELS,
-    }
+fn labels(language: AppLanguage) -> MenuLabels {
+    let catalog = match language {
+        AppLanguage::Ja => JAPANESE_MESSAGES,
+        AppLanguage::En => ENGLISH_MESSAGES,
+    };
+    serde_json::from_str(catalog).expect("翻訳カタログを読み込めませんでした")
 }
 
 fn about_metadata(
@@ -148,48 +99,60 @@ fn build_for_language<R: Runtime>(
         app.config().bundle.copyright.as_deref(),
         Some(ABOUT_ICON.clone()),
     );
-    let settings = MenuItemBuilder::with_id(SETTINGS_MENU_ID, text.settings)
+    let settings = MenuItemBuilder::with_id(SETTINGS_MENU_ID, text.native_menu_settings.as_str())
         .accelerator(SETTINGS_MENU_ACCELERATOR)
         .build(app)?;
-    let check_updates =
-        MenuItemBuilder::with_id(CHECK_UPDATES_MENU_ID, text.check_updates).build(app)?;
+    let check_updates = MenuItemBuilder::with_id(
+        CHECK_UPDATES_MENU_ID,
+        text.native_menu_check_updates.as_str(),
+    )
+    .build(app)?;
 
     let app_submenu = SubmenuBuilder::new(app, "Stella")
-        .about_with_text(text.about, Some(about))
+        .about_with_text(text.native_menu_about.as_str(), Some(about))
         .item(&check_updates)
         .separator()
         .item(&settings)
         .separator()
-        .services_with_text(text.services)
+        .services_with_text(text.native_menu_services.as_str())
         .separator()
-        .hide_with_text(text.hide)
-        .hide_others_with_text(text.hide_others)
-        .show_all_with_text(text.show_all)
+        .hide_with_text(text.native_menu_hide.as_str())
+        .hide_others_with_text(text.native_menu_hide_others.as_str())
+        .show_all_with_text(text.native_menu_show_all.as_str())
         .separator()
-        .quit_with_text(text.quit)
+        .quit_with_text(text.native_menu_quit.as_str())
         .build()?;
-    let file_submenu = SubmenuBuilder::new(app, text.file)
-        .close_window_with_text(text.close_window)
+    let file_submenu = SubmenuBuilder::new(app, text.native_menu_file.as_str())
+        .close_window_with_text(text.native_menu_close_window.as_str())
         .build()?;
-    let edit_submenu = SubmenuBuilder::new(app, text.edit)
-        .undo_with_text(text.undo)
-        .redo_with_text(text.redo)
+    let edit_submenu = SubmenuBuilder::new(app, text.native_menu_edit.as_str())
+        .undo_with_text(text.native_menu_undo.as_str())
+        .redo_with_text(text.native_menu_redo.as_str())
         .separator()
-        .cut_with_text(text.cut)
-        .copy_with_text(text.copy)
-        .paste_with_text(text.paste)
-        .select_all_with_text(text.select_all)
+        .cut_with_text(text.native_menu_cut.as_str())
+        .copy_with_text(text.native_menu_copy.as_str())
+        .paste_with_text(text.native_menu_paste.as_str())
+        .select_all_with_text(text.native_menu_select_all.as_str())
         .build()?;
-    let view_submenu = SubmenuBuilder::new(app, text.view)
-        .fullscreen_with_text(text.fullscreen)
+    let view_submenu = SubmenuBuilder::new(app, text.native_menu_view.as_str())
+        .fullscreen_with_text(text.native_menu_fullscreen.as_str())
         .build()?;
-    let window_submenu = SubmenuBuilder::with_id(app, tauri::menu::WINDOW_SUBMENU_ID, text.window)
-        .minimize_with_text(text.minimize)
-        .maximize_with_text(text.zoom)
-        .separator()
-        .bring_all_to_front_with_text(text.bring_all_to_front)
-        .build()?;
-    let help_submenu = Submenu::with_id(app, tauri::menu::HELP_SUBMENU_ID, text.help, true)?;
+    let window_submenu = SubmenuBuilder::with_id(
+        app,
+        tauri::menu::WINDOW_SUBMENU_ID,
+        text.native_menu_window.as_str(),
+    )
+    .minimize_with_text(text.native_menu_minimize.as_str())
+    .maximize_with_text(text.native_menu_zoom.as_str())
+    .separator()
+    .bring_all_to_front_with_text(text.native_menu_bring_all_to_front.as_str())
+    .build()?;
+    let help_submenu = Submenu::with_id(
+        app,
+        tauri::menu::HELP_SUBMENU_ID,
+        text.native_menu_help.as_str(),
+        true,
+    )?;
 
     MenuBuilder::new(app)
         .item(&app_submenu)
@@ -333,14 +296,20 @@ mod tests {
 
     #[test]
     fn menu_labels_cover_both_languages_and_keep_settings_contract() {
-        assert_eq!(labels(AppLanguage::En).settings, "Settings…");
-        assert_eq!(labels(AppLanguage::Ja).settings, "設定…");
-        assert_eq!(labels(AppLanguage::En).check_updates, "Check for Updates…");
-        assert_eq!(labels(AppLanguage::Ja).check_updates, "更新を確認…");
-        assert_eq!(labels(AppLanguage::En).file, "File");
-        assert_eq!(labels(AppLanguage::Ja).file, "ファイル");
-        assert_eq!(labels(AppLanguage::En).help, "Help");
-        assert_eq!(labels(AppLanguage::Ja).help, "ヘルプ");
+        assert_eq!(labels(AppLanguage::En).native_menu_settings, "Settings…");
+        assert_eq!(labels(AppLanguage::Ja).native_menu_settings, "設定…");
+        assert_eq!(
+            labels(AppLanguage::En).native_menu_check_updates,
+            "Check for Updates…"
+        );
+        assert_eq!(
+            labels(AppLanguage::Ja).native_menu_check_updates,
+            "更新を確認…"
+        );
+        assert_eq!(labels(AppLanguage::En).native_menu_file, "File");
+        assert_eq!(labels(AppLanguage::Ja).native_menu_file, "ファイル");
+        assert_eq!(labels(AppLanguage::En).native_menu_help, "Help");
+        assert_eq!(labels(AppLanguage::Ja).native_menu_help, "ヘルプ");
     }
 
     #[test]

@@ -603,7 +603,7 @@ export function ChangeList({
                       aria-label={t('changeAllAria', {
                         action: actionLabel ?? '',
                         count: actionableGroupEntries.length,
-                        area: label,
+                        context: id === 'staged' ? 'staged' : 'unstaged',
                       })}
                       aria-describedby={disabledReasonId}
                       onChange={() => {

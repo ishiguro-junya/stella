@@ -86,7 +86,7 @@ describe('CommitForm validation', () => {
     await user.type(screen.getByLabelText('Message'), 'handle a failed commit');
     await user.click(screen.getByRole('button', { name: 'Commit' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Hook rejected the commit.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Commit failed.');
     expect(onAttentionRequired).toHaveBeenCalledOnce();
   });
 

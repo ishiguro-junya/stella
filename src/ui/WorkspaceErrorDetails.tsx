@@ -10,14 +10,13 @@ export interface WorkspaceErrorContent {
 }
 
 export function describeWorkspaceError(cause: unknown, fallback: string): WorkspaceErrorContent {
-  const error = cause instanceof Error ? cause : new Error(fallback);
-  if (!(error instanceof WorkspaceAdapterError)) return { message: error.message };
+  if (!(cause instanceof WorkspaceAdapterError)) return { message: fallback };
   return {
-    message: error.message,
-    ...(error.localizedMessage ? { localizedMessage: error.localizedMessage } : {}),
-    ...(error.details.stderr ? { stderr: error.details.stderr } : {}),
-    ...(error.details.stdout ? { stdout: error.details.stdout } : {}),
-    ...(error.details.exitCode ? { exitCode: error.details.exitCode } : {}),
+    message: fallback,
+    ...(cause.localizedMessage ? { localizedMessage: cause.localizedMessage } : {}),
+    ...(cause.details.stderr ? { stderr: cause.details.stderr } : {}),
+    ...(cause.details.stdout ? { stdout: cause.details.stdout } : {}),
+    ...(cause.details.exitCode ? { exitCode: cause.details.exitCode } : {}),
   };
 }
 

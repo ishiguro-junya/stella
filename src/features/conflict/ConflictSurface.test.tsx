@@ -241,7 +241,7 @@ describe('ConflictSurface', () => {
     render(<ConflictSurface document={conflictDocument()} actions={handlers} />);
 
     await user.click(screen.getByRole('button', { name: 'Apply current to conflict 1' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choice backend failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not apply the choice.');
   });
 
   it('does not queue a second dialog for a materialize error already handled by App', async () => {

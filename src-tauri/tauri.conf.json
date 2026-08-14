@@ -47,6 +47,8 @@
       "../.tmp/toolchain/bundle/toolchain": "toolchain",
       "../node_modules/@pierre/diffs/LICENSE.md": "licenses/pierre-diffs-LICENSE.md",
       "../node_modules/@tauri-apps/plugin-dialog/LICENSE.spdx": "licenses/tauri-plugin-dialog-LICENSE.spdx",
+      "../node_modules/i18next/LICENSE": "licenses/i18next-LICENSE",
+      "../node_modules/react-i18next/LICENSE": "licenses/react-i18next-LICENSE",
       "../licenses/tauri-plugin-updater-LICENSE.spdx": "licenses/tauri-plugin-updater-LICENSE.spdx",
       "../node_modules/lucide-react/LICENSE": "licenses/lucide-react-LICENSE",
       "../node_modules/react-is/LICENSE": "licenses/react-is-LICENSE",

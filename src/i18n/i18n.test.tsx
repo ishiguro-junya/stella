@@ -1,8 +1,9 @@
+import i18next from 'i18next';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { detectLanguage, I18nProvider, translate, useI18n, type Language } from './i18n';
-import { MESSAGES } from './messages';
+import { resources } from './messages';
 
 function Probe() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -32,19 +33,35 @@ describe('Stella i18n', () => {
   });
 
   it('keeps every message available in both catalogs', () => {
-    for (const translations of Object.values(MESSAGES)) {
-      expect(translations.en).toBeDefined();
-      expect(translations.ja).toBeDefined();
+    expect(Object.keys(resources.en.translation).toSorted()).toEqual(
+      Object.keys(resources.ja.translation).toSorted(),
+    );
+  });
+
+  it('does not fall back to English when the selected catalog has no message', () => {
+    i18next.removeResourceBundle('ja', 'translation');
+    try {
+      expect(translate('ja', 'settingsTitle')).toBe('settingsTitle');
+    } finally {
+      i18next.addResourceBundle('ja', 'translation', structuredClone(resources.ja.translation));
     }
   });
 
   it('expands typed arguments and applies English plural forms', () => {
-    expect(translate('en', 'changeAllAria', { action: 'Stage', count: 1, area: 'Unstaged' })).toBe(
-      'Stage all 1 unstaged file',
-    );
-    expect(translate('en', 'changeAllAria', { action: 'Stage', count: 2, area: 'Unstaged' })).toBe(
-      'Stage all 2 unstaged files',
-    );
+    expect(
+      translate('en', 'changeAllAria', {
+        action: 'Stage',
+        count: 1,
+        context: 'unstaged',
+      }),
+    ).toBe('Stage all 1 unstaged file');
+    expect(
+      translate('en', 'changeAllAria', {
+        action: 'Stage',
+        count: 2,
+        context: 'unstaged',
+      }),
+    ).toBe('Stage all 2 unstaged files');
     expect(translate('ja', 'previewDeleteFiles', { count: 2 })).toBe(
       '2ファイルを削除します。削除後はゴミ箱から復元できます。',
     );
@@ -131,9 +148,11 @@ describe('Stella i18n', () => {
   });
 
   it('keeps the product name out of localized application copy', () => {
-    for (const translations of Object.values(MESSAGES)) {
-      expect(String(translations.en)).not.toContain('Stella');
-      expect(String(translations.ja)).not.toContain('Stella');
+    for (const catalog of [resources.en.translation, resources.ja.translation]) {
+      for (const [id, translation] of Object.entries(catalog)) {
+        if (id.startsWith('nativeMenu')) continue;
+        expect(translation).not.toContain('Stella');
+      }
     }
   });
 
