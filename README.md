@@ -1,7 +1,7 @@
 <h1 align="center">Stella</h1>
 
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" alt="Stellaのアイコン" width="128" height="128" style="border-radius: 22%;">
+  <img src="logo.png" alt="Stellaのアイコン" width="128" height="128">
 </p>
 
 <p align="center">
