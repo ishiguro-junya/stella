@@ -1,7 +1,7 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
-import { resetApp, selectSetting } from './support/app.js';
+import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js';
 
 describe('App shell and Settings', () => {
   beforeEach(async () => {
@@ -22,6 +22,70 @@ describe('App shell and Settings', () => {
 
   it('exposes the Tauri execute API in the E2E-only build', async () => {
     expect(await browser.tauri.execute(() => document.title)).toBe('Stella');
+  });
+
+  it('applies and persists the selected text size and fonts', async () => {
+    await $('.titlebar-actions button:last-child').click();
+    await selectSetting('font-size', '120');
+    await selectSetting('ui-font', 'avenirNext');
+    await selectSetting('code-font', 'menlo');
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const value: unknown = JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}');
+          return (
+            typeof value === 'object' &&
+            value !== null &&
+            'fontSize' in value &&
+            value.fontSize === 120 &&
+            'uiFont' in value &&
+            value.uiFont === 'avenirNext' &&
+            'codeFont' in value &&
+            value.codeFont === 'menlo'
+          );
+        }),
+      { timeoutMsg: 'The typography settings were not saved.' },
+    );
+
+    const typography = await browser.execute(() => {
+      const code = document.createElement('code');
+      code.hidden = true;
+      document.body.append(code);
+      const result = {
+        fontSize: document.documentElement.dataset.fontSize,
+        uiFont: document.documentElement.dataset.uiFont,
+        codeFont: document.documentElement.dataset.codeFont,
+        rootFontSize: Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+        bodyFontFamily: getComputedStyle(document.body).fontFamily,
+        codeFontFamily: getComputedStyle(code).fontFamily,
+      };
+      code.remove();
+      return result;
+    });
+    expect(typography).toMatchObject({
+      fontSize: '120',
+      uiFont: 'avenirNext',
+      codeFont: 'menlo',
+    });
+    expect(typography.rootFontSize).toBeCloseTo(19.2);
+    expect(typography.bodyFontFamily).toContain('Avenir Next');
+    expect(typography.codeFontFamily).toContain('Menlo');
+
+    await browser.refresh();
+    await $('[data-testid="app-shell"]').waitForDisplayed({ timeout: 10_000 });
+    await $('.titlebar-actions button:last-child').click();
+    await expect($('select[name="font-size"]')).toHaveValue('120');
+    await expect($('select[name="ui-font"]')).toHaveValue('avenirNext');
+    await expect($('select[name="code-font"]')).toHaveValue('menlo');
+
+    await setLogicalWindowSize(860, 560);
+    expect(
+      await browser.execute(() => {
+        const view = document.querySelector<HTMLElement>('.settings-view');
+        return view ? view.scrollWidth <= view.clientWidth : false;
+      }),
+    ).toBe(true);
   });
 
   it('opens Settings and applies language, appearance, Commit, stage, and toolchain settings', async () => {

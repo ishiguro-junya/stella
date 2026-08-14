@@ -11,11 +11,25 @@ import {
   type ChangeListDisplay,
 } from '../../persistence/preferences';
 import { APPEARANCE_OPTIONS, type Appearance } from '../../theme/appearance';
+import {
+  CODE_FONT_OPTIONS,
+  FONT_SIZE_OPTIONS,
+  UI_FONT_OPTIONS,
+  isCodeFont,
+  isFontSize,
+  isUiFont,
+  type CodeFont,
+  type FontSize,
+  type UiFont,
+} from '../../theme/typography';
 import { SelectControl } from '../../ui/SelectControl';
 
 export interface SettingsViewProps {
   appearance: Appearance;
   language: Language;
+  fontSize: FontSize;
+  uiFont: UiFont;
+  codeFont: CodeFont;
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
@@ -29,6 +43,9 @@ export interface SettingsViewProps {
   toolchainBusy?: boolean;
   onAppearanceChange: (appearance: Appearance) => void;
   onLanguageChange: (language: Language) => void;
+  onFontSizeChange: (fontSize: FontSize) => void;
+  onUiFontChange: (font: UiFont) => void;
+  onCodeFontChange: (font: CodeFont) => void;
   onAutomaticUpdateChecksChange: (enabled: boolean) => void;
   onDiffStyleChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
@@ -64,6 +81,9 @@ function isToolchainMode(value: string): value is ToolchainMode {
 export function SettingsView({
   appearance,
   language,
+  fontSize,
+  uiFont,
+  codeFont,
   automaticUpdateChecks,
   diffStyle,
   splitStageView,
@@ -77,6 +97,9 @@ export function SettingsView({
   toolchainBusy = false,
   onAppearanceChange,
   onLanguageChange,
+  onFontSizeChange,
+  onUiFontChange,
+  onCodeFontChange,
   onAutomaticUpdateChecksChange,
   onDiffStyleChange,
   onSplitStageViewChange,
@@ -176,6 +199,86 @@ export function SettingsView({
                         ? 'appearanceLight'
                         : 'appearanceDark',
                   )}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="font-size-title">
+            <div className="settings-row-copy">
+              <h2 id="font-size-title">{t('fontSizeTitle')}</h2>
+              <p id="font-size-description">{t('fontSizeDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="font-size"
+              value={fontSize}
+              aria-labelledby="font-size-title"
+              aria-describedby="font-size-description"
+              onChange={(event) => {
+                const value = Number(event.currentTarget.value);
+                if (isFontSize(value)) onFontSizeChange(value);
+              }}
+            >
+              {FONT_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option === 100 ? t('fontSizeDefault', { size: option }) : `${option}%`}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="ui-font-title">
+            <div className="settings-row-copy">
+              <h2 id="ui-font-title">{t('uiFontTitle')}</h2>
+              <p id="ui-font-description">{t('uiFontDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="ui-font"
+              value={uiFont}
+              aria-labelledby="ui-font-title"
+              aria-describedby="ui-font-description"
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (isUiFont(value)) onUiFontChange(value);
+              }}
+            >
+              {UI_FONT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {t(
+                    option === 'system'
+                      ? 'uiFontSystem'
+                      : option === 'hiraginoSans'
+                        ? 'uiFontHiraginoSans'
+                        : option === 'helveticaNeue'
+                          ? 'uiFontHelveticaNeue'
+                          : 'uiFontAvenirNext',
+                  )}
+                </option>
+              ))}
+            </SelectControl>
+          </section>
+
+          <section className="settings-row" aria-labelledby="code-font-title">
+            <div className="settings-row-copy">
+              <h2 id="code-font-title">{t('codeFontTitle')}</h2>
+              <p id="code-font-description">{t('codeFontDescription')}</p>
+            </div>
+            <SelectControl
+              className="settings-select"
+              name="code-font"
+              value={codeFont}
+              aria-labelledby="code-font-title"
+              aria-describedby="code-font-description"
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (isCodeFont(value)) onCodeFontChange(value);
+              }}
+            >
+              {CODE_FONT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option === 'sfMono' ? 'SF Mono' : option === 'menlo' ? 'Menlo' : 'Monaco'}
                 </option>
               ))}
             </SelectControl>

@@ -3,10 +3,16 @@ import { mkdir } from 'node:fs/promises';
 
 type Language = 'en' | 'ja';
 type Appearance = 'system' | 'light' | 'dark';
+type FontSize = 80 | 90 | 100 | 110 | 120;
+type UiFont = 'system' | 'hiraginoSans' | 'helveticaNeue' | 'avenirNext';
+type CodeFont = 'sfMono' | 'menlo' | 'monaco';
 
 interface ResetAppOptions {
   language?: Language;
   appearance?: Appearance;
+  fontSize?: FontSize;
+  uiFont?: UiFont;
+  codeFont?: CodeFont;
   automaticUpdateChecks?: boolean;
   splitStageView?: boolean;
   useConventionalCommits?: boolean;
@@ -27,6 +33,9 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     version: 1,
     appearance: options.appearance ?? 'system',
     language: options.language ?? 'ja',
+    fontSize: options.fontSize ?? 100,
+    uiFont: options.uiFont ?? 'system',
+    codeFont: options.codeFont ?? 'sfMono',
     automaticUpdateChecks: options.automaticUpdateChecks ?? true,
     diffStyle: 'unified',
     splitStageView: options.splitStageView ?? false,

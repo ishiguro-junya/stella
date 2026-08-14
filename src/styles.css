@@ -1,9 +1,10 @@
 :root {
   color-scheme: light dark;
+  font-size: 100%;
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-  --code-font-size: 13px;
-  --code-line-height: 20px;
+  --code-font-size: 0.8125rem;
+  --code-line-height: 1.25rem;
   --surface-base: light-dark(#eff0f2, #111215);
   --surface-toolbar: light-dark(rgb(249 249 251 / 92%), rgb(28 29 33 / 92%));
   --surface-sidebar: light-dark(#f5f5f7, #17181c);
@@ -73,6 +74,42 @@
   --shadow-sheet: 0 26px 80px rgb(20 20 24 / 24%);
 }
 
+:root[data-font-size='80'] {
+  font-size: 80%;
+}
+
+:root[data-font-size='90'] {
+  font-size: 90%;
+}
+
+:root[data-font-size='110'] {
+  font-size: 110%;
+}
+
+:root[data-font-size='120'] {
+  font-size: 120%;
+}
+
+:root[data-ui-font='hiraginoSans'] {
+  --font-ui: 'Hiragino Sans', -apple-system, sans-serif;
+}
+
+:root[data-ui-font='helveticaNeue'] {
+  --font-ui: 'Helvetica Neue', -apple-system, sans-serif;
+}
+
+:root[data-ui-font='avenirNext'] {
+  --font-ui: 'Avenir Next', -apple-system, sans-serif;
+}
+
+:root[data-code-font='menlo'] {
+  --font-mono: Menlo, Monaco, 'SFMono-Regular', monospace;
+}
+
+:root[data-code-font='monaco'] {
+  --font-mono: Monaco, Menlo, 'SFMono-Regular', monospace;
+}
+
 :root[data-theme='light'] {
   color-scheme: light;
 }
@@ -110,7 +147,7 @@ body,
 body {
   background: var(--surface-base);
   color: var(--text-primary);
-  font: 14px/1.45 var(--font-ui);
+  font: 0.875rem/1.45 var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -317,13 +354,13 @@ h3 {
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 1.875rem;
 }
 h2 {
-  font-size: 16px;
+  font-size: 1rem;
 }
 h3 {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 code,
@@ -334,7 +371,7 @@ kbd {
 
 kbd {
   color: inherit;
-  font-size: 10px;
+  font-size: 0.625rem;
   opacity: 0.75;
 }
 
@@ -399,13 +436,13 @@ kbd {
 }
 
 .settings-row-copy h2 {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .settings-row-copy p {
   margin-top: 3px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .settings-select {
@@ -424,7 +461,7 @@ kbd {
 }
 .settings-path-control > .field-error {
   margin: 0;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .settings-toolchain-row {
@@ -453,13 +490,13 @@ kbd {
 
 .settings-toolchain-modes dt {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .settings-toolchain-modes dd {
   margin: 2px 0 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -472,7 +509,7 @@ kbd {
   width: 100%;
   gap: 6px;
   margin: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .settings-toolchain-components > div {
@@ -778,7 +815,7 @@ button:where(:has(> .lucide)) > span {
   gap: 4px;
   padding: 6px 10px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 .titlebar-menu-button > .lucide {
@@ -1036,7 +1073,7 @@ button:where(:has(> .lucide)) > span {
   border-color: var(--border-subtle);
   border-radius: 7px;
   background: var(--surface-sunken);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .history-search input:focus-visible {
   outline: 2px solid var(--focus);
@@ -1063,7 +1100,7 @@ button:where(:has(> .lucide)) > span {
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-sidebar);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .changes-list-summary {
   display: flex;
@@ -1262,7 +1299,7 @@ button:where(:has(> .lucide)) > span {
 .eyebrow {
   margin-bottom: 3px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1276,7 +1313,7 @@ button:where(:has(> .lucide)) > span {
   padding: 6px 10px;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 0.625rem;
   overflow-wrap: anywhere;
 }
 
@@ -1401,7 +1438,7 @@ button:where(:has(> .lucide)) > span {
 .change-group-header .change-count {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1561,7 +1598,7 @@ button:where(:has(> .lucide)) > span {
   background: transparent;
   box-shadow: none;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   text-align: left;
 }
 
@@ -1638,7 +1675,7 @@ button:where(:has(> .lucide)) > span {
   background: var(--surface-overlay);
   box-shadow: var(--shadow-panel);
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.35;
   pointer-events: none;
   transform: translateX(-100%);
@@ -1832,17 +1869,17 @@ button:where(:has(> .lucide)) > span {
 }
 .file-path strong {
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 0.78125rem;
   font-weight: 550;
 }
 .file-path small {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .diff-stat {
   display: flex;
   gap: 4px;
-  font: 10px var(--font-mono);
+  font: 0.625rem var(--font-mono);
 }
 .diff-stat i {
   color: var(--success);
@@ -1859,7 +1896,7 @@ button:where(:has(> .lucide)) > span {
 .button-row.compact button {
   min-height: 26px;
   padding: 2px 7px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .button-row.end {
   justify-content: flex-end;
@@ -1942,15 +1979,15 @@ button:where(:has(> .lucide)) > span {
 }
 .history-view .diff-file-custom-header-title > span:last-child {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.005em;
-  line-height: 20px;
+  line-height: 1.25rem;
 }
 .history-view .diff-file-custom-header-counts {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 1.125rem;
 }
 .diff-file-collapse-toggle {
   display: inline-grid;
@@ -2010,11 +2047,11 @@ button:where(:has(> .lucide)) > span {
 .commit-form label > span,
 .confirmation-sheet label > span,
 .dialog-form-field > label {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 .dialog-form-field > span {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 .checkbox-field,
@@ -2034,7 +2071,7 @@ button:where(:has(> .lucide)) > span {
 }
 .checkbox-field > span,
 .compact-toggle > span {
-  line-height: 15px;
+  line-height: 0.9375rem;
   transform: translateY(-0.5px);
 }
 .field-error {
@@ -2068,7 +2105,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 6px;
   background: var(--surface-sunken);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .confirmation-sheet > .commit-form {
   display: grid;
@@ -2107,7 +2144,7 @@ button:where(:has(> .lucide)) > span {
   width: min(680px, 100%);
 }
 .remote-operation-form select {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .remote-operation-control-row {
   display: grid;
@@ -2155,7 +2192,7 @@ button:where(:has(> .lucide)) > span {
   margin: 0;
   padding: 0 12px 10px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .pull-resolution {
   margin: 10px;
@@ -2209,7 +2246,7 @@ button:where(:has(> .lucide)) > span {
 .commit-list > .history-search-empty {
   padding: 18px 14px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-align: center;
 }
 .history-working-tree-graph .history-graph-node {
@@ -2301,13 +2338,13 @@ button:where(:has(> .lucide)) > span {
   white-space: nowrap;
 }
 .commit-copy strong {
-  font-size: 12.5px;
+  font-size: 0.78125rem;
   font-weight: 550;
 }
 .commit-copy small,
 .commit-row time {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .commit-metadata {
   display: flex;
@@ -2353,7 +2390,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 9px;
   background: var(--selection-muted);
   color: var(--history-ref-foreground);
-  font-size: 12px;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 .ref-chip svg {
@@ -2389,7 +2426,7 @@ button:where(:has(> .lucide)) > span {
 .commit-detail-heading h2 {
   max-width: 720px;
   margin-bottom: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 .commit-detail-heading .ref-list {
   margin-top: 6px;
@@ -2407,7 +2444,7 @@ button:where(:has(> .lucide)) > span {
 }
 .metadata-list dt {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
   text-transform: uppercase;
 }
 .metadata-list dd {
@@ -2426,19 +2463,19 @@ button:where(:has(> .lucide)) > span {
 }
 .history-action-target > span {
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
 }
 .history-action-target > strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .history-action-target > code {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .conflict-surface {
@@ -2461,12 +2498,12 @@ button:where(:has(> .lucide)) > span {
 }
 .conflict-labels {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .status-badge {
   padding: 3px 8px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .status-badge.warning {
   background: var(--warning-muted);
@@ -2598,7 +2635,7 @@ button:where(:has(> .lucide)) > span {
   border: 0;
   border-radius: 7px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .choice-buttons {
   display: flex;
@@ -2613,7 +2650,7 @@ button:where(:has(> .lucide)) > span {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .choice-buttons button:hover:not(:disabled) {
   border-color: transparent;
@@ -2632,12 +2669,12 @@ button:where(:has(> .lucide)) > span {
 }
 .conflict-resolution-bar legend {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 .save-state {
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .external-conflict-panel {
   align-self: center;
@@ -2731,7 +2768,7 @@ button:where(:has(> .lucide)) > span {
 .activity-metric-select {
   width: auto;
   min-width: 96px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 .activity-metric-select {
@@ -2781,7 +2818,7 @@ button:where(:has(> .lucide)) > span {
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-inspector);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 600;
   text-align: left;
 }
@@ -2830,7 +2867,7 @@ button:where(:has(> .lucide)) > span {
   height: 38px;
   padding: 5px 8px;
   overflow: hidden;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2862,7 +2899,7 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   min-width: 0;
   gap: 5px;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
 }
 .activity-status .lucide {
@@ -2909,7 +2946,7 @@ button:where(:has(> .lucide)) > span {
 .activity-detail-heading p {
   margin-top: 2px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .activity-metadata-list {
   display: grid;
@@ -2922,12 +2959,12 @@ button:where(:has(> .lucide)) > span {
 }
 .activity-metadata-list dt {
   color: var(--text-tertiary);
-  font-size: 9.5px;
+  font-size: 0.59375rem;
 }
 .activity-metadata-list dd {
   overflow: hidden;
   margin: 1px 0 0;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2938,7 +2975,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 6px;
   background: var(--surface-sunken);
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
 }
 .activity-command {
   display: grid;
@@ -2972,7 +3009,7 @@ button:where(:has(> .lucide)) > span {
   justify-items: center;
   gap: 10px;
   max-width: 380px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .activity-coverage-note {
   margin: 0 12px 7px;
@@ -2980,7 +3017,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 6px;
   background: var(--warning-muted);
   color: var(--warning);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
 }
 .activity-chart {
   width: auto;
@@ -3002,7 +3039,7 @@ button:where(:has(> .lucide)) > span {
   margin-top: 8px;
   overflow: hidden;
   border-top: 1px solid var(--border-subtle);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
 }
 .activity-chart-data > div {
   min-height: 0;
@@ -3050,7 +3087,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 6px;
   background: var(--code-surface);
   color: var(--code-text);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .log-output pre {
   overflow-wrap: anywhere;
@@ -3077,7 +3114,7 @@ button:where(:has(> .lucide)) > span {
 }
 .repository-landing-header h1 {
   margin: 0 0 5px;
-  font-size: 24px;
+  font-size: 1.5rem;
   letter-spacing: -0.02em;
 }
 .repository-landing-header p {
@@ -3180,7 +3217,7 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   gap: 5px;
   padding: 5px 7px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .registered-repository-actions button > svg {
   width: 13px;
@@ -3201,18 +3238,18 @@ button:where(:has(> .lucide)) > span {
 }
 .repository-relocation-paths dt {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .repository-relocation-paths dd {
   margin: 0;
 }
 .registered-repository-row strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 .registered-repository-row small {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .repository-landing-empty {
   display: flex;
@@ -3236,7 +3273,7 @@ button:where(:has(> .lucide)) > span {
 .field-error {
   margin: -5px 0 10px;
   color: var(--danger);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 900px) {
@@ -3258,7 +3295,7 @@ button:where(:has(> .lucide)) > span {
 .remote-url-group h3 {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .remote-url-field,
 .remote-url-field input {
@@ -3394,7 +3431,7 @@ button:where(:has(> .lucide)) > span {
   outline: none;
   background: transparent;
   box-shadow: none;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 .switcher-search input:focus-visible {
   outline: none;
@@ -3409,7 +3446,7 @@ button:where(:has(> .lucide)) > span {
   border-bottom: 1px solid var(--border-subtle);
   background: var(--warning-muted);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .switcher-list {
   position: relative;
@@ -3506,13 +3543,13 @@ button:where(:has(> .lucide)) > span {
   white-space: nowrap;
 }
 .switcher-option-copy strong {
-  font-size: 13.5px;
+  font-size: 0.84375rem;
   font-weight: 600;
 }
 .switcher-option-copy small,
 .switcher-status small {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .switcher-option-row.is-selected :is(.switcher-option-copy small, .switcher-status small) {
   color: var(--text-secondary);
@@ -3544,7 +3581,7 @@ button:where(:has(> .lucide)) > span {
   border-radius: 999px;
   background: var(--surface-sunken);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1;
@@ -3623,12 +3660,12 @@ button:where(:has(> .lucide)) > span {
 }
 .git-flow-overview dt {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .git-flow-overview dd {
   margin: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3655,7 +3692,7 @@ button:where(:has(> .lucide)) > span {
 }
 .git-flow-fields > label > span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .git-flow-check {
   align-self: end;

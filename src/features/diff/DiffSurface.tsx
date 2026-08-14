@@ -58,6 +58,7 @@ const STELLA_DIFF_THEMES = {
 const STELLA_DIFF_HIGHLIGHT_CSS = `
 :host {
   --diffs-font-family: var(--font-mono);
+  --diffs-header-font-family: var(--font-ui);
   --diffs-font-size: var(--code-font-size);
   --diffs-line-height: var(--code-line-height);
   --diffs-min-number-column-width: 10px;
@@ -174,7 +175,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
-  font: 10px var(--diffs-header-font-family, var(--diffs-header-font-fallback));
+  font: 0.625rem var(--diffs-header-font-family, var(--diffs-header-font-fallback));
 }
 
 [data-stella-hunk-label] {
@@ -182,7 +183,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   margin-right: auto;
   overflow: hidden;
   color: color-mix(in srgb, var(--diffs-fg) 58%, var(--diffs-bg-separator));
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.01em;
   position: relative;

@@ -218,6 +218,9 @@ describe('DiffSurface line selection', () => {
       '--diffs-font-family: var(--font-mono);',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '--diffs-header-font-family: var(--font-ui);',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '--diffs-line-height: var(--code-line-height);',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
@@ -928,7 +931,7 @@ describe('DiffSurface line selection', () => {
     );
     expect(props?.options.unsafeCSS).toContain('padding: 0 8px 0 12px;');
     expect(props?.options.unsafeCSS).toContain('--diffs-font-size: var(--code-font-size);');
-    expect(props?.options.unsafeCSS).toContain('font-size: 11px;');
+    expect(props?.options.unsafeCSS).toContain('font-size: 0.6875rem;');
     expect(props?.options.unsafeCSS).not.toContain('[data-stella-hunk-toggle]');
   });
 

@@ -1072,6 +1072,62 @@ describe('Changes', () => {
     await $('.diff-surface').waitForDisplayed({ timeout: 10_000 });
   });
 
+  it('applies the selected size and code font to Diff and Editor text', async () => {
+    await resetApp({
+      language: 'ja',
+      splitStageView: true,
+      fontSize: 120,
+      uiFont: 'avenirNext',
+      codeFont: 'menlo',
+    });
+    await openRepository(repositoryPath);
+    await $('button.change-row').click();
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-line]'));
+        }),
+      { timeoutMsg: 'The Diff did not render with the selected typography.' },
+    );
+    const diffTypography = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const style = getComputedStyle(root.querySelector<HTMLElement>('[data-line]')!);
+      return {
+        fontFamily: style.fontFamily,
+        fontSize: Number.parseFloat(style.fontSize),
+        lineHeight: Number.parseFloat(style.lineHeight),
+      };
+    });
+    expect(diffTypography.fontFamily).toContain('Menlo');
+    expect(diffTypography.fontSize).toBeCloseTo(15.6);
+    expect(diffTypography.lineHeight).toBeCloseTo(24);
+
+    await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
+    const textbox = $('.file-editor-pane [role="textbox"]');
+    await textbox.waitForDisplayed({ timeout: 10_000 });
+    const editorTypography = await browser.execute(() => {
+      const style = getComputedStyle(
+        document.querySelector<HTMLElement>('.file-editor .cm-content')!,
+      );
+      return {
+        fontFamily: style.fontFamily,
+        fontSize: Number.parseFloat(style.fontSize),
+        lineHeight: Number.parseFloat(style.lineHeight),
+      };
+    });
+    expect(editorTypography.fontFamily).toContain('Menlo');
+    expect(editorTypography).toMatchObject({
+      fontSize: diffTypography.fontSize,
+      lineHeight: diffTypography.lineHeight,
+    });
+  });
+
   it('uses the shared accent selection in the Conflict editor', async () => {
     await runGit(repositoryPath, ['add', 'README.md']);
     await runGit(repositoryPath, ['commit', '-m', 'test: 競合の基点を作成する']);

@@ -19,13 +19,13 @@ export default function CommitActivityChart({ data, metricLabel }: CommitActivit
           dataKey="label"
           axisLine={false}
           interval="preserveStartEnd"
-          tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: '0.625rem' }}
           tickLine={false}
         />
         <YAxis
           allowDecimals={false}
           axisLine={false}
-          tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }}
+          tick={{ fill: 'var(--text-tertiary)', fontSize: '0.625rem' }}
           tickLine={false}
           width={36}
         />
@@ -36,7 +36,7 @@ export default function CommitActivityChart({ data, metricLabel }: CommitActivit
             border: '1px solid var(--border-subtle)',
             borderRadius: 8,
             color: 'var(--text-primary)',
-            fontSize: 11,
+            fontSize: '0.6875rem',
           }}
         />
         <Bar

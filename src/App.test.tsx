@@ -1814,12 +1814,21 @@ describe('App repository attach', () => {
     expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument();
     const repositories = screen.getByRole('button', { name: 'Repositories' });
     expect(screen.getByRole('combobox', { name: 'Appearance' })).toHaveValue('system');
+    expect(screen.getByRole('combobox', { name: 'Font Size' })).toHaveValue('100');
+    expect(screen.getByRole('combobox', { name: 'Interface Font' })).toHaveValue('system');
+    expect(screen.getByRole('combobox', { name: 'Code Font' })).toHaveValue('sfMono');
     expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
     expect(screen.getByRole('combobox', { name: 'Conventional Commits' })).toHaveValue('disabled');
     expect(screen.getByRole('combobox', { name: 'Line Wrapping' })).toHaveValue('disabled');
     expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toHaveValue(120);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Font Size' }), '120');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Interface Font' }),
+      'avenirNext',
+    );
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Code Font' }), 'menlo');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Conventional Commits' }),
@@ -1830,9 +1839,15 @@ describe('App repository attach', () => {
     await user.clear(wrapColumn);
     await user.type(wrapColumn, '100');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-font-size', '120');
+    expect(document.documentElement).toHaveAttribute('data-ui-font', 'avenirNext');
+    expect(document.documentElement).toHaveAttribute('data-code-font', 'menlo');
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         appearance: 'dark',
+        fontSize: 120,
+        uiFont: 'avenirNext',
+        codeFont: 'menlo',
         diffStyle: 'split',
         useConventionalCommits: true,
         editorLineWrapping: true,

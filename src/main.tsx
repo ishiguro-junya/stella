@@ -5,6 +5,7 @@ import { applyDocumentLanguage } from './i18n/i18n';
 import { applyNativeLanguage } from './i18n/nativeLanguage';
 import { readPreferences, setDevelopmentRepository } from './persistence/preferences';
 import { applyAppearance } from './theme/appearance';
+import { applyTypography } from './theme/typography';
 import './styles.css';
 
 if (import.meta.env.VITE_E2E === 'true') {
@@ -26,6 +27,7 @@ if (!root) throw new Error('#root was not found');
 
 const preferences = readPreferences();
 applyAppearance(preferences.appearance);
+applyTypography(preferences.fontSize, preferences.uiFont, preferences.codeFont);
 applyDocumentLanguage(preferences.language);
 void applyNativeLanguage(preferences.language).catch(() => undefined);
 

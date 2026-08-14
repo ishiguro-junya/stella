@@ -116,6 +116,7 @@ import {
   applyNativeAppearance,
   type Appearance,
 } from './theme/appearance';
+import { applyTypography, type CodeFont, type FontSize, type UiFont } from './theme/typography';
 
 const EMPTY_WORKSPACE: WorkspaceSnapshot = { repos: [], activities: [] };
 const APP_UPDATE_INTERVAL_MS = 60 * 60 * 1_000;
@@ -362,6 +363,9 @@ export function App({
   const [view, setView] = useState<WorkspaceView>('changes');
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
+  const [fontSize, setFontSize] = useState<FontSize>(initialPreferences.fontSize);
+  const [uiFont, setUiFont] = useState<UiFont>(initialPreferences.uiFont);
+  const [codeFont, setCodeFont] = useState<CodeFont>(initialPreferences.codeFont);
   const [automaticUpdateChecks, setAutomaticUpdateChecks] = useState(
     initialPreferences.automaticUpdateChecks,
   );
@@ -637,6 +641,8 @@ export function App({
     void applyNativeAppearance(appearance);
   }, [appearance]);
 
+  useEffect(() => applyTypography(fontSize, uiFont, codeFont), [codeFont, fontSize, uiFont]);
+
   useEffect(() => {
     applyDocumentLanguage(language);
     void applyNativeLanguage(language).catch(() => undefined);
@@ -681,6 +687,9 @@ export function App({
       ...current,
       appearance,
       language,
+      fontSize,
+      uiFont,
+      codeFont,
       automaticUpdateChecks,
       diffStyle,
       splitStageView,
@@ -698,9 +707,11 @@ export function App({
     appearance,
     automaticUpdateChecks,
     changeListDisplay,
+    codeFont,
     diffStyle,
     editorLineWrapping,
     editorWrapColumn,
+    fontSize,
     language,
     paneWidths,
     repo,
@@ -709,6 +720,7 @@ export function App({
     splitStageView,
     useConventionalCommits,
     stickyFileHeaders,
+    uiFont,
     workspace,
   ]);
 
@@ -1933,6 +1945,9 @@ export function App({
             <SettingsView
               appearance={appearance}
               language={language}
+              fontSize={fontSize}
+              uiFont={uiFont}
+              codeFont={codeFont}
               automaticUpdateChecks={automaticUpdateChecks}
               diffStyle={diffStyle}
               splitStageView={splitStageView}
@@ -1946,6 +1961,9 @@ export function App({
               toolchainBusy={toolchainBusy}
               onAppearanceChange={changeAppearance}
               onLanguageChange={changeLanguage}
+              onFontSizeChange={setFontSize}
+              onUiFontChange={setUiFont}
+              onCodeFontChange={setCodeFont}
               onAutomaticUpdateChecksChange={setAutomaticUpdateChecks}
               onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}

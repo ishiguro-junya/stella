@@ -30,6 +30,9 @@ describe('appearance preferences', () => {
 
     expect(readPreferences()).toMatchObject({
       appearance: 'system',
+      fontSize: 100,
+      uiFont: 'system',
+      codeFont: 'sfMono',
       automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: false,
@@ -104,6 +107,35 @@ describe('appearance preferences', () => {
   it('round-trips a fixed appearance', () => {
     writePreferences({ ...DEFAULT_PREFERENCES, appearance: 'dark' });
     expect(readPreferences().appearance).toBe('dark');
+  });
+
+  it('round-trips typography settings and defaults invalid values', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      fontSize: 120,
+      uiFont: 'avenirNext',
+      codeFont: 'menlo',
+    });
+    expect(readPreferences()).toMatchObject({
+      fontSize: 120,
+      uiFont: 'avenirNext',
+      codeFont: 'menlo',
+    });
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...DEFAULT_PREFERENCES,
+        fontSize: 95,
+        uiFont: 'other',
+        codeFont: 'other',
+      }),
+    );
+    expect(readPreferences()).toMatchObject({
+      fontSize: 100,
+      uiFont: 'system',
+      codeFont: 'sfMono',
+    });
   });
 
   it('defaults automatic update checks to on and saves the manual-only setting', () => {

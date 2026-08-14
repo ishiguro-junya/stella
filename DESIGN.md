@@ -65,7 +65,8 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 
 - 階層: リポジトリ情報と画面ナビゲーションは全幅の共通ヘッダー、変更操作は左ペイン下部に置きます。
 - 密度: 通常状態ではchange group、file、選択中のpath、diffだけを表示します。
-- typography: Diffと通常Editorのcode本文は共通の13pxを使用します。
+- typography: 文字サイズは80%から120%の5段階で変更でき、100%ではDiffと通常Editorのcode本文に共通の13pxを使用します。
+  画面用フォントとコード用フォントは個別に選択できます。
 - 操作性: Commit Dialogはfocus trap、focus復帰、IME変換中のEscape抑止を共通Dialogと揃えます。
   StagedとUnstagedは固定見出しとし、件数は右端ではなく各ラベル直後のbadgeに表示します。
 - accessibility: status名、開閉状態、group選択、modalの詳細、focus復元を明示します。
@@ -120,7 +121,7 @@ mockとの差異は承認済みの方針に従ったものです。
 選択した案3の参照画像と最終nativeの1180 x 760 Activity画面を、1つの比較画像として並べて確認しました。  
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
-- Settingsは言語を先頭、外観をその次に表示し、すべての設定項目をselectで選択します。
+- Settingsは言語、外観、フォントサイズ、画面用フォント、コード用フォントの順に表示し、選択式の設定項目はselectで選択します。
 - 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。

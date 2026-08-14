@@ -6,6 +6,14 @@ import type {
 } from '../domain/workspace';
 import { detectLanguage, isLanguage, type Language } from '../i18n/i18n';
 import type { Appearance } from '../theme/appearance';
+import {
+  isCodeFont,
+  isFontSize,
+  isUiFont,
+  type CodeFont,
+  type FontSize,
+  type UiFont,
+} from '../theme/typography';
 
 const STORAGE_KEY = 'stella.preferences.v1';
 const STORAGE_VERSION = 1;
@@ -33,6 +41,9 @@ export interface StellaPreferences {
   version: 1;
   appearance: Appearance;
   language: Language;
+  fontSize: FontSize;
+  uiFont: UiFont;
+  codeFont: CodeFont;
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
   splitStageView: boolean;
@@ -55,6 +66,9 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   version: STORAGE_VERSION,
   appearance: 'system',
   language: 'en',
+  fontSize: 100,
+  uiFont: 'system',
+  codeFont: 'sfMono',
   automaticUpdateChecks: true,
   diffStyle: 'unified',
   splitStageView: false,
@@ -218,6 +232,9 @@ export function readPreferences(): StellaPreferences {
         ? value.appearance
         : DEFAULT_PREFERENCES.appearance,
       language: isLanguage(value.language) ? value.language : detectLanguage(),
+      fontSize: isFontSize(value.fontSize) ? value.fontSize : DEFAULT_PREFERENCES.fontSize,
+      uiFont: isUiFont(value.uiFont) ? value.uiFont : DEFAULT_PREFERENCES.uiFont,
+      codeFont: isCodeFont(value.codeFont) ? value.codeFont : DEFAULT_PREFERENCES.codeFont,
       automaticUpdateChecks:
         typeof value.automaticUpdateChecks === 'boolean'
           ? value.automaticUpdateChecks

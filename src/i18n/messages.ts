@@ -74,6 +74,29 @@ export const MESSAGES = {
   appearanceSystem: { en: 'System', ja: 'システム' },
   appearanceLight: { en: 'Light', ja: 'ライト' },
   appearanceDark: { en: 'Dark', ja: 'ダーク' },
+  fontSizeTitle: { en: 'Font Size', ja: 'フォントサイズ' },
+  fontSizeDescription: {
+    en: 'Change text size across the app.',
+    ja: 'アプリ全体の文字サイズを変更します。',
+  },
+  fontSizeDefault: {
+    en: (args) => `${text(args, 'size')}% (Default)`,
+    ja: (args) => `${text(args, 'size')}%（標準）`,
+  },
+  uiFontTitle: { en: 'Interface Font', ja: '画面用フォント' },
+  uiFontDescription: {
+    en: 'Choose the font used by the interface.',
+    ja: '画面の表示に使用するフォントを選択します。',
+  },
+  uiFontSystem: { en: 'System', ja: 'システム標準' },
+  uiFontHiraginoSans: { en: 'Hiragino Sans', ja: 'ヒラギノ角ゴシック' },
+  uiFontHelveticaNeue: { en: 'Helvetica Neue', ja: 'Helvetica Neue' },
+  uiFontAvenirNext: { en: 'Avenir Next', ja: 'Avenir Next' },
+  codeFontTitle: { en: 'Code Font', ja: 'コード用フォント' },
+  codeFontDescription: {
+    en: 'Choose the font used by Diffs and editors.',
+    ja: '差分とエディタに使用するフォントを選択します。',
+  },
   automaticUpdateChecksTitle: { en: 'Automatic Updates', ja: '自動アップデート' },
   automaticUpdateChecksDescription: {
     en: 'Automatically check for updates at launch and while the app is open.',

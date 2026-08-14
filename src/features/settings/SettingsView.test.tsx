@@ -10,6 +10,10 @@ describe('SettingsView', () => {
     const user = userEvent.setup();
     const onAppearanceChange = vi.fn<(appearance: 'system' | 'light' | 'dark') => void>();
     const onLanguageChange = vi.fn<(language: 'ja' | 'en') => void>();
+    const onFontSizeChange = vi.fn<(fontSize: 80 | 90 | 100 | 110 | 120) => void>();
+    const onUiFontChange =
+      vi.fn<(font: 'system' | 'hiraginoSans' | 'helveticaNeue' | 'avenirNext') => void>();
+    const onCodeFontChange = vi.fn<(font: 'sfMono' | 'menlo' | 'monaco') => void>();
     const onAutomaticUpdateChecksChange = vi.fn<(enabled: boolean) => void>();
     const onDiffStyleChange = vi.fn<(style: 'unified' | 'split') => void>();
     const onSplitStageViewChange = vi.fn<(split: boolean) => void>();
@@ -24,6 +28,9 @@ describe('SettingsView', () => {
     const settingsProps: ComponentProps<typeof SettingsView> = {
       appearance: 'system',
       language: 'en',
+      fontSize: 100,
+      uiFont: 'system',
+      codeFont: 'sfMono',
       automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: true,
@@ -44,6 +51,9 @@ describe('SettingsView', () => {
       },
       onAppearanceChange,
       onLanguageChange,
+      onFontSizeChange,
+      onUiFontChange,
+      onCodeFontChange,
       onAutomaticUpdateChecksChange,
       onDiffStyleChange,
       onSplitStageViewChange,
@@ -63,6 +73,9 @@ describe('SettingsView', () => {
     ).toEqual([
       'Language',
       'Appearance',
+      'Font Size',
+      'Interface Font',
+      'Code Font',
       'Automatic Updates',
       'Repository Location',
       'Diff layout',
@@ -76,6 +89,9 @@ describe('SettingsView', () => {
     ]);
     const languageSelect = screen.getByRole('combobox', { name: 'Language' });
     const appearanceSelect = screen.getByRole('combobox', { name: 'Appearance' });
+    const fontSizeSelect = screen.getByRole('combobox', { name: 'Font Size' });
+    const uiFontSelect = screen.getByRole('combobox', { name: 'Interface Font' });
+    const codeFontSelect = screen.getByRole('combobox', { name: 'Code Font' });
     const automaticUpdateChecksSelect = screen.getByRole('combobox', {
       name: 'Automatic Updates',
     });
@@ -98,9 +114,12 @@ describe('SettingsView', () => {
       name: 'Repository Location',
     });
     const toolchainSelect = screen.getByRole('combobox', { name: 'Git Toolchain' });
-    expect(screen.getAllByRole('combobox')).toHaveLength(10);
+    expect(screen.getAllByRole('combobox')).toHaveLength(13);
     expect(languageSelect).toHaveValue('en');
     expect(appearanceSelect).toHaveValue('system');
+    expect(fontSizeSelect).toHaveValue('100');
+    expect(uiFontSelect).toHaveValue('system');
+    expect(codeFontSelect).toHaveValue('sfMono');
     expect(automaticUpdateChecksSelect).toHaveValue('enabled');
     expect(diffLayoutSelect).toHaveValue('unified');
     expect(stageDisplaySelect).toHaveValue('show');
@@ -108,6 +127,21 @@ describe('SettingsView', () => {
     expect(conventionalCommitsSelect).toHaveValue('disabled');
     expect(stickyFileHeadersSelect).toHaveValue('disabled');
     expect(editorLineWrappingSelect).toHaveValue('disabled');
+    expect(
+      within(fontSizeSelect)
+        .getAllByRole('option')
+        .map((item) => item.textContent),
+    ).toEqual(['80%', '90%', '100% (Default)', '110%', '120%']);
+    expect(
+      within(uiFontSelect)
+        .getAllByRole('option')
+        .map((item) => item.textContent),
+    ).toEqual(['System', 'Hiragino Sans', 'Helvetica Neue', 'Avenir Next']);
+    expect(
+      within(codeFontSelect)
+        .getAllByRole('option')
+        .map((item) => item.textContent),
+    ).toEqual(['SF Mono', 'Menlo', 'Monaco']);
     expect(
       within(stageDisplaySelect)
         .getAllByRole('option')
@@ -141,6 +175,12 @@ describe('SettingsView', () => {
     expect(screen.getByText('Next launch')).toBeVisible();
     await user.selectOptions(appearanceSelect, 'light');
     expect(onAppearanceChange).toHaveBeenCalledWith('light');
+    await user.selectOptions(fontSizeSelect, '120');
+    expect(onFontSizeChange).toHaveBeenCalledWith(120);
+    await user.selectOptions(uiFontSelect, 'avenirNext');
+    expect(onUiFontChange).toHaveBeenCalledWith('avenirNext');
+    await user.selectOptions(codeFontSelect, 'menlo');
+    expect(onCodeFontChange).toHaveBeenCalledWith('menlo');
     await user.selectOptions(languageSelect, 'ja');
     expect(onLanguageChange).toHaveBeenCalledWith('ja');
     await user.selectOptions(automaticUpdateChecksSelect, 'disabled');
