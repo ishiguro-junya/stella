@@ -71,6 +71,7 @@ describe('README用スクリーンショット', () => {
 
       await $('button[aria-label="設定"]').click();
       await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
+      await $('button[data-settings-category="changes"]').click();
       await selectSetting('stage-display', 'hide');
       await $('button=変更').click();
       await expect($('.changes-view')).toBeDisplayed();
@@ -152,6 +153,8 @@ describe('README用スクリーンショット', () => {
       await resetApp({ language: 'ja', appearance: 'dark', splitStageView: false });
       await $('button[aria-label="設定"]').click();
       await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
+      await $('button[data-settings-category="git"]').click();
+      await $('#settings-category-git-title').waitForDisplayed({ timeout: 10_000 });
       await blurActiveElement();
       await saveLogicalScreenshot(join(outputDirectory, 'settings.png'), 1180, 760);
     } finally {

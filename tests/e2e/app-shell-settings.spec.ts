@@ -3,6 +3,15 @@ import '@wdio/tauri-service';
 
 import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js';
 
+type SettingsCategory = 'general' | 'appearance' | 'changes' | 'editor' | 'git';
+
+async function openSettingsCategory(category: SettingsCategory): Promise<void> {
+  const button = $(`button[data-settings-category="${category}"]`);
+  await button.click();
+  await expect(button).toHaveAttribute('aria-current', 'page');
+  await expect($(`#settings-category-${category}`)).toBeDisplayed();
+}
+
 describe('App shell and Settings', () => {
   beforeEach(async () => {
     await resetApp({ language: 'ja' });
@@ -26,6 +35,7 @@ describe('App shell and Settings', () => {
 
   it('applies and persists the selected text size and fonts', async () => {
     await $('.titlebar-actions button:last-child').click();
+    await openSettingsCategory('appearance');
     await selectSetting('font-size', '120');
     await selectSetting('ui-font', 'avenirNext');
     await selectSetting('code-font', 'menlo');
@@ -75,15 +85,23 @@ describe('App shell and Settings', () => {
     await browser.refresh();
     await $('[data-testid="app-shell"]').waitForDisplayed({ timeout: 10_000 });
     await $('.titlebar-actions button:last-child').click();
+    await openSettingsCategory('appearance');
     await expect($('select[name="font-size"]')).toHaveValue('120');
     await expect($('select[name="ui-font"]')).toHaveValue('avenirNext');
     await expect($('select[name="code-font"]')).toHaveValue('menlo');
 
+    await openSettingsCategory('git');
     await setLogicalWindowSize(860, 560);
     expect(
       await browser.execute(() => {
         const view = document.querySelector<HTMLElement>('.settings-view');
-        return view ? view.scrollWidth <= view.clientWidth : false;
+        const detail = document.querySelector<HTMLElement>('.settings-detail');
+        return Boolean(
+          view &&
+          detail &&
+          view.scrollWidth <= view.clientWidth &&
+          detail.scrollWidth <= detail.clientWidth,
+        );
       }),
     ).toBe(true);
   });
@@ -97,12 +115,24 @@ describe('App shell and Settings', () => {
     );
     await selectSetting('language', 'en');
     await expect($('h1=Settings')).toBeDisplayed();
+    await expect($('button[data-settings-category="general"]')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     expect(
-      await browser.execute(() => [
-        document.querySelector('select[name="language"]')?.getBoundingClientRect().height,
-        document.querySelector('input[name="editor-wrap-column"]')?.getBoundingClientRect().height,
-      ]),
-    ).toEqual([36, 36]);
+      await browser.execute(
+        () => document.querySelector('select[name="language"]')?.getBoundingClientRect().height,
+      ),
+    ).toBe(36);
+    await openSettingsCategory('editor');
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('input[name="editor-wrap-column"]')?.getBoundingClientRect()
+            .height,
+      ),
+    ).toBe(36);
+    await openSettingsCategory('git');
     const repositoryBasePath = $('input[name="repository-base-path"]');
     await browser.waitUntil(
       async () => /\/Documents\/?$/u.test(await repositoryBasePath.getValue()),
@@ -155,6 +185,7 @@ describe('App shell and Settings', () => {
     ).toBe(2);
     await expect($('button[aria-label="Repositories"]')).toHaveText('Repositories');
 
+    await openSettingsCategory('changes');
     const changeListDisplay = $('select[name="change-list-display"]');
     await expect(changeListDisplay).toHaveValue('fullPath');
     expect(await changeListDisplay.$$('option').map((option) => option.getText())).toEqual([
@@ -163,6 +194,7 @@ describe('App shell and Settings', () => {
       'File Name and Path',
     ]);
 
+    await openSettingsCategory('appearance');
     await selectSetting('appearance', 'dark');
     expect(
       await browser.tauri.execute(() => ({
@@ -208,6 +240,7 @@ describe('App shell and Settings', () => {
     expect(systemAppearance.theme).toBeNull();
     expect(systemAppearance.colorScheme).toBe(systemAppearance.preferred);
 
+    await openSettingsCategory('general');
     const automaticUpdates = $('select[name="automatic-update-checks"]');
     await expect(automaticUpdates).toHaveValue('enabled');
     await selectSetting('automatic-update-checks', 'disabled');
@@ -221,6 +254,7 @@ describe('App shell and Settings', () => {
     );
     await selectSetting('automatic-update-checks', 'enabled');
 
+    await openSettingsCategory('editor');
     await selectSetting('editor-line-wrapping', 'enabled');
     const wrapColumn = $('input[name="editor-wrap-column"]');
     await wrapColumn.waitForEnabled();
@@ -241,6 +275,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The editor line wrapping settings were not saved.' },
     );
 
+    await openSettingsCategory('changes');
     const conventionalCommits = $('select[name="conventional-commits"]');
     await expect(conventionalCommits).toHaveValue('disabled');
     const conventionalCommitOptions = conventionalCommits.$$('option');
@@ -263,6 +298,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The Conventional Commits setting was not saved.' },
     );
 
+    await openSettingsCategory('git');
     const toolchain = $('section[aria-labelledby="toolchain-title"]');
     await expect(toolchain).toBeDisplayed();
     await browser.waitUntil(
@@ -347,12 +383,14 @@ describe('App shell and Settings', () => {
       await expect(toolchain.$('.settings-restart-notice')).toBeDisplayed();
     }
 
+    await openSettingsCategory('general');
     await selectSetting('language', 'ja');
     await expect($('h1=設定')).toBeDisplayed();
     await browser.waitUntil(
       async () => (await browser.execute(() => document.documentElement.lang)) === 'ja',
       { timeoutMsg: 'The document language did not change to Japanese.' },
     );
+    await openSettingsCategory('git');
     await expect($('#toolchain-description')).toHaveText(
       'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
     );
@@ -364,6 +402,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The Japanese language preference was not saved.' },
     );
 
+    await openSettingsCategory('general');
     await selectSetting('language', 'en');
     await expect($('h1=Settings')).toBeDisplayed();
     await browser.waitUntil(
@@ -377,6 +416,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The document language did not return to Japanese.' },
     );
 
+    await openSettingsCategory('changes');
     const stageDisplay = $('select[name="stage-display"]');
     await expect(stageDisplay).toHaveValue('hide');
     expect(
@@ -402,6 +442,7 @@ describe('App shell and Settings', () => {
         )) === false,
       { timeoutMsg: 'The hidden stage display preference was not saved.' },
     );
+    await openSettingsCategory('editor');
     await expect($('select[name="sticky-file-headers"]')).toHaveValue('disabled');
     await selectSetting('sticky-file-headers', 'enabled');
     await browser.waitUntil(

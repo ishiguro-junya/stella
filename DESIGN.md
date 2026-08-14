@@ -121,7 +121,8 @@ mockとの差異は承認済みの方針に従ったものです。
 選択した案3の参照画像と最終nativeの1180 x 760 Activity画面を、1つの比較画像として並べて確認しました。  
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
-- Settingsは言語、外観、フォントサイズ、画面用フォント、コード用フォントの順に表示し、選択式の設定項目はselectで選択します。
+- Settingsは左側の幅200pxの一覧から一般、外観、変更、エディタ、Gitを切り替え、右側の詳細paneだけをスクロールします。  
+  選択式の設定項目はselectで選択し、リポジトリの保存先とGitツールチェーンの操作欄は説明の下へ横幅いっぱいに表示します。
 - 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。

@@ -66,6 +66,12 @@ export const MESSAGES = {
   openSidebar: { en: 'Open Sidebar', ja: 'サイドバーを開く' },
   preferences: { en: 'Preferences', ja: '環境設定' },
   settingsTitle: { en: 'Settings', ja: '設定' },
+  settingsCategories: { en: 'Settings categories', ja: '設定カテゴリ' },
+  settingsCategoryGeneral: { en: 'General', ja: '一般' },
+  settingsCategoryAppearance: { en: 'Appearance', ja: '外観' },
+  settingsCategoryChanges: { en: 'Changes', ja: '変更' },
+  settingsCategoryEditor: { en: 'Editor', ja: 'エディタ' },
+  settingsCategoryGit: { en: 'Git', ja: 'Git' },
   appearanceTitle: { en: 'Appearance', ja: '外観' },
   appearanceDescription: {
     en: 'Follow the macOS appearance or use a fixed theme.',

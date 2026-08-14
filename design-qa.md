@@ -60,6 +60,72 @@ final result: passed
 
 ---
 
+## 設定画面の5カテゴリ化
+
+### 設定画面の比較対象
+
+- Source visual truth: `/Users/ishiguro/.codex/generated_images/019fff5a-a7aa-7231-9126-30ee5cd6c13f/exec-d24091d7-f5e9-4397-a739-772d2f4173c5.png`
+- Implementation screenshot: `/Users/ishiguro/project/stella/.tmp/settings-design-qa/settings.png`
+- Minimum-size screenshot: `/Users/ishiguro/project/stella/.tmp/settings-design-qa/settings-860x560.png`
+- Comparison board: `/Users/ishiguro/project/stella/.tmp/settings-design-qa/settings-comparison.png`
+- Viewport: `1180 x 760 CSS px`および`860 x 560 CSS px`
+- Source image: `1562 x 1007 px`を中央の内容を変えずに`1180 x 760 px`へ正規化しました。
+- Implementation image: device pixel ratio 2でcapture後、`1180 x 760 px`および`860 x 560 px`へ正規化しました。
+- State: 日本語、Dark、Gitカテゴリを選択、内蔵Gitツールチェーンを表示
+
+### 設定画面のFull-view comparison
+
+- 左側に設定見出しとカテゴリ一覧、右側に選択カテゴリの詳細を置く構成は、参照画像と同じです。
+- 計画どおりカテゴリ一覧を幅200pxに固定し、詳細paneだけを縦方向へスクロールできます。
+- 参照画像の4カテゴリを今回の分類に合わせて5カテゴリへ増やし、フォント設定を外観へまとめました。
+- リポジトリの保存先とGitツールチェーンの操作欄は、説明の下で詳細paneの横幅を使用しています。
+
+### 設定画面のFocused-region comparison
+
+- 選択中のGitカテゴリは既存の中立色tokenを使い、`aria-current="page"`と見た目を一致させました。
+- 見出し、説明、入力欄、区切り線の順序と左右の開始位置は、参照画像の情報階層に合わせています。
+- Gitツールチェーンは既存仕様のGit、Git LFS、Git Flowを維持し、参照画像だけにある設定項目やcomponentは追加していません。
+- `860 x 560`でも左側の幅を維持し、横スクロールや入力欄の欠けはありません。  
+  縦に収まらないcomponent情報は詳細pane内でスクロールできます。
+
+### 設定画面のRequired fidelity surfaces
+
+- Fonts and typography: 既存の画面用フォント、文字サイズ、見出しweight、code fontを維持しています。
+- Spacing and layout rhythm: 左側は200px、詳細paneの左右余白は24px以上、通常行の説明とselectの間隔は28pxです。
+- Colors and visual tokens: 背景、border、選択状態、文字色は既存のsemantic tokenだけを使用しています。
+- Image quality and asset fidelity: 新しい画像assetはなく、既存のLucide iconを使用しています。
+- Copy and content: 日本語と英語のカテゴリ名を追加し、既存15項目の文言と保存内容は変更していません。
+
+### 設定画面のComparison history
+
+1. Initial implementation
+   - 既存の1列表示では設定項目が同じpaneに連続し、path入力に使える横幅も680pxのpanel内に限られていました。
+2. Five-category implementation
+   - 一般、外観、変更、エディタ、Gitの5カテゴリへ再分類し、左側のカテゴリ一覧と右側の詳細paneへ分けました。
+   - Gitの2項目は操作欄を説明の下へ移し、詳細paneの横幅を使う配置へ変更しました。
+3. Native comparison and polish
+   - 参照画像とImplementationを同じcomparison boardで確認し、カテゴリの選択状態、詳細paneの開始位置、入力欄の幅、区切り線を確認しました。
+   - `1180 x 760`と`860 x 560`のnative captureで、横スクロールと表示切れがないことを確認しました。
+
+### 設定画面のFindings
+
+ActionableなP0、P1、P2、P3は残っていません。  
+
+### 設定画面のInteraction and regression checks
+
+- 単体testで初期表示、5カテゴリの切り替え、選択状態、全15項目の所属を確認しました。
+- Native E2Eで言語、外観、フォント、変更、エディタ、Gitの設定変更と保存を確認しました。
+- Native E2Eは4件、README画像のcaptureは1件が通過しました。
+- Application由来のconsole errorはありませんでした。
+
+### 設定画面のFollow-up polish
+
+残っているP3はありません。  
+
+final result: passed  
+
+---
+
 ## History graphの角張った分岐線
 
 ### History graphの比較対象

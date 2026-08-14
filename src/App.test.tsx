@@ -1813,15 +1813,12 @@ describe('App repository attach', () => {
     expect(settings).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument();
     const repositories = screen.getByRole('button', { name: 'Repositories' });
+    expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('button', { name: 'Appearance' }));
     expect(screen.getByRole('combobox', { name: 'Appearance' })).toHaveValue('system');
     expect(screen.getByRole('combobox', { name: 'Font Size' })).toHaveValue('100');
     expect(screen.getByRole('combobox', { name: 'Interface Font' })).toHaveValue('system');
     expect(screen.getByRole('combobox', { name: 'Code Font' })).toHaveValue('sfMono');
-    expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
-    expect(screen.getByRole('combobox', { name: 'Conventional Commits' })).toHaveValue('disabled');
-    expect(screen.getByRole('combobox', { name: 'Line Wrapping' })).toHaveValue('disabled');
-    expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toHaveValue(120);
-
     await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Font Size' }), '120');
     await user.selectOptions(
@@ -1829,15 +1826,21 @@ describe('App repository attach', () => {
       'avenirNext',
     );
     await user.selectOptions(screen.getByRole('combobox', { name: 'Code Font' }), 'menlo');
+    await user.click(screen.getByRole('button', { name: 'Editor' }));
+    expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
+    expect(screen.getByRole('combobox', { name: 'Line Wrapping' })).toHaveValue('disabled');
+    expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toHaveValue(120);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Conventional Commits' }),
-      'enabled',
-    );
     await user.selectOptions(screen.getByRole('combobox', { name: 'Line Wrapping' }), 'enabled');
     const wrapColumn = screen.getByRole('spinbutton', { name: 'Wrap Length' });
     await user.clear(wrapColumn);
     await user.type(wrapColumn, '100');
+    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    expect(screen.getByRole('combobox', { name: 'Conventional Commits' })).toHaveValue('disabled');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Conventional Commits' }),
+      'enabled',
+    );
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(document.documentElement).toHaveAttribute('data-font-size', '120');
     expect(document.documentElement).toHaveAttribute('data-ui-font', 'avenirNext');
@@ -1869,6 +1872,7 @@ describe('App repository attach', () => {
     expect(screen.queryByRole('dialog', { name: 'Add Repository' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Repository' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('button', { name: 'Repositories' }));
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Repositories' })).toHaveFocus();
@@ -1894,7 +1898,9 @@ describe('App repository attach', () => {
     render(<App adapter={adapter} />);
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Appearance' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Appearance' }), 'dark');
+    await user.click(screen.getByRole('button', { name: 'General' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'ja');
 
     expect(screen.getByRole('heading', { name: '設定' })).toBeVisible();
@@ -2131,7 +2137,11 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     await user.click(screen.getByRole('button', { name: 'Leave Without Saving' }));
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'App navigation' })).getByRole('button', {
+        name: 'Changes',
+      }),
+    );
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await user.click(screen.getByRole('button', { name: 'Activity' }));
