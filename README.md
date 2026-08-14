@@ -96,11 +96,19 @@ mise run dev
 
 ## 📚 ドキュメント
 
+- [AGENTS.md](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
 - [仕様](docs/specification.md)
 - [アーキテクチャ](docs/architecture.md)
 - [デザイン](DESIGN.md)
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
 - [リリース手順](docs/release.md)
+
+## 🧩 Agent Skills
+
+- [mattpocock/skills](https://www.skills.sh/mattpocock/skills)
+- [ponytail](https://www.skills.sh/dietrichgebert/ponytail/ponytail)
+- [natural-japanese](https://www.skills.sh/coji/natural-japanese/natural-japanese)
+- [stop-ai-slop-jp](https://www.skills.sh/ikora128/stop-ai-slop-jp/stop-ai-slop-jp)
 
 ## 🔗 参考リンク
 
