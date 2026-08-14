@@ -188,7 +188,7 @@ describe('App repository attach', () => {
     const { container } = render(<App adapter={adapter} />);
 
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
-    expect(screen.getByText('No repositories have been added yet.')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Add your first repository' })).toBeVisible();
     expect(container.querySelector('.brand, .brand-mark')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add Repository' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Clone Repository' })).toBeVisible();

@@ -47,6 +47,18 @@ export function RepositoryLanding({
   onForget,
 }: RepositoryLandingProps) {
   const { t } = useI18n();
+  const repositoryActions = (
+    <div className="repository-landing-actions">
+      <Button type="button" variant="primary" disabled={busy} onClick={onAddLocal}>
+        <FolderPlus aria-hidden="true" focusable="false" />
+        {t('addLocalRepository')}
+      </Button>
+      <Button type="button" disabled={busy} onClick={onClone}>
+        <Download aria-hidden="true" focusable="false" />
+        {t('cloneRepository')}
+      </Button>
+    </div>
+  );
 
   return (
     <main className="repository-landing">
@@ -58,16 +70,7 @@ export function RepositoryLanding({
             </h1>
             <p>{t('repositoriesDescription')}</p>
           </div>
-          <div className="repository-landing-actions">
-            <Button type="button" variant="primary" disabled={busy} onClick={onAddLocal}>
-              <FolderPlus aria-hidden="true" focusable="false" />
-              {t('addLocalRepository')}
-            </Button>
-            <Button type="button" disabled={busy} onClick={onClone}>
-              <Download aria-hidden="true" focusable="false" />
-              {t('cloneRepository')}
-            </Button>
-          </div>
+          {repositories.length ? repositoryActions : null}
         </header>
 
         {repositories.length ? (
@@ -132,10 +135,12 @@ export function RepositoryLanding({
             })}
           </ul>
         ) : (
-          <div className="repository-landing-empty">
+          <section className="repository-landing-empty" aria-labelledby="first-repository-title">
             <FolderGit2 aria-hidden="true" focusable="false" />
-            <p>{t('noRegisteredRepositories')}</p>
-          </div>
+            <h2 id="first-repository-title">{t('firstRepositoryTitle')}</h2>
+            <p>{t('firstRepositoryDescription')}</p>
+            {repositoryActions}
+          </section>
         )}
       </section>
     </main>

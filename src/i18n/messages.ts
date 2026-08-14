@@ -1171,9 +1171,13 @@ export const MESSAGES = {
     en: 'Open a repository or add a new one.',
     ja: 'リポジトリを選択するか、新しいリポジトリを追加します。',
   },
-  noRegisteredRepositories: {
-    en: 'No repositories have been added yet.',
-    ja: '追加済みのリポジトリはありません。',
+  firstRepositoryTitle: {
+    en: 'Add your first repository',
+    ja: '最初のリポジトリを追加',
+  },
+  firstRepositoryDescription: {
+    en: 'Add an existing local repository, or clone one from a URL.',
+    ja: '既存のローカルリポジトリを追加するか、URLからクローンします。',
   },
   repositoryMissing: { en: 'Check location', ja: '場所を確認' },
   repositoryNotRepository: { en: 'Check repository', ja: 'リポジトリを確認' },

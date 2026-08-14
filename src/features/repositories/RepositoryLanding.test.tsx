@@ -5,13 +5,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { RepositoryLanding } from './RepositoryLanding';
 
 describe('RepositoryLanding', () => {
-  it('shows separate local Add and URL Clone actions', () => {
+  it('shows separate local Add and URL Clone actions in the empty state', async () => {
+    const user = userEvent.setup();
+    const onAddLocal = vi.fn<() => void>();
+    const onClone = vi.fn<() => void>();
     render(
       <RepositoryLanding
         repositories={[]}
         busy={false}
-        onAddLocal={() => undefined}
-        onClone={() => undefined}
+        onAddLocal={onAddLocal}
+        onClone={onClone}
         onOpen={() => undefined}
         onRepair={() => undefined}
         onManageRemotes={() => undefined}
@@ -20,9 +23,21 @@ describe('RepositoryLanding', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
-    expect(screen.getByText('No repositories have been added yet.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Add Repository' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Clone Repository' })).toBeVisible();
+    const emptyState = screen.getByRole('region', { name: 'Add your first repository' });
+    expect(
+      within(emptyState).getByText('Add an existing local repository, or clone one from a URL.'),
+    ).toBeVisible();
+
+    const addButton = within(emptyState).getByRole('button', {
+      name: 'Add Repository',
+    });
+    const cloneButton = within(emptyState).getByRole('button', {
+      name: 'Clone Repository',
+    });
+    await user.click(addButton);
+    await user.click(cloneButton);
+    expect(onAddLocal).toHaveBeenCalledOnce();
+    expect(onClone).toHaveBeenCalledOnce();
   });
 
   it('renders registered repositories in MRU order and opens the selected path', async () => {

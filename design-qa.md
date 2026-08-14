@@ -60,6 +60,73 @@ final result: passed
 
 ---
 
+## リポジトリ未登録時の空状態カード
+
+### 空状態カードの比較対象
+
+- Source visual truth: `/Users/ishiguro/project/stella/.tmp/audit-current-20260814/repository-list-empty-light-1180x760.png`
+- Implementation screenshots:
+  - `/Users/ishiguro/project/stella/.tmp/repository-landing-card-qa/repository-list-empty-light-1180x760.png`
+  - `/Users/ishiguro/project/stella/.tmp/repository-landing-card-qa/repository-list-empty-light-860x560.png`
+- Comparison board: `/Users/ishiguro/project/stella/.tmp/repository-landing-card-qa/repository-landing-before-after-1180x760.png`
+- Viewport: `1180 x 760 CSS px`および`860 x 560 CSS px`
+- Source image: `1180 x 760 px`
+- Implementation image: device pixel ratio 2でcapture後、各CSS viewportと同じpixel寸法へ正規化しました。
+- State: English、Light、登録済みリポジトリなし
+
+Sourceは変更前の同じ初期ページです。  
+利用者が選択した構成に従い、ページ見出しと設定操作を維持しながら、分離していた空状態の説明と2つの操作を1枚のカードへまとめた差分を比較しました。  
+
+### 空状態カードのFull-view comparison
+
+- ページ見出し、説明、設定操作の位置と最大680pxの内容幅を維持しています。
+- 見出し右側にあった追加とクローンの操作は、未登録時だけ空状態カード内へ移動しています。
+- 登録済みリポジトリがある場合は、従来どおり2つの操作を見出し右側へ表示し、一覧の配置を変更していません。
+- `860 x 560`でもカードと操作が欠けず、横overflowはありません。
+
+### 空状態カードのFocused-region comparison
+
+カード内のアイコン、見出し、説明、操作をFull-viewで判読できるため、別の拡大cropは作成していません。  
+カードは幅680px以内、高さ220px、上下32pxの余白、12pxの角丸で表示され、内容の中央揃えと操作順が選択した構成に一致しています。  
+
+### 空状態カードのRequired fidelity surfaces
+
+- Fonts and typography: 既存のsystem UI fontを維持し、カード見出しだけを1remの太字、説明を既存のsecondary textとして表示しています。
+- Spacing and layout rhythm: 既存のページ幅と18pxの見出し下余白を維持し、カード内を10px間隔で揃えています。
+- Colors and visual tokens: カードは既存一覧と同じ`--surface-raised`、`--border-subtle`、`--shadow-panel`を使用しています。
+- Image quality and asset fidelity: 新しい画像assetはありません。  
+  既存のLucide iconをそのまま使用しています。
+- Copy and content: 日本語と英語に、最初のリポジトリを追加する目的とローカル追加／URLクローンの違いを表示しています。
+
+### 空状態カードのComparison history
+
+1. Initial source finding
+   - Severity: P2
+   - Finding: 操作が見出し右側、空状態の説明がその下へ分離し、広い余白の中で最初に行う操作がひとまとまりに見えませんでした。
+2. Final implementation pass
+   - Fix: 未登録時だけ既存の2操作を空状態カードへ移し、目的を示す見出しと説明を追加しました。
+   - Post-fix evidence: 同じ`1180 x 760`画面のComparison boardで、ページ外枠を維持しながら情報と操作がカードへまとまったことを確認しました。
+   - Post-fix evidence: `860 x 560`のNative E2E captureで表示切れと横overflowがないことを確認しました。
+
+### 空状態カードのFindings
+
+ActionableなP0、P1、P2は残っていません。  
+
+### 空状態カードのInteraction and regression checks
+
+- Unit testで空状態カード内の追加／クローン操作と各callbackを確認しました。
+- Native E2Eで追加ダイアログとクローンダイアログがそれぞれ開くことを確認しました。
+- Visual QA Native E2Eは1件、Repository Native E2Eは対象の1件が通過しました。
+- Application由来のconsole errorはありませんでした。
+
+### 空状態カードのFollow-up polish
+
+残っているP3はありません。  
+
+final result: passed  
+
+---
+
 ## 設定画面の5カテゴリ化
 
 ### 設定画面の比較対象
