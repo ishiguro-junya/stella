@@ -3,6 +3,7 @@ import { parsePatchFiles } from '@pierre/diffs';
 const STANDARD_BYTES = 1024 * 1024;
 const STANDARD_LINES = 20_000;
 const PERFORMANCE_MAX_LINE_BYTES = 256 * 1024;
+const BINARY_PATCH_PATTERN = /(?:^|\n)(?:GIT binary patch|Binary files .+ differ)(?:\n|$)/u;
 
 export interface DiffPatchProfile {
   binary: boolean;
@@ -20,7 +21,10 @@ export function profileDiffPatch(patch: string, truncated = false): DiffPatchPro
   const patchLines = patch.split('\n');
   const patchBytes = bytes(patch);
   const maxLineBytes = patchLines.reduce((maximum, line) => Math.max(maximum, bytes(line)), 0);
-  const binary = /(?:^|\n)(?:GIT binary patch|Binary files .+ differ)(?:\n|$)/u.test(patch);
+  const filePatches = patch.split(/^diff --git /gmu).slice(1);
+  const binary =
+    BINARY_PATCH_PATTERN.test(patch) &&
+    filePatches.every((filePatch) => BINARY_PATCH_PATTERN.test(filePatch));
   return {
     binary,
     performanceMode:

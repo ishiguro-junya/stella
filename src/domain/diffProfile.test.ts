@@ -14,6 +14,22 @@ describe('diff patch profile', () => {
     },
   );
 
+  it('keeps a mixed text and binary commit displayable', () => {
+    const patch = `diff --git a/app.ts b/app.ts
+--- a/app.ts
++++ b/app.ts
+@@ -1 +1 @@
+-old
++new
+diff --git a/image.png b/image.png
+GIT binary patch
+literal 1
+abc
+`;
+
+    expect(profileDiffPatch(patch).binary).toBe(false);
+  });
+
   it('enables performance mode above the ordinary line limit', () => {
     expect(profileDiffPatch('+x\n'.repeat(20_001)).performanceMode).toBe(true);
   });
