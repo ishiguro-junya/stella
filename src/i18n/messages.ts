@@ -62,13 +62,14 @@ export const MESSAGES = {
     en: 'The update could not be installed.',
     ja: '更新をインストールできませんでした。',
   },
-  back: { en: 'Back', ja: '戻る' },
+  closeSidebar: { en: 'Close Sidebar', ja: 'サイドバーを閉じる' },
+  openSidebar: { en: 'Open Sidebar', ja: 'サイドバーを開く' },
   preferences: { en: 'Preferences', ja: '環境設定' },
   settingsTitle: { en: 'Settings', ja: '設定' },
   appearanceTitle: { en: 'Appearance', ja: '外観' },
   appearanceDescription: {
     en: 'Follow the macOS appearance or use a fixed theme.',
-    ja: 'システムの外観に合わせるか、テーマを固定します。',
+    ja: '外観のテーマをシステムに合わせるか、固定します。',
   },
   appearanceSystem: { en: 'System', ja: 'システム' },
   appearanceLight: { en: 'Light', ja: 'ライト' },
@@ -130,7 +131,7 @@ export const MESSAGES = {
   toolchainTitle: { en: 'Git Toolchain', ja: 'Gitツールチェーン' },
   toolchainDescription: {
     en: 'Choose whether to use the bundled Git toolchain or one installed on this Mac.',
-    ja: '内蔵のGitツールチェーンまたはこの端末にインストールされたものを選択します。',
+    ja: 'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
   },
   toolchainBundled: { en: 'Bundled', ja: '内蔵' },
   toolchainSystem: { en: 'System', ja: 'システム' },
@@ -320,10 +321,6 @@ export const MESSAGES = {
   fileEditorAria: {
     en: (args) => `Edit ${text(args, 'path')}`,
     ja: (args) => `${text(args, 'path')}を編集`,
-  },
-  fileEditStagedNotice: {
-    en: 'Saving creates an Unstaged change. The index is not changed.',
-    ja: '保存内容は未ステージの変更になります。ステージ済みの内容は変更しません。',
   },
   fileEditExternalTitle: {
     en: 'This file changed outside the editor',
@@ -611,7 +608,6 @@ export const MESSAGES = {
     ja: 'このコミットに変更はありません。',
   },
   commitDetails: { en: 'Commit details', ja: 'コミット詳細' },
-  loadingCommitDetails: { en: 'Loading commit details…', ja: 'コミット詳細を読み込み中…' },
   selectCommit: { en: 'Select a commit.', ja: 'コミットを選択してください。' },
   createBranchFromSelected: {
     en: 'Create branch from selected commit',
@@ -619,6 +615,7 @@ export const MESSAGES = {
   },
   createBranch: { en: 'Create branch', ja: 'ブランチを作成' },
   createBranchMenu: { en: 'Create Branch', ja: 'ブランチを作成' },
+  deleteBranch: { en: 'Delete Branch', ja: 'ブランチを削除' },
   createAndCheckoutBranchDescription: {
     en: 'Create a branch from the current commit and switch to it.',
     ja: '現在のコミットからブランチを作成し、そのブランチへ切り替えます。',
@@ -642,6 +639,7 @@ export const MESSAGES = {
   sourceRef: { en: 'Source ref', ja: '元の参照' },
   selectedCommit: { en: 'Selected commit', ja: '選択したコミット' },
   targetCommit: { en: 'Target commit', ja: '対象コミット' },
+  next: { en: 'Next', ja: '次へ' },
   reviewImpact: { en: 'Review impact', ja: '影響を確認' },
   mainlineParent: { en: 'Mainline parent', ja: 'メインラインの親' },
   parentNumber: {
@@ -687,7 +685,6 @@ export const MESSAGES = {
     en: 'No repositories match your search.',
     ja: '検索に一致するリポジトリはありません。',
   },
-  addRepositoryEllipsis: { en: 'Add Repository', ja: 'リポジトリを追加' },
   switchBranch: { en: 'Switch Branch', ja: 'ブランチを切り替える' },
   searchBranches: { en: 'Search by branch name', ja: 'ブランチを検索' },
   noBranchSearchResults: {
@@ -811,6 +808,7 @@ export const MESSAGES = {
   actionPull: { en: 'Pull', ja: 'プル' },
   actionPush: { en: 'Push', ja: 'プッシュ' },
   actionCreateBranch: { en: 'Create Branch', ja: 'ブランチを作成' },
+  actionDeleteBranch: { en: 'Delete Branch', ja: 'ブランチを削除' },
   actionCreateTag: { en: 'Create Tag', ja: 'タグを作成' },
   actionGitFlow: { en: 'Git Flow Operation', ja: 'Git Flow操作' },
   actionCheckoutBranch: { en: 'Checkout Branch', ja: 'ブランチをチェックアウト' },
@@ -885,6 +883,7 @@ export const MESSAGES = {
   },
   backendPushCompleted: { en: 'Push completed', ja: 'プッシュしました' },
   backendBranchCreated: { en: 'Branch created', ja: 'ブランチを作成しました' },
+  backendBranchDeleted: { en: 'Branch deleted', ja: 'ブランチを削除しました' },
   backendTagCreated: { en: 'Tag created', ja: 'タグを作成しました' },
   backendGitFlowCompleted: { en: 'Git Flow operation completed', ja: 'Git Flow操作が完了しました' },
   backendBranchCheckedOut: {
@@ -970,6 +969,16 @@ export const MESSAGES = {
     en: (args) => `${text(args, 'mode')} reset HEAD to ${text(args, 'commit')}`,
     ja: (args) => `HEADを${text(args, 'commit')}へ${text(args, 'mode')}リセットします`,
   },
+  previewDeleteBranch: {
+    en: (args) => `Delete local branch ${text(args, 'branch')}`,
+    ja: (args) => `ローカルブランチ「${text(args, 'branch')}」を削除します`,
+  },
+  previewDeleteUnmergedBranch: {
+    en: (args) =>
+      `Local branch ${text(args, 'branch')} contains unmerged commits. Delete it anyway?`,
+    ja: (args) =>
+      `ローカルブランチ「${text(args, 'branch')}」には未マージのコミットがあります。本当に削除しますか？`,
+  },
   previewRebase: {
     en: (args) => `Rebase the current branch onto ${text(args, 'onto')}`,
     ja: (args) => `現在のブランチを${text(args, 'onto')}へリベースします`,
@@ -1030,7 +1039,7 @@ export const MESSAGES = {
     ja: (args, { number }) => `${number(count(args, 'count'))}件`,
   },
   activityOperations: { en: 'Operations', ja: '操作' },
-  activityOperationsWidth: { en: 'Operations width', ja: '操作一覧の幅' },
+  activityAnalyticsWidth: { en: 'Repository analytics width', ja: 'リポジトリ分析の幅' },
   activityStatus: { en: 'Status', ja: '状態' },
   activityAction: { en: 'Action', ja: '操作' },
   activitySummary: { en: 'Summary', ja: '概要' },
@@ -1056,11 +1065,6 @@ export const MESSAGES = {
   activityOpenRepository: {
     en: 'Open a repository to see its commit activity.',
     ja: 'コミット活動を確認するにはリポジトリを開いてください。',
-  },
-  activityLoading: { en: 'Loading commit activity', ja: 'コミット活動を読み込み中' },
-  activityReadingHistory: {
-    en: 'Reading commit history for the selected range.',
-    ja: '選択期間のコミット履歴を読み込んでいます。',
   },
   activityUnavailable: {
     en: 'Commit activity unavailable',
@@ -1088,7 +1092,6 @@ export const MESSAGES = {
     en: 'Selected repository metric over the chosen date range. Exact values are listed below.',
     ja: '選択期間のリポジトリ指標です。正確な値は下の一覧で確認できます。',
   },
-  loadingChart: { en: 'Loading chart…', ja: 'チャートを読み込み中…' },
   activityData: { en: 'Activity data', ja: '活動データ' },
   activityPeriod: { en: 'Period', ja: '期間' },
   activitySucceeded: { en: 'Succeeded', ja: '成功' },
@@ -1112,7 +1115,6 @@ export const MESSAGES = {
     en: (args) => `Switch branch. Current branch ${text(args, 'branch')}`,
     ja: (args) => `ブランチを切り替えます。現在のブランチは${text(args, 'branch')}`,
   },
-  loadingActivity: { en: 'Loading Activity…', ja: '活動を読み込み中…' },
   gitOperationInProgress: { en: 'Git operation in progress', ja: 'Git操作が進行中' },
   unresolvedCount: {
     en: (args, { number }) => `${number(count(args, 'count'))} unresolved`,
@@ -1193,6 +1195,7 @@ export const MESSAGES = {
   openRegisteredRepository: { en: 'Open Registered Repository', ja: '登録済みの方を開く' },
   forgetOldRepository: { en: 'Remove Previous Registration', ja: '以前の登録を解除' },
   deleteRepository: { en: 'Delete Repository', ja: 'リポジトリを削除' },
+  moveRepositoryToTrash: { en: 'Move to Trash', ja: 'ゴミ箱に移動' },
   forgetRepository: { en: 'Remove Registration Only', ja: '登録だけ解除' },
   forgetNamedRepository: {
     en: (args) => `Delete repository ${text(args, 'repository')}`,
@@ -1258,15 +1261,12 @@ export const MESSAGES = {
     en: 'The remote URL was updated.',
     ja: 'リモートURLを更新しました。',
   },
-  addRepository: { en: 'Add Repository', ja: 'リポジトリを追加' },
-  repositorySource: { en: 'Repository source', ja: 'リポジトリの追加元' },
-  repositoryUrlTab: { en: 'URL', ja: 'URL' },
-  repositoryPathTab: { en: 'Path', ja: 'パス' },
-  repositoryUrl: { en: 'Repository URL', ja: 'リポジトリURL' },
+  addLocalRepository: { en: 'Add Repository', ja: 'リポジトリを追加' },
+  cloneRepository: { en: 'Clone Repository', ja: 'リポジトリをクローン' },
+  repositoryUrl: { en: 'Repository URL', ja: 'リポジトリのURL' },
   repositoryPath: { en: 'Repository path', ja: 'リポジトリのパス' },
   repositoryDisplayName: { en: 'Repository name', ja: 'リポジトリ名' },
   chooseRepositoryDirectory: { en: 'Choose Repository', ja: 'リポジトリを選択' },
-  chooseCloneParentDirectory: { en: 'Choose Clone Location', ja: 'クローン先を選択' },
   chooseDirectoryFailed: {
     en: 'Could not open the folder picker.',
     ja: 'フォルダ選択を開けませんでした。',
@@ -1279,8 +1279,15 @@ export const MESSAGES = {
     en: 'Enter an absolute local path.',
     ja: '絶対パスを入力してください。',
   },
+  repositoryBasePathTitle: {
+    en: 'Repository Location',
+    ja: 'リポジトリの保存先',
+  },
+  repositoryBasePathDescription: {
+    en: 'Base path used when adding a repository from a URL. Enter an absolute path.',
+    ja: 'URLから追加するリポジトリの保存先となるベースパスです。絶対パスで入力します。',
+  },
   add: { en: 'Add', ja: '追加' },
-  hasChanges: { en: 'Has changes', ja: '変更あり' },
   impactPreview: { en: 'Impact preview', ja: '影響のプレビュー' },
   affectedPaths: { en: 'Affected paths', ja: '影響を受けるパス' },
   affectedCommits: { en: 'Affected commits', ja: '影響を受けるコミット' },

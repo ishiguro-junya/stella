@@ -90,6 +90,26 @@ beforeEach(() => {
 });
 
 describe('ActivityView', () => {
+  it('keeps the fixed activity state free of a line-shaped pulse while activity is pending', () => {
+    const adapter = adapterWithSeries();
+    vi.mocked(adapter.query).mockImplementation(async () => await new Promise<never>(() => {}));
+    const { container } = render(
+      <ActivityView
+        adapter={adapter}
+        repo={repo}
+        entries={[]}
+        paneWidth={560}
+        onPaneWidthChange={noopPaneWidthChange}
+        onCancel={noopCancel}
+        onError={noopError}
+      />,
+    );
+
+    const loadingState = container.querySelector('.activity-state[aria-busy="true"]');
+    expect(loadingState).not.toContainElement(container.querySelector('.loading-pulse'));
+    expect(loadingState).not.toHaveTextContent(/Loading|読み込み/u);
+  });
+
   it('retranslates an existing structured Activity entry when the language changes', () => {
     const entry = activity({
       status: 'succeeded',
@@ -121,7 +141,7 @@ describe('ActivityView', () => {
     expect(screen.getAllByText('フェッチしました').length).toBeGreaterThan(0);
     expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
     expect(screen.getByRole('combobox', { name: '活動の指標' })).toBeVisible();
-    expect(screen.getByRole('separator', { name: '操作一覧の幅' })).toBeVisible();
+    expect(screen.getByRole('separator', { name: 'リポジトリ分析の幅' })).toBeVisible();
   });
 
   it('loads 30-day commit metrics, exposes chart data, and keeps raw session detail cancellable', async () => {
@@ -153,6 +173,10 @@ describe('ActivityView', () => {
 
     expect(container.querySelector('h1')).toHaveClass('sr-only');
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
+    const panels = container.querySelector('.activity-page-panels');
+    expect(panels?.children.item(0)).toHaveClass('activity-analytics-panel');
+    expect(panels?.children.item(1)).toHaveClass('pane-resizer');
+    expect(panels?.children.item(2)).toHaveClass('activity-operations-panel');
     const rangeSelect = screen.getByRole('combobox', { name: 'Activity range' });
     expect(rangeSelect).toHaveValue('30d');
     expect(
@@ -185,6 +209,16 @@ describe('ActivityView', () => {
     expect(fetchRow).toHaveAttribute('tabindex', '0');
     expect(fetchRow).toHaveAttribute('aria-selected', 'true');
     expect(fetchRow.querySelector('button')).toBeNull();
+    const commitRow = within(operations).getByRole('row', {
+      name: /Succeeded Commit Commit created/u,
+    });
+    await waitFor(() => expect(fetchRow).toHaveFocus());
+    await user.keyboard('{ArrowDown}');
+    expect(commitRow).toHaveFocus();
+    expect(commitRow).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowUp}');
+    expect(fetchRow).toHaveFocus();
+    expect(fetchRow).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
     expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('30');
@@ -209,7 +243,7 @@ describe('ActivityView', () => {
     expect(await screen.findByTestId('commit-activity-chart')).toHaveTextContent('30');
     await user.selectOptions(metricSelect, 'branches');
     expect(within(table).getAllByRole('columnheader')).toHaveLength(4);
-    const resizer = screen.getByRole('separator', { name: 'Operations width' });
+    const resizer = screen.getByRole('separator', { name: 'Repository analytics width' });
     expect(resizer).toHaveAttribute('aria-valuenow', '560');
     resizer.focus();
     await user.keyboard('{ArrowLeft}');
@@ -219,9 +253,6 @@ describe('ActivityView', () => {
     expect(onCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'fetch-1' }));
 
     await user.click(within(operations).getByText('Commit created'));
-    const commitRow = within(operations).getByRole('row', {
-      name: /Succeeded Commit Commit created/u,
-    });
     expect(commitRow).toHaveAttribute('aria-selected', 'true');
     expect(
       within(screen.getByRole('region', { name: 'Operation detail' })).getByRole('heading', {

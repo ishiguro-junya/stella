@@ -138,9 +138,12 @@ describe('Stella i18n', () => {
   });
 
   it('uses the requested Japanese Git toolchain copy', () => {
+    expect(translate('ja', 'appearanceDescription')).toBe(
+      '外観のテーマをシステムに合わせるか、固定します。',
+    );
     expect(translate('ja', 'toolchainTitle')).toBe('Gitツールチェーン');
     expect(translate('ja', 'toolchainDescription')).toBe(
-      '内蔵のGitツールチェーンまたはこの端末にインストールされたものを選択します。',
+      'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
     );
     expect(translate('ja', 'toolchainRestartRequired')).toBe(
       '変更を反映するにはアプリを再起動してください。',

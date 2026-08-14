@@ -15,9 +15,12 @@ import {
   FolderGit2,
   GitBranch,
   History as HistoryIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Settings as SettingsIcon,
 } from 'lucide-react';
+import { documentDir } from '@tauri-apps/api/path';
 
 import { pickDirectory, type DirectoryPicker } from './ui/directoryPicker';
 import {
@@ -95,7 +98,8 @@ import {
 } from './ui/WorkspaceErrorDialog';
 import { describeWorkspaceError, type WorkspaceErrorContent } from './ui/WorkspaceErrorDetails';
 import {
-  CHANGES_PANE_MIN_WIDTH,
+  LEFT_PANE_MAX_WIDTH,
+  LEFT_PANE_MIN_WIDTH,
   clearRemoteHealthIssue,
   forgetRepositoryPath,
   readPreferences,
@@ -165,9 +169,11 @@ interface AppError extends WorkspaceErrorContent {
 interface AddRepositoryState {
   source: 'url' | 'path';
   url: string;
-  path: string;
+  cloneParentPath: string;
+  localPath: string;
   name: string;
   error?: string;
+  errorField?: 'url' | 'path';
 }
 
 interface BranchDialogState {
@@ -193,6 +199,7 @@ interface RelocationState {
 }
 
 type WorkspaceViewTransitionStyle = CSSProperties & { '--left-pane': string };
+type AppShellStyle = CSSProperties & { '--shell-left-pane': string };
 
 function actionNeedsPreview(action: WorkspaceAction): boolean {
   if (action.kind === 'setRemoteUrl') return true;
@@ -218,6 +225,7 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
     'cherryPick',
     'revert',
     'createBranch',
+    'deleteBranch',
     'createTag',
     'abortOperation',
     'materializeConflict',
@@ -228,6 +236,14 @@ function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): st
   if (action.kind === 'setRemoteUrl') return t('changeRemoteUrlAction');
   if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('deleteFiles');
   if (action.kind === 'discardFiles') return t('discardFiles');
+  if (action.kind === 'createBranch') return t('createBranchMenu');
+  if (action.kind === 'deleteBranch') return t('deleteBranch');
+  if (action.kind === 'createTag') return t('createTagMenu');
+  if (action.kind === 'merge') return t('mergeMenu');
+  if (action.kind === 'rebase') return t('rebaseMenu');
+  if (action.kind === 'cherryPick') return t('cherryPickMenu');
+  if (action.kind === 'revert') return t('revertMenu');
+  if (action.kind === 'reset') return t('resetMenu');
   return t('run');
 }
 
@@ -250,12 +266,10 @@ function remoteHealthReason(
 
 function repositoryState(
   repo: RepoSnapshot,
-  t: I18nValue['t'],
   message: I18nValue['message'],
-): { label: string; tone: 'danger' | 'warning' } | undefined {
+): { label: string; tone: 'danger' } | undefined {
   if (repo.operation.kind !== 'none')
     return { label: message(repo.operation.label), tone: 'danger' };
-  if (repo.changes.length) return { label: t('hasChanges'), tone: 'warning' };
   return undefined;
 }
 
@@ -364,6 +378,9 @@ export function App({
     initialPreferences.editorLineWrapping,
   );
   const [editorWrapColumn, setEditorWrapColumn] = useState(initialPreferences.editorWrapColumn);
+  const [repositoryBasePath, setRepositoryBasePath] = useState(
+    initialPreferences.repositoryBasePath ?? '',
+  );
   const [toolchainStatus, setToolchainStatus] = useState<ToolchainStatus>();
   const [toolchainBusy, setToolchainBusy] = useState(false);
   const t = useCallback<I18nValue['t']>((id, args) => translate(language, id, args), [language]);
@@ -372,6 +389,7 @@ export function App({
     [language],
   );
   const [page, setPage] = useState<AppPage>('workspace');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsFocusRequest, setSettingsFocusRequest] = useState(0);
   const [activityFocusRequest, setActivityFocusRequest] = useState(0);
   const [activityReady, setActivityReady] = useState(false);
@@ -410,7 +428,6 @@ export function App({
   const [relocation, setRelocation] = useState<RelocationState>();
   const [unavailableRepoPath, setUnavailableRepoPath] = useState<string>();
   const [pendingForgetPath, setPendingForgetPath] = useState<string>();
-  const [branchControlFocused, setBranchControlFocused] = useState(false);
   const [restoringWorkspace, setRestoringWorkspace] = useState(
     initialPreferences.openRepoPaths.length > 0,
   );
@@ -422,7 +439,6 @@ export function App({
   const pollingRef = useRef(false);
   const pendingPollingRef = useRef(false);
   const requestNavigationRef = useRef<(navigation: PendingNavigation) => void>(() => undefined);
-  const activityButtonRef = useRef<HTMLButtonElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusRepositoriesOnWorkspaceRef = useRef(false);
   const errorIdRef = useRef(0);
@@ -627,6 +643,15 @@ export function App({
   }, [language]);
 
   useEffect(() => {
+    if (repositoryBasePath) return;
+    void documentDir()
+      .then((path) => {
+        if (isAbsoluteLocalPath(path)) setRepositoryBasePath(path);
+      })
+      .catch(() => undefined);
+  }, [repositoryBasePath]);
+
+  useEffect(() => {
     if (!effectiveRepositoryLogoLoader) return;
     for (const path of registeredPaths) {
       if (logoRequestsRef.current.has(path)) continue;
@@ -641,8 +666,7 @@ export function App({
 
   useEffect(() => {
     if (page === 'settings') settingsButtonRef.current?.focus();
-    if (page === 'activity') activityButtonRef.current?.focus();
-  }, [activityFocusRequest, page, settingsFocusRequest]);
+  }, [page, settingsFocusRequest]);
 
   useEffect(() => {
     if (page !== 'workspace' || repo || !focusRepositoriesOnWorkspaceRef.current) return;
@@ -665,6 +689,7 @@ export function App({
       stickyFileHeaders,
       editorLineWrapping,
       editorWrapColumn,
+      ...(repositoryBasePath ? { repositoryBasePath } : {}),
       openRepoPaths: workspace.repos.map((candidate) => candidate.path),
       ...(repo ? { selectedRepoPath: repo.path } : {}),
       paneWidths,
@@ -679,6 +704,7 @@ export function App({
     language,
     paneWidths,
     repo,
+    repositoryBasePath,
     restoringWorkspace,
     splitStageView,
     useConventionalCommits,
@@ -932,12 +958,9 @@ export function App({
 
   const loadRemoteManager = useCallback(
     async (repoId: string, path: string): Promise<void> => {
-      setRemoteManager((current) => ({
-        path,
-        repoId,
-        remotes: current?.repoId === repoId ? current.remotes : [],
-        loading: true,
-      }));
+      setRemoteManager((current) =>
+        current?.repoId === repoId ? { ...current, loading: true } : undefined,
+      );
       try {
         const result = await adapter.query({ kind: 'remotes', repoId });
         if (result.kind !== 'remotes') throw new Error(t('loadRemotesFailed'));
@@ -973,10 +996,16 @@ export function App({
     settleUiAction(repositoryName ? attach(request, repositoryName) : attach(request));
   }, [activityReady, attach, cloneToStart, page]);
 
-  const openAddRepositoryDialog = (): void => {
+  const openRepositoryDialog = (source: AddRepositoryState['source']): void => {
     setRepositorySwitcherOpen(false);
     setBranchDialog(undefined);
-    setAddRepositoryDialog({ source: 'url', url: '', path: '', name: '' });
+    setAddRepositoryDialog({
+      source,
+      url: '',
+      cloneParentPath: repositoryBasePath,
+      localPath: '',
+      name: '',
+    });
   };
 
   const chooseDirectory = async (title: string): Promise<string | null> => {
@@ -1164,11 +1193,19 @@ export function App({
     }
   };
 
-  const chooseLocalRepository = async (): Promise<void> => {
+  const chooseRepositoryPath = async (): Promise<void> => {
     const path = await chooseDirectory(t('chooseRepositoryDirectory'));
     if (path) {
       setAddRepositoryDialog((current) =>
-        current ? { source: 'path', url: current.url, path, name: current.name } : current,
+        current
+          ? {
+              source: current.source,
+              url: current.url,
+              cloneParentPath: current.source === 'url' ? path : current.cloneParentPath,
+              localPath: current.source === 'path' ? path : current.localPath,
+              name: current.name,
+            }
+          : current,
       );
     }
   };
@@ -1177,10 +1214,10 @@ export function App({
     if (!addRepositoryDialog) return;
     const repositoryName = addRepositoryDialog.name.trim() || undefined;
     if (addRepositoryDialog.source === 'path') {
-      const path = addRepositoryDialog.path.trim();
+      const path = addRepositoryDialog.localPath.trim();
       if (!isAbsoluteLocalPath(path)) {
         setAddRepositoryDialog((current) =>
-          current ? { ...current, error: t('invalidRepositoryPath') } : current,
+          current ? { ...current, error: t('invalidRepositoryPath'), errorField: 'path' } : current,
         );
         return;
       }
@@ -1194,13 +1231,18 @@ export function App({
     const inferredName = repositoryNameFromRemoteUrl(remoteUrl);
     if (!inferredName) {
       setAddRepositoryDialog((current) =>
-        current ? { ...current, error: t('invalidRepositoryUrl') } : current,
+        current ? { ...current, error: t('invalidRepositoryUrl'), errorField: 'url' } : current,
       );
       return;
     }
 
-    const parent = await chooseDirectory(t('chooseCloneParentDirectory'));
-    if (!parent) return;
+    const parent = addRepositoryDialog.cloneParentPath.trim();
+    if (!isAbsoluteLocalPath(parent)) {
+      setAddRepositoryDialog((current) =>
+        current ? { ...current, error: t('invalidRepositoryPath'), errorField: 'path' } : current,
+      );
+      return;
+    }
     requestNavigationRef.current({
       page: 'activity',
       cloneRequest: {
@@ -1655,18 +1697,21 @@ export function App({
     settleUiAction(beginAppUpdate(false));
   };
   const activeError = errors[0];
-  const currentRepositoryState = repo ? repositoryState(repo, t, message) : undefined;
+  const currentRepositoryState = repo ? repositoryState(repo, message) : undefined;
   const showActivityMenu = Boolean(repo) || hasRunningActivity || page === 'activity';
   const showRepositoryMenu = !repo && page !== 'workspace';
   const activeWorkspaceView = workspaceViewTransition ?? view;
+  const sidebarAvailable = (page === 'workspace' && Boolean(repo)) || page === 'activity';
+  const sidebarVisible = sidebarAvailable && sidebarOpen;
+  const shellLeftPane = Math.min(
+    LEFT_PANE_MAX_WIDTH,
+    Math.max(LEFT_PANE_MIN_WIDTH, paneWidths.left),
+  );
+  const appShellStyle: AppShellStyle = { '--shell-left-pane': `${shellLeftPane}px` };
   const workspaceViewTransitionStyle: WorkspaceViewTransitionStyle | undefined =
     workspaceViewTransition
       ? {
-          '--left-pane': `${
-            workspaceViewTransition === 'changes'
-              ? Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.changes.left)
-              : paneWidths.history.left
-          }px`,
+          '--left-pane': `${shellLeftPane}px`,
         }
       : undefined;
   const branchDialogRepo = branchDialog
@@ -1678,13 +1723,30 @@ export function App({
   const pendingForgetRepository = pendingForgetPath
     ? registeredRepositories.find((candidate) => candidate.path === pendingForgetPath)
     : undefined;
+  const sidebarControlLabel = t(sidebarOpen ? 'closeSidebar' : 'openSidebar');
+  const sidebarControl = (
+    <button
+      type="button"
+      className="icon-button sidebar-toggle-button"
+      aria-label={sidebarControlLabel}
+      aria-expanded={sidebarOpen}
+      title={sidebarControlLabel}
+      onClick={() => setSidebarOpen((current) => !current)}
+    >
+      {sidebarOpen ? (
+        <PanelLeftClose aria-hidden="true" focusable="false" />
+      ) : (
+        <PanelLeftOpen aria-hidden="true" focusable="false" />
+      )}
+    </button>
+  );
 
   if (restoringWorkspace) {
     return (
       <I18nProvider language={language}>
         <AppearanceProvider appearance={appearance}>
-          <div className="app-shell" data-testid="app-shell" aria-busy="true">
-            <header className="titlebar" data-tauri-drag-region />
+          <div className="app-shell" data-testid="app-shell" aria-busy="true" style={appShellStyle}>
+            <header className="app-header" data-tauri-drag-region />
           </div>
         </AppearanceProvider>
       </I18nProvider>
@@ -1694,157 +1756,175 @@ export function App({
   return (
     <I18nProvider language={language}>
       <AppearanceProvider appearance={appearance}>
-        <div className="app-shell" data-testid="app-shell">
-          <header className="titlebar" data-tauri-drag-region>
-            <nav
-              className="titlebar-context"
-              aria-label={t('workspaceContext')}
-              data-tauri-drag-region
-            >
-              {repo ? (
-                <>
+        <div
+          className={`app-shell${sidebarAvailable && !sidebarOpen ? ' is-sidebar-closed' : ''}`}
+          data-testid="app-shell"
+          style={appShellStyle}
+        >
+          <header className="app-header" data-tauri-drag-region>
+            {sidebarAvailable ? sidebarControl : null}
+            <div className="window-header-content" data-tauri-drag-region>
+              <div className="window-header-leading" data-tauri-drag-region>
+                {page !== 'settings' ? (
+                  <nav
+                    className="titlebar-context"
+                    aria-label={t('workspaceContext')}
+                    data-tauri-drag-region
+                  >
+                    {repo ? (
+                      <>
+                        <button
+                          type="button"
+                          className="titlebar-context-toggle repository-toggle"
+                          aria-label={t('switchRepositoryCurrent', {
+                            repository: repoDisplayName ?? repo.name,
+                            state: currentRepositoryState
+                              ? t('repositoryStateSuffix', { state: currentRepositoryState.label })
+                              : '',
+                          })}
+                          aria-haspopup="dialog"
+                          aria-expanded={repositorySwitcherOpen}
+                          title={repo.path}
+                          onClick={openRepositorySwitcher}
+                        >
+                          <FolderGit2 aria-hidden="true" focusable="false" />
+                          <span>{repoDisplayName ?? repo.name}</span>
+                          {currentRepositoryState ? (
+                            <i
+                              className={`repository-status-dot ${currentRepositoryState.tone}`}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <ChevronDown aria-hidden="true" focusable="false" />
+                        </button>
+                        <button
+                          type="button"
+                          className="titlebar-context-toggle branch-toggle"
+                          aria-label={t('switchBranchCurrent', {
+                            branch: repo.branch.detached
+                              ? t('detachedHead')
+                              : (repo.branch.name ?? ''),
+                          })}
+                          aria-haspopup="dialog"
+                          aria-expanded={Boolean(branchDialog)}
+                          title={
+                            repo.branch.detached
+                              ? t('detachedHead')
+                              : (repo.branch.name ?? undefined)
+                          }
+                          onClick={openBranchSwitcher}
+                        >
+                          <GitBranch aria-hidden="true" focusable="false" />
+                          <span>{repo.branch.detached ? t('detachedHead') : repo.branch.name}</span>
+                          <ChevronDown aria-hidden="true" focusable="false" />
+                        </button>
+                      </>
+                    ) : null}
+                  </nav>
+                ) : null}
+              </div>
+              <nav
+                className="titlebar-actions"
+                aria-label={t('appNavigation')}
+                data-tauri-drag-region
+              >
+                {availableUpdate ? (
                   <button
                     type="button"
-                    className="titlebar-context-toggle repository-toggle"
-                    aria-label={t('switchRepositoryCurrent', {
-                      repository: repoDisplayName ?? repo.name,
-                      state: currentRepositoryState
-                        ? t('repositoryStateSuffix', { state: currentRepositoryState.label })
-                        : '',
-                    })}
-                    aria-haspopup="dialog"
-                    aria-expanded={repositorySwitcherOpen}
-                    title={repo.path}
-                    onClick={openRepositorySwitcher}
+                    className="titlebar-menu-button titlebar-update-button"
+                    aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
+                    onClick={() => setUpdateDialogOpen(true)}
+                  >
+                    <RefreshCw aria-hidden="true" focusable="false" />
+                    <span>{t('update')}</span>
+                  </button>
+                ) : null}
+                {repo ? (
+                  <>
+                    <button
+                      type="button"
+                      className="titlebar-menu-button"
+                      aria-label={t('changes')}
+                      aria-current={
+                        page === 'workspace' && activeWorkspaceView === 'changes'
+                          ? 'page'
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (page !== 'workspace' || activeWorkspaceView !== 'changes')
+                          requestNavigation({ page: 'workspace', view: 'changes' });
+                      }}
+                    >
+                      <Files aria-hidden="true" focusable="false" />
+                      <span>{t('changes')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="titlebar-menu-button"
+                      aria-label={t('history')}
+                      aria-current={
+                        page === 'workspace' && activeWorkspaceView === 'history'
+                          ? 'page'
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (page !== 'workspace' || activeWorkspaceView !== 'history')
+                          requestNavigation({ page: 'workspace', view: 'history' });
+                      }}
+                    >
+                      <HistoryIcon aria-hidden="true" focusable="false" />
+                      <span>{t('history')}</span>
+                    </button>
+                  </>
+                ) : showRepositoryMenu ? (
+                  <button
+                    type="button"
+                    className="titlebar-menu-button"
+                    aria-label={t('repositoriesTitle')}
+                    onClick={() => {
+                      focusRepositoriesOnWorkspaceRef.current = true;
+                      requestNavigation({ page: 'workspace' });
+                    }}
                   >
                     <FolderGit2 aria-hidden="true" focusable="false" />
-                    <span>{repoDisplayName ?? repo.name}</span>
-                    {currentRepositoryState ? (
-                      <i
-                        className={`repository-status-dot ${currentRepositoryState.tone}`}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    <ChevronDown aria-hidden="true" focusable="false" />
+                    <span>{t('repositoriesTitle')}</span>
                   </button>
+                ) : null}
+                {showActivityMenu ? (
                   <button
                     type="button"
-                    className={`titlebar-context-toggle branch-toggle${branchControlFocused ? ' is-focused' : ''}`}
-                    aria-label={t('switchBranchCurrent', {
-                      branch: repo.branch.detached ? t('detachedHead') : (repo.branch.name ?? ''),
-                    })}
-                    aria-haspopup="dialog"
-                    aria-expanded={Boolean(branchDialog)}
-                    title={
-                      repo.branch.detached ? t('detachedHead') : (repo.branch.name ?? undefined)
-                    }
-                    onFocus={() => setBranchControlFocused(true)}
-                    onBlur={() => setBranchControlFocused(false)}
-                    onClick={openBranchSwitcher}
-                  >
-                    <GitBranch aria-hidden="true" focusable="false" />
-                    <span>{repo.branch.detached ? t('detachedHead') : repo.branch.name}</span>
-                    <ChevronDown aria-hidden="true" focusable="false" />
-                  </button>
-                </>
-              ) : null}
-            </nav>
-            <nav
-              className="titlebar-actions"
-              aria-label={t('appNavigation')}
-              data-tauri-drag-region
-            >
-              {availableUpdate ? (
-                <button
-                  type="button"
-                  className="titlebar-menu-button titlebar-update-button"
-                  aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
-                  onClick={() => setUpdateDialogOpen(true)}
-                >
-                  <RefreshCw aria-hidden="true" focusable="false" />
-                  <span>{t('update')}</span>
-                </button>
-              ) : null}
-              {repo ? (
-                <>
-                  <button
-                    type="button"
-                    className="titlebar-menu-button"
-                    aria-label={t('changes')}
-                    aria-current={
-                      page === 'workspace' && activeWorkspaceView === 'changes' ? 'page' : undefined
-                    }
+                    className="titlebar-menu-button activity-toggle"
+                    aria-label={t('appActivity')}
+                    aria-current={page === 'activity' ? 'page' : undefined}
                     onClick={() => {
-                      if (page !== 'workspace' || activeWorkspaceView !== 'changes')
-                        requestNavigation({ page: 'workspace', view: 'changes' });
+                      if (page !== 'activity') requestNavigation({ page: 'activity' });
                     }}
                   >
-                    <Files aria-hidden="true" focusable="false" />
-                    <span>{t('changes')}</span>
+                    <ChartNoAxesCombined aria-hidden="true" focusable="false" />
+                    <span>{t('appActivity')}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="titlebar-menu-button"
-                    aria-label={t('history')}
-                    aria-current={
-                      page === 'workspace' && activeWorkspaceView === 'history' ? 'page' : undefined
-                    }
-                    onClick={() => {
-                      if (page !== 'workspace' || activeWorkspaceView !== 'history')
-                        requestNavigation({ page: 'workspace', view: 'history' });
-                    }}
-                  >
-                    <HistoryIcon aria-hidden="true" focusable="false" />
-                    <span>{t('history')}</span>
-                  </button>
-                </>
-              ) : showRepositoryMenu ? (
+                ) : null}
                 <button
+                  ref={settingsButtonRef}
                   type="button"
                   className="titlebar-menu-button"
-                  aria-label={t('repositoriesTitle')}
+                  aria-label={t('appSettings')}
+                  aria-current={page === 'settings' ? 'page' : undefined}
                   onClick={() => {
-                    focusRepositoriesOnWorkspaceRef.current = true;
-                    requestNavigation({ page: 'workspace' });
+                    if (page !== 'settings') requestNavigation({ page: 'settings' });
                   }}
                 >
-                  <FolderGit2 aria-hidden="true" focusable="false" />
-                  <span>{t('repositoriesTitle')}</span>
+                  <SettingsIcon aria-hidden="true" focusable="false" />
+                  <span>{t('appSettings')}</span>
                 </button>
-              ) : null}
-              {showActivityMenu ? (
-                <button
-                  ref={activityButtonRef}
-                  type="button"
-                  className="titlebar-menu-button activity-toggle"
-                  aria-label={t('appActivity')}
-                  aria-current={page === 'activity' ? 'page' : undefined}
-                  onClick={() => {
-                    if (page !== 'activity') requestNavigation({ page: 'activity' });
-                  }}
-                >
-                  <ChartNoAxesCombined aria-hidden="true" focusable="false" />
-                  <span>{t('appActivity')}</span>
-                </button>
-              ) : null}
-              <button
-                ref={settingsButtonRef}
-                type="button"
-                className="titlebar-menu-button"
-                aria-label={t('appSettings')}
-                aria-current={page === 'settings' ? 'page' : undefined}
-                onClick={() => {
-                  if (page !== 'settings') requestNavigation({ page: 'settings' });
-                }}
-              >
-                <SettingsIcon aria-hidden="true" focusable="false" />
-                <span>{t('appSettings')}</span>
-              </button>
-            </nav>
+              </nav>
+            </div>
           </header>
 
           {notice ? (
-            <output className={`global-notice ${notice.level}`}>
+            <output
+              className={`global-notice ${notice.level}${sidebarVisible ? ' is-right-pane' : ''}`}
+            >
               <NoticeContent notice={notice} />
             </output>
           ) : null}
@@ -1857,6 +1937,7 @@ export function App({
               diffStyle={diffStyle}
               splitStageView={splitStageView}
               changeListDisplay={changeListDisplay}
+              repositoryBasePath={repositoryBasePath}
               useConventionalCommits={useConventionalCommits}
               stickyFileHeaders={stickyFileHeaders}
               editorLineWrapping={editorLineWrapping}
@@ -1869,6 +1950,7 @@ export function App({
               onDiffStyleChange={setDiffStyle}
               onSplitStageViewChange={setSplitStageView}
               onChangeListDisplayChange={setChangeListDisplay}
+              onRepositoryBasePathChange={setRepositoryBasePath}
               onUseConventionalCommitsChange={setUseConventionalCommits}
               onStickyFileHeadersChange={setStickyFileHeaders}
               onEditorLineWrappingChange={setEditorLineWrapping}
@@ -1888,7 +1970,7 @@ export function App({
                   <h1 id="activity-title" className="sr-only">
                     {t('appActivity')}
                   </h1>
-                  <output>{t('loadingActivity')}</output>
+                  <span className="loading-pulse" aria-hidden="true" />
                 </main>
               }
             >
@@ -1896,13 +1978,12 @@ export function App({
                 adapter={adapter}
                 repo={repo}
                 entries={currentActivities}
-                paneWidth={paneWidths.activity.left}
-                onPaneWidthChange={(left) =>
-                  setPaneWidths((current) => ({ ...current, activity: { left } }))
-                }
+                paneWidth={shellLeftPane}
+                onPaneWidthChange={(left) => setPaneWidths((current) => ({ ...current, left }))}
                 onCancel={cancelActivity}
                 onError={showError}
                 onReady={markActivityReady}
+                focusRequest={activityFocusRequest}
               />
             </Suspense>
           ) : null}
@@ -1911,7 +1992,10 @@ export function App({
             {repo ? (
               <>
                 {operationActions ? (
-                  <section className="operation-banner" aria-label={t('gitOperationInProgress')}>
+                  <section
+                    className={`operation-banner${sidebarVisible ? ' is-right-pane' : ''}`}
+                    aria-label={t('gitOperationInProgress')}
+                  >
                     <div>
                       <strong>{message(operationActions.label)}</strong>
                       <span>
@@ -1972,7 +2056,7 @@ export function App({
                       onUnsavedLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
-                      paneWidths={paneWidths.changes}
+                      paneWidths={paneWidths}
                       diffStyle={diffStyle}
                       splitStageView={splitStageView}
                       changeListDisplay={changeListDisplay}
@@ -1980,9 +2064,7 @@ export function App({
                       stickyFileHeaders={stickyFileHeaders}
                       editorLineWrapping={editorLineWrapping}
                       editorWrapColumn={editorWrapColumn}
-                      onPaneWidthsChange={(changes) =>
-                        setPaneWidths((current) => ({ ...current, changes }))
-                      }
+                      onPaneWidthsChange={setPaneWidths}
                     />
                   ) : (
                     <HistoryView
@@ -1999,9 +2081,9 @@ export function App({
                       lineWrapping={editorLineWrapping}
                       wrapColumn={editorWrapColumn}
                       stickyFileHeaders={stickyFileHeaders}
-                      paneWidths={paneWidths.history}
+                      paneWidths={paneWidths}
                       onPaneWidthsChange={({ left }) =>
-                        setPaneWidths((current) => ({ ...current, history: { left } }))
+                        setPaneWidths((current) => ({ ...current, left }))
                       }
                     />
                   )}
@@ -2011,7 +2093,8 @@ export function App({
               <RepositoryLanding
                 repositories={registeredRepositories}
                 busy={busy}
-                onAdd={openAddRepositoryDialog}
+                onAddLocal={() => openRepositoryDialog('path')}
+                onClone={() => openRepositoryDialog('url')}
                 onOpen={(path) => settleUiAction(attach({ kind: 'openExisting', path }))}
                 onRepair={(path) => settleUiAction(chooseRelocatedRepository(path))}
                 onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
@@ -2149,7 +2232,8 @@ export function App({
                 setRepositorySwitcherOpen(false);
                 requestForgetRepository(path);
               }}
-              onAdd={openAddRepositoryDialog}
+              onAddLocal={() => openRepositoryDialog('path')}
+              onClone={() => openRepositoryDialog('url')}
             />
           ) : null}
 
@@ -2374,13 +2458,13 @@ export function App({
                   }
                   onClick={() => settleUiAction(confirmRepositoryRemoval(true))}
                 >
-                  {t('deleteRepository')}
+                  {t('moveRepositoryToTrash')}
                 </button>
               </DialogFooter>
             </Dialog>
           ) : null}
 
-          {branchDialog && branchDialogRepo ? (
+          {branchDialog && !branchDialog.loading && branchDialogRepo ? (
             <BranchSwitcherDialog
               repo={branchDialogRepo}
               branches={branchDialog.branches}
@@ -2400,6 +2484,11 @@ export function App({
                   startOid,
                   checkout: true,
                 });
+              }}
+              onDelete={(branchName) => {
+                const repoId = branchDialog.repoId;
+                setBranchDialog(undefined);
+                settleUiAction(runAction({ kind: 'deleteBranch', name: branchName }, repoId));
               }}
             />
           ) : null}
@@ -2657,35 +2746,57 @@ export function App({
             <AddRepositoryDialog
               source={addRepositoryDialog.source}
               url={addRepositoryDialog.url}
-              path={addRepositoryDialog.path}
+              cloneParentPath={addRepositoryDialog.cloneParentPath}
+              localPath={addRepositoryDialog.localPath}
               name={addRepositoryDialog.name}
               {...(addRepositoryDialog.error ? { error: addRepositoryDialog.error } : {})}
+              {...(addRepositoryDialog.errorField
+                ? { errorField: addRepositoryDialog.errorField }
+                : {})}
               busy={busy}
-              onSourceChange={(source) =>
-                setAddRepositoryDialog((current) =>
-                  current
-                    ? { source, url: current.url, path: current.path, name: current.name }
-                    : current,
-                )
-              }
               onUrlChange={(url) =>
                 setAddRepositoryDialog((current) =>
                   current
-                    ? { source: current.source, url, path: current.path, name: current.name }
+                    ? {
+                        source: current.source,
+                        url,
+                        cloneParentPath: current.cloneParentPath,
+                        localPath: current.localPath,
+                        name: current.name,
+                      }
                     : current,
                 )
               }
-              onPathChange={(path) =>
+              onCloneParentPathChange={(cloneParentPath) =>
                 setAddRepositoryDialog((current) =>
                   current
-                    ? { source: current.source, url: current.url, path, name: current.name }
+                    ? {
+                        source: current.source,
+                        url: current.url,
+                        cloneParentPath,
+                        localPath: current.localPath,
+                        name: current.name,
+                      }
+                    : current,
+                )
+              }
+              onLocalPathChange={(localPath) =>
+                setAddRepositoryDialog((current) =>
+                  current
+                    ? {
+                        source: current.source,
+                        url: current.url,
+                        cloneParentPath: current.cloneParentPath,
+                        localPath,
+                        name: current.name,
+                      }
                     : current,
                 )
               }
               onNameChange={(name) =>
                 setAddRepositoryDialog((current) => (current ? { ...current, name } : current))
               }
-              onChooseLocal={() => settleUiAction(chooseLocalRepository())}
+              onChoosePath={() => settleUiAction(chooseRepositoryPath())}
               onDismiss={() => setAddRepositoryDialog(undefined)}
               onSubmit={() => settleUiAction(submitAddRepository())}
             />

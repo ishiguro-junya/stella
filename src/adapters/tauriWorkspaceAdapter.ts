@@ -540,6 +540,8 @@ async function mapAction(
         startPoint: action.startOid,
         checkout: action.checkout ?? false,
       };
+    case 'deleteBranch':
+      return { kind: 'deleteBranch', name: action.name };
     case 'createTag':
       return { kind: 'createTag', name: action.name, target: action.targetOid };
     case 'gitFlow':
@@ -722,6 +724,8 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionPush');
     case 'createBranch':
       return localized('actionCreateBranch');
+    case 'deleteBranch':
+      return localized('actionDeleteBranch');
     case 'createTag':
       return localized('actionCreateTag');
     case 'gitFlow':
@@ -775,6 +779,7 @@ function actionMayChangeHistoryRefs(action: WireAction): boolean {
     action.kind === 'pull' ||
     action.kind === 'push' ||
     action.kind === 'createBranch' ||
+    action.kind === 'deleteBranch' ||
     action.kind === 'createTag' ||
     action.kind === 'checkout' ||
     action.kind === 'gitFlow'

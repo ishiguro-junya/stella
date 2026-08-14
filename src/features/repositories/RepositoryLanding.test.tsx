@@ -5,12 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { RepositoryLanding } from './RepositoryLanding';
 
 describe('RepositoryLanding', () => {
-  it('shows the empty state and the single add action', () => {
+  it('shows separate local Add and URL Clone actions', () => {
     render(
       <RepositoryLanding
         repositories={[]}
         busy={false}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
         onOpen={() => undefined}
         onRepair={() => undefined}
         onManageRemotes={() => undefined}
@@ -21,6 +22,7 @@ describe('RepositoryLanding', () => {
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
     expect(screen.getByText('No repositories have been added yet.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Add Repository' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clone Repository' })).toBeVisible();
   });
 
   it('renders registered repositories in MRU order and opens the selected path', async () => {
@@ -37,7 +39,8 @@ describe('RepositoryLanding', () => {
           { path: '/Users/stella/older', name: 'Older' },
         ]}
         busy={false}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
         onOpen={onOpen}
         onRepair={() => undefined}
         onManageRemotes={() => undefined}
@@ -76,7 +79,8 @@ describe('RepositoryLanding', () => {
           },
         ]}
         busy={false}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
         onOpen={() => undefined}
         onRepair={onRepair}
         onManageRemotes={onManageRemotes}

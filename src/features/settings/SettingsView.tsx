@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ToolchainMode, ToolchainStatus } from '../../adapters/toolchainAdapter';
+import { isAbsoluteLocalPath } from '../../domain/repositoryLocation';
 import type { DiffStyle } from '../../domain/workspace';
 import { useI18n, type Language } from '../../i18n/i18n';
 import {
@@ -19,6 +20,7 @@ export interface SettingsViewProps {
   diffStyle: DiffStyle;
   splitStageView: boolean;
   changeListDisplay: ChangeListDisplay;
+  repositoryBasePath: string;
   useConventionalCommits: boolean;
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
@@ -31,6 +33,7 @@ export interface SettingsViewProps {
   onDiffStyleChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
   onChangeListDisplayChange: (display: ChangeListDisplay) => void;
+  onRepositoryBasePathChange: (path: string) => void;
   onUseConventionalCommitsChange: (enabled: boolean) => void;
   onStickyFileHeadersChange: (sticky: boolean) => void;
   onEditorLineWrappingChange: (enabled: boolean) => void;
@@ -65,6 +68,7 @@ export function SettingsView({
   diffStyle,
   splitStageView,
   changeListDisplay,
+  repositoryBasePath,
   useConventionalCommits,
   stickyFileHeaders,
   editorLineWrapping,
@@ -77,6 +81,7 @@ export function SettingsView({
   onDiffStyleChange,
   onSplitStageViewChange,
   onChangeListDisplayChange,
+  onRepositoryBasePathChange,
   onUseConventionalCommitsChange,
   onStickyFileHeadersChange,
   onEditorLineWrappingChange,
@@ -85,10 +90,16 @@ export function SettingsView({
 }: SettingsViewProps) {
   const { t } = useI18n();
   const [wrapColumnDraft, setWrapColumnDraft] = useState(String(editorWrapColumn));
+  const [repositoryBasePathDraft, setRepositoryBasePathDraft] = useState(repositoryBasePath);
+  const [repositoryBasePathError, setRepositoryBasePathError] = useState(false);
   const toolchainModeLabel = (mode: ToolchainMode): string =>
     t(mode === 'bundled' ? 'toolchainBundled' : 'toolchainSystem');
 
   useEffect(() => setWrapColumnDraft(String(editorWrapColumn)), [editorWrapColumn]);
+  useEffect(() => {
+    setRepositoryBasePathDraft(repositoryBasePath);
+    setRepositoryBasePathError(false);
+  }, [repositoryBasePath]);
 
   const commitWrapColumn = (): void => {
     const value = wrapColumnDraft.trim()
@@ -96,6 +107,17 @@ export function SettingsView({
       : editorWrapColumn;
     setWrapColumnDraft(String(value));
     onEditorWrapColumnChange(value);
+  };
+
+  const commitRepositoryBasePath = (draft = repositoryBasePathDraft): void => {
+    const path = draft.trim();
+    if (!isAbsoluteLocalPath(path)) {
+      setRepositoryBasePathError(true);
+      return;
+    }
+    setRepositoryBasePathDraft(path);
+    setRepositoryBasePathError(false);
+    onRepositoryBasePathChange(path);
   };
 
   return (
@@ -181,6 +203,41 @@ export function SettingsView({
             </SelectControl>
           </section>
 
+          <section className="settings-row" aria-labelledby="repository-base-path-title">
+            <div className="settings-row-copy">
+              <h2 id="repository-base-path-title">{t('repositoryBasePathTitle')}</h2>
+              <p id="repository-base-path-description">{t('repositoryBasePathDescription')}</p>
+            </div>
+            <div className="settings-path-control">
+              <input
+                className="settings-path-input"
+                name="repository-base-path"
+                value={repositoryBasePathDraft}
+                aria-labelledby="repository-base-path-title"
+                aria-describedby={
+                  repositoryBasePathError
+                    ? 'repository-base-path-description repository-base-path-error'
+                    : 'repository-base-path-description'
+                }
+                aria-invalid={repositoryBasePathError || undefined}
+                autoComplete="off"
+                onChange={(event) => {
+                  setRepositoryBasePathDraft(event.currentTarget.value);
+                  setRepositoryBasePathError(false);
+                }}
+                onBlur={(event) => commitRepositoryBasePath(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur();
+                }}
+              />
+              {repositoryBasePathError ? (
+                <small id="repository-base-path-error" className="field-error" role="alert">
+                  {t('invalidRepositoryPath')}
+                </small>
+              ) : null}
+            </div>
+          </section>
+
           <section className="settings-row" aria-labelledby="diff-layout-title">
             <div className="settings-row-copy">
               <h2 id="diff-layout-title">{t('diffLayout')}</h2>
@@ -242,7 +299,7 @@ export function SettingsView({
                 if (isChangeListDisplay(value)) onChangeListDisplayChange(value);
               }}
             >
-              {(['nameAndPath', 'fullPath', 'tree'] as const).map((option) => (
+              {(['fullPath', 'tree', 'nameAndPath'] as const).map((option) => (
                 <option key={option} value={option}>
                   {t(
                     option === 'nameAndPath'
@@ -364,6 +421,7 @@ export function SettingsView({
           <section
             className="settings-row settings-toolchain-row"
             aria-labelledby="toolchain-title"
+            aria-busy={!toolchainStatus || toolchainBusy}
           >
             <div className="settings-row-copy">
               <h2 id="toolchain-title">{t('toolchainTitle')}</h2>
@@ -433,7 +491,39 @@ export function SettingsView({
                 </dl>
               </>
             ) : (
-              <p className="settings-toolchain-loading">{t('loading')}</p>
+              <>
+                <dl
+                  className="settings-toolchain-modes settings-toolchain-loading"
+                  aria-hidden="true"
+                >
+                  {[0, 1].map((index) => (
+                    <div key={index}>
+                      <dt>
+                        <span className="loading-pulse" />
+                      </dt>
+                      <dd>
+                        <span className="loading-pulse" />
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <dl
+                  className="settings-toolchain-components settings-toolchain-loading"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <div key={index}>
+                      <dt>
+                        <span className="loading-pulse" />
+                      </dt>
+                      <dd>
+                        <span className="loading-pulse" />
+                        <span className="loading-pulse settings-toolchain-path-loading" />
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
             )}
           </section>
         </div>

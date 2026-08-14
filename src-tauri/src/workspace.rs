@@ -1149,7 +1149,7 @@ impl Workspace {
             |value| value.affected_commits.clone(),
         );
         let remote_effect = remote_effect(&self.git, &repo.root, &request.action)?;
-        let summary = preview_summary(&request.action);
+        let summary = preview_summary(&request.action, target_binding.as_ref());
         let (confirmation_token, expires_at_unix_ms) = if request.action.requires_preview_binding()
         {
             let token = Uuid::new_v4().to_string();
@@ -1209,11 +1209,12 @@ impl Workspace {
         let input = match action {
             Action::Reset { commit, .. }
             | Action::CherryPick { commit, .. }
-            | Action::Revert { commit, .. } => Some(commit),
-            Action::Merge { source, .. } => Some(source),
-            Action::Rebase { onto } => Some(onto),
-            Action::CreateBranch { start_point, .. } => Some(start_point),
-            Action::CreateTag { target, .. } => Some(target),
+            | Action::Revert { commit, .. } => Some(commit.clone()),
+            Action::Merge { source, .. } => Some(source.clone()),
+            Action::Rebase { onto } => Some(onto.clone()),
+            Action::CreateBranch { start_point, .. } => Some(start_point.clone()),
+            Action::DeleteBranch { name } => Some(format!("refs/heads/{name}")),
+            Action::CreateTag { target, .. } => Some(target.clone()),
             _ => None,
         };
         let current_head = snapshot_head_oid(snapshot);
@@ -1435,6 +1436,17 @@ impl Workspace {
                     &mut affected_paths,
                     control,
                 )?;
+            }
+            Action::DeleteBranch { .. } => {
+                let oid = oid.as_ref().expect("branch target was resolved");
+                let head = current_head.as_ref().ok_or_else(|| {
+                    WorkspaceError::new(
+                        ErrorCode::InvalidRequest,
+                        "Cannot compare a branch with an unborn HEAD",
+                    )
+                })?;
+                lost_commit_oids = self.commits_not_reachable(repo, oid, head, control)?;
+                affected_commits.extend(lost_commit_oids.iter().cloned());
             }
             Action::CreateBranch { .. } | Action::CreateTag { .. } => {}
             Action::Discard {
@@ -2925,6 +2937,19 @@ impl Workspace {
                     )?
                 };
                 Ok((LocalizedMessage::new("backendBranchCreated"), output))
+            }
+            Action::DeleteBranch { name } => {
+                let output = self.run_checked(
+                    repo,
+                    GitCommand::DeleteBranch {
+                        name: name.clone(),
+                        // 対象先端と失われるCommitはpreview bindingで再検証済みなので、追跡先のmerge判定には委ねない。
+                        force: true,
+                    },
+                    None,
+                    control,
+                )?;
+                Ok((LocalizedMessage::new("backendBranchDeleted"), output))
             }
             Action::CreateTag { name, target } => {
                 let target = self.bound_target(repo, target, target_binding, control)?;
@@ -5261,6 +5286,7 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
             validate_branch_name(name)?;
             validate_revision(start_point)?;
         }
+        Action::DeleteBranch { name } => validate_branch_name(name)?,
         Action::CreateTag { name, target } => {
             validate_tag_name(name)?;
             validate_revision(target)?;
@@ -5293,6 +5319,19 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
 }
 
 fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> WorkspaceResult<()> {
+    if let Action::DeleteBranch { name } = action {
+        if matches!(
+            &snapshot.head,
+            HeadState::Branch { name: current, .. } | HeadState::Unborn { name: current }
+                if current == name
+        ) {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The current branch cannot be deleted",
+            ));
+        }
+        return Ok(());
+    }
     if let Action::SaveFile { path, .. } = action {
         let entry = snapshot
             .entries
@@ -5685,7 +5724,7 @@ fn remote_effect(
     Ok(effect)
 }
 
-fn preview_summary(action: &Action) -> LocalizedMessage {
+fn preview_summary(action: &Action, target_binding: Option<&TargetBinding>) -> LocalizedMessage {
     match action {
         Action::Discard { target, paths, .. } => LocalizedMessage::new("previewDiscardPaths")
             .number_arg("count", paths.len())
@@ -5693,6 +5732,14 @@ fn preview_summary(action: &Action) -> LocalizedMessage {
         Action::Reset { commit, mode } => LocalizedMessage::new("previewReset")
             .arg("mode", format!("{mode:?}"))
             .arg("commit", commit.clone()),
+        Action::DeleteBranch { name }
+            if target_binding.is_some_and(|binding| !binding.lost_commit_oids.is_empty()) =>
+        {
+            LocalizedMessage::new("previewDeleteUnmergedBranch").arg("branch", name.clone())
+        }
+        Action::DeleteBranch { name } => {
+            LocalizedMessage::new("previewDeleteBranch").arg("branch", name.clone())
+        }
         Action::Rebase { onto } => LocalizedMessage::new("previewRebase").arg("onto", onto.clone()),
         Action::Abort => LocalizedMessage::new("previewAbort"),
         Action::ConflictMaterialize { choice, .. } => {
@@ -5717,6 +5764,7 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::Push { .. } => "actionPush",
         Action::SetRemoteUrl { .. } => "actionSetRemoteUrl",
         Action::CreateBranch { .. } => "actionCreateBranch",
+        Action::DeleteBranch { .. } => "actionDeleteBranch",
         Action::CreateTag { .. } => "actionCreateTag",
         Action::GitFlow { .. } => "actionGitFlow",
         Action::Checkout { .. } => "actionCheckoutBranch",
@@ -9080,6 +9128,200 @@ mod tests {
             fs::read_to_string(fixture.repo.join("untracked.txt")).unwrap(),
             "untracked\n"
         );
+    }
+
+    #[test]
+    fn deletes_a_merged_non_current_branch_after_confirmation() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+        fixture.git(&["branch", "delete-me"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::DeleteBranch {
+            name: "delete-me".into(),
+        };
+        let preview = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action: action.clone(),
+            })
+            .unwrap();
+
+        assert!(preview.destructive);
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "delete-branch".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: preview.confirmation_token,
+            })
+            .unwrap();
+
+        assert!(
+            fixture
+                .git_output(&["branch", "--list", "delete-me"])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn deletes_an_unmerged_branch_after_showing_its_lost_commits() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+        fixture.git(&["switch", "-c", "delete-unmerged"]);
+        fixture.write("experiment.txt", "trial\n");
+        fixture.git(&["add", "--", "experiment.txt"]);
+        fixture.git(&["commit", "-m", "test: 検証結果を追加"]);
+        let lost_commit = fixture.git_output(&["rev-parse", "HEAD"]);
+        fixture.git(&["switch", "main"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::DeleteBranch {
+            name: "delete-unmerged".into(),
+        };
+        let preview = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action: action.clone(),
+            })
+            .unwrap();
+
+        assert_eq!(preview.summary.id, "previewDeleteUnmergedBranch");
+        assert_eq!(preview.lost_commit_oids, vec![lost_commit]);
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "delete-unmerged-branch".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: preview.confirmation_token,
+            })
+            .unwrap();
+
+        assert!(
+            fixture
+                .git_output(&["branch", "--list", "delete-unmerged"])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn deletes_a_branch_merged_into_head_when_its_upstream_is_behind() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+        let bare = fixture.temp.path().join("remote.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "--set-upstream", "origin", "main"]);
+        fixture.git(&["switch", "-c", "delete-tracking"]);
+        fixture.write("published.txt", "published\n");
+        fixture.git(&["add", "--", "published.txt"]);
+        fixture.git(&["commit", "-m", "feat: 公開済みの変更を追加"]);
+        fixture.git(&["push", "--set-upstream", "origin", "delete-tracking"]);
+        fixture.write("local.txt", "local\n");
+        fixture.git(&["add", "--", "local.txt"]);
+        fixture.git(&["commit", "-m", "feat: ローカルの変更を追加"]);
+        fixture.git(&["switch", "main"]);
+        fixture.git(&[
+            "merge",
+            "--no-ff",
+            "delete-tracking",
+            "-m",
+            "merge: ローカルブランチを統合",
+        ]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::DeleteBranch {
+            name: "delete-tracking".into(),
+        };
+        let preview = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action: action.clone(),
+            })
+            .unwrap();
+
+        assert!(preview.lost_commit_oids.is_empty());
+        workspace
+            .execute(ExecuteRequest {
+                operation_id: "delete-tracking-branch".into(),
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: preview.confirmation_token,
+            })
+            .unwrap();
+
+        assert!(
+            fixture
+                .git_output(&["branch", "--list", "delete-tracking"])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn rejects_deleting_the_current_branch_during_preview() {
+        let fixture = GitFixture::new();
+        fixture.write("tracked.txt", "base\n");
+        fixture.git(&["add", "--", "tracked.txt"]);
+        fixture.git(&["commit", "-m", "feat: 追跡対象ファイルを追加"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let current = fixture.git_output(&["branch", "--show-current"]);
+        let error = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id,
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::DeleteBranch { name: current },
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
     }
 
     #[test]

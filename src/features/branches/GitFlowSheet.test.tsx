@@ -19,6 +19,23 @@ const OVERVIEW = {
 } as const;
 
 describe('GitFlowSheet', () => {
+  it('reserves the overview grid with pulse placeholders while loading', () => {
+    render(
+      <GitFlowSheet
+        loading
+        onDismiss={() => undefined}
+        onRun={() => undefined}
+        onReload={() => undefined}
+      />,
+    );
+
+    const overview = screen.getByRole('region', { name: 'Repository overview' });
+    expect(overview).toHaveAttribute('aria-busy', 'true');
+    expect(overview).not.toHaveTextContent('Loading…');
+    expect(overview.querySelectorAll('.git-flow-overview-loading > div')).toHaveLength(4);
+    expect(overview.querySelectorAll('.loading-pulse')).toHaveLength(8);
+  });
+
   it('shows overview fields and exposes every typed command family', () => {
     render(
       <GitFlowSheet

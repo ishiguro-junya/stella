@@ -5,58 +5,59 @@ import { describe, expect, it, vi } from 'vitest';
 import { AddRepositoryDialog } from './AddRepositoryDialog';
 
 describe('AddRepositoryDialog', () => {
-  it('defaults to URL and switches to a path field with an adjacent picker button', async () => {
+  it('shows URL and destination fields without source tabs in the Clone dialog', async () => {
     const user = userEvent.setup();
-    const onChooseLocal = vi.fn<() => void>();
-    const onSourceChange = vi.fn<(source: 'url' | 'path') => void>();
+    const onChoosePath = vi.fn<() => void>();
     const onUrlChange = vi.fn<(url: string) => void>();
     render(
       <AddRepositoryDialog
         source="url"
         url=""
-        path=""
+        cloneParentPath="/Users/example/Documents"
+        localPath=""
         name=""
         busy={false}
-        onSourceChange={onSourceChange}
         onUrlChange={onUrlChange}
-        onPathChange={() => undefined}
+        onCloneParentPathChange={() => undefined}
+        onLocalPathChange={() => undefined}
         onNameChange={() => undefined}
-        onChooseLocal={onChooseLocal}
+        onChoosePath={onChoosePath}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
       />,
     );
 
-    const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
-    expect(within(dialog).getByRole('tab', { name: 'URL' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    const dialog = screen.getByRole('dialog', { name: 'Clone Repository' });
+    expect(within(dialog).queryByRole('tab')).not.toBeInTheDocument();
     const url = within(dialog).getByRole('textbox', { name: 'Repository URL' });
     expect(url).not.toHaveAttribute('placeholder');
+    const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
+    expect(path).toHaveValue('/Users/example/Documents');
+    const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
+    expect(path.parentElement).toContainElement(picker);
+    await user.click(picker);
+    expect(onChoosePath).toHaveBeenCalledOnce();
     await user.type(url, 'https://example.com/stella.git');
     expect(onUrlChange).toHaveBeenCalled();
-
-    await user.click(within(dialog).getByRole('tab', { name: 'Path' }));
-    expect(onSourceChange).toHaveBeenCalledWith('path');
   });
 
   it('shows the icon-only path picker and a separate repository name field', async () => {
     const user = userEvent.setup();
-    const onChooseLocal = vi.fn<() => void>();
+    const onChoosePath = vi.fn<() => void>();
     const onNameChange = vi.fn<(name: string) => void>();
     render(
       <AddRepositoryDialog
         source="path"
         url=""
-        path="/Users/example/stella"
+        cloneParentPath="/Users/example/Documents"
+        localPath="/Users/example/stella"
         name=""
         busy={false}
-        onSourceChange={() => undefined}
         onUrlChange={() => undefined}
-        onPathChange={() => undefined}
+        onCloneParentPathChange={() => undefined}
+        onLocalPathChange={() => undefined}
         onNameChange={onNameChange}
-        onChooseLocal={onChooseLocal}
+        onChoosePath={onChoosePath}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
       />,
@@ -71,7 +72,7 @@ describe('AddRepositoryDialog', () => {
     expect(path.parentElement).toContainElement(picker);
     expect(picker).not.toHaveTextContent(/Finder|Choose/u);
     await user.click(picker);
-    expect(onChooseLocal).toHaveBeenCalledOnce();
+    expect(onChoosePath).toHaveBeenCalledOnce();
 
     await user.type(name, 'Stella App');
     expect(onNameChange).toHaveBeenCalled();
@@ -82,15 +83,16 @@ describe('AddRepositoryDialog', () => {
       <AddRepositoryDialog
         source="path"
         url=""
-        path="invalid"
+        cloneParentPath="/Users/example/Documents"
+        localPath="invalid"
         name=""
         error="Enter an absolute local path."
         busy={false}
-        onSourceChange={() => undefined}
         onUrlChange={() => undefined}
-        onPathChange={() => undefined}
+        onCloneParentPathChange={() => undefined}
+        onLocalPathChange={() => undefined}
         onNameChange={() => undefined}
-        onChooseLocal={() => undefined}
+        onChoosePath={() => undefined}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
       />,

@@ -130,12 +130,18 @@ export function RemoteOperationDialog({
         setRemotes(remoteResult.remotes);
         if (kind === 'pull') {
           const availableTargets = remoteBranchTargets(branchResult.branches, names);
+          const preferredRemote = names.includes('origin') ? 'origin' : names[0];
+          const matchingCurrentBranch = repo.branch.name
+            ? availableTargets.find(
+                (target) => target.remote === preferredRemote && target.branch === repo.branch.name,
+              )
+            : undefined;
           setPullTarget((current) =>
             availableTargets.some((target) => target.label === current)
               ? current
               : upstream && availableTargets.some((target) => target.label === upstream.label)
                 ? upstream.label
-                : '',
+                : (matchingCurrentBranch?.label ?? ''),
           );
         } else {
           const initialRemote =
@@ -268,9 +274,9 @@ export function RemoteOperationDialog({
                 <div className="remote-operation-control-row">
                   <SelectControl
                     id="pull-remote-branch"
-                    data-dialog-initial-focus
                     value={pullTarget}
                     disabled={locked}
+                    data-dialog-initial-focus={!locked && !pullTarget ? true : undefined}
                     onChange={(event) => setPullTarget(event.currentTarget.value)}
                   >
                     <option value="">{t('selectRemoteBranch')}</option>
@@ -329,7 +335,6 @@ export function RemoteOperationDialog({
                   <div className="remote-operation-control-row">
                     <select
                       id="push-remote"
-                      data-dialog-initial-focus
                       value={pushRemote}
                       disabled={locked}
                       onChange={(event) => {
@@ -419,6 +424,14 @@ export function RemoteOperationDialog({
         <button
           type="submit"
           className="primary"
+          data-dialog-initial-focus={
+            !locked &&
+            !loading &&
+            !loadError &&
+            (kind === 'pull' ? Boolean(pullTarget) : Boolean(pushRemote && pushBranch.trim()))
+              ? true
+              : undefined
+          }
           disabled={
             locked ||
             loading ||

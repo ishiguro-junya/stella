@@ -369,6 +369,7 @@ export type WorkspaceAction =
       newUrl: string;
     }
   | { kind: 'createBranch'; name: string; startOid: string; checkout?: boolean }
+  | { kind: 'deleteBranch'; name: string }
   | { kind: 'createTag'; name: string; targetOid: string }
   | { kind: 'gitFlow'; request: GitFlowRequest }
   | { kind: 'checkoutBranch'; name: string }

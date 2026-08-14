@@ -1,5 +1,5 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus管理を維持したままブランチ作成をdialogとして公開する。 */
-import { GitBranch, GitBranchPlus } from 'lucide-react';
+import { GitBranch, GitBranchPlus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import type { BranchSummary, RepoSnapshot } from '../domain/workspace';
@@ -16,6 +16,7 @@ export interface BranchSwitcherDialogProps {
   onDismiss: () => void;
   onCheckout: (branchName: string) => void;
   onCreate: (branchName: string, startOid: string) => void;
+  onDelete: (branchName: string) => void;
 }
 
 const BASE_BRANCH_NAMES = [
@@ -83,6 +84,7 @@ export function BranchSwitcherDialog({
   onDismiss,
   onCheckout,
   onCreate,
+  onDelete,
 }: BranchSwitcherDialogProps) {
   const { t, message } = useI18n();
   const [creating, setCreating] = useState(false);
@@ -108,6 +110,14 @@ export function BranchSwitcherDialog({
         label: t('switchBranch'),
         icon: <GitBranch aria-hidden="true" focusable="false" />,
         disabled: branch.current || Boolean(disabledReason),
+      },
+      {
+        action: 'delete',
+        label: t('deleteBranch'),
+        icon: <Trash2 aria-hidden="true" focusable="false" />,
+        disabled: branch.current || Boolean(disabledReason),
+        danger: true,
+        separatorBefore: true,
       },
     ],
   }));
@@ -188,9 +198,10 @@ export function BranchSwitcherDialog({
         if (branch && !branch.current) onCheckout(branch.shortName);
       }}
       onAction={(item, action) => {
-        if (action !== 'select') return;
         const branch = selectableBranches.find((candidate) => candidate.fullName === item.id);
-        if (branch && !branch.current) onCheckout(branch.shortName);
+        if (!branch || branch.current) return;
+        if (action === 'select') onCheckout(branch.shortName);
+        if (action === 'delete') onDelete(branch.shortName);
       }}
     />
   );

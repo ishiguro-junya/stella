@@ -94,6 +94,104 @@ describe('Changes', () => {
     repositoryPath = '';
   });
 
+  it('defaults to full paths and keeps keyboard file navigation responsive', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'src/keyboard-navigation.md',
+      '# Keyboard navigation\n',
+    );
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ src/keyboard-navigation.md"]').waitForExist();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement ===
+            document.querySelector('.change-item.is-current .change-row'),
+        ),
+      { timeoutMsg: 'The selected Changes file did not receive initial focus.' },
+    );
+
+    const initial = await browser.execute(() => {
+      const rows = [...document.querySelectorAll<HTMLElement>('.change-item')];
+      const selectedIndex = rows.findIndex((row) => row.classList.contains('is-current'));
+      const fullPath = rows.find((row) =>
+        row.querySelector('.file-path strong')?.textContent?.includes('keyboard-navigation.md'),
+      );
+      const actionTriggers = rows.map((row) =>
+        row.querySelector<HTMLElement>('.row-action-trigger'),
+      );
+      const fullPathRow = fullPath?.querySelector<HTMLElement>('.change-row');
+      const fullPathRowStyle = fullPathRow ? getComputedStyle(fullPathRow) : undefined;
+      return {
+        selectedIndex,
+        rowCount: rows.length,
+        fullPath: fullPath?.querySelector('.file-path strong')?.textContent,
+        hasSecondaryPath: Boolean(fullPath?.querySelector('.file-path small')),
+        fullPathRowHeight: fullPathRow?.getBoundingClientRect().height,
+        fullPathRowPaddingBlock: fullPathRowStyle
+          ? [fullPathRowStyle.paddingTop, fullPathRowStyle.paddingBottom]
+          : undefined,
+        allActionsVisible: actionTriggers.every((trigger) => {
+          if (!trigger) return false;
+          const style = getComputedStyle(trigger);
+          return style.opacity === '1' && style.visibility === 'visible';
+        }),
+      };
+    });
+    expect(initial).toEqual({
+      selectedIndex: expect.any(Number),
+      rowCount: 2,
+      fullPath: 'src/keyboard-navigation.md',
+      hasSecondaryPath: false,
+      fullPathRowHeight: 38,
+      fullPathRowPaddingBlock: ['6px', '6px'],
+      allActionsVisible: true,
+    });
+    expect(initial.selectedIndex).toBeGreaterThanOrEqual(0);
+
+    const direction = initial.selectedIndex === 0 ? 'ArrowDown' : 'ArrowUp';
+    const expectedIndex = initial.selectedIndex === 0 ? 1 : 0;
+    await browser.keys([direction]);
+    expect(
+      await browser.execute(() => {
+        const rows = [...document.querySelectorAll<HTMLElement>('.change-item')];
+        const selectedIndex = rows.findIndex((row) => row.classList.contains('is-current'));
+        return {
+          selectedIndex,
+          focused: document.activeElement === rows[selectedIndex]?.querySelector('.change-row'),
+        };
+      }),
+    ).toEqual({ selectedIndex: expectedIndex, focused: true });
+
+    await browser.keys([direction === 'ArrowDown' ? 'ArrowUp' : 'ArrowDown']);
+    expect(
+      await browser.execute(() => {
+        const rows = [...document.querySelectorAll<HTMLElement>('.change-item')];
+        const selectedIndex = rows.findIndex((row) => row.classList.contains('is-current'));
+        return {
+          selectedIndex,
+          focused: document.activeElement === rows[selectedIndex]?.querySelector('.change-row'),
+        };
+      }),
+    ).toEqual({ selectedIndex: initial.selectedIndex, focused: true });
+
+    await $('.diff-file-toolbar h2').waitForDisplayed();
+    await browser.execute(() => window.getSelection()?.removeAllRanges());
+    await $('.diff-file-toolbar h2').dragAndDrop(
+      $('.change-item:not(.is-current) .file-path strong'),
+      { duration: 300 },
+    );
+    expect(await browser.execute(() => window.getSelection()?.toString() ?? '')).toBe('');
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.change-item:not(.is-current) .row-action-trigger')!
+        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+  });
+
   it('applies line wrapping to the displayed Diff and defaults to no wrapping', async () => {
     await $('button.change-row').click();
     await browser.waitUntil(
@@ -331,6 +429,17 @@ describe('Changes', () => {
     await $('.changes-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
     await expect(pullDialog).toBeDisplayed();
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          () =>
+            document.activeElement ===
+            document.querySelector(
+              '[role="dialog"][aria-labelledby="pull-dialog-title"] button[type="submit"]',
+            ),
+        ),
+      { timeoutMsg: 'Pull action did not receive initial focus.' },
+    );
     await expect(pullDialog).toHaveText(
       expect.stringContaining('ローカルブランチへ取り込むリモートブランチを選択します。'),
     );
@@ -346,6 +455,17 @@ describe('Changes', () => {
     await $('.changes-action-button[aria-label="プッシュ"]').click();
     let pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
+    await browser.waitUntil(
+      () =>
+        browser.execute(
+          () =>
+            document.activeElement ===
+            document.querySelector(
+              '[role="dialog"][aria-labelledby="push-dialog-title"] button[type="submit"]',
+            ),
+        ),
+      { timeoutMsg: 'Push action did not receive initial focus.' },
+    );
     await expect(pushDialog).toHaveText(expect.stringContaining('ローカルブランチ'));
     await expect(pushDialog.$('#push-local-branch')).toBeDisabled();
     await expect(pushDialog.$('#push-local-branch')).toHaveValue('main');
@@ -465,6 +585,12 @@ describe('Changes', () => {
     );
     await uncommittedChanges.click();
     await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
+    expect(
+      await browser.execute(
+        () =>
+          document.activeElement === document.querySelector('.change-item.is-current .change-row'),
+      ),
+    ).toBe(true);
 
     const stagedGroup = $('section[aria-labelledby="area-staged"]');
     const unstagedGroup = $('section[aria-labelledby="area-worktree"]');
@@ -494,9 +620,10 @@ describe('Changes', () => {
     await stage.waitForClickable();
     const changesPaneLayout = await browser.execute(() => {
       const sidebar = document.querySelector<HTMLElement>('.changes-sidebar-pane')!;
-      const actionSection = sidebar.querySelector<HTMLElement>('.changes-action-section')!;
+      const footer = sidebar.querySelector<HTMLElement>('.changes-list-footer')!;
+      const actionBar = footer.querySelector<HTMLElement>('.changes-action-bar')!;
       const actionButtonElements = [
-        ...actionSection.querySelectorAll<HTMLElement>('.changes-action-button'),
+        ...actionBar.querySelectorAll<HTMLElement>('.changes-action-button'),
       ];
       const filesRegion = sidebar.querySelector<HTMLElement>('.changes-files-scroll-region')!;
       const staged = sidebar.querySelector<HTMLElement>('.change-group-staged')!;
@@ -507,24 +634,20 @@ describe('Changes', () => {
       const unstagedHeader = unstaged.querySelector<HTMLElement>('.change-group-header')!;
       const stagedHeaderHeight = stagedHeader.getBoundingClientRect().height;
       const unstagedHeaderHeight = unstagedHeader.getBoundingClientRect().height;
-      const actionRect = actionSection.getBoundingClientRect();
+      const actionRect = actionBar.getBoundingClientRect();
       const filesRect = filesRegion.getBoundingClientRect();
       const stagedRect = staged.getBoundingClientRect();
       const unstagedRect = unstaged.getBoundingClientRect();
-      const actionGrid = getComputedStyle(actionSection.querySelector('.changes-action-bar')!);
       return {
-        actionsBeforeFiles: actionRect.bottom <= filesRect.top + 1,
+        actionsInFooter:
+          actionRect.top >= footer.getBoundingClientRect().top &&
+          actionRect.bottom <= footer.getBoundingClientRect().bottom,
         firstGroupOffset: stagedRect.top - filesRect.top,
-        actionColumns: actionGrid.gridTemplateColumns.split(' ').length,
-        actionLabelsVisible: actionButtonElements.every(
-          (button) => getComputedStyle(button.querySelector('span')!).display !== 'none',
-        ),
-        actionIconLabelGaps: actionButtonElements.map((button) => getComputedStyle(button).gap),
-        actionIconsUseCurrentSize: actionButtonElements.every((button) => {
+        actionLabelsRemoved: actionButtonElements.every((button) => !button.querySelector('span')),
+        actionIconSizes: actionButtonElements.map((button) => {
           const icon = button.querySelector<SVGElement>('.lucide')!;
-          return (
-            getComputedStyle(icon).width === '16px' && getComputedStyle(icon).height === '16px'
-          );
+          const style = getComputedStyle(icon);
+          return [style.width, style.height];
         }),
         stageTogglesUseCompactHeight: [
           ...sidebar.querySelectorAll<HTMLElement>('.stage-toggle'),
@@ -539,12 +662,15 @@ describe('Changes', () => {
       };
     });
     expect(changesPaneLayout).toEqual({
-      actionsBeforeFiles: true,
+      actionsInFooter: true,
       firstGroupOffset: 0,
-      actionColumns: 4,
-      actionLabelsVisible: true,
-      actionIconLabelGaps: ['4px', '4px', '4px', '4px'],
-      actionIconsUseCurrentSize: true,
+      actionLabelsRemoved: true,
+      actionIconSizes: [
+        ['16px', '16px'],
+        ['16px', '16px'],
+        ['16px', '16px'],
+        ['15px', '15px'],
+      ],
       stageTogglesUseCompactHeight: true,
       groupsMeetAtMiddle: true,
       groupHeightDifference: 0,
@@ -573,8 +699,7 @@ describe('Changes', () => {
     await expect($('.loading-state')).not.toExist();
     await expect($('.change-item.is-current')).toBeDisplayed();
     await expectInteractiveSelectedColors('.change-item.is-current', {
-      foreground: ['.file-status', '.row-action-trigger'],
-      mutedForeground: ['.file-path small'],
+      palette: 'neutral',
     });
     const selectedRowPaint = await browser.execute(() => {
       const item = document.querySelector<HTMLElement>('.change-item.is-current');
@@ -583,7 +708,7 @@ describe('Changes', () => {
       const action = item?.querySelector<HTMLElement>('.row-action-trigger');
       if (!item || !row || !stageHitbox || !action) return null;
       const probe = document.createElement('div');
-      probe.style.background = 'var(--interactive-selected-surface)';
+      probe.style.background = 'var(--list-selection-surface)';
       document.body.append(probe);
       const selectedSurface = getComputedStyle(probe).backgroundColor;
       probe.remove();
@@ -814,6 +939,7 @@ describe('Changes', () => {
     await expectAttachedTabs('.diff-file-toolbar .file-view-mode-tabs');
     await expectInteractiveSelectedColors(
       '.diff-file-toolbar [role="tab"][aria-label="表示"][aria-selected="true"]',
+      { palette: 'neutral' },
     );
     await browser.waitUntil(
       async () =>
@@ -830,6 +956,31 @@ describe('Changes', () => {
       },
     );
     const diffFontSize = '13px';
+    const diffLineMetrics = await browser.execute(() => {
+      const host = document.querySelector<HTMLElement>('.diff-surface diffs-container')!;
+      const root = host.shadowRoot!;
+      const line = root.querySelector<HTMLElement>('[data-content] [data-line]')!;
+      const changedLine = root.querySelector<HTMLElement>(
+        "[data-content] [data-line-type='change-addition'], [data-content] [data-line-type='change-deletion']",
+      )!;
+      const lineNumber = root.querySelector<HTMLElement>('[data-column-number]')!;
+      const lineStyle = getComputedStyle(line);
+      const lineNumberStyle = getComputedStyle(lineNumber);
+      return {
+        indicator: getComputedStyle(changedLine, '::before').content,
+        lineHeight: lineStyle.lineHeight,
+        lineNumberFontFamily: lineNumberStyle.fontFamily,
+        lineNumberWidth: lineNumber.getBoundingClientRect().width,
+        lineNumberPaddingLeft: lineNumberStyle.paddingLeft,
+        lineNumberPaddingRight: lineNumberStyle.paddingRight,
+        textLeft:
+          line.getBoundingClientRect().left -
+          host.getBoundingClientRect().left +
+          Number.parseFloat(lineStyle.paddingLeft),
+      };
+    });
+    expect(diffLineMetrics.indicator).toMatch(/[+-]/u);
+    expect(diffLineMetrics.lineHeight).toBe('20px');
     await editTab.waitForClickable({ timeout: 10_000 });
     await expect(editTab).toHaveAttribute('title', '編集');
     await expect(editTab).toHaveText('');
@@ -844,6 +995,7 @@ describe('Changes', () => {
     );
     await expectInteractiveSelectedColors(
       '.file-editor-pane [role="tab"][aria-label="編集"][aria-selected="true"]',
+      { palette: 'neutral' },
     );
     await expect(editor.$('button=保存する')).not.toExist();
     await expect(editor.$('button=キャンセル')).not.toExist();
@@ -862,16 +1014,41 @@ describe('Changes', () => {
       );
       const foldGutter = document.querySelector<HTMLElement>('.file-editor .cm-foldGutter');
       const foldMarkerChevron = foldGutter?.querySelector('.text-editor-fold-marker polyline');
+      const editorRoot = document.querySelector<HTMLElement>('.file-editor .cm-editor');
+      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+      const firstLine = document.querySelector<HTMLElement>('.file-editor .cm-line');
+      const lineStyle = firstLine ? getComputedStyle(firstLine) : undefined;
+      const lineNumberStyle = lineNumber ? getComputedStyle(lineNumber) : undefined;
       return {
+        firstLineTopGap:
+          firstLine && scroller
+            ? firstLine.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+            : undefined,
+        lineHeight: lineStyle?.lineHeight ?? '',
+        lineNumberFontFamily: lineNumberStyle?.fontFamily ?? '',
+        lineNumberWidth: lineNumber?.getBoundingClientRect().width,
+        lineNumberPaddingLeft: lineNumberStyle?.paddingLeft ?? '',
         lineNumberPaddingRight: lineNumber ? getComputedStyle(lineNumber).paddingRight : '',
         foldGutterWidth: foldGutter ? getComputedStyle(foldGutter).width : '',
         foldMarkerPoints: foldMarkerChevron?.getAttribute('points') ?? '',
+        textLeft:
+          firstLine && editorRoot && lineStyle
+            ? firstLine.getBoundingClientRect().left -
+              editorRoot.getBoundingClientRect().left +
+              Number.parseFloat(lineStyle.paddingLeft)
+            : undefined,
       };
     });
     expect(gutterSpacing).toEqual({
+      firstLineTopGap: 0,
+      lineHeight: diffLineMetrics.lineHeight,
+      lineNumberFontFamily: diffLineMetrics.lineNumberFontFamily,
+      lineNumberWidth: diffLineMetrics.lineNumberWidth,
+      lineNumberPaddingLeft: diffLineMetrics.lineNumberPaddingLeft,
       lineNumberPaddingRight: '4px',
       foldGutterWidth: '18px',
       foldMarkerPoints: '4 2 8 6 4 10',
+      textLeft: diffLineMetrics.textLeft,
     });
 
     await textbox.click();
@@ -973,6 +1150,87 @@ describe('Changes', () => {
         }),
       { timeout: 10_000, timeoutMsg: 'The Diff did not return after Hunk editing.' },
     );
+    const contextLineText = await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>("[data-content] [data-line-type='context']")!;
+      line.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      return line.textContent?.trim() ?? '';
+    });
+    expect(contextLineText).toMatch(/^line-\d+$/u);
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-content] [data-line][data-selected-line]'));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The unchanged Diff line was not selected.' },
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>(
+        '[data-content] [data-line][data-selected-line]',
+      )!;
+      const rect = line.getBoundingClientRect();
+      line.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + 8,
+          clientY: rect.top + 8,
+        }),
+      );
+    });
+    await $('[role="menu"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $$('[role="menuitem"]').map((item) => item.getText())).toEqual([
+      '選択した行を編集',
+      '選択した行をコピー',
+    ]);
+    await browser.keys(['Escape']);
+    await $('.diff-file-actions [role="tab"][aria-label="編集"]').click();
+    await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
+    const contextEditorPosition = await waitForEditorPosition(contextLineText);
+    expect(contextEditorPosition.scrollTop).toBeGreaterThan(0);
+    expect(contextEditorPosition.activeLine).toBe(contextLineText);
+    expect(contextEditorPosition.focused).toBe(true);
+
+    await $('.file-editor-pane [role="tab"][aria-label="表示"]').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(
+            root?.querySelector<HTMLElement>('[data-content] [data-line][data-selected-line]'),
+          );
+        }),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The selected Diff line was not restored.',
+      },
+    );
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          const line = root?.querySelector<HTMLElement>(
+            '[data-content] [data-line][data-selected-line]',
+          );
+          return Boolean(line && root?.activeElement === line);
+        }),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The restored Diff line was not focused.',
+      },
+    );
     await browser.execute(() => {
       const root = document.querySelector<HTMLElement>(
         '.diff-surface diffs-container',
@@ -1018,6 +1276,63 @@ describe('Changes', () => {
     expect(lineEditorPosition.focused).toBe(true);
     expect(lineEditorPosition.viewportRatio).toBeGreaterThan(0.2);
     expect(lineEditorPosition.viewportRatio).toBeLessThan(0.3);
+  });
+
+  it('opens a deleted line at the next remaining line and scrolls the last line to the top', async () => {
+    const base = Array.from({ length: 80 }, (_, index) => `line-${index + 1}`).join('\n');
+    const changed = base.replace('line-40\nline-41\n', '');
+    await writeRepositoryFile(repositoryPath, 'README.md', base);
+    await runGit(repositoryPath, ['add', '--', 'README.md']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 削除行の編集位置を確認する']);
+    await writeRepositoryFile(repositoryPath, 'README.md', changed);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('.change-item .file-status.modified').waitForExist({ timeout: 10_000 });
+    await $('button.change-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return (
+            root?.querySelectorAll("[data-content] [data-line-type='change-deletion']").length === 2
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'The deleted Diff lines did not render.' },
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const deletedLines = root.querySelectorAll<HTMLElement>(
+        "[data-content] [data-line-type='change-deletion']",
+      );
+      deletedLines[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    });
+    await $('.diff-file-actions [role="tab"][aria-label="編集"]').click();
+    await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
+
+    const editorPosition = await waitForEditorPosition('line-42');
+    expect(editorPosition.focused).toBe(true);
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+          const content = document.querySelector<HTMLElement>('.file-editor .cm-content');
+          const lastLine = document.querySelector<HTMLElement>('.file-editor .cm-line:last-child');
+          if (!scroller || !content || !lastLine) return false;
+          scroller.scrollTop = scroller.scrollHeight;
+          const contentPaddingTop = Number.parseFloat(getComputedStyle(content).paddingTop) || 0;
+          return (
+            Math.abs(
+              lastLine.getBoundingClientRect().top -
+                (scroller.getBoundingClientRect().top + contentPaddingTop),
+            ) <= 2
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'The last editor line could not reach the viewport top.' },
+    );
   });
 
   it('places Hunk actions at the right edge and opens line actions from a blue selection', async () => {
@@ -1151,15 +1466,6 @@ describe('Changes', () => {
       const unselectedAddition = [
         ...root.querySelectorAll<HTMLElement>("[data-line][data-line-type='change-addition']"),
       ].find((candidate) => !candidate.hasAttribute('data-selected-line'))!;
-      const rect = line.getBoundingClientRect();
-      line.dispatchEvent(
-        new MouseEvent('contextmenu', {
-          bubbles: true,
-          composed: true,
-          clientX: rect.left + 8,
-          clientY: rect.top + 8,
-        }),
-      );
       return {
         selectedCount: root.querySelectorAll('[data-line][data-selected-line]').length,
         selectedBackground: style.getPropertyValue('--diffs-computed-selected-line-bg').trim(),
@@ -1179,6 +1485,29 @@ describe('Changes', () => {
       selectedLineStyle.interactiveBackgroundColor,
     );
     expect(selectedLineStyle.userSelect).toBe('none');
+    expect(
+      await browser.execute(() => document.activeElement?.matches('.diff-surface') ?? false),
+    ).toBe(true);
+    await browser.keys(['Meta', 'c']);
+    await $('.file-action-notice[role="status"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $('.file-action-notice[role="status"]').getText()).toBe(
+      '選択行をコピーしました。',
+    );
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>('[data-line][data-selected-line]')!;
+      const rect = line.getBoundingClientRect();
+      line.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + 8,
+          clientY: rect.top + 8,
+        }),
+      );
+    });
     await $('[role="menu"]').waitForDisplayed({ timeout: 10_000 });
     expect(await $$('[role="menuitem"]').map((item) => item.getText())).toEqual([
       '選択した行を編集',
@@ -1186,10 +1515,5 @@ describe('Changes', () => {
       '選択した行をステージ',
       '選択行を破棄',
     ]);
-    await $('button=選択した行をコピー').click();
-    await $('.file-action-notice[role="status"]').waitForDisplayed({ timeout: 10_000 });
-    expect(await $('.file-action-notice[role="status"]').getText()).toBe(
-      '選択行をコピーしました。',
-    );
   });
 });

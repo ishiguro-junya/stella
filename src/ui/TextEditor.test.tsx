@@ -39,8 +39,17 @@ describe('TextEditor', () => {
       />,
     );
     const lineNumber = container.querySelector('.cm-lineNumbers .cm-gutterElement');
+    const gutters = container.querySelector('.cm-gutters');
     const foldGutter = container.querySelector('.cm-foldGutter');
-    if (!(lineNumber instanceof HTMLElement) || !(foldGutter instanceof HTMLElement)) {
+    const scroller = container.querySelector('.cm-scroller');
+    const content = container.querySelector('.cm-content');
+    if (
+      !(lineNumber instanceof HTMLElement) ||
+      !(gutters instanceof HTMLElement) ||
+      !(foldGutter instanceof HTMLElement) ||
+      !(scroller instanceof HTMLElement) ||
+      !(content instanceof HTMLElement)
+    ) {
       throw new Error('CodeMirror gutters were not rendered.');
     }
 
@@ -51,7 +60,12 @@ describe('TextEditor', () => {
     const foldMarkerChevron = foldMarker.querySelector('polyline');
 
     expect(getComputedStyle(lineNumber).paddingRight).toBe('4px');
+    expect(getComputedStyle(lineNumber).paddingLeft).toBe('5px');
+    expect(getComputedStyle(lineNumber).minWidth).toBe('20px');
+    expect(getComputedStyle(gutters).fontFamily).toBe('var(--font-mono)');
     expect(getComputedStyle(foldGutter).width).toBe('18px');
+    expect(getComputedStyle(content).paddingTop).toBe('0px');
+    expect(getComputedStyle(scroller).lineHeight).toBe('var(--code-line-height)');
     expect(foldMarker).toHaveClass('is-closed');
     expect(foldMarkerChevron).toHaveAttribute('points', '4 2 8 6 4 10');
   });
@@ -74,6 +88,22 @@ describe('TextEditor', () => {
     expect(scroller.scrollTop).toBe(0);
     expect(scroller.scrollLeft).toBe(0);
     expect(container.querySelector('.cm-content')).not.toHaveFocus();
+  });
+
+  it('keeps enough space below the document to scroll the last line to the top', () => {
+    const { container } = render(
+      <TextEditor
+        value={'first\nlast'}
+        path="notes.txt"
+        lineEnding="lf"
+        ariaLabel="Edit notes.txt"
+        onChange={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+    const content = container.querySelector<HTMLElement>('.cm-content');
+
+    expect(Number.parseFloat(content?.style.paddingBottom ?? '')).toBeGreaterThan(0);
   });
 
   it('opens the requested line above center and focused in the initial state', () => {

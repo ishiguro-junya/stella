@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { patchContainsMultipleFiles, profileDiffPatch } from './diffProfile';
+import {
+  editorLineForDiffSelection,
+  patchContainsMultipleFiles,
+  profileDiffPatch,
+} from './diffProfile';
 
 describe('diff patch profile', () => {
   it.each(['GIT binary patch\n', 'Binary files a/image.png and b/image.png differ\n'])(
@@ -20,5 +24,24 @@ describe('diff patch profile', () => {
         'diff --git a/a b/a\n--- a/a\n+++ b/a\ndiff --git a/b b/b\n--- a/b\n+++ b/b\n',
       ),
     ).toBe(true);
+  });
+
+  it('maps a deleted line to the next line remaining in the edited file', () => {
+    const patch = `diff --git a/example.txt b/example.txt
+--- a/example.txt
++++ b/example.txt
+@@ -1,4 +1,2 @@
+ keep-1
+-delete-2
+-delete-3
+ keep-4
+`;
+
+    expect(
+      editorLineForDiffSelection(patch, 'deleted-line', {
+        side: 'deletions',
+        startLine: 3,
+      }),
+    ).toBe(2);
   });
 });

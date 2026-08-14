@@ -52,13 +52,53 @@ async function historyDiffFileCount(): Promise<number> {
   return browser.execute(() => document.querySelectorAll('.diff-surface diffs-container').length);
 }
 
+async function runHistoryAction(
+  oid: string,
+  menuLabel: string,
+  kind: string,
+  actionLabel: string,
+  field?: { label: string; value: string },
+): Promise<void> {
+  await $('button=履歴').click();
+  const commit = $(`[data-history-commit-oid="${oid}"]`);
+  await commit.waitForDisplayed({ timeout: 20_000 });
+  await commit.scrollIntoView();
+  await commit.click();
+  const trigger = $('.history-commit-item.is-current .history-action-trigger');
+  await trigger.waitForEnabled({ timeout: 20_000 });
+  await trigger.click();
+  const menu = $('[role="menu"]');
+  await menu.waitForDisplayed({ timeout: 20_000 });
+  await menu.$(`button=${menuLabel}`).click();
+  const dialog = $(`[role="dialog"][aria-labelledby="history-${kind}-title"]`);
+  await expect(dialog).toBeDisplayed();
+  if (field) await dialog.$(`[aria-label="${field.label}"]`).setValue(field.value);
+  await dialog.$('button=次へ').click();
+  const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
+  await expect(confirmation).toBeDisplayed();
+  await confirmation.$(`button=${actionLabel}`).click();
+  await expect(confirmation).not.toExist();
+}
+
+async function commitPendingHistoryAction(description: string): Promise<void> {
+  await $('button=変更').click();
+  const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+  await trigger.waitForEnabled({ timeout: 20_000 });
+  await trigger.click();
+  const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+  await dialog.waitForDisplayed({ timeout: 20_000 });
+  await dialog.$('[data-commit-field="description"]').setValue(description);
+  await dialog.$('.commit-form button[type="submit"]').click();
+  await expect(dialog).not.toExist();
+}
+
 describe('History', () => {
   let fixturePath = '';
   let repositoryPath = '';
 
   beforeEach(async () => {
     fixturePath = await createFixtureDirectory('history');
-    repositoryPath = await copyE2EShowcaseRepository(fixturePath);
+    repositoryPath = await copyE2EShowcaseRepository(fixturePath, 'major-league-baseball');
     await writeRepositoryFile(
       repositoryPath,
       'CHANGELOG.md',
@@ -116,8 +156,7 @@ describe('History', () => {
     await paletteCommit.click();
     await $('.commit-detail-header .ref-chip.branch').waitForDisplayed({ timeout: 20_000 });
     await expectInteractiveSelectedColors('.history-commit-item.is-current', {
-      foreground: ['.row-action-trigger', '.ref-chip'],
-      mutedForeground: ['.commit-metadata', '.commit-oid'],
+      palette: 'neutral',
     });
 
     const historyColors = await browser.execute(() => {
@@ -150,7 +189,6 @@ describe('History', () => {
       )
         return null;
       return {
-        selectedBackground: getComputedStyle(selectedCommit).backgroundColor,
         selectedCommitEdge: getComputedStyle(selectedCommitEdge).stroke,
         selectedCommitNode: getComputedStyle(selectedCommitNode).borderColor,
         listBranchFontSize: getComputedStyle(listBranch).fontSize,
@@ -162,18 +200,19 @@ describe('History', () => {
         detailBranchFontSize: getComputedStyle(detailBranch).fontSize,
       };
     });
-    expect(historyColors).toEqual({
-      selectedBackground: 'rgb(20, 115, 230)',
-      selectedCommitEdge: 'rgb(182, 109, 226)',
-      selectedCommitNode: 'rgb(182, 109, 226)',
-      listBranchFontSize: '12px',
-      nextCommitEdge: 'rgb(182, 109, 226)',
-      workingTreeEdge: 'rgb(119, 120, 129)',
-      workingTreeNode: 'rgb(119, 120, 129)',
-      branchForeground: 'rgb(100, 177, 255)',
-      branchBackground: 'rgb(23, 54, 82)',
-      detailBranchFontSize: '12px',
-    });
+    expect(historyColors).toEqual(
+      expect.objectContaining({
+        selectedCommitEdge: 'rgb(20, 115, 230)',
+        listBranchFontSize: '12px',
+        nextCommitEdge: 'rgb(20, 115, 230)',
+        workingTreeEdge: 'rgb(119, 120, 129)',
+        workingTreeNode: 'rgb(119, 120, 129)',
+        branchForeground: 'rgb(100, 177, 255)',
+        branchBackground: 'rgb(23, 54, 82)',
+        detailBranchFontSize: '12px',
+      }),
+    );
+    expect(historyColors?.selectedCommitNode).not.toBe(historyColors?.workingTreeNode);
     if (visualQaDirectory) {
       await browser.execute(() => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -214,13 +253,15 @@ describe('History', () => {
         workingTreeEdge: getComputedStyle(workingTreeEdge).stroke,
       };
     });
-    expect(lightHistoryColors).toEqual({
-      selectedBackground: 'rgb(8, 127, 245)',
-      selectedCommitEdge: 'rgb(123, 44, 191)',
-      selectedCommitNode: 'rgb(123, 44, 191)',
-      nextCommitEdge: 'rgb(123, 44, 191)',
-      workingTreeEdge: 'rgb(115, 115, 123)',
-    });
+    expect(lightHistoryColors).toEqual(
+      expect.objectContaining({
+        selectedBackground: 'rgb(222, 223, 227)',
+        selectedCommitEdge: 'rgb(8, 127, 245)',
+        nextCommitEdge: 'rgb(8, 127, 245)',
+        workingTreeEdge: 'rgb(115, 115, 123)',
+      }),
+    );
+    expect(lightHistoryColors?.selectedCommitNode).not.toBe(lightHistoryColors?.workingTreeEdge);
     if (visualQaDirectory) {
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'history-graph-and-branch-light-1180x760.png'),
@@ -230,28 +271,452 @@ describe('History', () => {
     }
   });
 
+  it('keeps branch corners fixed and refs on one row', async () => {
+    await $('button=履歴').click();
+    await browser.waitUntil(
+      async () => (await $('.commit-list').getText()).includes('feat: 第一子誕生を発表'),
+      { timeout: 10_000, timeoutMsg: 'The first-child branch was not shown in History.' },
+    );
+
+    const layout = await browser.execute(() => {
+      const firstCommit = document.querySelector<HTMLElement>('.history-commit-item');
+      const corner = firstCommit?.querySelector<SVGPathElement>(
+        '.history-graph-edge.parent[data-from-lane="0"][data-to-lane="1"]',
+      );
+      const vertical = firstCommit?.querySelector<SVGPathElement>(
+        '.history-graph-edge.parent-vertical[data-to-lane="1"]',
+      );
+      const yamamotoBranch = [
+        ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
+      ].find((commit) => commit.textContent?.includes('ヤンキース戦で7回無失点7奪三振'));
+      const yamamotoBase = [...document.querySelectorAll<HTMLElement>('.history-commit-item')].find(
+        (commit) => commit.textContent?.includes('5回無失点8奪三振でMLB初勝利'),
+      );
+      const branchContinuesVertically = yamamotoBranch?.querySelector(
+        '.history-graph-edge.parent[data-from-lane="1"][data-to-lane="1"]',
+      );
+      const baseStartsDiagonally = yamamotoBase?.querySelector(
+        '.history-graph-edge.incoming[data-from-lane="1"][data-to-lane="0"]',
+      );
+      const refs = [...(firstCommit?.querySelectorAll<HTMLElement>('.ref-chip') ?? [])];
+      if (!corner?.ownerSVGElement || !vertical?.ownerSVGElement || refs.length === 0) return null;
+      const cornerRect = corner.ownerSVGElement.getBoundingClientRect();
+      const verticalRect = vertical.ownerSVGElement.getBoundingClientRect();
+      return {
+        cornerHeight: cornerRect.height,
+        cornerPath: corner.getAttribute('d'),
+        cornerToVerticalGap: Math.abs(cornerRect.bottom - verticalRect.top),
+        branchContinuesVertically: Boolean(branchContinuesVertically),
+        baseStartsDiagonally: Boolean(baseStartsDiagonally),
+        refRows: new Set(refs.map((ref) => Math.round(ref.getBoundingClientRect().top))).size,
+      };
+    });
+
+    expect(layout).toEqual({
+      cornerHeight: 8,
+      cornerPath: 'M 6 0 L 18 8',
+      cornerToVerticalGap: 0,
+      branchContinuesVertically: true,
+      baseStartsDiagonally: true,
+      refRows: 1,
+    });
+  });
+
+  it('shows several branch tips that have not been merged', async () => {
+    const branchNames = ['darvish-mlb-debut', 'ohtani-mlb-debut', 'senga-mlb-debut'];
+    const unmergedBranches = (
+      await runGit(repositoryPath, [
+        'branch',
+        '--no-merged',
+        'main',
+        '--format=%(refname:short)',
+        '--sort=refname',
+      ])
+    )
+      .trim()
+      .split('\n');
+    expect(unmergedBranches).toEqual(branchNames);
+
+    await $('button=履歴').click();
+    await browser.waitUntil(
+      async () => {
+        const history = await $('.commit-list').getText();
+        return branchNames.every((name) => history.includes(name));
+      },
+      { timeout: 10_000, timeoutMsg: 'Unmerged branch tips were not shown in History.' },
+    );
+    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
+      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
+    );
+
+    const branchTips = await browser.execute(
+      (names) =>
+        names.map((name) => {
+          const chip = [...document.querySelectorAll<HTMLElement>('.ref-chip.branch')].find(
+            (ref) => ref.textContent === name,
+          );
+          const row = chip?.closest<HTMLElement>('.history-commit-item');
+          const lane = row?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
+          return {
+            name,
+            incomingEdges: row?.querySelectorAll('[data-edge-kind="incoming"]').length,
+            continuesToParent: Boolean(
+              lane &&
+              row?.querySelector(
+                `[data-edge-kind="parent"][data-from-lane="${lane}"][data-to-lane="${lane}"]`,
+              ),
+            ),
+          };
+        }),
+      branchNames,
+    );
+    expect(branchTips).toEqual(
+      branchNames.map((name) => ({ name, incomingEdges: 0, continuesToParent: true })),
+    );
+  });
+
+  it('executes every Commit action through preview against a real repository', async function () {
+    this.timeout(120_000);
+    const currentBranch = (await runGit(repositoryPath, ['branch', '--show-current'])).trim();
+    const baseOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    const createTarget = async (branch: string, path: string): Promise<string> => {
+      await runGit(repositoryPath, ['switch', '-c', branch, baseOid]);
+      await writeRepositoryFile(repositoryPath, path, `${branch}\n`);
+      await runGit(repositoryPath, ['add', path]);
+      await runGit(repositoryPath, ['commit', '-m', `test: ${branch}`]);
+      return (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    };
+    const rebaseOid = await createTarget('e2e-rebase-target', 'e2e-rebase.txt');
+    const mergeOid = await createTarget('e2e-merge-target', 'e2e-merge.txt');
+    const cherryPickOid = await createTarget('e2e-cherry-target', 'e2e-cherry.txt');
+    await runGit(repositoryPath, ['switch', currentBranch]);
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+
+    await runHistoryAction(baseOid, 'ブランチを作成', 'createBranch', 'ブランチを作成', {
+      label: 'ブランチ名',
+      value: 'e2e-created-branch',
+    });
+    await browser.waitUntil(
+      async () =>
+        runGit(repositoryPath, ['rev-parse', 'refs/heads/e2e-created-branch']).then(
+          (oid) => oid.trim() === baseOid,
+          () => false,
+        ),
+      { timeout: 20_000, timeoutMsg: 'Create Branch did not create the selected ref.' },
+    );
+    expect(
+      (await runGit(repositoryPath, ['rev-parse', 'refs/heads/e2e-created-branch'])).trim(),
+    ).toBe(baseOid);
+
+    await runHistoryAction(baseOid, 'タグを作成', 'createTag', 'タグを作成', {
+      label: 'タグ名',
+      value: 'e2e-history-actions',
+    });
+    await browser.waitUntil(
+      async () =>
+        runGit(repositoryPath, ['rev-parse', 'refs/tags/e2e-history-actions']).then(
+          (oid) => oid.trim() === baseOid,
+          () => false,
+        ),
+      { timeout: 20_000, timeoutMsg: 'Create Tag did not create the selected ref.' },
+    );
+    expect(
+      (await runGit(repositoryPath, ['rev-parse', 'refs/tags/e2e-history-actions'])).trim(),
+    ).toBe(baseOid);
+
+    await runHistoryAction(rebaseOid, 'リベースを実行', 'rebase', 'リベースを実行');
+    await browser.waitUntil(
+      async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() === rebaseOid,
+      { timeout: 20_000, timeoutMsg: 'Rebase did not update HEAD.' },
+    );
+
+    await runHistoryAction(mergeOid, 'マージを実行', 'merge', 'マージを実行');
+    const operationBanner = $('[aria-label="Git操作が進行中"]');
+    await expect(operationBanner).toBeDisplayed();
+    await expect(operationBanner.$('button=続行')).toBeDisabled();
+    await commitPendingHistoryAction('履歴からマージする');
+    await browser.waitUntil(
+      async () =>
+        (await runGit(repositoryPath, ['rev-list', '--parents', '-n', '1', 'HEAD']))
+          .trim()
+          .split(' ').length === 3,
+      { timeout: 20_000, timeoutMsg: 'Merge did not create a merge commit.' },
+    );
+    const mergedHead = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+
+    await runHistoryAction(
+      cherryPickOid,
+      'チェリーピックを実行',
+      'cherryPick',
+      'チェリーピックを実行',
+    );
+    const runtimeError = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
+    await browser.waitUntil(
+      async () =>
+        (await runtimeError.isExisting()) ||
+        (await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).trim() ===
+          'e2e-cherry.txt',
+      {
+        timeout: 20_000,
+        timeoutMsg: 'Cherry-pick neither staged its changes nor displayed an error.',
+      },
+    );
+    if (await runtimeError.isExisting()) {
+      throw new Error(`Cherry-pick failed: ${await runtimeError.getText()}`);
+    }
+    await commitPendingHistoryAction('履歴からチェリーピックする');
+    await browser.waitUntil(
+      async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() !== mergedHead,
+      { timeout: 20_000, timeoutMsg: 'Cherry-pick did not create a commit.' },
+    );
+    const cherryPickedHead = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    expect((await runGit(repositoryPath, ['show', 'HEAD:e2e-cherry.txt'])).trim()).toBe(
+      'e2e-cherry-target',
+    );
+
+    await runHistoryAction(cherryPickedHead, 'リバートを実行', 'revert', 'リバートを実行');
+    await browser.waitUntil(
+      async () =>
+        (await runtimeError.isExisting()) ||
+        (await runGit(repositoryPath, ['diff', '--cached', '--name-status'])).trim() ===
+          'D\te2e-cherry.txt',
+      {
+        timeout: 20_000,
+        timeoutMsg: 'Revert neither staged its changes nor displayed an error.',
+      },
+    );
+    if (await runtimeError.isExisting()) {
+      throw new Error(`Revert failed: ${await runtimeError.getText()}`);
+    }
+    await commitPendingHistoryAction('履歴からリバートする');
+    await browser.waitUntil(
+      async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() !== cherryPickedHead,
+      { timeout: 20_000, timeoutMsg: 'Revert did not create a commit.' },
+    );
+    expect(
+      (
+        await runGit(repositoryPath, ['ls-tree', '-r', '--name-only', 'HEAD', 'e2e-cherry.txt'])
+      ).trim(),
+    ).toBe('');
+
+    await runHistoryAction(mergedHead, 'リセットを実行', 'reset', 'リセットを実行');
+    await browser.waitUntil(
+      async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() === mergedHead,
+      { timeout: 20_000, timeoutMsg: 'Reset did not move HEAD to the selected commit.' },
+    );
+    expect((await runGit(repositoryPath, ['status', '--porcelain'])).trim()).toBe('');
+  });
+
   it('searches history and creates Tags and Branches from a Commit', async function () {
     this.timeout(120_000);
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="履歴"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('.repository-toggle')).toHaveText(
+      expect.stringContaining('major-league-baseball'),
+    );
+    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
+      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
+    );
+    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
+      expect.stringContaining('大谷翔平'),
+    );
+    await browser.waitUntil(
+      async () => (await $('.commit-list').getText()).includes('feat: 第一子誕生を発表'),
+      { timeout: 10_000, timeoutMsg: 'The first-child branch was not shown in History.' },
+    );
+    const showcaseBranch = await browser.execute(() => {
+      const commits = [...document.querySelectorAll<HTMLElement>('.history-commit-item')];
+      const firstChild = commits.find((commit) => commit.textContent?.includes('第一子誕生'));
+      const firstNode = commits[0]?.querySelector<HTMLElement>('.history-graph-node');
+      const firstChildNode = firstChild?.querySelector<HTMLElement>('.history-graph-node');
+      const branchStartEdge = commits[0]?.querySelector<SVGPathElement>(
+        '.history-graph-edge.parent[data-from-lane="0"][data-to-lane="1"]',
+      );
+      const nodeTitleOffsets = [
+        ...document.querySelectorAll<HTMLElement>(
+          '.history-working-tree-item, .history-commit-item',
+        ),
+      ]
+        .slice(0, 4)
+        .map((row) => {
+          const node = row.querySelector<HTMLElement>('.history-graph-node');
+          const title = row.querySelector<HTMLElement>('.commit-copy strong');
+          if (!node || !title) return undefined;
+          const nodeRect = node.getBoundingClientRect();
+          const titleRect = title.getBoundingClientRect();
+          return Math.abs(
+            nodeRect.top + nodeRect.height / 2 - (titleRect.top + titleRect.height / 2),
+          );
+        })
+        .filter((offset): offset is number => offset !== undefined);
+      return {
+        firstLane: firstNode?.dataset.nodeLane,
+        firstChildLane: firstChildNode?.dataset.nodeLane,
+        branch: firstChild?.querySelector<HTMLElement>('.ref-chip.branch')?.textContent,
+        branches: [...document.querySelectorAll<HTMLElement>('.ref-chip.branch')].map(
+          (ref) => ref.textContent,
+        ),
+        firstColor: firstNode ? getComputedStyle(firstNode).borderColor : undefined,
+        firstChildColor: firstChildNode ? getComputedStyle(firstChildNode).borderColor : undefined,
+        branchStartEdgeColor: branchStartEdge
+          ? getComputedStyle(branchStartEdge).stroke
+          : undefined,
+        branchStartEdgePath: branchStartEdge?.getAttribute('d'),
+        maxNodeTitleOffset: Math.max(...nodeTitleOffsets),
+      };
+    });
+    expect(showcaseBranch).toEqual(
+      expect.objectContaining({ firstLane: '0', firstChildLane: '1', branch: 'family-news' }),
+    );
+    expect(showcaseBranch.branches).toEqual(
+      expect.arrayContaining([
+        'family-news',
+        'yamamoto-yankees',
+        'senga-200-strikeouts',
+        'seiya-season-debut',
+      ]),
+    );
+    expect(showcaseBranch.firstChildColor).not.toBe(showcaseBranch.firstColor);
+    expect(showcaseBranch.branchStartEdgeColor).toBe(showcaseBranch.firstChildColor);
+    expect(showcaseBranch.branchStartEdgePath).toBe('M 6 0 L 18 8');
+    expect(showcaseBranch.maxNodeTitleOffset).toBeLessThanOrEqual(0.5);
+    const initiallyFocusedOid = await browser.execute(() => {
+      const active = document.activeElement;
+      const selected = document.querySelector<HTMLElement>(
+        '.history-commit-item.is-current .commit-row',
+      );
+      return active === selected && active instanceof HTMLElement
+        ? active.dataset.historyCommitOid
+        : undefined;
+    });
+    expect(initiallyFocusedOid).toBeTruthy();
+    await browser.keys(['ArrowDown']);
+    await browser.waitUntil(
+      async () =>
+        browser.execute((previousOid) => {
+          const active = document.activeElement;
+          return (
+            active === document.querySelector('.history-commit-item.is-current .commit-row') &&
+            active instanceof HTMLElement &&
+            active.dataset.historyCommitOid !== previousOid
+          );
+        }, initiallyFocusedOid),
+      { timeoutMsg: 'ArrowDown did not move the focused History selection.' },
+    );
+    await expect($('.commit-list')).toHaveElementClass('is-keyboard-navigating');
+    await browser.keys(['ArrowUp']);
+    await browser.waitUntil(
+      async () =>
+        browser.execute((expectedOid) => {
+          const active = document.activeElement;
+          return (
+            active instanceof HTMLElement &&
+            active.dataset.historyCommitOid === expectedOid &&
+            active === document.querySelector('.history-commit-item.is-current .commit-row')
+          );
+        }, initiallyFocusedOid),
+      { timeoutMsg: 'ArrowUp did not restore the focused History selection.' },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.commit-list')
+        ?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+    });
+    await expect($('.commit-list')).not.toHaveElementClass('is-keyboard-navigating');
+    expect(await $('.commit-detail-pane').getText()).not.toContain('コミット詳細を読み込み中...');
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.history-commit-item .history-action-trigger')!
+        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    await expect($('.commit-detail-heading .history-action-trigger')).toExist();
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.history-commit-item .history-action-trigger')!
+        .dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      document
+        .querySelector<HTMLElement>('.commit-detail-heading .history-action-trigger')!
+        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    expect(
+      await browser.execute(() => {
+        const listPane = document.querySelector<HTMLElement>('.commit-list-pane')!;
+        const listAction = document.querySelector<HTMLElement>(
+          '.history-commit-item .history-action-trigger',
+        )!;
+        const detailHeading = document.querySelector<HTMLElement>('.commit-detail-heading')!;
+        const detailTitle = detailHeading.querySelector<HTMLElement>('h2')!;
+        const detailAction = detailHeading.querySelector<HTMLElement>('.history-action-trigger')!;
+        const listActions = [
+          ...document.querySelectorAll<HTMLElement>(
+            '.history-commit-item > .history-action-trigger',
+          ),
+        ];
+        return {
+          listActionTrailingGap:
+            listPane.getBoundingClientRect().right - listAction.getBoundingClientRect().right,
+          detailActionTopOffset:
+            detailAction.getBoundingClientRect().top - detailTitle.getBoundingClientRect().top,
+          allListActionsVisible: listActions.every((action) => {
+            const style = getComputedStyle(action);
+            return style.opacity === '1' && style.visibility === 'visible';
+          }),
+          detailActionVisible: (() => {
+            const style = getComputedStyle(detailAction);
+            return style.opacity === '1' && style.visibility === 'visible';
+          })(),
+        };
+      }),
+    ).toEqual({
+      listActionTrailingGap: 8,
+      detailActionTopOffset: 0,
+      allListActionsVisible: true,
+      detailActionVisible: true,
+    });
     await expectInteractiveSelectedColors('.history-commit-item.is-current', {
-      foreground: ['.row-action-trigger', '.ref-chip'],
-      mutedForeground: ['.commit-metadata', '.commit-oid'],
+      palette: 'neutral',
     });
     await expect($('.repository-view-tabs')).not.toExist();
 
     const historyResizer = $('[role="separator"][aria-label="履歴一覧の幅"]');
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '320');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '360');
     await historyResizer.click();
-    await browser.keys(['ArrowLeft']);
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '312');
+    await browser.keys(['ArrowRight']);
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '368');
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
     );
 
     const historySearch = $('input[aria-label="履歴を検索"]');
     await expect(historySearch).toBeDisplayed();
+    await expect($('.history-pane-toolbar input[aria-label="履歴を検索"]')).toBeDisplayed();
+    await expect($('.commit-list-pane .history-search')).toExist();
+    expect(
+      await browser.execute(() => {
+        const toolbar = document.querySelector<HTMLElement>('.history-pane-toolbar')!;
+        const input = toolbar.querySelector<HTMLInputElement>('.history-search input')!;
+        const icon = toolbar.querySelector<HTMLElement>('.history-search-icon')!;
+        const toolbarRect = toolbar.getBoundingClientRect();
+        const inputRect = input.getBoundingClientRect();
+        return {
+          insideToolbar: inputRect.top >= toolbarRect.top && inputRect.bottom <= toolbarRect.bottom,
+          rightGap: toolbarRect.right - inputRect.right,
+          leftGap: inputRect.left - toolbarRect.left,
+          iconInset: icon.getBoundingClientRect().left - inputRect.left,
+          inputPaddingLeft: getComputedStyle(input).paddingLeft,
+        };
+      }),
+    ).toEqual({
+      insideToolbar: true,
+      rightGap: 10,
+      leftGap: 10,
+      iconInset: 11,
+      inputPaddingLeft: '34px',
+    });
     await historySearch.setValue('50本塁打');
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
@@ -259,9 +724,9 @@ describe('History', () => {
     await historySearch.setValue('一致しない検索');
     await expect($('.history-search-empty')).toHaveText('一致する履歴はありません。');
     await historySearch.setValue('');
-    await browser.waitUntil(async () => (await historyDiffFileCount()) === 2, {
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 3, {
       timeout: 10_000,
-      timeoutMsg: 'The History multi-file diff did not render two files.',
+      timeoutMsg: 'The History multi-file diff did not render three files.',
     });
     const historyDiffNames = await browser.execute(() =>
       [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')].map(
@@ -270,7 +735,7 @@ describe('History', () => {
             ?.textContent ?? '',
       ),
     );
-    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'src/records.ts']);
+    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'docs/first-child.md', 'src/records.ts']);
     const historyFileNameTypography = await browser.execute(() => {
       const fileName = document.querySelector<HTMLElement>(
         '.history-view .diff-file-custom-header-title > span:last-child',
@@ -295,16 +760,14 @@ describe('History', () => {
     );
     expect(historyDiffText).not.toMatch(/unmodified lines?/iu);
 
-    const historyFileLayout = await browser.execute(async () => {
+    const historyFileLayout = await browser.execute(() => {
       const surface = document.querySelector<HTMLElement>('.diff-surface');
       const hosts = [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')];
       const firstHeader = hosts[0]?.shadowRoot?.querySelector<HTMLElement>('[data-diffs-header]');
       if (!surface || !firstHeader)
         throw new Error('The History file header layout was not found.');
       surface.scrollTop = 40;
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
+      surface.getBoundingClientRect();
       const stickyOffset = Math.abs(
         firstHeader.getBoundingClientRect().top - surface.getBoundingClientRect().top,
       );
@@ -312,9 +775,7 @@ describe('History', () => {
       const firstHost = hosts[0];
       if (!firstHost) throw new Error('The first History diff host was not found.');
       surface.scrollTop = Math.max(0, firstHost.offsetHeight - surface.clientHeight / 2);
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
+      surface.getBoundingClientRect();
       const renderedHosts = [
         ...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container'),
       ];
@@ -416,11 +877,11 @@ describe('History', () => {
     ).toBe(true);
     const tagName = 'e2e-v1.0.0';
     await historyActionsDialog.$('input[aria-label="タグ名"]').setValue(tagName);
-    await historyActionsDialog.$('button=影響を確認').click();
+    await historyActionsDialog.$('button=次へ').click();
     const tagConfirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(tagConfirmation).toBeDisplayed();
     await expect(historyActionsDialog).not.toExist();
-    await tagConfirmation.$('button=実行').click();
+    await tagConfirmation.$('button=タグを作成').click();
     await expect(tagConfirmation).not.toExist();
     await expect($(`.ref-chip.tag[aria-label="タグ ${tagName}"]`)).toHaveText(tagName);
     expect(await runGit(repositoryPath, ['rev-parse', `refs/tags/${tagName}`])).toMatch(
@@ -451,7 +912,7 @@ describe('History', () => {
     await branchDialog.$('button=影響を確認').click();
     const branchConfirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(branchConfirmation).toBeDisplayed();
-    await branchConfirmation.$('button=実行').click();
+    await branchConfirmation.$('button=ブランチを作成').click();
     await expect(branchConfirmation).not.toExist();
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining(branchName));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe(`${branchName}\n`);

@@ -213,14 +213,14 @@ export function HistoryActionDialog({
         </button>
         <button
           type="submit"
-          className={request.kind === 'reset' && resetMode === 'hard' ? 'danger' : 'primary'}
+          className="primary"
           data-dialog-initial-focus={
             request.kind === 'cherryPick' || request.kind === 'revert' ? true : undefined
           }
           disabled={!actionReady || fieldDisabled}
           aria-describedby={disabledReason ? 'history-action-disabled-reason' : undefined}
         >
-          {t('reviewImpact')}
+          {t('next')}
         </button>
       </DialogFooter>
     </Dialog>

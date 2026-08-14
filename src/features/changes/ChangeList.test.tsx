@@ -77,6 +77,25 @@ function BusyAfterFileActionHarness() {
 }
 
 describe('ChangeList staging controls', () => {
+  it('focuses the selected file when opened so arrow navigation works immediately', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderList({
+      entries: [
+        { path: 'src/one.ts', area: 'unstaged', status: 'modified' },
+        { path: 'src/two.ts', area: 'unstaged', status: 'modified' },
+      ],
+      selectedKey: 'unstaged:src/one.ts',
+    });
+    const first = changeRow(/Modified src\/one\.ts/u);
+    const second = changeRow(/Modified src\/two\.ts/u);
+
+    await waitFor(() => expect(first).toHaveFocus());
+    await user.keyboard('{ArrowDown}');
+
+    expect(onSelect).toHaveBeenLastCalledWith('unstaged:src/two.ts');
+    expect(second).toHaveFocus();
+  });
+
   it('moves file selection with the up and down arrow keys within each group', async () => {
     const user = userEvent.setup();
     const { onSelect } = renderList({
@@ -167,7 +186,11 @@ describe('ChangeList staging controls', () => {
       { path: 'README.md', area: 'unstaged', status: 'modified' },
       { path: 'src/features/app.ts', area: 'unstaged', status: 'modified' },
     ];
-    const twoLine = renderList({ entries, selectedKey: 'unstaged:src/features/app.ts' });
+    const twoLine = renderList({
+      entries,
+      display: 'nameAndPath',
+      selectedKey: 'unstaged:src/features/app.ts',
+    });
     const twoLineRow = changeRow(/Modified src\/features\/app\.ts/u);
     expect(within(twoLineRow).getByText('app.ts')).toBeVisible();
     expect(within(twoLineRow).getByText('src/features')).toBeVisible();
@@ -175,12 +198,11 @@ describe('ChangeList staging controls', () => {
 
     const fullPath = renderList({
       entries,
-      display: 'fullPath',
       selectedKey: 'unstaged:src/features/app.ts',
     });
     const fullPathRow = changeRow(/Modified src\/features\/app\.ts/u);
     expect(within(fullPathRow).getByText('src/features/app.ts')).toBeVisible();
-    expect(fullPathRow).toHaveClass('is-single-line');
+    expect(fullPathRow).toHaveClass('is-single-line', 'is-full-path');
     fullPath.unmount();
 
     const user = userEvent.setup();

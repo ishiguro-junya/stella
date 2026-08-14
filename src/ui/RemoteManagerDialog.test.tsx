@@ -28,6 +28,30 @@ function JapaneseRemoteManagerHost() {
 }
 
 describe('RemoteManagerDialog', () => {
+  it('keeps loaded URLs in place without showing loading copy during a reload', () => {
+    render(
+      <RemoteManagerDialog
+        remotes={[
+          {
+            name: 'origin',
+            fetchUrls: ['https://example.test/repo.git'],
+            pushUrls: [],
+          },
+        ]}
+        loading
+        busy={false}
+        onDismiss={() => undefined}
+        onReload={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Change Remote URLs' });
+    expect(dialog.querySelector('.dialog-body')).toHaveAttribute('aria-busy', 'true');
+    expect(within(dialog).getByRole('textbox')).toHaveValue('https://example.test/repo.git');
+    expect(within(dialog).queryByText('Loading…')).not.toBeInTheDocument();
+  });
+
   it('shows every URL as an input and saves all changed URLs together', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn<RemoteManagerDialogProps['onSave']>();

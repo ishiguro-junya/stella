@@ -1,4 +1,4 @@
-import { FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
+import { Download, FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
 
 import type { RepoSnapshot } from '../domain/workspace';
 import { RepositoryLogo, type RepositoryListItem } from '../features/repositories/RepositoryLogo';
@@ -15,7 +15,8 @@ export interface RepositorySwitcherDialogProps {
   onSelectRegistered: (path: string) => void;
   onManageRemotes: (path: string) => void;
   onForget: (path: string) => void;
-  onAdd: () => void;
+  onAddLocal: () => void;
+  onClone: () => void;
 }
 
 function registeredStatus(
@@ -39,13 +40,11 @@ function registeredStatus(
 
 function repositoryStatus(
   repo: RepoSnapshot,
-  modifiedLabel: string,
   operationLabel: string | undefined,
 ): SwitcherDialogItem['status'] {
   if (repo.operation.kind !== 'none') {
     return { label: operationLabel ?? '', tone: 'danger' };
   }
-  if (repo.changes.length) return { label: modifiedLabel, tone: 'warning' };
   return undefined;
 }
 
@@ -59,7 +58,8 @@ export function RepositorySwitcherDialog({
   onSelectRegistered,
   onManageRemotes,
   onForget,
-  onAdd,
+  onAddLocal,
+  onClone,
 }: RepositorySwitcherDialogProps) {
   const { t, message } = useI18n();
   const openPaths = new Set(repos.map((repo) => repo.path));
@@ -71,19 +71,18 @@ export function RepositorySwitcherDialog({
     ...orderedRepos.map((repo) => {
       const registration = registeredRepositories.find((candidate) => candidate.path === repo.path);
       const displayName = registration?.name ?? repo.name;
-      const branch = repo.branch.detached ? t('detachedHead') : repo.branch.name;
       const status = repositoryStatus(
         repo,
-        t('modified'),
         repo.operation.kind === 'none' ? undefined : message(repo.operation.label),
       );
+      const changedFileCount = new Set(repo.changes.map((change) => change.path)).size;
       const healthStatus = registration ? registeredStatus(registration, t) : undefined;
       const finalStatus = healthStatus ?? status;
       const item: SwitcherDialogItem = {
         id: `open:${repo.repoId}`,
         label: displayName,
-        description: branch ? `${repo.path} · ${branch}` : repo.path,
-        searchText: `${displayName}\n${repo.path}\n${branch ?? ''}`,
+        description: repo.path,
+        searchText: `${displayName}\n${repo.path}`,
         icon: <RepositoryLogo logoUrl={registration?.logoUrl} />,
         current: repo.repoId === selectedRepoId,
         actions: [
@@ -110,6 +109,14 @@ export function RepositorySwitcherDialog({
         ],
       };
       if (finalStatus) item.status = finalStatus;
+      if (changedFileCount) {
+        item.badge = {
+          count: changedFileCount,
+          label: `${t('uncommittedChanges')}, ${t('uncommittedFileCount', {
+            count: changedFileCount,
+          })}`,
+        };
+      }
       return item;
     }),
     ...registeredRepositories
@@ -185,10 +192,16 @@ export function RepositorySwitcherDialog({
         else if (action === 'forget') onForget(path);
       }}
       footer={
-        <button type="button" disabled={busy} onClick={onAdd}>
-          <FolderPlus aria-hidden="true" focusable="false" />
-          <span>{t('addRepositoryEllipsis')}</span>
-        </button>
+        <>
+          <button type="button" disabled={busy} onClick={onAddLocal}>
+            <FolderPlus aria-hidden="true" focusable="false" />
+            <span>{t('addLocalRepository')}</span>
+          </button>
+          <button type="button" disabled={busy} onClick={onClone}>
+            <Download aria-hidden="true" focusable="false" />
+            <span>{t('cloneRepository')}</span>
+          </button>
+        </>
       }
     />
   );

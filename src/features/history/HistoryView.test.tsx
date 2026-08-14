@@ -172,6 +172,55 @@ async function openCommitAction(
 }
 
 describe('HistoryView', () => {
+  it('focuses the selected commit when opened and moves it with the arrow keys', async () => {
+    const user = userEvent.setup();
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return {
+            kind: 'commitDetails' as const,
+            commit: { ...commitDetails(undefined), oid: request.oid, shortOid: request.oid },
+          };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          selectedCommitOid: 'first',
+          history: [commitSummary('first'), commitSummary('second')],
+        })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="first"]')!;
+    const second = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="second"]')!;
+
+    await waitFor(() => expect(first).toHaveFocus());
+    await user.keyboard('{ArrowDown}');
+
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute('aria-current', 'true');
+    const historyList = second.closest('.commit-list');
+    expect(historyList).toHaveClass('is-keyboard-navigating');
+
+    fireEvent.pointerMove(historyList!);
+    expect(historyList).not.toHaveClass('is-keyboard-navigating');
+
+    second.blur();
+    expect(document.body).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute('aria-current', 'true');
+  });
+
   it('checks out an unambiguous local branch when its history item is double-clicked', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
@@ -431,7 +480,8 @@ describe('HistoryView', () => {
     );
 
     const historyPane = screen.getByRole('complementary', { name: 'Commit history' });
-    expect(historyPane.firstElementChild).toHaveClass('history-search');
+    expect(historyPane.firstElementChild).toHaveClass('left-pane-toolbar', 'history-pane-toolbar');
+    expect(historyPane.firstElementChild?.firstElementChild).toHaveClass('history-search');
     expect(within(historyPane).queryByRole('tablist')).not.toBeInTheDocument();
     expect(within(historyPane).queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
     expect(historyPane.querySelector('.history-branch-context')).not.toBeInTheDocument();
@@ -561,7 +611,7 @@ describe('HistoryView', () => {
       screen.getByText('Creates a lightweight Tag locally. It is not pushed to a remote.'),
     ).toBeVisible();
     await user.type(input, 'v1.0.0');
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
 
     expect(onAction).toHaveBeenCalledWith({
       kind: 'createTag',
@@ -759,6 +809,14 @@ describe('HistoryView', () => {
     expect(mainEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
     expect(sideEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-1)');
     expect(graph.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
+    expect(
+      screen
+        .getByTestId('history-graph-root')
+        .querySelector<SVGPathElement>(
+          '[data-edge-kind="incoming"][data-from-lane="1"][data-to-lane="0"]',
+        )
+        ?.style.getPropertyValue('--history-lane-color'),
+    ).toBe('var(--history-lane-1)');
   });
 
   it('renders merge connectors as decorative SVG while exposing parent ids in the row', () => {
@@ -791,11 +849,12 @@ describe('HistoryView', () => {
     const graph = screen.getByTestId('history-graph-merge');
     expect(graph).toHaveAttribute('aria-hidden', 'true');
     expect(graph.querySelector('svg')).toHaveAttribute('focusable', 'false');
-    expect(graph.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'none');
+    expect(graph.querySelector('svg')).not.toHaveAttribute('preserveAspectRatio');
     expect(graph.querySelectorAll('[data-edge-kind="parent"]')).toHaveLength(2);
-    expect(
-      graph.querySelector('[data-edge-kind="parent"][data-to-lane="1"]')?.getAttribute('d'),
-    ).toContain(' C ');
+    const connectorPath = graph
+      .querySelector('[data-edge-kind="parent"][data-to-lane="1"]')
+      ?.getAttribute('d');
+    expect(connectorPath).toBe('M 6 0 L 18 8');
     expect(
       graph
         .querySelector<SVGPathElement>('[data-edge-kind="parent"][data-to-lane="1"]')
@@ -974,13 +1033,13 @@ describe('HistoryView', () => {
       within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
       '2',
     );
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
     dialog = await openCommitAction(user, 'Revert', 'Revert');
     await user.selectOptions(
       within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
       '2',
     );
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
 
     expect(onAction).toHaveBeenNthCalledWith(1, {
       kind: 'cherryPick',
@@ -1042,7 +1101,7 @@ describe('HistoryView', () => {
     await user.click(screen.getByRole('button', { name: /two parent merge/u }));
     dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick', twoParent.oid);
     expect(within(dialog).getByRole('combobox', { name: 'Mainline parent' })).toHaveValue('1');
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
 
     expect(onAction).toHaveBeenCalledWith({
       kind: 'cherryPick',
@@ -1091,10 +1150,13 @@ describe('HistoryView', () => {
     expect(await screen.findByRole('heading', { name: first.subject })).toBeInTheDocument();
     await user.click(screen.getByTestId(`history-graph-${second.oid}`).closest('button')!);
 
-    expect(screen.getByText('Loading commit details…')).toBeInTheDocument();
+    expect(screen.queryByText('Loading commit details…')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'More actions for selected commit first' }),
+    ).toBeDisabled();
     const dialog = await openCommitAction(user, 'Cherry-pick', 'Cherry-pick', second.oid);
     expect(within(dialog).getByText(second.shortOid, { selector: 'code' })).toBeVisible();
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
     expect(onAction).toHaveBeenCalledWith({ kind: 'cherryPick', oid: second.oid });
 
     resolveSecond({
@@ -1102,6 +1164,52 @@ describe('HistoryView', () => {
       commit: { ...commitDetails(undefined), ...second },
     });
     expect(await screen.findByRole('heading', { name: second.subject })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'More actions for selected commit second' }),
+    ).toBeEnabled();
+  });
+
+  it('clears stale commit details when the next detail query fails', async () => {
+    const user = userEvent.setup();
+    const first = commitSummary('first', ['second']);
+    const second = commitSummary('second');
+    const failure = new Error('Second commit details failed.');
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails' && request.oid === second.oid) throw failure;
+        if (request.kind === 'commitDetails') {
+          return {
+            kind: 'commitDetails' as const,
+            commit: { ...commitDetails(undefined), ...first },
+          };
+        }
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: first.oid, detached: false, ahead: 0, behind: 0 },
+          history: [first, second],
+        })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const detailPane = screen.getByRole('main');
+    expect(await within(detailPane).findByRole('heading', { name: first.subject })).toBeVisible();
+    await user.click(screen.getByTestId(`history-graph-${second.oid}`).closest('button')!);
+
+    expect(await within(detailPane).findByRole('alert')).toBeVisible();
+    expect(
+      within(detailPane).queryByRole('heading', { name: first.subject }),
+    ).not.toBeInTheDocument();
+    expect(within(detailPane).getByRole('heading', { name: 'Commit details' })).toBeVisible();
   });
 
   it('closes open menus and idle action dialogs when repository work becomes busy', async () => {

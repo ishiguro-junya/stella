@@ -12,37 +12,98 @@ import {
 
 const run = promisify(execFile);
 const fixtureBaseRoot = join(process.cwd(), '.tmp', 'fixtures', 'base');
-const fixtureBaseRepository = join(fixtureBaseRoot, 'ohtani-shohei');
+const fixtureBaseRepository = join(fixtureBaseRoot, 'major-league-baseball');
 const developmentFixtureRoot = join(process.cwd(), '.tmp', 'dev');
-const developmentRepository = join(developmentFixtureRoot, 'ohtani-shohei');
-const developmentRemote = join(developmentFixtureRoot, 'ohtani-shohei-remote.git');
-const CONTRIBUTORS = [
-  ['大谷翔平', 'shohei.ohtani@example.invalid'],
-  ['山本由伸', 'yoshinobu.yamamoto@example.invalid'],
-  ['鈴木誠也', 'seiya.suzuki@example.invalid'],
-  ['岡本和真', 'kazuma.okamoto@example.invalid'],
-  ['佐々木朗希', 'roki.sasaki@example.invalid'],
-  ['鈴木一郎', 'ichiro.suzuki@example.invalid'],
-  ['今永昇太', 'shota.imanaga@example.invalid'],
-] as const;
+const developmentRepository = join(developmentFixtureRoot, 'major-league-baseball');
+const developmentRemote = join(developmentFixtureRoot, 'major-league-baseball-remote.git');
+type Contributor = readonly [name: string, email: string];
+const CONTRIBUTORS = {
+  ichiro: ['鈴木一朗', 'ichiro.suzuki@example.invalid'],
+  darvish: ['ダルビッシュ有', 'yu.darvish@example.invalid'],
+  ohtani: ['大谷翔平', 'shohei.ohtani@example.invalid'],
+  seiya: ['鈴木誠也', 'seiya.suzuki@example.invalid'],
+  senga: ['千賀滉大', 'kodai.senga@example.invalid'],
+  imanaga: ['今永昇太', 'shota.imanaga@example.invalid'],
+  yamamoto: ['山本由伸', 'yoshinobu.yamamoto@example.invalid'],
+} as const satisfies Record<string, Contributor>;
+const ACTIVITY_CONTRIBUTOR = ['MLBデータ', 'mlb.data@example.invalid'] as const;
+// 日本語UIでMLB公式記録の日付のまま表示するため、表示用日時は日本時間で保持する。
 const ACHIEVEMENTS = [
-  ['2018-03-29T13:10:00-07:00', 'feat: MLBデビュー戦で初安打を記録'],
-  ['2018-04-03T19:10:00-07:00', 'feat: MLB初本塁打を記録'],
-  ['2018-11-12T15:00:00-08:00', 'feat: ア・リーグ新人王を受賞'],
-  ['2021-07-13T17:30:00-06:00', 'feat: オールスターに二刀流で出場'],
-  ['2021-11-18T15:00:00-08:00', 'feat: 満票でア・リーグMVPを受賞'],
-  ['2022-08-31T18:38:00-04:00', 'feat: 10勝・30本塁打を達成'],
-  ['2023-03-21T22:43:00-04:00', 'feat: WBC優勝と大会MVPを達成'],
-  ['2023-11-16T15:00:00-08:00', 'feat: 2度目の満票MVPを受賞'],
-  ['2024-04-03T19:10:00-07:00', 'feat: ドジャース移籍後初本塁打を記録'],
-  ['2024-07-13T13:10:00-07:00', 'feat: 20本塁打・20盗塁 (20-20) を達成'],
-  ['2024-08-03T18:07:00-07:00', 'feat: 30本塁打・30盗塁 (30-30) を達成'],
-  ['2024-08-17T16:15:00-07:00', 'feat: 35本塁打・35盗塁 (35-35) を達成'],
-  ['2024-08-23T19:10:00-07:00', 'feat: 40本塁打・40盗塁 (40-40) を達成'],
-  ['2024-09-06T19:10:00-07:00', 'feat: 45本塁打・45盗塁 (45-45) を達成'],
-  ['2024-09-19T19:10:00+09:00', 'feat: 50本塁打・50盗塁 (50-50) を達成'],
+  ['2001-04-02T19:05:00+09:00', 'feat: MLBデビュー戦で初安打を記録', CONTRIBUTORS.ichiro],
+  ['2004-10-01T19:05:00+09:00', 'feat: シーズン最多安打記録を更新', CONTRIBUTORS.ichiro],
+  ['2012-04-09T19:05:00+09:00', 'feat: MLBデビュー戦で初勝利を記録', CONTRIBUTORS.darvish],
+  [
+    '2013-04-02T19:10:00+09:00',
+    'feat: 8回2/3まで完全試合を継続し14奪三振を記録',
+    CONTRIBUTORS.darvish,
+  ],
+  ['2018-03-29T13:10:00+09:00', 'feat: MLBデビュー戦で初安打を記録', CONTRIBUTORS.ohtani],
+  ['2022-04-10T13:20:00+09:00', 'feat: MLB初本塁打を記録', CONTRIBUTORS.seiya],
+  ['2023-04-02T13:40:00+09:00', 'feat: MLBデビュー戦で8奪三振と初勝利を記録', CONTRIBUTORS.senga],
+  ['2023-04-14T19:10:00+09:00', 'feat: シーズン初出場で本塁打を記録', CONTRIBUTORS.seiya],
+  ['2023-07-27T13:10:00+09:00', 'feat: 完封勝利と1日2本塁打を達成', CONTRIBUTORS.ohtani],
+  ['2023-09-27T19:10:00+09:00', 'feat: MLB新人年にシーズン200奪三振を達成', CONTRIBUTORS.senga],
+  [
+    '2024-04-01T13:20:00+09:00',
+    'feat: MLBデビュー戦で6回無失点・9奪三振を記録',
+    CONTRIBUTORS.imanaga,
+  ],
+  ['2024-04-06T13:20:00+09:00', 'feat: 5回無失点8奪三振でMLB初勝利を記録', CONTRIBUTORS.yamamoto],
+  [
+    '2024-06-07T19:05:00+09:00',
+    'feat: ヤンキース戦で7回無失点7奪三振を記録',
+    CONTRIBUTORS.yamamoto,
+  ],
+  ['2024-07-07T17:00:00+09:00', 'feat: 新人年にオールスターへ初選出', CONTRIBUTORS.imanaga],
+  ['2024-09-19T19:10:00+09:00', 'feat: 50本塁打・50盗塁 (50-50) を達成', CONTRIBUTORS.ohtani],
 ] as const;
 const ACTIVITY_COMMITS_BY_MONTH = [8, 10, 13, 17, 23, 31, 42, 56, 73, 93, 116, 140, 168] as const;
+const FIRST_CHILD_DATE = '2025-04-19T12:00:00+09:00';
+const FIRST_CHILD_MESSAGE = 'feat: 第一子誕生を発表';
+const ACHIEVEMENT_BRANCHES = [
+  {
+    achievementIndex: 2,
+    mergeAtIndex: undefined,
+    name: 'darvish-mlb-debut',
+    path: 'docs/darvish-mlb-debut.md',
+    content: '# MLB初勝利\n\n2012年4月9日、MLBデビュー戦で初勝利を記録。\n',
+  },
+  {
+    achievementIndex: 4,
+    mergeAtIndex: undefined,
+    name: 'ohtani-mlb-debut',
+    path: 'docs/ohtani-mlb-debut.md',
+    content: '# MLB初安打\n\n2018年3月29日、MLBデビュー戦で初安打を記録。\n',
+  },
+  {
+    achievementIndex: 6,
+    mergeAtIndex: undefined,
+    name: 'senga-mlb-debut',
+    path: 'docs/senga-mlb-debut.md',
+    content: '# MLB初勝利\n\n2023年4月2日、MLBデビュー戦で8奪三振と初勝利を記録。\n',
+  },
+  {
+    achievementIndex: 7,
+    mergeAtIndex: 10,
+    name: 'seiya-season-debut',
+    path: 'docs/seiya-2023-season-debut.md',
+    content: '# 2023年シーズン初出場\n\n2023年4月14日、シーズン初出場で本塁打を記録。\n',
+  },
+  {
+    achievementIndex: 9,
+    mergeAtIndex: 11,
+    name: 'senga-200-strikeouts',
+    path: 'docs/senga-200-strikeouts.md',
+    content: '# 新人年200奪三振\n\n2023年9月27日、MLB新人年にシーズン200奪三振を達成。\n',
+  },
+  {
+    achievementIndex: 12,
+    mergeAtIndex: 13,
+    name: 'yamamoto-yankees',
+    path: 'docs/yamamoto-yankees.md',
+    content: '# ヤンキース戦\n\n2024年6月7日、ヤンキース戦で7回無失点・7奪三振を記録。\n',
+  },
+] as const;
 const FIFTY_FIFTY_SOURCE = `
 
 export const fiftyFiftyGame = {
@@ -136,7 +197,7 @@ export const SHOWCASE_STAGED_PATHS = [
 
 function committerDate(index: number): string {
   const date = new Date();
-  date.setHours(8 + (index % 12), index, 0, 0);
+  date.setHours(8, index, 0, 0);
   return date.toISOString();
 }
 
@@ -162,7 +223,7 @@ function activityMonthDates(): Date[] {
 async function runDatedGit(
   repositoryPath: string,
   args: readonly string[],
-  contributor: (typeof CONTRIBUTORS)[number],
+  contributor: Contributor,
   authoredAt: string,
   committedAt: string,
 ): Promise<void> {
@@ -184,7 +245,7 @@ async function commitFile(
   path: string,
   content: string,
   message: string,
-  contributor: (typeof CONTRIBUTORS)[number],
+  contributor: Contributor,
   authoredAt: string,
   committedAt: string,
 ): Promise<void> {
@@ -211,21 +272,43 @@ async function commitAchievements(
   const nextSource = `${source}  { date: '${achievement[0].slice(0, 10)}', title: '${achievement[1].slice(6)}' },\n${
     isFiftyFifty ? `] as const;${FIFTY_FIFTY_SOURCE}` : ''
   }`;
-  await commitFile(
-    repositoryPath,
-    'src/records.ts',
-    nextSource,
-    achievement[1],
-    CONTRIBUTORS[index % CONTRIBUTORS.length]!,
-    achievement[0],
-    committerDate(index),
+  const achievementBranch = ACHIEVEMENT_BRANCHES.find(
+    (branch) => branch.achievementIndex === index,
   );
+  if (achievementBranch) {
+    await runGit(repositoryPath, ['switch', '--create', achievementBranch.name]);
+    await commitFile(
+      repositoryPath,
+      achievementBranch.path,
+      achievementBranch.content,
+      achievement[1],
+      achievement[2],
+      achievement[0],
+      committerDate(index),
+    );
+    await runGit(repositoryPath, ['switch', 'main']);
+  } else {
+    const branchToMerge = isFiftyFifty
+      ? 'family-news'
+      : ACHIEVEMENT_BRANCHES.find((branch) => branch.mergeAtIndex === index)?.name;
+    if (isFiftyFifty) await createFirstChildBranch(repositoryPath);
+    if (branchToMerge)
+      await runGit(repositoryPath, ['merge', '--no-ff', '--no-commit', branchToMerge]);
+    await commitFile(
+      repositoryPath,
+      'src/records.ts',
+      nextSource,
+      achievement[1],
+      achievement[2],
+      achievement[0],
+      committerDate(index),
+    );
+  }
   await commitAchievements(repositoryPath, index + 1, nextSource);
 }
 
 async function commitActivity(repositoryPath: string): Promise<void> {
   const dates = activityMonthDates();
-  let total = 0;
   for (const [monthIndex, commitCount] of ACTIVITY_COMMITS_BY_MONTH.entries()) {
     const month = dates[monthIndex]!;
     for (let index = 0; index < commitCount; index += 1) {
@@ -235,18 +318,36 @@ async function commitActivity(repositoryPath: string): Promise<void> {
       // eslint-disable-next-line no-await-in-loop
       await runDatedGit(
         repositoryPath,
-        ['commit', '--allow-empty', '-m', `chore: 月間活動を記録 ${monthIndex + 1}-${index + 1}`],
-        CONTRIBUTORS[total % CONTRIBUTORS.length]!,
+        [
+          'commit',
+          '--allow-empty',
+          '-m',
+          `chore: 月間集計データを更新 ${monthIndex + 1}-${index + 1}`,
+        ],
+        ACTIVITY_CONTRIBUTOR,
         committedAt.toISOString(),
         committedAt.toISOString(),
       );
-      total += 1;
     }
   }
 }
 
+async function createFirstChildBranch(repositoryPath: string): Promise<void> {
+  await runGit(repositoryPath, ['switch', '--create', 'family-news']);
+  await commitFile(
+    repositoryPath,
+    'docs/first-child.md',
+    '# 第一子誕生\n\n2025年4月19日、第一子の誕生を発表。\n',
+    FIRST_CHILD_MESSAGE,
+    CONTRIBUTORS.ohtani,
+    FIRST_CHILD_DATE,
+    committerDate(ACHIEVEMENTS.length - 2),
+  );
+  await runGit(repositoryPath, ['switch', 'main']);
+}
+
 async function createShowcaseRepository(root: string): Promise<string> {
-  const repositoryPath = join(root, 'ohtani-shohei');
+  const repositoryPath = join(root, 'major-league-baseball');
   await mkdir(repositoryPath, { recursive: true });
   await runGit(repositoryPath, ['init', '-b', 'main']);
   await configureRepository(repositoryPath);
@@ -327,7 +428,7 @@ async function prepareShowcaseChanges(repositoryPath: string): Promise<void> {
   await writeRepositoryFile(
     repositoryPath,
     'README.md',
-    '# Shohei Ohtani Records\n\n大谷翔平の記録をタイムラインで振り返ります。\n',
+    '# Major League Baseball Records\n\n日本人メジャーリーガーの記録をタイムラインで振り返ります。\n',
   );
   await writeRepositoryFile(
     repositoryPath,

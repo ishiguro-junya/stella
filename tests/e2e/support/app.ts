@@ -38,11 +38,7 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     repositoryNames: {},
     openRepoPaths: [],
     view: 'changes',
-    paneWidths: {
-      changes: { left: 320, right: 336 },
-      history: { left: 320 },
-      activity: { left: 560 },
-    },
+    paneWidths: { left: 360, right: 336 },
     commitDrafts: {},
   };
 
@@ -76,19 +72,27 @@ export async function expectInteractiveSelectedColors(
   options: {
     foreground?: readonly string[];
     mutedForeground?: readonly string[];
+    palette?: 'accent' | 'neutral';
   } = {},
 ): Promise<void> {
   const result = await browser.execute(
-    ({ targetSelector, foregroundSelectors, mutedForegroundSelectors }) => {
+    ({ targetSelector, foregroundSelectors, mutedForegroundSelectors, palette }) => {
       const target = document.querySelector<HTMLElement>(targetSelector);
       if (!target) return { missing: [targetSelector] };
 
       const primaryProbe = document.createElement('button');
-      primaryProbe.className = 'primary';
+      if (palette === 'accent') primaryProbe.className = 'primary';
+      else {
+        primaryProbe.style.background = 'var(--list-selection-surface)';
+        primaryProbe.style.color = 'var(--text-primary)';
+      }
       primaryProbe.style.position = 'fixed';
       primaryProbe.style.visibility = 'hidden';
       const mutedProbe = document.createElement('span');
-      mutedProbe.style.color = 'var(--interactive-selected-muted-foreground)';
+      mutedProbe.style.color =
+        palette === 'accent'
+          ? 'var(--interactive-selected-muted-foreground)'
+          : 'var(--text-secondary)';
       primaryProbe.append(mutedProbe);
       document.body.append(primaryProbe);
 
@@ -126,6 +130,7 @@ export async function expectInteractiveSelectedColors(
       targetSelector: selector,
       foregroundSelectors: options.foreground ?? [],
       mutedForegroundSelectors: options.mutedForeground ?? [],
+      palette: options.palette ?? 'accent',
     },
   );
 
@@ -247,17 +252,14 @@ export async function openRepository(
 ): Promise<void> {
   const language = options.language ?? 'ja';
   await $(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
-  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
+  const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
   await expect(dialog).toBeDisplayed();
   if (options.inspectDialog) {
-    await expect(dialog.$('button=URL')).toHaveAttribute('aria-selected', 'true');
-    await expectAttachedTabs('[role="dialog"] .add-repository-source');
-    await expectInteractiveSelectedColors(
-      '[role="dialog"] .add-repository-source [aria-selected="true"]',
-    );
+    await expect(dialog.$('[role="tab"]')).not.toExist();
+    await expect(dialog.$('#repository-location')).toExist();
+    await expect(dialog.$('.repository-path-picker')).toExist();
     await expect(dialog.$('#repository-display-name')).toExist();
   }
-  await dialog.$(`button=${language === 'ja' ? 'パス' : 'Path'}`).click();
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   await waitForChangesOrThrow();
@@ -268,9 +270,8 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
   const switcher = $('[role="dialog"]');
   await expect(switcher).toBeDisplayed();
   await switcher.$(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
-  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
+  const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
   await expect(dialog).toBeDisplayed();
-  await dialog.$(`button=${language === 'ja' ? 'パス' : 'Path'}`).click();
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   await $(`.repository-toggle[title="${path}"]`).waitForDisplayed({ timeout: 10_000 });

@@ -216,9 +216,6 @@ export function FileEditorSurface({
           {headerActions}
         </div>
       </div>
-      {entry.area === 'staged' ? (
-        <p className="inline-alert info file-editor-stage-note">{t('fileEditStagedNotice')}</p>
-      ) : null}
       {externalChangeDetected ? (
         <section
           className="inline-alert warning file-editor-external"

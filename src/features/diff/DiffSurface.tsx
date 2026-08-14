@@ -57,7 +57,13 @@ const STELLA_DIFF_THEMES = {
 } as const;
 const STELLA_DIFF_HIGHLIGHT_CSS = `
 :host {
+  --diffs-font-family: var(--font-mono);
   --diffs-font-size: var(--code-font-size);
+  --diffs-line-height: var(--code-line-height);
+  --diffs-min-number-column-width: 10px;
+  --diffs-fg-number-override: var(--text-tertiary);
+  --diffs-bg-context-gutter-override: var(--surface-raised);
+  --diffs-gap-style: 1px solid var(--border-subtle);
   --diffs-addition-color-override: var(--diff-addition-accent);
   --diffs-deletion-color-override: var(--diff-deletion-accent);
   --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);
@@ -71,6 +77,24 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
+}
+
+[data-gutter-buffer],
+[data-column-number] {
+  padding-left: 5px;
+  padding-right: 4px;
+}
+
+[data-indicators='classic'] [data-line] {
+  padding-inline: 2px;
+  padding-inline-start: 24px;
+}
+
+[data-indicators='classic']
+  [data-line-type]:where([data-line-type='change-addition'], [data-line-type='change-deletion'])::before {
+  left: 0;
+  width: 18px;
+  text-align: center;
 }
 
 [data-diffs-header='default'],
@@ -233,6 +257,7 @@ export interface SurfaceSelection {
   startLine: number;
   endLine: number;
   itemId?: string;
+  patchActionable: boolean;
 }
 
 export interface SurfaceHunkSelection {
@@ -301,12 +326,14 @@ export interface DiffSurfaceProps {
   hunkSeparators?: 'simple' | 'line-info-basic';
   hunkAction?: HunkActionConfig;
   ariaLabel?: string;
+  initialSelection?: SurfaceSelection | undefined;
   onSelectionChange?: (selection: SurfaceSelection | null) => void;
   onSelectionContextMenu?: (
     selection: SurfaceSelection,
     point: SurfaceContextPoint,
     text: string,
   ) => void;
+  onSelectionCopy?: (text: string) => void;
 }
 
 interface DiffWorkerPoolProviderProps {
@@ -370,6 +397,7 @@ class DiffErrorBoundary extends Component<DiffErrorBoundaryProps, DiffErrorBound
 function toSurfaceSelection(
   range: SelectedLineRange | null,
   itemId?: string,
+  patchActionable = true,
 ): SurfaceSelection | null {
   if (!range?.side) return null;
   return {
@@ -377,6 +405,17 @@ function toSurfaceSelection(
     side: range.side,
     startLine: Math.min(range.start, range.end),
     endLine: Math.max(range.start, range.end),
+    patchActionable,
+  };
+}
+
+function toSelectedLineRange(selection: SurfaceSelection | undefined): SelectedLineRange | null {
+  if (!selection) return null;
+  return {
+    start: selection.startLine,
+    end: selection.endLine,
+    side: selection.side,
+    endSide: selection.side,
   };
 }
 
@@ -390,8 +429,21 @@ function selectedLineTextFromContextEvent(event: MouseEvent): string {
     );
   const root = row?.getRootNode();
   if (!(root instanceof ShadowRoot)) return '';
+  return selectedLineTextFromRoot(root);
+}
+
+function selectedLineTextFromRoot(root: ParentNode): string {
   return [...root.querySelectorAll<HTMLElement>('[data-line][data-selected-line]')]
     .map((line) => line.textContent ?? '')
+    .join('\n');
+}
+
+function selectedLineTextFromSurface(surface: HTMLElement): string {
+  return [...surface.querySelectorAll('diffs-container')]
+    .map((host) => host.shadowRoot)
+    .filter((root): root is ShadowRoot => root !== null)
+    .map(selectedLineTextFromRoot)
+    .filter(Boolean)
     .join('\n');
 }
 
@@ -445,6 +497,7 @@ interface SurfaceSelectionAnchor {
   itemId?: string;
   lineNumber: number;
   side: NonNullable<SelectedLineRange['side']>;
+  patchActionable: boolean;
 }
 
 function isDiffPostRenderInstance(instance: unknown): instance is DiffPostRenderInstance {
@@ -559,8 +612,10 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     hunkSeparators = 'line-info-basic',
     hunkAction,
     ariaLabel,
+    initialSelection,
     onSelectionChange,
     onSelectionContextMenu,
+    onSelectionCopy,
   },
   ref,
 ) {
@@ -568,9 +623,27 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   const resolvedAriaLabel = ariaLabel ?? t('diff');
   const appearance = useAppearance();
   const hasHunkAction = hunkAction !== undefined;
-  const [selection, setSelection] = useState<SelectedLineRange | null>(null);
-  const [codeViewSelection, setCodeViewSelection] = useState<CodeViewLineSelection | null>(null);
+  const initialSelectedLines = toSelectedLineRange(initialSelection);
+  const [selection, setSelection] = useState<SelectedLineRange | null>(() =>
+    source.kind === 'codeView' ? null : initialSelectedLines,
+  );
+  const [codeViewSelection, setCodeViewSelection] = useState<CodeViewLineSelection | null>(() =>
+    source.kind === 'codeView' && initialSelectedLines && initialSelection?.itemId
+      ? { id: initialSelection.itemId, range: initialSelectedLines }
+      : null,
+  );
+  const [selectionPatchActionable, setSelectionPatchActionable] = useState(
+    initialSelection?.patchActionable ?? true,
+  );
   const selectionAnchorRef = useRef<SurfaceSelectionAnchor | null>(null);
+  const surfaceRef = useRef<HTMLElement>(null);
+  const initialSelectionRef = useRef(initialSelection);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  initialSelectionRef.current = initialSelection;
+  onSelectionChangeRef.current = onSelectionChange;
+  const initialSelectionSignature = initialSelection
+    ? `${initialSelection.itemId ?? ''}:${initialSelection.side}:${initialSelection.startLine}:${initialSelection.endLine}:${initialSelection.patchActionable}`
+    : '';
   const [singleFileCollapsed, setSingleFileCollapsed] = useState(false);
   const [collapsedCodeViewItems, setCollapsedCodeViewItems] = useState<Set<string>>(
     () => new Set(),
@@ -609,15 +682,77 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   };
   const previousSourceKeyRef = useRef(source.cacheKey);
   useEffect(() => {
-    if (previousSourceKeyRef.current === source.cacheKey) return;
+    const sourceChanged = previousSourceKeyRef.current !== source.cacheKey;
+    const restored = initialSelectionRef.current;
+    if (!sourceChanged && !restored) return;
     previousSourceKeyRef.current = source.cacheKey;
-    setSelection(null);
-    setCodeViewSelection(null);
-    selectionAnchorRef.current = null;
-    setSingleFileCollapsed(false);
-    setCollapsedCodeViewItems(new Set());
-    onSelectionChange?.(null);
-  }, [onSelectionChange, source.cacheKey]);
+    const restoredRange = toSelectedLineRange(restored);
+    setSelection(source.kind === 'codeView' ? null : restoredRange);
+    setCodeViewSelection(
+      source.kind === 'codeView' && restoredRange && restored?.itemId
+        ? { id: restored.itemId, range: restoredRange }
+        : null,
+    );
+    setSelectionPatchActionable(restored?.patchActionable ?? true);
+    selectionAnchorRef.current = restored
+      ? {
+          ...(restored.itemId ? { itemId: restored.itemId } : {}),
+          lineNumber: restored.startLine,
+          side: restored.side,
+          patchActionable: restored.patchActionable,
+        }
+      : null;
+    if (sourceChanged) {
+      setSingleFileCollapsed(false);
+      setCollapsedCodeViewItems(new Set());
+    }
+    onSelectionChangeRef.current?.(restored ?? null);
+  }, [initialSelectionSignature, source.cacheKey, source.kind]);
+
+  useEffect(() => {
+    if (!initialSelectionRef.current) return undefined;
+    const surface = surfaceRef.current;
+    if (!surface) return undefined;
+    let frame = 0;
+    const observedRoots = new Set<ShadowRoot>();
+    const focusSelection = (): void => {
+      const selectedLine = [...(surfaceRef.current?.querySelectorAll('diffs-container') ?? [])]
+        .map((host) => host.shadowRoot)
+        .filter((root): root is ShadowRoot => root !== null)
+        .map((root) =>
+          root.querySelector<HTMLElement>('[data-content] [data-line][data-selected-line]'),
+        )
+        .find((line): line is HTMLElement => line !== null);
+      if (!selectedLine) return;
+      if (!selectedLine.hasAttribute('tabindex')) selectedLine.tabIndex = -1;
+      selectedLine.focus({ preventScroll: true });
+      selectedLine.scrollIntoView?.({ block: 'center' });
+    };
+    let observer: MutationObserver;
+    const observeRoots = (): void => {
+      for (const host of surface.querySelectorAll('diffs-container')) {
+        const root = host.shadowRoot;
+        if (!root || observedRoots.has(root)) continue;
+        observedRoots.add(root);
+        observer.observe(root, { attributes: true, childList: true, subtree: true });
+      }
+    };
+    observer = new MutationObserver(() => {
+      observeRoots();
+      focusSelection();
+    });
+    observer.observe(surface, { childList: true, subtree: true });
+    observeRoots();
+    focusSelection();
+    frame = requestAnimationFrame(() => {
+      observeRoots();
+      focusSelection();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [initialSelectionSignature, source.cacheKey]);
   const canUseWorkers = typeof Worker !== 'undefined';
   const disableWorkerPool = !canUseWorkers || hasHunkAction;
   const effectiveSingleFileCollapsed =
@@ -761,21 +896,16 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   }, [enhanceHunkSeparators, hunkControlLabelsRevision]);
   const selectClickedLine = useCallback(
     (props: SurfaceLineClickProps, context?: CodeViewLineClickContext): void => {
-      if (
-        !selectable ||
-        props.numberColumn ||
-        !('annotationSide' in props) ||
-        !props.lineType.startsWith('change-')
-      )
-        return;
+      if (!selectable || !('annotationSide' in props)) return;
+      const linePatchActionable = props.lineType.startsWith('change-');
+      const eventPath = props.event.composedPath();
+      surfaceRef.current?.focus({ preventScroll: true });
       const itemId =
         context?.item.id ??
-        props.event
-          .composedPath()
-          .find(
-            (item): item is HTMLElement =>
-              item instanceof HTMLElement && item.dataset.stellaItemId !== undefined,
-          )?.dataset.stellaItemId;
+        eventPath.find(
+          (item): item is HTMLElement =>
+            item instanceof HTMLElement && item.dataset.stellaItemId !== undefined,
+        )?.dataset.stellaItemId;
       const anchor = selectionAnchorRef.current;
       const extendsFromAnchor =
         props.event instanceof MouseEvent &&
@@ -788,11 +918,13 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
         side: props.annotationSide,
         endSide: props.annotationSide,
       };
+      const patchActionable = linePatchActionable && (!extendsFromAnchor || anchor.patchActionable);
       if (!extendsFromAnchor) {
         selectionAnchorRef.current = {
           ...(itemId ? { itemId } : {}),
           lineNumber: props.lineNumber,
           side: props.annotationSide,
+          patchActionable: linePatchActionable,
         };
       }
       if (source.kind === 'codeView') {
@@ -801,7 +933,8 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       } else {
         setSelection(range);
       }
-      onSelectionChange?.(toSurfaceSelection(range, itemId));
+      setSelectionPatchActionable(patchActionable);
+      onSelectionChange?.(toSurfaceSelection(range, itemId, patchActionable));
     },
     [onSelectionChange, selectable, source.kind],
   );
@@ -810,7 +943,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       theme: STELLA_DIFF_THEMES,
       themeType: appearance,
       diffStyle: performanceMode ? ('unified' as const) : diffStyle,
-      diffIndicators: 'none' as const,
+      diffIndicators: 'classic' as const,
       collapsed: effectiveSingleFileCollapsed,
       disableFileHeader: !showFileHeaders,
       stickyHeader: showFileHeaders && stickyFileHeaders,
@@ -833,9 +966,11 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       tokenizeMaxLineLength: performanceMode ? 0 : 2_000,
       lineDiffType: performanceMode ? ('none' as const) : ('word-alt' as const),
       onLineSelectionChange: (range: SelectedLineRange | null) => {
+        if (range) surfaceRef.current?.focus({ preventScroll: true });
         setSelection(range);
+        setSelectionPatchActionable(true);
         selectionAnchorRef.current = range?.side
-          ? { lineNumber: range.start, side: range.side }
+          ? { lineNumber: range.start, side: range.side, patchActionable: true }
           : null;
         onSelectionChange?.(toSurfaceSelection(range));
       },
@@ -863,16 +998,21 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     () => ({
       getSelection: () =>
         codeViewSelection
-          ? toSurfaceSelection(codeViewSelection.range, codeViewSelection.id)
-          : toSurfaceSelection(selection),
+          ? toSurfaceSelection(
+              codeViewSelection.range,
+              codeViewSelection.id,
+              selectionPatchActionable,
+            )
+          : toSurfaceSelection(selection, undefined, selectionPatchActionable),
       clearSelection: () => {
         setSelection(null);
         setCodeViewSelection(null);
+        setSelectionPatchActionable(true);
         selectionAnchorRef.current = null;
         onSelectionChange?.(null);
       },
     }),
-    [codeViewSelection, onSelectionChange, selection],
+    [codeViewSelection, onSelectionChange, selection, selectionPatchActionable],
   );
 
   const plainText = source.kind === 'fileDiff' ? source.targetText : source.patch;
@@ -974,9 +1114,16 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       {...(showFileHeaders ? { renderCustomHeader: renderCodeViewHeader } : {})}
       selectedLines={codeViewSelection}
       onSelectedLinesChange={(next) => {
+        if (next) surfaceRef.current?.focus({ preventScroll: true });
         setCodeViewSelection(next);
+        setSelectionPatchActionable(true);
         selectionAnchorRef.current = next?.range.side
-          ? { itemId: next.id, lineNumber: next.range.start, side: next.range.side }
+          ? {
+              itemId: next.id,
+              lineNumber: next.range.start,
+              side: next.range.side,
+              patchActionable: true,
+            }
           : null;
         onSelectionChange?.(toSurfaceSelection(next?.range ?? null, next?.id));
       }}
@@ -995,9 +1142,8 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   );
 
   const activeSelection = codeViewSelection
-    ? toSurfaceSelection(codeViewSelection.range, codeViewSelection.id)
-    : toSurfaceSelection(selection);
-  const surfaceRef = useRef<HTMLElement>(null);
+    ? toSurfaceSelection(codeViewSelection.range, codeViewSelection.id, selectionPatchActionable)
+    : toSurfaceSelection(selection, undefined, selectionPatchActionable);
   useEffect(() => {
     const surface = surfaceRef.current;
     if (!surface || !activeSelection || !onSelectionContextMenu) return undefined;
@@ -1023,6 +1169,20 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
 
   useEffect(() => {
     const surface = surfaceRef.current;
+    if (!surface || !activeSelection || !onSelectionCopy) return undefined;
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return;
+      const text = selectedLineTextFromSurface(surface);
+      if (!text) return;
+      event.preventDefault();
+      onSelectionCopy(text);
+    };
+    surface.addEventListener('keydown', handleKeyDown);
+    return () => surface.removeEventListener('keydown', handleKeyDown);
+  }, [activeSelection, onSelectionCopy]);
+
+  useEffect(() => {
+    const surface = surfaceRef.current;
     if (!surface) return undefined;
     const preventDragTextSelection = (event: Event): void => event.preventDefault();
     surface.addEventListener('selectstart', preventDragTextSelection);
@@ -1036,6 +1196,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       data-line-wrapping={lineWrapping}
       data-wrap-column={normalizedWrapColumn}
       aria-label={resolvedAriaLabel}
+      tabIndex={-1}
       hidden={collapsed === true}
     >
       <DiffErrorBoundary key={source.cacheKey} fallback={fallback}>

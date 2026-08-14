@@ -53,7 +53,7 @@ interface MockPatchDiffOptions {
     annotationSide: 'additions' | 'deletions';
     event: PointerEvent;
     lineNumber: number;
-    lineType: 'change-addition' | 'change-deletion';
+    lineType: 'change-addition' | 'change-deletion' | 'context' | 'context-expanded';
     numberColumn: boolean;
   }) => void;
   onPostRender?: (
@@ -172,7 +172,7 @@ describe('DiffSurface fallback', () => {
 });
 
 describe('DiffSurface line selection', () => {
-  it('hides plus/minus indicators and defines blue selected-line backgrounds', () => {
+  it('shows plus/minus indicators and matches the editor line geometry', () => {
     render(
       <DiffSurface
         source={{
@@ -186,7 +186,7 @@ describe('DiffSurface line selection', () => {
 
     expect(patchDiffPropsMock.mock.lastCall?.[0].options).toEqual(
       expect.objectContaining({
-        diffIndicators: 'none',
+        diffIndicators: 'classic',
         overflow: 'scroll',
         theme: { light: 'stella-semantic', dark: 'stella-semantic' },
         themeType: 'system',
@@ -213,6 +213,18 @@ describe('DiffSurface line selection', () => {
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '--diffs-scrollbar-gutter-override: 0px;',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '--diffs-font-family: var(--font-mono);',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '--diffs-line-height: var(--code-line-height);',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '--diffs-min-number-column-width: 10px;',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      "[data-indicators='classic'] [data-line] {\n  padding-inline: 2px;\n  padding-inline-start: 24px;",
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '[data-code] {\n  overscroll-behavior: none;\n  -webkit-user-select: none;\n  user-select: none;\n}',
@@ -459,6 +471,7 @@ describe('DiffSurface line selection', () => {
       side: 'additions',
       startLine: 1,
       endLine: 3,
+      patchActionable: true,
     });
 
     rerender(
@@ -475,6 +488,37 @@ describe('DiffSurface line selection', () => {
     );
 
     expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('restores an initial selection when the Diff is shown again', () => {
+    const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
+    const initialSelection: SurfaceSelection = {
+      side: 'additions',
+      startLine: 3,
+      endLine: 3,
+      patchActionable: false,
+    };
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        initialSelection={initialSelection}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
+      start: 3,
+      end: 3,
+      side: 'additions',
+      endSide: 'additions',
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(initialSelection);
   });
 
   it('selects a changed row when its content is left-clicked', () => {
@@ -509,12 +553,91 @@ describe('DiffSurface line selection', () => {
       side: 'additions',
       startLine: 2,
       endLine: 2,
+      patchActionable: true,
     });
     expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
       start: 2,
       end: 2,
       side: 'additions',
       endSide: 'additions',
+    });
+  });
+
+  it('selects an unchanged context row for editing without enabling patch actions', () => {
+    const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+    act(() => {
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event: new Event('click'),
+          lineNumber: 3,
+          lineType: 'context',
+          numberColumn: false,
+        },
+      ]);
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      side: 'additions',
+      startLine: 3,
+      endLine: 3,
+      patchActionable: false,
+    });
+    expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
+      start: 3,
+      end: 3,
+      side: 'additions',
+      endSide: 'additions',
+    });
+  });
+
+  it('selects a row when its line number is clicked', () => {
+    const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+    act(() => {
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event: new Event('click'),
+          lineNumber: 3,
+          lineType: 'context',
+          numberColumn: true,
+        },
+      ]);
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      side: 'additions',
+      startLine: 3,
+      endLine: 3,
+      patchActionable: false,
     });
   });
 
@@ -553,6 +676,7 @@ describe('DiffSurface line selection', () => {
       side: 'additions',
       startLine: 2,
       endLine: 5,
+      patchActionable: true,
     });
     expect(patchDiffPropsMock.mock.lastCall?.[0].selectedLines).toEqual({
       start: 2,
@@ -611,10 +735,63 @@ describe('DiffSurface line selection', () => {
     });
 
     expect(onSelectionContextMenu).toHaveBeenCalledWith(
-      { side: 'additions', startLine: 2, endLine: 2 },
+      { side: 'additions', startLine: 2, endLine: 2, patchActionable: true },
       { x: 20, y: 30 },
       'second line\nthird line',
     );
+  });
+
+  it('returns selected line contents from Command-C', () => {
+    const onSelectionCopy = vi.fn<(text: string) => void>();
+    const { container } = render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionCopy={onSelectionCopy}
+      />,
+    );
+    const host = document.createElement('diffs-container');
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <span data-line data-selected-line>second line</span>
+      <span data-line data-selected-line>third line</span>
+    `;
+    container.querySelector('.diff-surface')?.append(host);
+    const selectedLine = root.querySelector<HTMLElement>('[data-line]')!;
+    const onLineClick = patchDiffPropsMock.mock.lastCall?.[0].options.onLineClick;
+    selectedLine.addEventListener('click', (event) => {
+      if (!onLineClick) return;
+      Reflect.apply(onLineClick, undefined, [
+        {
+          annotationSide: 'additions',
+          event,
+          lineNumber: 2,
+          lineType: 'change-addition',
+          numberColumn: false,
+        },
+      ]);
+    });
+
+    act(() => {
+      selectedLine.click();
+    });
+    act(() => {
+      (root.activeElement ?? document.activeElement)?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          composed: true,
+          key: 'c',
+          metaKey: true,
+        }),
+      );
+    });
+
+    expect(onSelectionCopy).toHaveBeenCalledWith('second line\nthird line');
   });
 
   it('keeps direct selection available for a single-file performance CodeView', () => {
@@ -642,6 +819,7 @@ describe('DiffSurface line selection', () => {
       side: 'additions',
       startLine: 1,
       endLine: 1,
+      patchActionable: true,
     });
   });
 

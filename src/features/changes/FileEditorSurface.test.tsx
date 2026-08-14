@@ -209,9 +209,6 @@ describe('FileEditorSurface', () => {
     expect(await screen.findByText('This file changed outside the editor')).toBeVisible();
     expect(editor).toHaveValue('draft');
     expect(editor).toHaveAttribute('readonly');
-    expect(
-      screen.getByText('Saving creates an Unstaged change. The index is not changed.'),
-    ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Copy Draft' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeVisible();
 

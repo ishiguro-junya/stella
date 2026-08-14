@@ -39,6 +39,11 @@ describe('FileActionMenu', () => {
     render(<Harness />);
     const trigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
 
+    await user.hover(trigger);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('More actions');
+    await user.unhover(trigger);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('menu', { name: 'src/app.ts actions' })).toBeVisible();

@@ -91,6 +91,7 @@ describe('RemoteOperationDialog', () => {
       within(dialog).getByText('Select the remote branch to pull into the current branch.'),
     ).toBeVisible();
     const target = await within(dialog).findByRole('combobox', { name: 'Remote branch' });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Pull' })).toHaveFocus());
     expect(target.parentElement).toHaveClass('select-control');
     expect(target.parentElement?.querySelector('.lucide-chevron-down')).toBeInTheDocument();
     expect(within(dialog).getByRole('textbox', { name: 'Local branch' })).toHaveValue('main');
@@ -184,6 +185,7 @@ describe('RemoteOperationDialog', () => {
     );
 
     const dialog = await screen.findByRole('dialog', { name: 'Push' });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Push' })).toHaveFocus());
     const remote = within(dialog).getByRole('combobox', { name: 'Remote' });
     const branch = within(dialog).getByRole('combobox', { name: 'Remote branch' });
     expect(remote).toHaveValue('origin');
@@ -284,6 +286,29 @@ describe('RemoteOperationDialog', () => {
     await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(2));
   });
 
+  it('requires an explicit Pull target without an upstream or same-name remote branch', async () => {
+    render(
+      <RemoteOperationDialog
+        kind="pull"
+        repo={repoSnapshot({
+          branch: { name: 'release/missing', detached: false, ahead: 0, behind: 0 },
+        })}
+        adapter={adapterWithTargets()}
+        busy={false}
+        onDismiss={() => undefined}
+        onRefreshBranches={async () => undefined}
+        onPull={async () => undefined}
+        onPush={async () => undefined}
+      />,
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: 'Pull' });
+    const target = within(dialog).getByRole('combobox', { name: 'Remote branch' });
+    expect(target).toHaveValue('');
+    expect(target).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'Pull' })).toBeDisabled();
+  });
+
   it('keeps Pull usable without an upstream and reports target loading failures', async () => {
     const repo = repoSnapshot({
       branch: { name: 'main', detached: false, ahead: 0, behind: 0 },
@@ -302,7 +327,10 @@ describe('RemoteOperationDialog', () => {
     );
 
     const dialog = await screen.findByRole('dialog', { name: 'Pull' });
-    expect(within(dialog).getByRole('combobox', { name: 'Remote branch' })).toHaveValue('');
+    expect(within(dialog).getByRole('combobox', { name: 'Remote branch' })).toHaveValue(
+      'origin/main',
+    );
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Pull' })).toHaveFocus());
     expect(within(dialog).getByRole('option', { name: 'origin/main' })).toBeVisible();
     unmount();
 

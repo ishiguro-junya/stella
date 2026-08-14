@@ -60,6 +60,47 @@ final result: passed
 
 ---
 
+## History graphの角張った分岐線
+
+### History graphの比較対象
+
+- Source visual truth: `/Users/ishiguro/Desktop/スクリーンショット 2026-08-14 12.45.31.png`
+- Implementation render: `/Users/ishiguro/project/stella/.tmp/design-qa/history-graph-angular-implementation.svg.png`
+- Comparison board: `/Users/ishiguro/project/stella/.tmp/design-qa/history-graph-angular-comparison.png`
+- Focused region: `138 x 232 px`、Dark、2 lane間の分岐
+
+### History graphのFocused-region comparison
+
+- Bezier曲線を、本線のnodeから右斜めへ分岐して縦に伸びる折れ線へ変更しました。
+- 既存のlane間隔、行高、node位置を維持し、分岐線の形状だけを変更しました。
+- 参照画像とImplementationを同じcomparison boardで開き、丸い曲線が残っていないことを確認しました。
+
+### History graphのRequired fidelity surfaces
+
+- Fonts and typography: 変更していません。
+- Spacing and layout rhythm: lane間隔、行高、node位置を変更していません。
+- Colors and visual tokens: 既存のlane color tokenを維持しています。
+- Image quality and asset fidelity: Productionへ画像assetは追加していません。
+- Copy and content: 変更していません。
+
+### History graphのComparison history
+
+1. Initial source finding
+   - Severity: P2
+   - Finding: laneをまたぐ接続線がBezier曲線で、参照画像より滑らかに見えていました。
+2. Final implementation pass
+   - Fix: 50-50をmerge commitとし、第一子のbranchへ右斜めに出てから縦へ伸びる実際のGit履歴へ変更しました。
+   - Post-fix evidence: Unit testで折れ位置を含むpath全体を確認し、E2E testにも同じ検査を追加しました。
+   - Post-fix evidence: Comparison boardで角張った接続形状を確認しました。
+
+### History graphのFindings
+
+ActionableなP0、P1、P2は残っていません。  
+
+final result: passed  
+
+---
+
 ## 密着型tabの共通デザイン
 
 ### 密着型tabの比較対象

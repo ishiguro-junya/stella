@@ -33,7 +33,7 @@ describe('appearance preferences', () => {
       automaticUpdateChecks: true,
       diffStyle: 'unified',
       splitStageView: false,
-      changeListDisplay: 'nameAndPath',
+      changeListDisplay: 'fullPath',
       useConventionalCommits: false,
       stickyFileHeaders: false,
       editorLineWrapping: false,
@@ -41,7 +41,7 @@ describe('appearance preferences', () => {
     });
   });
 
-  it('fills a missing v1 language from macOS and defaults the screen-specific pane widths', () => {
+  it('fills a missing v1 language from macOS and keeps the shared pane width', () => {
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP']);
     localStorage.setItem(
       'stella.preferences.v1',
@@ -65,26 +65,34 @@ describe('appearance preferences', () => {
       repositoryNames: {},
       openRepoPaths: ['/tmp/stella'],
       selectedRepoPath: '/tmp/stella',
-      paneWidths: DEFAULT_PREFERENCES.paneWidths,
+      paneWidths: { left: 360, right: 400 },
     });
     expect(preferences).not.toHaveProperty('view');
   });
 
-  it('round-trips independent pane widths for Changes, History, and Activity', () => {
+  it('round-trips one pane position shared by Changes, History, and Activity', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
-      paneWidths: {
-        changes: { left: 344, right: 408 },
-        history: { left: 288 },
-        activity: { left: 584 },
-      },
+      paneWidths: { left: 408, right: 408 },
     });
 
-    expect(readPreferences().paneWidths).toEqual({
-      changes: { left: 344, right: 408 },
-      history: { left: 288 },
-      activity: { left: 584 },
-    });
+    expect(readPreferences().paneWidths).toEqual({ left: 408, right: 408 });
+  });
+
+  it('migrates screen-specific pane widths using the Changes position', () => {
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...DEFAULT_PREFERENCES,
+        paneWidths: {
+          changes: { left: 408, right: 400 },
+          history: { left: 384 },
+          activity: { left: 560 },
+        },
+      }),
+    );
+
+    expect(readPreferences().paneWidths).toEqual({ left: 408, right: 400 });
   });
 
   it('keeps a saved language ahead of the current macOS language', () => {
@@ -110,8 +118,8 @@ describe('appearance preferences', () => {
     expect(readPreferences().splitStageView).toBe(true);
   });
 
-  it('defaults the file list to two lines and round-trips the selected display', () => {
-    expect(DEFAULT_PREFERENCES.changeListDisplay).toBe('nameAndPath');
+  it('defaults the file list to full paths and round-trips the selected display', () => {
+    expect(DEFAULT_PREFERENCES.changeListDisplay).toBe('fullPath');
     writePreferences({ ...DEFAULT_PREFERENCES, changeListDisplay: 'tree' });
     expect(readPreferences().changeListDisplay).toBe('tree');
 
@@ -119,7 +127,7 @@ describe('appearance preferences', () => {
       'stella.preferences.v1',
       JSON.stringify({ ...DEFAULT_PREFERENCES, changeListDisplay: 'invalid' }),
     );
-    expect(readPreferences().changeListDisplay).toBe('nameAndPath');
+    expect(readPreferences().changeListDisplay).toBe('fullPath');
   });
 
   it('defaults Conventional Commits to off and round-trips the enabled preference', () => {
@@ -187,6 +195,20 @@ describe('appearance preferences', () => {
     expect(readPreferences().editorWrapColumn).toBe(400);
   });
 
+  it('keeps only an absolute repository base path', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      repositoryBasePath: '/Users/example/Documents',
+    });
+    expect(readPreferences().repositoryBasePath).toBe('/Users/example/Documents');
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({ ...DEFAULT_PREFERENCES, repositoryBasePath: 'relative/path' }),
+    );
+    expect(readPreferences().repositoryBasePath).toBeUndefined();
+  });
+
   it('round-trips the selected Diff layout', () => {
     writePreferences({ ...DEFAULT_PREFERENCES, diffStyle: 'split' });
     expect(readPreferences().diffStyle).toBe('split');
@@ -214,11 +236,11 @@ describe('appearance preferences', () => {
       selectedRepoPath: '/repo/stella',
     });
 
-    expect(setDevelopmentRepository('/repo/.tmp/dev/ohtani-shohei')).toMatchObject({
+    expect(setDevelopmentRepository('/repo/.tmp/dev/major-league-baseball')).toMatchObject({
       appearance: 'dark',
-      registeredRepoPaths: ['/repo/.tmp/dev/ohtani-shohei'],
-      openRepoPaths: ['/repo/.tmp/dev/ohtani-shohei'],
-      selectedRepoPath: '/repo/.tmp/dev/ohtani-shohei',
+      registeredRepoPaths: ['/repo/.tmp/dev/major-league-baseball'],
+      openRepoPaths: ['/repo/.tmp/dev/major-league-baseball'],
+      selectedRepoPath: '/repo/.tmp/dev/major-league-baseball',
     });
   });
 

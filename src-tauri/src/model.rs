@@ -350,6 +350,9 @@ pub enum Action {
         start_point: String,
         checkout: bool,
     },
+    DeleteBranch {
+        name: String,
+    },
     CreateTag {
         name: String,
         target: String,
@@ -430,6 +433,7 @@ impl Action {
         matches!(
             self,
             Self::Discard { .. }
+                | Self::DeleteBranch { .. }
                 | Self::Reset {
                     mode: ResetMode::Hard,
                     ..
@@ -455,6 +459,7 @@ impl Action {
             Self::Push { .. } => "push",
             Self::SetRemoteUrl { .. } => "setRemoteUrl",
             Self::CreateBranch { .. } => "createBranch",
+            Self::DeleteBranch { .. } => "deleteBranch",
             Self::CreateTag { .. } => "createTag",
             Self::GitFlow { .. } => "gitFlow",
             Self::Checkout { .. } => "checkout",
@@ -1403,6 +1408,16 @@ mod tests {
                 "name": "topic",
                 "startPoint": "HEAD",
                 "checkout": true
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Action::DeleteBranch {
+                name: "topic".into(),
+            })
+            .unwrap(),
+            json!({
+                "kind": "deleteBranch",
+                "name": "topic"
             })
         );
         assert_eq!(

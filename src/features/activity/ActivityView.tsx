@@ -1,4 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { Ban, CircleCheck, CircleX, LoaderCircle, RotateCw } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
@@ -10,6 +20,7 @@ import type {
   RepoSnapshot,
 } from '../../domain/workspace';
 import type { ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
+import { LEFT_PANE_MAX_WIDTH, LEFT_PANE_MIN_WIDTH } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
 import { SelectControl } from '../../ui/SelectControl';
 import { useI18n, type I18nValue, type Language } from '../../i18n/i18n';
@@ -22,8 +33,6 @@ import {
 const CommitActivityChart = lazy(() => import('./CommitActivityChart'));
 const ACTIVITY_RANGES: readonly ActivityRange[] = ['7d', '30d', '90d', '180d', '1y'];
 const ACTIVITY_METRICS = ['commits', 'contributors', 'branches'] as const;
-const ACTIVITY_LEFT_PANE_MIN = 360;
-const ACTIVITY_LEFT_PANE_MAX = 600;
 type ActivityMetric = (typeof ACTIVITY_METRICS)[number];
 
 function isActivityRange(value: string): value is ActivityRange {
@@ -49,6 +58,7 @@ export interface ActivityViewProps {
   onCancel: (entry: ActivityEntry) => Promise<void>;
   onError: ShowWorkspaceError;
   onReady?: () => void;
+  focusRequest?: number;
 }
 
 export function ActivityView({
@@ -60,6 +70,7 @@ export function ActivityView({
   onCancel,
   onError,
   onReady,
+  focusRequest = 0,
 }: ActivityViewProps) {
   const { t } = useI18n();
   const [range, setRange] = useState<ActivityRange>('30d');
@@ -138,6 +149,42 @@ export function ActivityView({
   const paneStyle: CSSProperties & { '--activity-left-pane': string } = {
     '--activity-left-pane': `${paneWidth}px`,
   };
+  const activityControls = (
+    <div className="activity-analytics-controls">
+      <SelectControl
+        className="activity-metric-select"
+        aria-label={t('activityMetric')}
+        value={metric}
+        onChange={(event) => {
+          if (isActivityMetric(event.currentTarget.value)) {
+            setMetric(event.currentTarget.value);
+          }
+        }}
+      >
+        {ACTIVITY_METRICS.map((option) => (
+          <option key={option} value={option}>
+            {activityMetricLabel(option, t)}
+          </option>
+        ))}
+      </SelectControl>
+      <SelectControl
+        className="activity-range-select"
+        aria-label={t('activityRange')}
+        value={range}
+        onChange={(event) => {
+          if (isActivityRange(event.currentTarget.value)) {
+            setRange(event.currentTarget.value);
+          }
+        }}
+      >
+        {ACTIVITY_RANGES.map((option) => (
+          <option key={option} value={option}>
+            {activityRangeLabel(option, t)}
+          </option>
+        ))}
+      </SelectControl>
+    </div>
+  );
 
   return (
     <main className="activity-view" aria-labelledby="activity-title">
@@ -146,29 +193,29 @@ export function ActivityView({
       </h1>
       <div className="activity-page-content">
         <div className="activity-page-panels" style={paneStyle}>
-          <OperationsPanel
-            activities={activities}
-            selected={selected}
-            onSelect={setSelectedId}
-            onCancel={onCancel}
-          />
-          <PaneResizer
-            label={t('activityOperationsWidth')}
-            value={paneWidth}
-            direction="growRight"
-            min={ACTIVITY_LEFT_PANE_MIN}
-            max={ACTIVITY_LEFT_PANE_MAX}
-            onChange={onPaneWidthChange}
-          />
           <AnalyticsPanel
             analytics={analytics}
             chartBuckets={chartBuckets}
             tableBuckets={tableBuckets}
             range={range}
             metric={metric}
-            onRangeChange={setRange}
-            onMetricChange={setMetric}
+            controls={activityControls}
             onRetry={() => setRetryRequest((current) => current + 1)}
+          />
+          <PaneResizer
+            label={t('activityAnalyticsWidth')}
+            value={paneWidth}
+            direction="growRight"
+            min={LEFT_PANE_MIN_WIDTH}
+            max={LEFT_PANE_MAX_WIDTH}
+            onChange={onPaneWidthChange}
+          />
+          <OperationsPanel
+            activities={activities}
+            selected={selected}
+            focusRequest={focusRequest}
+            onSelect={setSelectedId}
+            onCancel={onCancel}
           />
         </div>
       </div>
@@ -179,12 +226,43 @@ export function ActivityView({
 interface OperationsPanelProps {
   activities: ActivityEntry[];
   selected: ActivityEntry | undefined;
+  focusRequest: number;
   onSelect: (id: string) => void;
   onCancel: (entry: ActivityEntry) => Promise<void>;
 }
 
-function OperationsPanel({ activities, selected, onSelect, onCancel }: OperationsPanelProps) {
+function OperationsPanel({
+  activities,
+  selected,
+  focusRequest,
+  onSelect,
+  onCancel,
+}: OperationsPanelProps) {
   const { t, message, locale, language } = useI18n();
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const handledFocusRequestRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!selected || handledFocusRequestRef.current === focusRequest) return;
+    const target = rowRefs.current.get(selected.id);
+    if (!target) return;
+    target.focus();
+    handledFocusRequestRef.current = focusRequest;
+  }, [activities, focusRequest, selected]);
+
+  const moveSelection = (
+    event: ReactKeyboardEvent<HTMLTableRowElement>,
+    index: number,
+    offset: -1 | 1,
+  ): void => {
+    event.preventDefault();
+    const nextIndex = Math.min(Math.max(index + offset, 0), activities.length - 1);
+    const next = activities[nextIndex];
+    if (!next || nextIndex === index) return;
+    onSelect(next.id);
+    rowRefs.current.get(next.id)?.focus();
+  };
+
   return (
     <section className="activity-operations-panel" aria-labelledby="operations-title">
       <h2 id="operations-title" className="sr-only">
@@ -212,16 +290,25 @@ function OperationsPanel({ activities, selected, onSelect, onCancel }: Operation
             </thead>
             <tbody>
               {activities.length ? (
-                activities.map((entry) => {
+                activities.map((entry, index) => {
                   const isSelected = selected?.id === entry.id;
                   return (
                     <tr
                       key={entry.id}
-                      tabIndex={0}
+                      ref={(element) => {
+                        if (element) rowRefs.current.set(entry.id, element);
+                        else rowRefs.current.delete(entry.id);
+                      }}
+                      tabIndex={isSelected ? 0 : -1}
                       aria-selected={isSelected}
-                      onClick={() => onSelect(entry.id)}
+                      onClick={(event) => {
+                        onSelect(entry.id);
+                        event.currentTarget.focus();
+                      }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
+                        if (event.key === 'ArrowUp') moveSelection(event, index, -1);
+                        else if (event.key === 'ArrowDown') moveSelection(event, index, 1);
+                        else if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           onSelect(entry.id);
                         }
@@ -353,8 +440,7 @@ interface AnalyticsPanelProps {
   tableBuckets: CommitActivityBucket[];
   range: ActivityRange;
   metric: ActivityMetric;
-  onRangeChange: (range: ActivityRange) => void;
-  onMetricChange: (metric: ActivityMetric) => void;
+  controls?: ReactNode;
   onRetry: () => void;
 }
 
@@ -364,62 +450,29 @@ function AnalyticsPanel({
   tableBuckets,
   range,
   metric,
-  onRangeChange,
-  onMetricChange,
+  controls,
   onRetry,
 }: AnalyticsPanelProps) {
   const { t } = useI18n();
   const days = ACTIVITY_RANGE_DAYS[range];
   return (
-    <section className="activity-analytics-panel" aria-labelledby="commit-activity-title">
-      <header className="activity-panel-header activity-analytics-header">
-        <h2 id="commit-activity-title" className="sr-only">
-          {t('activityAnalytics')}
-        </h2>
-        <div className="activity-analytics-controls">
-          <SelectControl
-            className="activity-metric-select"
-            aria-label={t('activityMetric')}
-            value={metric}
-            onChange={(event) => {
-              if (isActivityMetric(event.currentTarget.value)) {
-                onMetricChange(event.currentTarget.value);
-              }
-            }}
-          >
-            {ACTIVITY_METRICS.map((option) => (
-              <option key={option} value={option}>
-                {activityMetricLabel(option, t)}
-              </option>
-            ))}
-          </SelectControl>
-          <SelectControl
-            className="activity-range-select"
-            aria-label={t('activityRange')}
-            value={range}
-            onChange={(event) => {
-              if (isActivityRange(event.currentTarget.value)) {
-                onRangeChange(event.currentTarget.value);
-              }
-            }}
-          >
-            {ACTIVITY_RANGES.map((option) => (
-              <option key={option} value={option}>
-                {activityRangeLabel(option, t)}
-              </option>
-            ))}
-          </SelectControl>
-        </div>
-      </header>
+    <section
+      className={`activity-analytics-panel${controls ? ' has-inline-controls' : ''}`}
+      aria-labelledby="commit-activity-title"
+    >
+      <h2 id="commit-activity-title" className="sr-only">
+        {t('activityAnalytics')}
+      </h2>
+      {controls ? (
+        <header className="left-pane-toolbar activity-analytics-header">{controls}</header>
+      ) : null}
       <div className="activity-analytics-body" aria-live="polite">
         {analytics.kind === 'noRepo' ? (
           <ActivityState title={t('activityNoRepository')}>
             {t('activityOpenRepository')}
           </ActivityState>
         ) : analytics.kind === 'loading' ? (
-          <ActivityState title={t('activityLoading')} busy>
-            {t('activityReadingHistory')}
-          </ActivityState>
+          <output className="activity-state" aria-busy="true" />
         ) : analytics.kind === 'error' ? (
           <ActivityState title={t('activityUnavailable')}>
             {t('activityLoadFailed')}
@@ -494,7 +547,7 @@ function CommitAnalyticsReady({
         <figcaption id="activity-chart-caption" className="sr-only">
           {t('activityChartDescription')}
         </figcaption>
-        <Suspense fallback={<p>{t('loadingChart')}</p>}>
+        <Suspense fallback={<output className="activity-chart-loading" aria-busy="true" />}>
           <CommitActivityChart data={chartData} metricLabel={activityMetricLabel(metric, t)} />
         </Suspense>
       </figure>
@@ -548,27 +601,12 @@ function activityMetricValue(bucket: CommitActivityBucket, metric: ActivityMetri
       : bucket.branchCount;
 }
 
-function ActivityState({
-  title,
-  children,
-  busy = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  busy?: boolean;
-}) {
-  const content = (
-    <>
+function ActivityState({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="activity-state">
       <strong>{title}</strong>
       <div>{children}</div>
-    </>
-  );
-  return busy ? (
-    <output className="activity-state" aria-busy="true">
-      {content}
-    </output>
-  ) : (
-    <div className="activity-state">{content}</div>
+    </div>
   );
 }
 

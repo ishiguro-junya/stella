@@ -55,7 +55,8 @@ describe('RepositorySwitcherDialog', () => {
         onSelectRegistered={() => undefined}
         onManageRemotes={() => undefined}
         onForget={() => undefined}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
       />,
     );
 
@@ -76,7 +77,11 @@ describe('RepositorySwitcherDialog', () => {
       name: 'second',
       path: '/tmp/second',
       branch: { name: 'topic', detached: false, ahead: 0, behind: 0 },
-      changes: [{ path: 'README.md', area: 'unstaged', status: 'modified' }],
+      changes: [
+        { path: 'README.md', area: 'staged', status: 'modified' },
+        { path: 'README.md', area: 'unstaged', status: 'modified' },
+        { path: 'src/app.ts', area: 'unstaged', status: 'modified' },
+      ],
     });
     const onSelectRegistered = vi.fn<(path: string) => void>();
     render(
@@ -92,19 +97,30 @@ describe('RepositorySwitcherDialog', () => {
         onSelectRegistered={onSelectRegistered}
         onManageRemotes={() => undefined}
         onForget={() => undefined}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
       />,
     );
 
     const dialog = screen.getByRole('dialog', { name: 'Switch Repository' });
     expect(within(dialog).getAllByRole('option')).toHaveLength(3);
     const options = within(dialog).getAllByRole('option');
-    expect(options[0]).toHaveAccessibleName(/second.*topic.*Modified/u);
+    expect(options[0]).toHaveAccessibleName(/second.*\/tmp\/second.*Uncommitted changes.*2 files/u);
+    expect(options[0]).not.toHaveTextContent('topic');
     expect(within(dialog).getByRole('option', { name: /second/u })).toHaveAttribute(
       'aria-current',
       'true',
     );
-    expect(within(dialog).getByRole('option', { name: /second.*topic.*Modified/u })).toBeVisible();
+    const currentOption = within(dialog).getByRole('option', {
+      name: /second.*\/tmp\/second.*Uncommitted changes.*2 files/u,
+    });
+    expect(currentOption).toBeVisible();
+    const countBadge = within(currentOption).getByLabelText('Uncommitted changes, 2 files');
+    expect(countBadge).toHaveClass('switcher-count-badge');
+    expect(countBadge).toHaveTextContent('2');
+    expect(currentOption.lastElementChild).toBe(countBadge);
+    expect(currentOption.nextElementSibling).toHaveClass('switcher-action-trigger');
+    expect(currentOption.querySelector('.switcher-status-dot.warning')).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/Open repositories|Recent/u)).not.toBeInTheDocument();
     expect(dialog).not.toHaveTextContent(/[⌘⇧]/u);
     expect(
@@ -112,6 +128,12 @@ describe('RepositorySwitcherDialog', () => {
         .getByRole('option', { name: /Saved Custom/u })
         .querySelector('img'),
     ).toHaveAttribute('src', 'asset://recent/logo.svg');
+    expect(within(dialog).getByRole('button', { name: 'Clone Repository' })).not.toHaveClass(
+      'primary',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Add Repository' })).not.toHaveClass(
+      'primary',
+    );
 
     expect(options[0]).toHaveFocus();
     expect(options[0]?.closest('.switcher-option-row')).toHaveClass('is-focused');
@@ -147,11 +169,26 @@ describe('RepositorySwitcherDialog', () => {
         onSelectRegistered={() => undefined}
         onManageRemotes={() => undefined}
         onForget={() => undefined}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
       />,
     );
 
-    await user.keyboard('{End}{ArrowUp}{Home}{ArrowDown}{Enter}');
+    const [first, second, last] = screen.getAllByRole('option');
+    const search = screen.getByRole('combobox', { name: 'Search by repository name' });
+    search.focus();
+    await user.keyboard('{End}{ArrowDown}');
+    expect(last).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Home}{ArrowUp}');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+
+    first?.focus();
+    await user.keyboard('{End}{ArrowDown}');
+    expect(last).toHaveFocus();
+    await user.keyboard('{Home}{ArrowUp}');
+    expect(first).toHaveFocus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(second).toHaveFocus();
     expect(onSelectOpen).toHaveBeenCalledWith('repo-2');
   });
 
@@ -175,7 +212,8 @@ describe('RepositorySwitcherDialog', () => {
         onSelectRegistered={() => undefined}
         onManageRemotes={onManageRemotes}
         onForget={onForget}
-        onAdd={() => undefined}
+        onAddLocal={() => undefined}
+        onClone={() => undefined}
       />,
     );
 
@@ -222,6 +260,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={onDismiss}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -241,6 +280,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -263,6 +303,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={onCheckout}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -289,24 +330,28 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={onCheckout}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
     const feature = screen.getByRole('option', { name: 'feature/search' });
     expect(feature).not.toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('button', { name: 'Create branch' })).toBeEnabled();
+    const createBranch = screen.getByRole('button', { name: 'Create branch' });
+    expect(createBranch).toBeEnabled();
+    expect(createBranch).not.toHaveClass('primary');
     await user.click(feature);
     expect(onCheckout).not.toHaveBeenCalled();
     await user.dblClick(feature);
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
 
-    await user.click(screen.getByRole('button', { name: 'Create branch' }));
+    await user.click(createBranch);
     expect(screen.getByRole('textbox', { name: 'Branch name' })).toBeEnabled();
   });
 
-  it('opens branch switching from right-click and the persistent ellipsis', async () => {
+  it('opens branch actions from right-click and the persistent ellipsis', async () => {
     const user = userEvent.setup();
     const onCheckout = vi.fn<(branchName: string) => void>();
+    const onDelete = vi.fn<(branchName: string) => void>();
     render(
       <BranchSwitcherDialog
         repo={repoSnapshot()}
@@ -314,6 +359,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={onCheckout}
         onCreate={() => undefined}
+        onDelete={onDelete}
       />,
     );
 
@@ -329,8 +375,13 @@ describe('BranchSwitcherDialog', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'Switch Branch' }));
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
 
+    await user.click(screen.getByRole('button', { name: 'More actions for feature/search' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete Branch' }));
+    expect(onDelete).toHaveBeenCalledWith('feature/search');
+
     await user.click(screen.getByRole('button', { name: 'More actions for main' }));
     expect(screen.getByRole('menuitem', { name: 'Switch Branch' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete Branch' })).toBeDisabled();
   });
 
   it('orders the current and exact base branches before the remaining Git order', () => {
@@ -358,6 +409,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -383,11 +435,17 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
     expect(screen.getByRole('option', { name: 'main' })).toHaveFocus();
-    expect(screen.getByText('Loading…')).toBeVisible();
+    expect(screen.getByRole('listbox', { name: 'Switch Branch' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(screen.getByText('Loading…')).toHaveClass('sr-only');
+    expect(document.querySelector('.switcher-loading .loading-pulse')).toBeVisible();
   });
 
   it('focuses search when detached HEAD has no current branch item', () => {
@@ -400,6 +458,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -422,6 +481,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
 
@@ -439,6 +499,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={() => undefined}
+        onDelete={() => undefined}
       />,
     );
     expect(screen.getByRole('option', { name: 'feature/search' })).toHaveAttribute(
@@ -458,6 +519,7 @@ describe('BranchSwitcherDialog', () => {
         onDismiss={() => undefined}
         onCheckout={() => undefined}
         onCreate={onCreate}
+        onDelete={() => undefined}
       />,
     );
 

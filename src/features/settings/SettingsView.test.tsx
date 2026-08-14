@@ -19,6 +19,7 @@ describe('SettingsView', () => {
     const onStickyFileHeadersChange = vi.fn<(sticky: boolean) => void>();
     const onEditorLineWrappingChange = vi.fn<(enabled: boolean) => void>();
     const onEditorWrapColumnChange = vi.fn<(column: number) => void>();
+    const onRepositoryBasePathChange = vi.fn<(path: string) => void>();
     const onToolchainModeChange = vi.fn<(mode: 'bundled' | 'system') => void>();
     const settingsProps: ComponentProps<typeof SettingsView> = {
       appearance: 'system',
@@ -31,6 +32,7 @@ describe('SettingsView', () => {
       stickyFileHeaders: false,
       editorLineWrapping: false,
       editorWrapColumn: 120,
+      repositoryBasePath: '/Users/example/Documents',
       toolchainStatus: {
         activeMode: 'bundled',
         selectedMode: 'bundled',
@@ -50,6 +52,7 @@ describe('SettingsView', () => {
       onStickyFileHeadersChange,
       onEditorLineWrappingChange,
       onEditorWrapColumnChange,
+      onRepositoryBasePathChange,
       onToolchainModeChange,
     };
     const { rerender } = render(<SettingsView {...settingsProps} />);
@@ -61,6 +64,7 @@ describe('SettingsView', () => {
       'Language',
       'Appearance',
       'Automatic Updates',
+      'Repository Location',
       'Diff layout',
       'Stage Display',
       'File Display Format',
@@ -90,6 +94,9 @@ describe('SettingsView', () => {
       name: 'Line Wrapping',
     });
     const editorWrapColumnInput = screen.getByRole('spinbutton', { name: 'Wrap Length' });
+    const repositoryBasePathInput = screen.getByRole('textbox', {
+      name: 'Repository Location',
+    });
     const toolchainSelect = screen.getByRole('combobox', { name: 'Git Toolchain' });
     expect(screen.getAllByRole('combobox')).toHaveLength(10);
     expect(languageSelect).toHaveValue('en');
@@ -122,6 +129,7 @@ describe('SettingsView', () => {
         .map((item) => item.textContent),
     ).toEqual(['Wrap', "Don't Wrap"]);
     expect(editorWrapColumnInput).toHaveValue(120);
+    expect(repositoryBasePathInput).toHaveValue('/Users/example/Documents');
     expect(editorWrapColumnInput).toBeDisabled();
     expect(editorWrapColumnInput).toHaveAttribute(
       'aria-describedby',
@@ -147,7 +155,7 @@ describe('SettingsView', () => {
       within(changeListDisplaySelect)
         .getAllByRole('option')
         .map((item) => item.textContent),
-    ).toEqual(['File Name and Path', 'Full Path', 'Tree']);
+    ).toEqual(['Full Path', 'Tree', 'File Name and Path']);
     await user.selectOptions(changeListDisplaySelect, 'tree');
     expect(onChangeListDisplayChange).toHaveBeenCalledWith('tree');
     await user.selectOptions(conventionalCommitsSelect, 'enabled');
@@ -162,7 +170,25 @@ describe('SettingsView', () => {
     await user.clear(enabledWrapColumnInput);
     await user.type(enabledWrapColumnInput, '100');
     expect(onEditorWrapColumnChange).toHaveBeenLastCalledWith(100);
+    await user.clear(repositoryBasePathInput);
+    await user.type(repositoryBasePathInput, 'relative/path');
+    await user.tab();
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter an absolute local path.');
+    expect(onRepositoryBasePathChange).not.toHaveBeenCalled();
+    await user.clear(repositoryBasePathInput);
+    await user.type(repositoryBasePathInput, '/Users/example/Repositories');
+    await user.tab();
+    expect(onRepositoryBasePathChange).toHaveBeenCalledWith('/Users/example/Repositories');
     await user.selectOptions(toolchainSelect, 'system');
     expect(onToolchainModeChange).toHaveBeenCalledWith('system');
+
+    const loadingSettingsProps = { ...settingsProps };
+    delete loadingSettingsProps.toolchainStatus;
+    rerender(<SettingsView {...loadingSettingsProps} />);
+    const toolchain = screen.getByRole('region', { name: 'Git Toolchain' });
+    expect(toolchain).toHaveAttribute('aria-busy', 'true');
+    expect(toolchain).not.toHaveTextContent('Loading…');
+    expect(toolchain.querySelectorAll('.settings-toolchain-modes > div')).toHaveLength(2);
+    expect(toolchain.querySelectorAll('.settings-toolchain-components > div')).toHaveLength(3);
   });
 });

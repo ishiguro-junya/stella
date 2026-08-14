@@ -70,11 +70,9 @@ export function assignHistoryLanes<Node extends HistoryLaneNode>(
     if (!firstParent) {
       active[lane] = undefined;
     } else {
-      const existingParentLane = active.indexOf(firstParent);
-      const parentLane = existingParentLane >= 0 ? existingParentLane : lane;
-      if (parentLane === lane) active[lane] = firstParent;
-      else active[lane] = undefined;
-      parentEdges.push({ parentOid: firstParent, fromLane: lane, toLane: parentLane });
+      // 共通の親でもこのlaneを親行まで保ち、分岐元から斜め線を開始する。
+      active[lane] = firstParent;
+      parentEdges.push({ parentOid: firstParent, fromLane: lane, toLane: lane });
     }
 
     for (const parentOid of mergeParents) {

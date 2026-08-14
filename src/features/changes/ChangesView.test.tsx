@@ -24,6 +24,13 @@ interface MockDiffSurfaceProps {
   collapsed?: boolean;
   showFileHeaders?: boolean;
   source?: { cacheKey?: string; path?: string };
+  initialSelection?: {
+    side: 'additions' | 'deletions';
+    startLine: number;
+    endLine: number;
+    itemId?: string;
+    patchActionable: boolean;
+  };
   hunkAction?: {
     kind: 'stage' | 'unstage';
     editDisabled?: boolean;
@@ -37,12 +44,14 @@ interface MockDiffSurfaceProps {
     side: 'additions' | 'deletions';
     startLine: number;
     endLine: number;
+    patchActionable: boolean;
   }) => void;
   onSelectionContextMenu?: (
     selection: { side: 'additions'; startLine: number; endLine: number },
     point: { x: number; y: number },
     text: string,
   ) => void;
+  onSelectionCopy?: (text: string) => void;
 }
 
 interface MockFileEditorSurfaceProps {
@@ -70,9 +79,42 @@ vi.mock('../diff/DiffSurface', () => ({
         <span>Diff</span>
         <button
           type="button"
-          onClick={() => props.onSelectionChange?.({ side: 'additions', startLine: 2, endLine: 3 })}
+          onClick={() =>
+            props.onSelectionChange?.({
+              side: 'additions',
+              startLine: 2,
+              endLine: 3,
+              patchActionable: true,
+            })
+          }
         >
           Select diff lines
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            props.onSelectionChange?.({
+              side: 'additions',
+              startLine: 4,
+              endLine: 4,
+              patchActionable: false,
+            })
+          }
+        >
+          Select unchanged line
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            props.onSelectionChange?.({
+              side: 'deletions',
+              startLine: 3,
+              endLine: 3,
+              patchActionable: true,
+            })
+          }
+        >
+          Select deleted line
         </button>
         <button
           type="button"
@@ -85,6 +127,9 @@ vi.mock('../diff/DiffSurface', () => ({
           }
         >
           Open selection menu
+        </button>
+        <button type="button" onClick={() => props.onSelectionCopy?.('second line\nthird line')}>
+          Copy selection shortcut
         </button>
         {props.hunkAction ? (
           <>
@@ -233,8 +278,11 @@ function adapterWithConflict(): WorkspaceAdapter {
   };
 }
 
-function adapterWithFile(text = 'const value = 1;\n'): WorkspaceAdapter {
-  const adapter = adapterWithDiff();
+function adapterWithFile(
+  text = 'const value = 1;\n',
+  diffOptions: { patch?: string; tooLarge?: boolean; truncated?: boolean } = {},
+): WorkspaceAdapter {
+  const adapter = adapterWithDiff(diffOptions);
   const queryDiff = adapter.query;
   return {
     ...adapter,
@@ -323,7 +371,7 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('keeps the action bar above changed files and opens Commit as a dialog', async () => {
+  it('renders icon-only repository actions in the left pane footer and opens Commit as a dialog', async () => {
     const user = userEvent.setup();
     render(
       <ChangesView
@@ -337,12 +385,10 @@ describe('ChangesView diff lifecycle', () => {
 
     const sidebar = screen.getByRole('complementary', { name: 'Changes' });
     const changedFiles = within(sidebar).getByRole('region', { name: 'Changed files' });
-    const actions = within(sidebar).getByRole('group', { name: 'Actions' });
-    const actionSection = actions.closest('.changes-action-section');
-    expect(sidebar.firstElementChild).toBe(actionSection);
-    expect(actionSection?.nextElementSibling).toBe(changedFiles);
+    const actions = screen.getByRole('group', { name: 'Actions' });
     const footer = within(sidebar).getByRole('contentinfo');
     expect(changedFiles.nextElementSibling).toBe(footer);
+    expect(footer).toContainElement(actions);
     expect(within(footer).getByText('0 files')).toBeVisible();
     expect(within(footer).getByText('+0')).toBeVisible();
     expect(within(footer).getByText('−0')).toBeVisible();
@@ -360,11 +406,11 @@ describe('ChangesView diff lifecycle', () => {
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toBeVisible();
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
       'aria-valuemin',
-      '240',
+      '360',
     );
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
       'aria-valuenow',
-      '240',
+      '360',
     );
     expect(screen.queryByRole('separator', { name: 'Commit pane width' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Changes' })).not.toBeInTheDocument();
@@ -414,6 +460,24 @@ describe('ChangesView diff lifecycle', () => {
     expect(within(footer).getByText('2 files selected')).toBeVisible();
   });
 
+  it('defaults the file list to full paths', () => {
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/features/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const row = changeRow(/Modified src\/features\/app\.ts/u);
+    expect(within(row).getByText('src/features/app.ts')).toBeVisible();
+    expect(row).toHaveClass('is-single-line');
+  });
+
   it('keeps the left pane resizable without changing the persisted History inspector width', async () => {
     const user = userEvent.setup();
     const onPaneWidthsChange = vi.fn<(widths: { left: number; right: number }) => void>();
@@ -430,7 +494,7 @@ describe('ChangesView diff lifecycle', () => {
     screen.getByRole('separator', { name: 'Changes list width' }).focus();
     await user.keyboard('{ArrowRight}');
 
-    expect(onPaneWidthsChange).toHaveBeenCalledWith({ left: 248, right: 330 });
+    expect(onPaneWidthsChange).toHaveBeenCalledWith({ left: 368, right: 330 });
   });
 
   it('labels a truncated diff and disables line selection', async () => {
@@ -571,6 +635,33 @@ describe('ChangesView diff lifecycle', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('second line\nthird line'));
     expect(screen.getByRole('status')).toHaveTextContent('Copied the selected lines.');
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('copies the selected line contents from the Diff shortcut', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn<(value: string) => Promise<void>>(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText('Diff');
+    await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
+    await user.click(screen.getByRole('button', { name: 'Copy selection shortcut' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('second line\nthird line'));
+    expect(screen.getByRole('status')).toHaveTextContent('Copied the selected lines.');
   });
 
   it('hides line and Hunk staging actions when Stage display is hidden', async () => {
@@ -869,7 +960,7 @@ describe('ChangesView diff lifecycle', () => {
     );
   });
 
-  it('keeps Commit left of Pull in the labeled action bar with Fetch last', () => {
+  it('keeps Commit left of Pull in the icon-only footer actions with Fetch last', () => {
     render(
       <ChangesView
         repo={repoSnapshot({ branch: { name: 'main', detached: false, ahead: 0, behind: 0 } })}
@@ -885,18 +976,18 @@ describe('ChangesView diff lifecycle', () => {
       within(actions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Commit', 'Pull', 'Push', 'Fetch']);
+    ).toEqual(['', '', '', '']);
     const pull = screen.getByRole('button', { name: 'Pull' });
     expect(pull).toBeEnabled();
     expect(pull).toHaveClass('changes-action-button');
     expect(pull).toHaveAttribute('title', 'Pull');
-    expect(pull).toHaveTextContent('Pull');
+    expect(pull.querySelector('span')).not.toBeInTheDocument();
     expect(pull).toHaveAttribute('aria-expanded', 'false');
     for (const label of ['Commit', 'Push', 'Fetch']) {
       const action = within(actions).getByRole('button', { name: label });
       expect(action).toHaveClass('changes-action-button');
       expect(action).toHaveAttribute('title', label);
-      expect(action).toHaveTextContent(label);
+      expect(action.querySelector('span')).not.toBeInTheDocument();
     }
   });
 
@@ -1325,6 +1416,75 @@ describe('ChangesView diff lifecycle', () => {
 
     await user.click(screen.getByRole('button', { name: 'Display' }));
     expect(await screen.findByText('Diff')).toBeVisible();
+  });
+
+  it('opens an unchanged selected line from the mode tabs and restores it in the Diff', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile()}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+
+    await user.click(screen.getByRole('button', { name: 'Select unchanged line' }));
+    await user.click(screen.getByRole('button', { name: 'Open selection menu' }));
+    const menu = screen.getByRole('menu', { name: 'Selected lines' });
+    expect(within(menu).getByRole('menuitem', { name: 'Edit Lines' })).toBeVisible();
+    expect(within(menu).getByRole('menuitem', { name: 'Copy Selected Lines' })).toBeVisible();
+    expect(within(menu).queryByRole('menuitem', { name: 'Stage Selected Lines' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Discard Selected Lines' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('tab', { name: 'Edit' }));
+    const editor = await screen.findByRole('textbox', { name: 'Edit src/app.ts' });
+    expect(editor.closest('main')).toHaveAttribute('data-initial-scroll-line', '4');
+
+    await user.click(screen.getByRole('button', { name: 'Display' }));
+    await screen.findByText('Diff');
+    expect(diffSurfaceMock.mock.lastCall?.[0].initialSelection).toEqual({
+      side: 'additions',
+      startLine: 4,
+      endLine: 4,
+      patchActionable: false,
+    });
+  });
+
+  it('opens a deleted selection at the next line remaining in the edited file', async () => {
+    const user = userEvent.setup();
+    const patch = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,4 +1,2 @@
+ keep-1
+-delete-2
+-delete-3
+ keep-4
+`;
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithFile('keep-1\nkeep-4\n', { patch })}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    await screen.findByText('Diff');
+
+    await user.click(screen.getByRole('button', { name: 'Select deleted line' }));
+    await user.click(screen.getByRole('tab', { name: 'Edit' }));
+
+    const editor = await screen.findByRole('textbox', { name: 'Edit src/app.ts' });
+    expect(editor.closest('main')).toHaveAttribute('data-initial-scroll-line', '2');
   });
 
   it('keeps the ellipsis file menu in the editor and restricts destructive actions while dirty', async () => {

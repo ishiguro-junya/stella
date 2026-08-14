@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -25,7 +26,11 @@ import type {
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
-import { DEFAULT_EDITOR_WRAP_COLUMN } from '../../persistence/preferences';
+import {
+  DEFAULT_EDITOR_WRAP_COLUMN,
+  LEFT_PANE_MAX_WIDTH,
+  LEFT_PANE_MIN_WIDTH,
+} from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
 import {
   describeWorkspaceError,
@@ -56,10 +61,8 @@ export interface HistoryViewProps {
   onPaneWidthsChange: (widths: { left: number; right?: number }) => void;
 }
 
-const GRAPH_HEIGHT = 48;
-const GRAPH_MIDDLE = GRAPH_HEIGHT / 2;
-const GRAPH_EDGE_TOP = 0;
-const GRAPH_EDGE_BOTTOM = GRAPH_HEIGHT;
+const GRAPH_CORNER_HEIGHT = 8;
+const GRAPH_EDGE_LENGTH = 10_000;
 const GRAPH_LANE_GAP = 12;
 const GRAPH_HORIZONTAL_PADDING = 6;
 const HISTORY_LANE_COLOR_COUNT = 6;
@@ -83,12 +86,13 @@ function laneX(lane: number): number {
   return GRAPH_HORIZONTAL_PADDING + lane * GRAPH_LANE_GAP;
 }
 
-function graphEdgePath(fromLane: number, fromY: number, toLane: number, toY: number): string {
-  const fromX = laneX(fromLane);
-  const toX = laneX(toLane);
-  if (fromX === toX) return `M ${fromX} ${fromY} L ${toX} ${toY}`;
-  const controlY = (fromY + toY) / 2;
-  return `M ${fromX} ${fromY} C ${fromX} ${controlY}, ${toX} ${controlY}, ${toX} ${toY}`;
+function graphVerticalPath(lane: number): string {
+  const x = laneX(lane);
+  return `M ${x} 0 L ${x} ${GRAPH_EDGE_LENGTH}`;
+}
+
+function graphCornerPath(fromLane: number, toLane: number): string {
+  return `M ${laneX(fromLane)} 0 L ${laneX(toLane)} ${GRAPH_CORNER_HEIGHT}`;
 }
 
 type HistoryRefKind = 'tag' | 'branch' | 'remote' | 'head' | 'other';
@@ -211,10 +215,46 @@ function HistoryGraph({
       aria-hidden="true"
       style={graphStyle}
     >
+      <svg className="history-graph-through" width={width} focusable="false">
+        {throughLanes.map((lane) => (
+          <path
+            key={`active:${lane}`}
+            className="history-graph-edge active"
+            data-edge-kind="active"
+            data-from-lane={lane}
+            data-to-lane={lane}
+            style={historyLaneStyle(lane)}
+            d={graphVerticalPath(lane)}
+          />
+        ))}
+      </svg>
+      <svg className="history-graph-incoming-vertical" width={width} focusable="false">
+        {connectsFromWorkingTree ? (
+          <path
+            className="history-graph-edge working-tree"
+            data-edge-kind="working-tree-incoming-vertical"
+            data-from-lane={commit.lane}
+            data-to-lane={commit.lane}
+            style={WORKING_TREE_LANE_STYLE}
+            d={graphVerticalPath(commit.lane)}
+          />
+        ) : null}
+        {commit.incomingEdges.map((edge) => (
+          <path
+            key={`incoming-vertical:${edge.fromLane}:${edge.toLane}`}
+            className="history-graph-edge incoming-vertical"
+            data-edge-kind="incoming-vertical"
+            data-from-lane={edge.fromLane}
+            data-to-lane={edge.toLane}
+            style={historyLaneStyle(edge.fromLane)}
+            d={graphVerticalPath(edge.fromLane)}
+          />
+        ))}
+      </svg>
       <svg
+        className="history-graph-incoming-corner"
         width={width}
-        viewBox={`0 0 ${width} ${GRAPH_HEIGHT}`}
-        preserveAspectRatio="none"
+        height={GRAPH_CORNER_HEIGHT}
         focusable="false"
       >
         {connectsFromWorkingTree ? (
@@ -224,20 +264,9 @@ function HistoryGraph({
             data-from-lane={commit.lane}
             data-to-lane={commit.lane}
             style={WORKING_TREE_LANE_STYLE}
-            d={graphEdgePath(commit.lane, GRAPH_EDGE_TOP, commit.lane, GRAPH_MIDDLE)}
+            d={graphCornerPath(commit.lane, commit.lane)}
           />
         ) : null}
-        {throughLanes.map((lane) => (
-          <path
-            key={`active:${lane}`}
-            className="history-graph-edge active"
-            data-edge-kind="active"
-            data-from-lane={lane}
-            data-to-lane={lane}
-            style={historyLaneStyle(lane)}
-            d={graphEdgePath(lane, GRAPH_EDGE_TOP, lane, GRAPH_EDGE_BOTTOM)}
-          />
-        ))}
         {commit.incomingEdges.map((edge) => (
           <path
             key={`incoming:${edge.fromLane}:${edge.toLane}`}
@@ -246,18 +275,38 @@ function HistoryGraph({
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
             style={historyLaneStyle(edge.fromLane)}
-            d={graphEdgePath(edge.fromLane, GRAPH_EDGE_TOP, edge.toLane, GRAPH_MIDDLE)}
+            d={graphCornerPath(edge.fromLane, edge.toLane)}
           />
         ))}
-        {commit.parentEdges.map((edge) => (
+      </svg>
+      <svg
+        className="history-graph-outgoing-corner"
+        width={width}
+        height={GRAPH_CORNER_HEIGHT}
+        focusable="false"
+      >
+        {commit.parentEdges.map((edge, index) => (
           <path
             key={`parent:${edge.parentOid}:${edge.toLane}`}
             className="history-graph-edge parent"
             data-edge-kind="parent"
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
-            style={historyLaneStyle(edge.toLane)}
-            d={graphEdgePath(edge.fromLane, GRAPH_MIDDLE, edge.toLane, GRAPH_EDGE_BOTTOM)}
+            style={historyLaneStyle(index === 0 ? edge.fromLane : edge.toLane)}
+            d={graphCornerPath(edge.fromLane, edge.toLane)}
+          />
+        ))}
+      </svg>
+      <svg className="history-graph-outgoing-vertical" width={width} focusable="false">
+        {commit.parentEdges.map((edge, index) => (
+          <path
+            key={`parent-vertical:${edge.parentOid}:${edge.toLane}`}
+            className="history-graph-edge parent-vertical"
+            data-edge-kind="parent-vertical"
+            data-from-lane={edge.fromLane}
+            data-to-lane={edge.toLane}
+            style={historyLaneStyle(index === 0 ? edge.fromLane : edge.toLane)}
+            d={graphVerticalPath(edge.toLane)}
           />
         ))}
       </svg>
@@ -284,9 +333,9 @@ function WorkingTreeGraph({ laneCount, connected }: { laneCount: number; connect
       style={graphStyle}
     >
       <svg
+        className="history-graph-outgoing-corner"
         width={width}
-        viewBox={`0 0 ${width} ${GRAPH_HEIGHT}`}
-        preserveAspectRatio="none"
+        height={GRAPH_CORNER_HEIGHT}
         focusable="false"
       >
         {connected ? (
@@ -295,7 +344,18 @@ function WorkingTreeGraph({ laneCount, connected }: { laneCount: number; connect
             data-edge-kind="working-tree"
             data-from-lane="0"
             data-to-lane="0"
-            d={graphEdgePath(0, GRAPH_MIDDLE, 0, GRAPH_EDGE_BOTTOM)}
+            d={graphCornerPath(0, 0)}
+          />
+        ) : null}
+      </svg>
+      <svg className="history-graph-outgoing-vertical" width={width} focusable="false">
+        {connected ? (
+          <path
+            className="history-graph-edge working-tree parent-vertical"
+            data-edge-kind="working-tree-vertical"
+            data-from-lane="0"
+            data-to-lane="0"
+            d={graphVerticalPath(0)}
           />
         ) : null}
       </svg>
@@ -362,6 +422,7 @@ export function HistoryView({
 }: HistoryViewProps) {
   const { t, message, formatDate } = useI18n();
   const [selectedOid, setSelectedOid] = useState(repo.selectedCommitOid ?? repo.history[0]?.oid);
+  const deferredSelectedOid = useDeferredValue(selectedOid);
   const [details, setDetails] = useState<CommitDetails>();
   const [error, setError] = useState<WorkspaceErrorContent>();
   const [openMenu, setOpenMenu] = useState<{ oid: string; source: HistoryMenuSource }>();
@@ -380,11 +441,28 @@ export function HistoryView({
   const historyListRef = useRef<HTMLOListElement>(null);
   const historyEndRef = useRef<HTMLLIElement>(null);
   const actionFocusOidRef = useRef<string | undefined>(undefined);
+  const focusedRepoRef = useRef<string | undefined>(undefined);
   const loadingMoreRef = useRef(false);
   const historyRequestIdRef = useRef(0);
   const visibleHistory = useMemo(
     () => assignHistoryLanes(historyPage.commits),
     [historyPage.commits],
+  );
+  const moveCommitSelection = useCallback(
+    (index: number, offset: -1 | 1): void => {
+      historyListRef.current?.classList.add('is-keyboard-navigating');
+      const nextIndex = Math.min(Math.max(index + offset, 0), visibleHistory.length - 1);
+      const next = visibleHistory[nextIndex];
+      if (!next || nextIndex === index) return;
+      setSelectedOid(next.oid);
+      setOpenMenu(undefined);
+      setContextMenu(undefined);
+      const rows = historyListRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[data-history-commit-oid]',
+      );
+      rows?.[nextIndex]?.focus();
+    },
+    [visibleHistory],
   );
   const changedFileCount = new Set(repo.changes.map((change) => change.path)).size;
   const operationActionDisabledReason =
@@ -406,31 +484,31 @@ export function HistoryView({
   );
 
   useEffect(() => {
-    if (!selectedOid) {
+    if (!deferredSelectedOid) {
       setDetails(undefined);
       return undefined;
     }
     let cancelled = false;
     setError(undefined);
-    setDetails(undefined);
     void adapter
-      .query({ kind: 'commitDetails', repoId: repo.repoId, oid: selectedOid })
+      .query({ kind: 'commitDetails', repoId: repo.repoId, oid: deferredSelectedOid })
       .then((result) => {
-        if (!cancelled && result.kind === 'commitDetails' && result.commit.oid === selectedOid)
+        if (cancelled) return;
+        if (result.kind === 'commitDetails' && result.commit.oid === deferredSelectedOid) {
           setDetails(result.commit);
+          return;
+        }
+        setDetails(undefined);
       })
       .catch((cause: unknown) => {
-        if (!cancelled)
-          reportRuntimeError(
-            t('loadCommitDetailsFailedTitle'),
-            cause,
-            t('loadCommitDetailsFailed'),
-          );
+        if (cancelled) return;
+        setDetails(undefined);
+        reportRuntimeError(t('loadCommitDetailsFailedTitle'), cause, t('loadCommitDetailsFailed'));
       });
     return () => {
       cancelled = true;
     };
-  }, [adapter, repo.repoId, reportRuntimeError, selectedOid, t]);
+  }, [adapter, deferredSelectedOid, repo.repoId, reportRuntimeError, t]);
 
   useEffect(() => {
     const normalizedSearch = historySearch.trim();
@@ -527,6 +605,55 @@ export function HistoryView({
       return visibleHistory[0]?.oid;
     });
   }, [repo.selectedCommitOid, visibleHistory]);
+
+  useEffect(() => {
+    if (focusedRepoRef.current === repo.repoId || !selectedOid) return;
+    const target = [
+      ...(historyListRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[data-history-commit-oid]',
+      ) ?? []),
+    ].find((row) => row.dataset.historyCommitOid === selectedOid);
+    if (!target) return;
+    target.focus();
+    focusedRepoRef.current = repo.repoId;
+  }, [repo.repoId, selectedOid, visibleHistory]);
+
+  useEffect(() => {
+    const handleHistoryArrow = (event: KeyboardEvent): void => {
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
+      ) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : undefined;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [role="listbox"]',
+        )
+      ) {
+        return;
+      }
+      const active = document.activeElement;
+      if (
+        active !== document.body &&
+        !(active instanceof Element && active.closest('.history-view')) &&
+        !(active instanceof Element && active.matches('.titlebar-menu-button[aria-current="page"]'))
+      ) {
+        return;
+      }
+      const index = visibleHistory.findIndex((commit) => commit.oid === selectedOid);
+      if (index < 0) return;
+      event.preventDefault();
+      moveCommitSelection(index, event.key === 'ArrowUp' ? -1 : 1);
+    };
+    window.addEventListener('keydown', handleHistoryArrow);
+    return () => window.removeEventListener('keydown', handleHistoryArrow);
+  }, [moveCommitSelection, selectedOid, visibleHistory]);
 
   useEffect(() => {
     setOpenMenu(undefined);
@@ -670,32 +797,37 @@ export function HistoryView({
     if (branch) settleAction(onAction({ kind: 'checkoutBranch', name: branch }));
   };
 
+  const historySearchControl = (
+    <label className="history-search">
+      <Search className="history-search-icon" aria-hidden="true" focusable="false" />
+      <input
+        ref={historySearchRef}
+        type="search"
+        value={historySearch}
+        aria-label={t('searchHistory')}
+        aria-keyshortcuts="Meta+F"
+        placeholder={t('searchHistory')}
+        onChange={(event) => setHistorySearch(event.currentTarget.value)}
+      />
+      {searchingHistory ? (
+        <>
+          <LoaderCircle className="history-search-loading" aria-hidden="true" focusable="false" />
+          <output className="sr-only">{t('loading')}</output>
+        </>
+      ) : null}
+    </label>
+  );
+
   return (
     <div className="three-pane history-view" style={paneStyle}>
       <aside className="pane commit-list-pane" aria-label={t('commitHistory')}>
-        <label className="history-search">
-          <Search className="history-search-icon" aria-hidden="true" focusable="false" />
-          <input
-            ref={historySearchRef}
-            type="search"
-            value={historySearch}
-            aria-label={t('searchHistory')}
-            aria-keyshortcuts="Meta+F"
-            placeholder={t('searchHistory')}
-            onChange={(event) => setHistorySearch(event.currentTarget.value)}
-          />
-          {searchingHistory ? (
-            <>
-              <LoaderCircle
-                className="history-search-loading"
-                aria-hidden="true"
-                focusable="false"
-              />
-              <output className="sr-only">{t('loading')}</output>
-            </>
-          ) : null}
-        </label>
-        <ol ref={historyListRef} className="commit-list" style={historyListStyle}>
+        <div className="left-pane-toolbar history-pane-toolbar">{historySearchControl}</div>
+        <ol
+          ref={historyListRef}
+          className="commit-list"
+          style={historyListStyle}
+          onPointerMove={(event) => event.currentTarget.classList.remove('is-keyboard-navigating')}
+        >
           {changedFileCount > 0 ? (
             <li className="history-working-tree-item">
               <button
@@ -731,6 +863,12 @@ export function HistoryView({
                   data-history-commit-oid={commit.oid}
                   aria-current={selected ? 'true' : undefined}
                   onClick={() => setSelectedOid(commit.oid)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      moveCommitSelection(index, event.key === 'ArrowUp' ? -1 : 1);
+                    }
+                  }}
                   onDoubleClick={(event) => checkoutCommitBranch(event, commit)}
                   onContextMenu={(event) => openContextMenu(event, commit)}
                 >
@@ -797,6 +935,8 @@ export function HistoryView({
         label={t('historyListWidth')}
         value={paneWidths.left}
         direction="growRight"
+        min={LEFT_PANE_MIN_WIDTH}
+        max={LEFT_PANE_MAX_WIDTH}
         onChange={(left) => onPaneWidthsChange({ ...paneWidths, left })}
       />
 
@@ -817,7 +957,7 @@ export function HistoryView({
                 <HistoryActionMenu
                   target={actionTargetFor(details)}
                   open={openMenu?.source === 'detail' && openMenu.oid === details.oid}
-                  disabled={repositoryActionsDisabled}
+                  disabled={repositoryActionsDisabled || details.oid !== selectedOid}
                   persistentTrigger
                   onOpenChange={(open) => {
                     setOpenMenu(open ? { oid: details.oid, source: 'detail' } : undefined);
@@ -896,9 +1036,7 @@ export function HistoryView({
                 <h2 id="commit-detail-title">{t('commitDetails')}</h2>
               </div>
             </header>
-            <p className="empty-state-small">
-              {t(selectedOid ? 'loadingCommitDetails' : 'selectCommit')}
-            </p>
+            {!selectedOid ? <p className="empty-state-small">{t('selectCommit')}</p> : null}
           </>
         )}
       </main>

@@ -1451,6 +1451,33 @@ describe('tauriWorkspaceAdapter', () => {
         confirmationToken: 'branch-preview',
       }),
     });
+
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_preview')
+        return {
+          confirmationToken: 'delete-branch-preview',
+          expiresAtUnixMs: 1,
+          summary: { id: 'previewDeleteBranch', args: { branch: 'feature/old' } },
+          destructive: true,
+          affectedPaths: [],
+          affectedCommits: [],
+          resolvedTargets: [],
+          lostCommitOids: [],
+          remoteEffect: null,
+        };
+      return baseInvoke()(command, args);
+    });
+    const deleteAction = { kind: 'deleteBranch' as const, name: 'feature/old' };
+    const deletePreview = await adapter.preview({ repoId: 'repo-1', action: deleteAction });
+
+    expect(deletePreview.destructive).toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
+      request: {
+        repoId: 'repo-1',
+        expectedGeneration: 2,
+        action: deleteAction,
+      },
+    });
   });
 
   it('creates a Tag through the typed action and refreshes History refs', async () => {

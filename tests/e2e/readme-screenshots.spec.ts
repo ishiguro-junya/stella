@@ -35,7 +35,7 @@ describe('README用スクリーンショット', () => {
 
     const fixtureRoot = await createFixtureDirectory('readme-screenshots');
     try {
-      const repositoryPath = await copyE2EShowcaseRepository(fixtureRoot, 'ohtani-shohei', {
+      const repositoryPath = await copyE2EShowcaseRepository(fixtureRoot, 'major-league-baseball', {
         preserveChanges: true,
       });
 
@@ -86,6 +86,16 @@ describe('README用スクリーンショット', () => {
       await waitForDiff();
       await blurActiveElement();
       await saveLogicalScreenshot(join(outputDirectory, 'changes.png'), 1180, 760);
+
+      await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
+      const editor = $('.file-editor-pane');
+      await editor.waitForDisplayed({ timeout: 10_000 });
+      await expect(editor.$('[role="textbox"]')).toHaveAttribute(
+        'aria-label',
+        'src/teams/dodgers/shohei-ohtani.tsを編集',
+      );
+      await blurActiveElement();
+      await saveLogicalScreenshot(join(outputDirectory, 'editor.png'), 1180, 760);
 
       await $('button[aria-label="活動"]').click();
       await expect($('.activity-view')).toBeDisplayed();

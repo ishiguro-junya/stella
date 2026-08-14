@@ -2,6 +2,6 @@
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "com.emuni.stella.dev",
   "bundle": {
-    "icon": ["icons/icon-dev.icns"]
+    "icon": ["icons/icon.png"]
   }
 }

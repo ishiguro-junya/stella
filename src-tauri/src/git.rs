@@ -263,6 +263,10 @@ pub(crate) enum GitCommand {
         name: String,
         start_point: String,
     },
+    DeleteBranch {
+        name: String,
+        force: bool,
+    },
     CreateTag {
         name: String,
         target: String,
@@ -692,6 +696,14 @@ impl GitCommand {
                 name.into(),
                 start_point.into(),
             ],
+            Self::DeleteBranch { name, force } => {
+                let mut args = strings(["branch", "--delete"]);
+                if *force {
+                    args.push("--force".into());
+                }
+                args.extend([OsString::from("--"), name.into()]);
+                args
+            }
             Self::CreateTag { name, target } => vec![
                 "tag".into(),
                 "--no-sign".into(),
@@ -1565,6 +1577,25 @@ mod tests {
         .args();
         assert!(create.contains(&OsString::from("--no-overwrite-ignore")));
         assert!(create.contains(&OsString::from("-c")));
+    }
+
+    #[test]
+    fn branch_deletion_forces_only_when_requested() {
+        let safe = GitCommand::DeleteBranch {
+            name: "topic".into(),
+            force: false,
+        }
+        .args();
+        let forced = GitCommand::DeleteBranch {
+            name: "topic".into(),
+            force: true,
+        }
+        .args();
+
+        assert!(safe.contains(&OsString::from("--delete")));
+        assert!(!safe.contains(&OsString::from("--force")));
+        assert!(forced.contains(&OsString::from("--delete")));
+        assert!(forced.contains(&OsString::from("--force")));
     }
 
     #[test]

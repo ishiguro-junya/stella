@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +24,10 @@ vi.mock('./features/activity/ActivityView', () => ({
   },
 }));
 
+vi.mock('@tauri-apps/api/path', () => ({
+  documentDir: async () => '/tmp',
+}));
+
 describe('App deferred Activity navigation', () => {
   it('discards an unstarted Clone when Activity closes before its lazy view is ready', async () => {
     const user = userEvent.setup();
@@ -47,12 +51,16 @@ describe('App deferred Activity navigation', () => {
     };
     render(<App adapter={adapter} directoryPicker={async () => '/tmp'} />);
 
-    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/repository.git',
     );
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
+        name: 'Clone Repository',
+      }),
+    );
 
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(attach).not.toHaveBeenCalled();
@@ -60,7 +68,6 @@ describe('App deferred Activity navigation', () => {
     expect(screen.getByRole('heading', { name: 'Repositories' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
-    await user.click(screen.getByRole('tab', { name: 'Path' }));
     await user.type(screen.getByRole('textbox', { name: 'Repository path' }), repo.path);
     await user.click(screen.getByRole('button', { name: 'Add' }));
 

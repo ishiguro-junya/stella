@@ -9,7 +9,8 @@ import type { Appearance } from '../theme/appearance';
 
 const STORAGE_KEY = 'stella.preferences.v1';
 const STORAGE_VERSION = 1;
-export const CHANGES_PANE_MIN_WIDTH = 240;
+export const LEFT_PANE_MIN_WIDTH = 360;
+export const LEFT_PANE_MAX_WIDTH = 600;
 export const EDITOR_WRAP_COLUMN_MIN = 40;
 export const EDITOR_WRAP_COLUMN_MAX = 400;
 export const DEFAULT_EDITOR_WRAP_COLUMN = 120;
@@ -21,11 +22,7 @@ export interface PaneWidths {
   right: number;
 }
 
-export interface PaneWidthPreferences {
-  changes: PaneWidths;
-  history: { left: number };
-  activity: { left: number };
-}
+export type PaneWidthPreferences = PaneWidths;
 
 export interface CommitDraft {
   plainMessage: string;
@@ -44,6 +41,7 @@ export interface StellaPreferences {
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
   editorWrapColumn: number;
+  repositoryBasePath?: string;
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
   repositoryHealthIssues: Record<string, RepositoryHealthIssue[]>;
@@ -60,7 +58,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   automaticUpdateChecks: true,
   diffStyle: 'unified',
   splitStageView: false,
-  changeListDisplay: 'nameAndPath',
+  changeListDisplay: 'fullPath',
   useConventionalCommits: false,
   stickyFileHeaders: false,
   editorLineWrapping: false,
@@ -69,11 +67,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   repositoryNames: {},
   repositoryHealthIssues: {},
   openRepoPaths: [],
-  paneWidths: {
-    changes: { left: 320, right: 336 },
-    history: { left: 320 },
-    activity: { left: 560 },
-  },
+  paneWidths: { left: 360, right: 336 },
   commitDrafts: {},
 };
 
@@ -212,6 +206,12 @@ export function readPreferences(): StellaPreferences {
     const changesPaneWidths = isRecord(paneWidths.changes) ? paneWidths.changes : {};
     const historyPaneWidths = isRecord(paneWidths.history) ? paneWidths.history : {};
     const activityPaneWidths = isRecord(paneWidths.activity) ? paneWidths.activity : {};
+    const sharedLeftPaneWidth = [
+      paneWidths.left,
+      changesPaneWidths.left,
+      historyPaneWidths.left,
+      activityPaneWidths.left,
+    ].find((width) => typeof width === 'number' && Number.isFinite(width));
     return {
       version: STORAGE_VERSION,
       appearance: isAppearance(value.appearance)
@@ -243,6 +243,9 @@ export function readPreferences(): StellaPreferences {
           ? value.editorLineWrapping
           : DEFAULT_PREFERENCES.editorLineWrapping,
       editorWrapColumn: normalizeEditorWrapColumn(value.editorWrapColumn),
+      ...(typeof value.repositoryBasePath === 'string' && value.repositoryBasePath.startsWith('/')
+        ? { repositoryBasePath: value.repositoryBasePath }
+        : {}),
       registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
       repositoryNames: repositoryNameRecord(value.repositoryNames),
       repositoryHealthIssues: repositoryHealthIssueRecord(value.repositoryHealthIssues),
@@ -251,28 +254,16 @@ export function readPreferences(): StellaPreferences {
         ? { selectedRepoPath: value.selectedRepoPath }
         : {}),
       paneWidths: {
-        changes: {
-          left: boundedWidth(
-            changesPaneWidths.left,
-            DEFAULT_PREFERENCES.paneWidths.changes.left,
-            CHANGES_PANE_MIN_WIDTH,
-          ),
-          right: boundedWidth(
-            changesPaneWidths.right,
-            DEFAULT_PREFERENCES.paneWidths.changes.right,
-          ),
-        },
-        history: {
-          left: boundedWidth(historyPaneWidths.left, DEFAULT_PREFERENCES.paneWidths.history.left),
-        },
-        activity: {
-          left: boundedWidth(
-            activityPaneWidths.left,
-            DEFAULT_PREFERENCES.paneWidths.activity.left,
-            360,
-            600,
-          ),
-        },
+        left: boundedWidth(
+          sharedLeftPaneWidth,
+          DEFAULT_PREFERENCES.paneWidths.left,
+          LEFT_PANE_MIN_WIDTH,
+          LEFT_PANE_MAX_WIDTH,
+        ),
+        right: boundedWidth(
+          paneWidths.right ?? changesPaneWidths.right,
+          DEFAULT_PREFERENCES.paneWidths.right,
+        ),
       },
       commitDrafts: commitDraftRecord(value.commitDrafts),
     };

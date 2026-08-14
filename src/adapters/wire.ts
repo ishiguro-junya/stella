@@ -149,6 +149,7 @@ export type WireAction =
       newUrl: string;
     }
   | { kind: 'createBranch'; name: string; startPoint: string; checkout: boolean }
+  | { kind: 'deleteBranch'; name: string }
   | { kind: 'createTag'; name: string; target: string }
   | { kind: 'gitFlow'; request: WireGitFlowRequest }
   | { kind: 'checkout'; branch: string }

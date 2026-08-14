@@ -40,7 +40,7 @@ describe('HistoryActionDialog', () => {
     expect(input).toHaveFocus();
     expect(input).not.toHaveAttribute('placeholder');
     await user.type(input, 'feature/history-menu');
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
 
     expect(onAction).toHaveBeenCalledWith({
       kind: 'createBranch',
@@ -61,7 +61,7 @@ describe('HistoryActionDialog', () => {
     const input = within(dialog).getByRole('textbox', { name: 'Tag name' });
     expect(input).not.toHaveAttribute('placeholder');
     await user.type(input, 'v2.0.0');
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
     expect(onAction).toHaveBeenCalledWith({
       kind: 'createTag',
       name: 'v2.0.0',
@@ -82,7 +82,7 @@ describe('HistoryActionDialog', () => {
       expect(input).toHaveValue(target.oid);
       await user.clear(input);
       await user.type(input, 'origin/topic');
-      await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Next' }));
       expect(onAction).toHaveBeenCalledWith(expected);
     },
   );
@@ -95,9 +95,9 @@ describe('HistoryActionDialog', () => {
     const { onAction } = renderDialog({ kind, target });
     const dialog = screen.getByRole('dialog', { name: dialogName });
     expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
-    const review = within(dialog).getByRole('button', { name: 'Review impact' });
-    expect(review).toHaveFocus();
-    await user.click(review);
+    const next = within(dialog).getByRole('button', { name: 'Next' });
+    expect(next).toHaveFocus();
+    await user.click(next);
     expect(onAction).toHaveBeenCalledWith({ kind, oid: target.oid });
   });
 
@@ -110,7 +110,7 @@ describe('HistoryActionDialog', () => {
       within(dialog).getByRole('combobox', { name: 'Mainline parent' }),
       '2',
     );
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
     expect(onAction).toHaveBeenCalledWith({ kind: 'revert', oid: target.oid, mainline: 2 });
   });
 
@@ -121,9 +121,10 @@ describe('HistoryActionDialog', () => {
     const mode = within(dialog).getByRole('combobox', { name: 'Reset mode' });
     expect(mode).toHaveValue('mixed');
     await user.selectOptions(mode, 'hard');
-    const review = within(dialog).getByRole('button', { name: 'Review impact' });
-    expect(review).toHaveClass('danger');
-    await user.click(review);
+    const next = within(dialog).getByRole('button', { name: 'Next' });
+    expect(next).toHaveClass('primary');
+    expect(next).not.toHaveClass('danger');
+    await user.click(next);
     expect(onAction).toHaveBeenCalledWith({ kind: 'reset', oid: target.oid, mode: 'hard' });
   });
 
@@ -136,11 +137,11 @@ describe('HistoryActionDialog', () => {
     const dialog = screen.getByRole('dialog', { name: 'Create Tag' });
     const input = within(dialog).getByRole('textbox', { name: 'Tag name' });
     await user.type(input, 'v2.0.0');
-    await user.click(within(dialog).getByRole('button', { name: 'Review impact' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }));
 
     await waitFor(() => expect(onAction).toHaveBeenCalledOnce());
     expect(input).toHaveValue('v2.0.0');
-    expect(within(dialog).getByRole('button', { name: 'Review impact' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Next' })).toBeEnabled();
     expect(onDismiss).not.toHaveBeenCalled();
   });
 });

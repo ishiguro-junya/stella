@@ -11,13 +11,13 @@ describe('App shell and Settings', () => {
   it('launches the native app', async () => {
     await expect(browser).toHaveTitle('Stella');
     await expect($('[data-testid="app-shell"]')).toBeDisplayed();
-    const titlebarButtonLabels = await browser.tauri.execute(() =>
-      [...document.querySelectorAll<HTMLButtonElement>('.titlebar button')].map(
+    const headerButtonLabels = await browser.tauri.execute(() =>
+      [...document.querySelectorAll<HTMLButtonElement>('.app-header button')].map(
         (button) => button.ariaLabel,
       ),
     );
-    expect(titlebarButtonLabels).toHaveLength(1);
-    expect(['Settings', '設定']).toContain(titlebarButtonLabels[0]);
+    expect(headerButtonLabels).toHaveLength(1);
+    expect(['Settings', '設定']).toContain(headerButtonLabels[0]);
   });
 
   it('exposes the Tauri execute API in the E2E-only build', async () => {
@@ -39,6 +39,31 @@ describe('App shell and Settings', () => {
         document.querySelector('input[name="editor-wrap-column"]')?.getBoundingClientRect().height,
       ]),
     ).toEqual([36, 36]);
+    const repositoryBasePath = $('input[name="repository-base-path"]');
+    await browser.waitUntil(
+      async () => /\/Documents\/?$/u.test(await repositoryBasePath.getValue()),
+      { timeoutMsg: 'The default repository base path was not resolved to Documents.' },
+    );
+    await repositoryBasePath.click();
+    await repositoryBasePath.setValue('/tmp/stella-repositories');
+    await browser.keys('Enter');
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () =>
+            JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}').repositoryBasePath,
+        )) === '/tmp/stella-repositories',
+      { timeoutMsg: 'The absolute repository base path was not saved.' },
+    );
+    await repositoryBasePath.click();
+    await repositoryBasePath.setValue('relative/path');
+    await browser.keys('Enter');
+    await expect($('#repository-base-path-error')).toBeDisplayed();
+    expect(
+      await browser.execute(
+        () => JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}').repositoryBasePath,
+      ),
+    ).toBe('/tmp/stella-repositories');
     await expect($('.titlebar-actions')).toHaveAttribute('aria-label', 'App navigation');
     await expect(settings).toHaveAttribute('aria-current', 'page');
     const selectedNavigationColors = await browser.execute(() => {
@@ -65,6 +90,14 @@ describe('App shell and Settings', () => {
       ),
     ).toBe(2);
     await expect($('button[aria-label="Repositories"]')).toHaveText('Repositories');
+
+    const changeListDisplay = $('select[name="change-list-display"]');
+    await expect(changeListDisplay).toHaveValue('fullPath');
+    expect(await changeListDisplay.$$('option').map((option) => option.getText())).toEqual([
+      'Full Path',
+      'Tree',
+      'File Name and Path',
+    ]);
 
     await selectSetting('appearance', 'dark');
     expect(
@@ -257,7 +290,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The document language did not change to Japanese.' },
     );
     await expect($('#toolchain-description')).toHaveText(
-      '内蔵のGitツールチェーンまたはこの端末にインストールされたものを選択します。',
+      'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
     );
     await browser.waitUntil(
       async () =>

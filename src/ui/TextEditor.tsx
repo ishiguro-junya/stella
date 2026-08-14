@@ -11,6 +11,7 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  scrollPastEnd,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
@@ -228,6 +229,7 @@ export function TextEditor({
       extensions: [
         ...(!externalHistory ? [history()] : []),
         lineNumbers(),
+        scrollPastEnd(),
         highlightSpecialChars(),
         drawSelection(),
         dropCursor(),
@@ -247,13 +249,18 @@ export function TextEditor({
             color: 'var(--code-text)',
             backgroundColor: 'var(--code-surface)',
           },
-          '.cm-content': {
-            caretColor: 'var(--accent)',
+          '.cm-scroller': {
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--code-font-size)',
+            lineHeight: 'var(--code-line-height)',
+          },
+          '.cm-content': {
+            caretColor: 'var(--accent)',
+            padding: '0',
           },
           '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
           '.cm-gutters': {
+            fontFamily: 'var(--font-mono)',
             color: 'var(--text-tertiary)',
             backgroundColor: 'var(--surface-raised)',
             borderRightColor: 'var(--border-subtle)',

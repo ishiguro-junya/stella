@@ -3,6 +3,7 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   --code-font-size: 13px;
+  --code-line-height: 20px;
   --surface-base: light-dark(#eff0f2, #111215);
   --surface-toolbar: light-dark(rgb(249 249 251 / 92%), rgb(28 29 33 / 92%));
   --surface-sidebar: light-dark(#f5f5f7, #17181c);
@@ -27,12 +28,14 @@
     var(--accent-contrast) 76%,
     transparent
   );
-  --history-lane-0: light-dark(#7b2cbf, #b66de2);
-  --history-lane-1: light-dark(#8b5cc7, #bf8cff);
-  --history-lane-2: light-dark(#b85c00, #ff9f43);
-  --history-lane-3: light-dark(#237a43, #56c884);
-  --history-lane-4: light-dark(#b8437d, #f778ba);
-  --history-lane-5: light-dark(#087985, #54cbd3);
+  --list-selection-surface: light-dark(#dedfe3, #2b2c31);
+  --list-selection-hover: light-dark(#d4d5da, #33343a);
+  --history-lane-0: var(--accent);
+  --history-lane-1: light-dark(#b85c00, #ff9f43);
+  --history-lane-2: light-dark(#237a43, #56c884);
+  --history-lane-3: light-dark(#b8437d, #f778ba);
+  --history-lane-4: light-dark(#087985, #54cbd3);
+  --history-lane-5: light-dark(#8b5cc7, #bf8cff);
   --history-working-tree: light-dark(#73737b, #777881);
   --focus: light-dark(#087ff5, #64b1ff);
   --history-ref-foreground: var(--focus);
@@ -176,7 +179,7 @@ button.danger-quiet {
 }
 
 button.quiet,
-.titlebar button,
+.app-header button,
 .pane-toolbar button,
 .change-row,
 .commit-row,
@@ -187,7 +190,7 @@ button.quiet,
 }
 
 button.quiet:hover:not(:disabled),
-.titlebar button:hover:not(:disabled),
+.app-header button:hover:not(:disabled),
 .pane-toolbar button:hover:not(:disabled) {
   border-color: transparent;
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -195,6 +198,25 @@ button.quiet:hover:not(:disabled),
 
 button.full {
   width: 100%;
+}
+
+.loading-pulse {
+  display: block;
+  width: 72px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  animation: loading-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 button:focus-visible,
@@ -390,9 +412,19 @@ kbd {
   width: 220px;
 }
 
-.settings-number-input {
+.settings-number-input,
+.settings-path-control,
+.settings-path-input {
   width: 220px;
   min-width: 0;
+}
+.settings-path-control {
+  display: grid;
+  gap: 6px;
+}
+.settings-path-control > .field-error {
+  margin: 0;
+  font-size: 11px;
 }
 
 .settings-toolchain-row {
@@ -408,6 +440,7 @@ kbd {
 .settings-toolchain-modes {
   display: grid;
   grid-column: 1 / -1;
+  min-height: 35px;
   width: 100%;
   grid-template-columns: repeat(2, max-content);
   gap: 24px;
@@ -435,6 +468,7 @@ kbd {
 .settings-toolchain-components {
   display: grid;
   grid-column: 1 / -1;
+  min-height: 120px;
   width: 100%;
   gap: 6px;
   margin: 0;
@@ -454,6 +488,7 @@ kbd {
 
 .settings-toolchain-components dd {
   min-width: 0;
+  min-height: 36px;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -473,10 +508,23 @@ kbd {
 }
 
 .settings-toolchain-loading {
-  grid-column: 1 / -1;
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+}
+
+.settings-toolchain-modes.settings-toolchain-loading dt .loading-pulse,
+.settings-toolchain-components.settings-toolchain-loading dt .loading-pulse {
+  width: 52px;
+  height: 16px;
+}
+
+.settings-toolchain-loading dd > .loading-pulse {
+  width: min(180px, 100%);
+  height: 17px;
+}
+
+.settings-toolchain-loading .settings-toolchain-path-loading {
+  width: min(320px, 100%);
+  margin-top: 2px;
 }
 
 @media (max-width: 700px) {
@@ -494,20 +542,19 @@ kbd {
     width: 100%;
   }
 
-  .settings-number-input {
+  .settings-number-input,
+  .settings-path-control,
+  .settings-path-input {
     width: 100%;
   }
 }
 
-.titlebar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+.app-header {
+  position: relative;
+  display: block;
   flex: none;
-  min-height: 64px;
-  gap: 10px;
+  height: 64px;
   min-width: 0;
-  padding: 6px 12px 6px 78px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-toolbar);
   box-shadow: 0 1px 0 rgb(0 0 0 / 5%);
@@ -515,8 +562,73 @@ kbd {
   -webkit-app-region: drag;
 }
 
-.titlebar button,
-.titlebar select {
+.window-header-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  gap: 10px;
+  padding: 0 10px 0 76px;
+}
+
+.app-header > .sidebar-toggle-button {
+  position: absolute;
+  z-index: 1;
+  bottom: 10px;
+  left: 3px;
+}
+
+.window-header-leading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.sidebar-toggle-button,
+.sidebar-toggle-button:hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.icon-button.sidebar-toggle-button {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  color: var(--text-secondary);
+}
+
+.sidebar-toggle-button:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.sidebar-toggle-button > .lucide {
+  width: 17px;
+  height: 17px;
+}
+
+.left-pane-toolbar {
+  display: flex;
+  min-height: 56px;
+  flex: none;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-sidebar);
+}
+
+.history-pane-toolbar > .history-search {
+  width: 100%;
+  min-height: 55px;
+  padding: 7px 10px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.app-header button,
+.app-header select {
   -webkit-app-region: no-drag;
 }
 
@@ -531,7 +643,6 @@ kbd {
 }
 
 .titlebar-context {
-  grid-column: 1;
   min-width: 0;
   gap: 4px;
   overflow: hidden;
@@ -556,7 +667,8 @@ kbd {
 }
 
 .titlebar-context-toggle:hover:not(:disabled),
-.titlebar-context-toggle[aria-expanded='true'] {
+.titlebar-context-toggle[aria-expanded='true'],
+.titlebar-context-toggle.branch-toggle:focus-visible {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
@@ -569,11 +681,6 @@ kbd {
 .titlebar-context-toggle.branch-toggle {
   max-width: min(400px, 64vw);
   outline: none;
-}
-
-.titlebar-context-toggle.branch-toggle.is-focused {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
 }
 
 .titlebar-context-toggle > span {
@@ -602,7 +709,6 @@ kbd {
   border-radius: 50%;
 }
 
-.repository-status-dot.warning,
 .switcher-status-dot.warning {
   background: var(--warning);
 }
@@ -625,7 +731,6 @@ kbd {
   color: var(--text-secondary);
 }
 .titlebar-actions {
-  grid-column: 2;
   gap: 4px;
   white-space: nowrap;
 }
@@ -668,24 +773,25 @@ button:where(:has(> .lucide)) > span {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50px;
-  gap: 3px;
-  padding: 5px 8px;
+  min-width: 48px;
+  min-height: 52px;
+  gap: 4px;
+  padding: 6px 10px;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
 }
 .titlebar-menu-button > .lucide {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 .titlebar-menu-button[aria-current='page'] {
   border-color: transparent;
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
-.titlebar .titlebar-update-button,
-.titlebar .titlebar-update-button:hover:not(:disabled) {
+.app-header .titlebar-update-button,
+.app-header .titlebar-update-button:hover:not(:disabled) {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -739,6 +845,11 @@ button:where(:has(> .lucide)) > span {
   padding: 5px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border-subtle));
   background: color-mix(in srgb, var(--warning-muted) 82%, var(--surface-toolbar));
+}
+
+.operation-banner.is-right-pane,
+.global-notice.is-right-pane:not(.info) {
+  margin-left: calc(var(--shell-left-pane) + 1px);
 }
 
 .operation-banner > div:first-child {
@@ -816,7 +927,7 @@ button:where(:has(> .lucide)) > span {
 
 .workspace-view-transition {
   display: grid;
-  grid-template-columns: var(--left-pane) 5px minmax(320px, 1fr);
+  grid-template-columns: var(--left-pane) 1px minmax(320px, 1fr);
   width: 100%;
   height: 100%;
   background: var(--border-subtle);
@@ -834,9 +945,18 @@ button:where(:has(> .lucide)) > span {
   background: var(--border-subtle);
 }
 
+.app-shell.is-sidebar-closed .workspace-view-transition {
+  grid-template-columns: minmax(320px, 1fr);
+}
+
+.app-shell.is-sidebar-closed .workspace-view-transition .workspace-view-transition-pane:first-child,
+.app-shell.is-sidebar-closed .workspace-view-transition .workspace-view-transition-divider {
+  display: none;
+}
+
 .three-pane {
   display: grid;
-  grid-template-columns: var(--left-pane) 5px minmax(320px, 1fr) 5px var(--right-pane);
+  grid-template-columns: var(--left-pane) 1px minmax(320px, 1fr) 1px var(--right-pane);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -845,7 +965,26 @@ button:where(:has(> .lucide)) > span {
 }
 
 .changes-two-pane {
-  grid-template-columns: var(--left-pane) 5px minmax(320px, 1fr);
+  grid-template-columns: var(--left-pane) 1px minmax(320px, 1fr);
+}
+
+.app-shell.is-sidebar-closed .three-pane {
+  grid-template-columns: minmax(320px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell.is-sidebar-closed .three-pane > aside,
+.app-shell.is-sidebar-closed .three-pane > .pane-resizer,
+.app-shell.is-sidebar-closed .activity-page-panels > .activity-analytics-panel,
+.app-shell.is-sidebar-closed .activity-page-panels > .pane-resizer {
+  display: none;
+}
+
+.app-shell.is-sidebar-closed .changes-two-pane .changes-content-pane,
+.app-shell.is-sidebar-closed .changes-two-pane .conflict-pane-span,
+.app-shell.is-sidebar-closed .history-view .commit-detail-pane {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .pane {
@@ -913,18 +1052,26 @@ button:where(:has(> .lucide)) > span {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  user-select: none;
 }
 .changes-list-footer {
   display: flex;
-  height: 26px;
+  height: 38px;
   flex: none;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+  padding: 4px 6px 4px 10px;
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-sidebar);
   color: var(--text-secondary);
   font-size: 10px;
+}
+.changes-list-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .changes-list-footer .additions {
   color: var(--success);
@@ -932,33 +1079,25 @@ button:where(:has(> .lucide)) > span {
 .changes-list-footer .deletions {
   color: var(--danger);
 }
-.changes-action-section {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-inspector);
-}
 .changes-action-bar {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 5px 8px;
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
 }
 .changes-action-button {
-  width: 100%;
-  min-height: 42px;
-  flex-direction: column;
-  gap: 4px;
-  padding: 3px 4px;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 .changes-action-button > .lucide {
   width: 16px;
   height: 16px;
+}
+.changes-action-button > .lucide.lucide-refresh-cw {
+  width: 15px;
+  height: 15px;
 }
 .commit-pane {
   background: var(--surface-inspector);
@@ -972,6 +1111,7 @@ button:where(:has(> .lucide)) > span {
 }
 
 .pane-resizer {
+  position: relative;
   z-index: 2;
   width: 5px;
   height: 100%;
@@ -980,14 +1120,26 @@ button:where(:has(> .lucide)) > span {
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: var(--border-subtle);
+  background: transparent;
   cursor: col-resize;
   touch-action: none;
+  transform: translateX(-2px);
 }
 
-.pane-resizer:hover,
+.pane-resizer::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--surface-raised);
+  content: '';
+  pointer-events: none;
+}
+
 .pane-resizer:focus-visible {
-  background: color-mix(in srgb, var(--accent) 60%, var(--border-subtle));
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .pane-toolbar {
@@ -1058,7 +1210,6 @@ button:where(:has(> .lucide)) > span {
   border-radius: 50%;
   background: var(--warning);
 }
-.file-editor-stage-note,
 .file-editor-external,
 .file-editor-error {
   flex: none;
@@ -1444,13 +1595,13 @@ button:where(:has(> .lucide)) > span {
 
 .change-item.is-selected,
 .change-item.is-current {
-  background: var(--interactive-selected-surface);
-  color: var(--interactive-selected-foreground);
+  background: var(--list-selection-surface);
+  color: var(--text-primary);
 }
 
 .change-item.is-selected:hover,
 .change-item.is-current:hover {
-  background: var(--interactive-selected-hover);
+  background: var(--list-selection-hover);
 }
 
 .change-row:focus-visible {
@@ -1458,11 +1609,7 @@ button:where(:has(> .lucide)) > span {
 }
 
 .change-item:has(> .change-row:focus-visible) {
-  box-shadow: inset 0 0 0 2px var(--focus);
-}
-
-.change-item:is(.is-selected, .is-current):has(> .change-row:focus-visible) {
-  box-shadow: inset 0 0 0 2px var(--interactive-selected-foreground);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
 
 .row-action-trigger {
@@ -1480,13 +1627,35 @@ button:where(:has(> .lucide)) > span {
   pointer-events: none;
 }
 
-.change-item:hover .row-action-trigger,
-.change-item.is-selected .row-action-trigger,
-.change-item.is-current .row-action-trigger,
-.change-item:focus-within .row-action-trigger,
-.history-commit-item:hover .row-action-trigger,
-.history-commit-item.is-current .row-action-trigger,
-.history-commit-item:focus-within .row-action-trigger,
+.row-action-tooltip {
+  position: fixed;
+  z-index: 80;
+  width: max-content;
+  max-width: 220px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-panel);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translateX(-100%);
+  animation: row-action-tooltip-in 100ms ease 300ms both;
+}
+
+@keyframes row-action-tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.change-item .row-action-trigger,
+.history-commit-item .row-action-trigger,
 .row-action-trigger.is-persistent,
 .row-action-trigger[aria-expanded='true'] {
   opacity: 1;
@@ -1496,12 +1665,12 @@ button:where(:has(> .lucide)) > span {
 
 .change-item:is(.is-selected, .is-current) .row-action-trigger,
 .history-commit-item.is-current .row-action-trigger {
-  color: var(--interactive-selected-foreground);
+  color: var(--text-secondary);
 }
 
 .change-item:is(.is-selected, .is-current) .row-action-trigger:hover:not(:disabled),
 .history-commit-item.is-current .row-action-trigger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--interactive-selected-foreground) 18%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .row-action-menu {
@@ -1590,16 +1759,15 @@ button:where(:has(> .lucide)) > span {
   padding-block: 4px;
 }
 
-.change-row[aria-current='true'],
-.commit-row[aria-current='true'],
-.activity-item[aria-current='true'],
+.change-row.is-full-path {
+  min-height: 38px;
+  padding-block: 6px;
+}
+
 .block-selector[aria-current='true'] {
   background: var(--interactive-selected-surface);
   color: var(--interactive-selected-foreground);
 }
-.change-row[aria-current='true']:hover:not(:disabled),
-.commit-row[aria-current='true']:hover:not(:disabled),
-.activity-item[aria-current='true']:hover:not(:disabled),
 .block-selector[aria-current='true']:hover:not(:disabled) {
   background: var(--interactive-selected-hover);
 }
@@ -1614,14 +1782,7 @@ button:where(:has(> .lucide)) > span {
 .change-item:is(.is-selected, .is-current) .file-path small,
 .commit-row[aria-current='true'] small,
 .commit-row[aria-current='true'] time {
-  color: var(--interactive-selected-muted-foreground);
-}
-.change-item:is(.is-selected, .is-current) .file-status {
-  background: color-mix(in srgb, var(--interactive-selected-foreground) 18%, transparent);
-  color: var(--interactive-selected-foreground);
-}
-.change-item:is(.is-selected, .is-current) .stage-toggle {
-  accent-color: var(--interactive-selected-foreground);
+  color: var(--text-secondary);
 }
 .file-status {
   display: inline-grid;
@@ -1706,6 +1867,10 @@ button:where(:has(> .lucide)) > span {
 .diff-pane,
 .commit-detail-pane {
   position: relative;
+}
+.diff-pane {
+  -webkit-user-select: none;
+  user-select: none;
 }
 .diff-surface {
   min-width: 0;
@@ -1913,14 +2078,10 @@ button:where(:has(> .lucide)) > span {
   gap: 0;
   overflow: hidden;
 }
-.add-repository-source {
-  width: fit-content;
-}
-.add-repository-source > button {
-  min-width: 92px;
-}
 .repository-location-control {
   display: grid;
+  width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
 }
@@ -2003,7 +2164,7 @@ button:where(:has(> .lucide)) > span {
 .commit-row {
   grid-template-columns: var(--history-graph-width, 20px) minmax(0, 1fr);
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 8px 14px;
   border-radius: 0;
 }
@@ -2012,18 +2173,25 @@ button:where(:has(> .lucide)) > span {
 }
 .commit-list .history-commit-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 34px;
   align-items: center;
 }
 .history-commit-item:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .history-commit-item.is-current {
-  background: var(--interactive-selected-surface);
-  color: var(--interactive-selected-foreground);
+  background: var(--list-selection-surface);
+  color: var(--text-primary);
 }
 .history-commit-item.is-current:hover {
-  background: var(--interactive-selected-hover);
+  background: var(--list-selection-hover);
+}
+.commit-list.is-keyboard-navigating .history-commit-item:hover,
+.commit-list.is-keyboard-navigating .commit-row:hover:not(:disabled) {
+  background: transparent;
+}
+.commit-list.is-keyboard-navigating .history-commit-item.is-current:hover {
+  background: var(--list-selection-surface);
 }
 .history-commit-item .commit-row:hover:not(:disabled),
 .history-commit-item .commit-row[aria-current='true'] {
@@ -2033,13 +2201,10 @@ button:where(:has(> .lucide)) > span {
   outline: none;
 }
 .history-commit-item:has(> .commit-row:focus-visible) {
-  box-shadow: inset 0 0 0 2px var(--focus);
+  box-shadow: inset 0 0 0 1px var(--focus);
 }
-.history-commit-item.is-current:has(> .commit-row:focus-visible) {
-  box-shadow: inset 0 0 0 2px var(--interactive-selected-foreground);
-}
-.history-action-trigger {
-  margin-right: 1px;
+.history-commit-item .history-action-trigger {
+  margin-right: 8px;
 }
 .commit-list > .history-search-empty {
   padding: 18px 14px;
@@ -2066,9 +2231,12 @@ button:where(:has(> .lucide)) > span {
   animation: activity-status-spin 1.5s linear infinite;
 }
 .history-view {
-  grid-template-columns: var(--left-pane) 5px minmax(320px, 1fr);
+  grid-template-columns: var(--left-pane) 1px minmax(320px, 1fr);
 }
 .history-graph {
+  --history-node-center-y: 17px;
+  --history-corner-height: 8px;
+
   position: relative;
   align-self: stretch;
   width: var(--history-graph-width);
@@ -2078,10 +2246,31 @@ button:where(:has(> .lucide)) > span {
   overflow: visible;
 }
 .history-graph > svg {
+  position: absolute;
+  left: 0;
   display: block;
   width: 100%;
+  overflow: hidden;
+}
+.history-graph-through {
+  top: 0;
   height: 100%;
-  overflow: visible;
+}
+.history-graph-incoming-vertical {
+  top: 0;
+  height: calc(var(--history-node-center-y) - var(--history-corner-height));
+}
+.history-graph-incoming-corner {
+  top: calc(var(--history-node-center-y) - var(--history-corner-height));
+  height: var(--history-corner-height);
+}
+.history-graph-outgoing-corner {
+  top: var(--history-node-center-y);
+  height: var(--history-corner-height);
+}
+.history-graph-outgoing-vertical {
+  top: calc(var(--history-node-center-y) + var(--history-corner-height));
+  height: calc(100% - var(--history-node-center-y) - var(--history-corner-height));
 }
 .history-graph-edge {
   fill: none;
@@ -2092,7 +2281,7 @@ button:where(:has(> .lucide)) > span {
 }
 .history-graph-node {
   position: absolute;
-  top: 50%;
+  top: var(--history-node-center-y);
   left: var(--history-node-x);
   width: 11px;
   height: 11px;
@@ -2149,6 +2338,10 @@ button:where(:has(> .lucide)) > span {
   gap: 3px;
   margin-top: 3px;
 }
+.commit-row .ref-list {
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
 .ref-chip {
   display: inline-flex;
   min-width: 0;
@@ -2177,11 +2370,7 @@ button:where(:has(> .lucide)) > span {
   color: var(--warning);
 }
 .commit-row[aria-current='true'] .commit-oid {
-  color: var(--interactive-selected-muted-foreground);
-}
-.commit-row[aria-current='true'] .ref-chip {
-  background: color-mix(in srgb, var(--interactive-selected-foreground) 18%, transparent);
-  color: var(--interactive-selected-foreground);
+  color: var(--text-tertiary);
 }
 .commit-detail-header {
   padding: 18px 20px 16px;
@@ -2193,6 +2382,9 @@ button:where(:has(> .lucide)) > span {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+.commit-detail-heading > .history-action-trigger {
+  align-self: flex-start;
 }
 .commit-detail-heading h2 {
   max-width: 720px;
@@ -2376,6 +2568,17 @@ button:where(:has(> .lucide)) > span {
   width: 14px;
   height: 14px;
 }
+.file-view-mode-tabs button[aria-selected='true'] {
+  background: var(--list-selection-surface);
+  box-shadow: none;
+  color: var(--text-primary);
+}
+.file-view-mode-tabs button[aria-selected='true']:hover:not(:disabled) {
+  background: var(--list-selection-hover);
+}
+.file-view-mode-tabs button[aria-selected='true']:focus-visible {
+  outline-color: var(--focus);
+}
 .conflict-block-list li {
   margin: 2px 7px;
   padding: 0;
@@ -2479,7 +2682,6 @@ button:where(:has(> .lucide)) > span {
 .activity-page-loading {
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
 }
 .activity-page-content {
   display: flex;
@@ -2492,41 +2694,33 @@ button:where(:has(> .lucide)) > span {
 }
 .activity-page-panels {
   display: grid;
-  grid-template-columns: var(--activity-left-pane, 560px) 5px minmax(250px, 1fr);
+  grid-template-columns: var(--activity-left-pane, 360px) 1px minmax(250px, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
 }
+
+.app-shell.is-sidebar-closed .activity-page-panels {
+  grid-template-columns: minmax(250px, 1fr);
+}
 .activity-operations-panel,
 .activity-analytics-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--surface-raised);
 }
-.activity-operations-panel {
-  grid-template-rows: minmax(0, 1fr);
-}
 .activity-analytics-panel {
   border-left: 0;
 }
-.activity-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
-  gap: 10px;
-  padding: 8px 11px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-toolbar);
-}
-.activity-panel-header h2 {
-  margin: 0;
+.activity-analytics-panel.has-inline-controls {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .activity-analytics-header {
-  justify-content: flex-end;
+  justify-content: flex-start;
+  padding: 8px 10px;
 }
 .activity-analytics-controls {
   display: flex;
@@ -2600,53 +2794,36 @@ button:where(:has(> .lucide)) > span {
 .activity-list tbody tr[aria-selected='true'],
 .activity-list tbody tr[tabindex]:hover,
 .activity-list tbody tr:focus-visible {
-  background: var(--selection-muted);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .activity-list tbody tr[aria-selected='true'] {
-  background: var(--interactive-selected-surface);
-  color: var(--interactive-selected-foreground);
+  background: var(--list-selection-surface);
+  color: var(--text-primary);
 }
 .activity-list tbody tr[aria-selected='true']:hover {
-  background: var(--interactive-selected-hover);
+  background: var(--list-selection-hover);
 }
 .activity-list tbody tr:focus-visible {
   outline: none;
 }
 .activity-list tbody tr:focus-visible > * {
   box-shadow:
-    inset 0 2px 0 var(--focus),
-    inset 0 -2px 0 var(--focus);
+    inset 0 1px 0 var(--focus),
+    inset 0 -1px 0 var(--focus);
 }
 .activity-list tbody tr:focus-visible > :first-child {
   border-radius: 6px 0 0 6px;
   box-shadow:
-    inset 2px 0 0 var(--focus),
-    inset 0 2px 0 var(--focus),
-    inset 0 -2px 0 var(--focus);
+    inset 1px 0 0 var(--focus),
+    inset 0 1px 0 var(--focus),
+    inset 0 -1px 0 var(--focus);
 }
 .activity-list tbody tr:focus-visible > :last-child {
   border-radius: 0 6px 6px 0;
   box-shadow:
-    inset -2px 0 0 var(--focus),
-    inset 0 2px 0 var(--focus),
-    inset 0 -2px 0 var(--focus);
-}
-.activity-list tbody tr[aria-selected='true']:focus-visible > * {
-  box-shadow:
-    inset 0 2px 0 var(--interactive-selected-foreground),
-    inset 0 -2px 0 var(--interactive-selected-foreground);
-}
-.activity-list tbody tr[aria-selected='true']:focus-visible > :first-child {
-  box-shadow:
-    inset 2px 0 0 var(--interactive-selected-foreground),
-    inset 0 2px 0 var(--interactive-selected-foreground),
-    inset 0 -2px 0 var(--interactive-selected-foreground);
-}
-.activity-list tbody tr[aria-selected='true']:focus-visible > :last-child {
-  box-shadow:
-    inset -2px 0 0 var(--interactive-selected-foreground),
-    inset 0 2px 0 var(--interactive-selected-foreground),
-    inset 0 -2px 0 var(--interactive-selected-foreground);
+    inset -1px 0 0 var(--focus),
+    inset 0 1px 0 var(--focus),
+    inset 0 -1px 0 var(--focus);
 }
 .activity-list tbody th,
 .activity-list tbody td {
@@ -2673,15 +2850,6 @@ button:where(:has(> .lucide)) > span {
 .activity-list time {
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-.activity-list
-  tbody
-  tr[aria-selected='true']
-  :is(.activity-item-summary, time, .activity-item-duration) {
-  color: var(--interactive-selected-muted-foreground);
-}
-.activity-list tbody tr[aria-selected='true'] .activity-status {
-  color: var(--interactive-selected-foreground);
 }
 .activity-list .empty-row {
   height: auto;
@@ -2816,18 +2984,15 @@ button:where(:has(> .lucide)) > span {
 }
 .activity-chart {
   width: auto;
-  height: 122px;
-  min-height: 112px;
+  height: 240px;
+  min-height: 230px;
   flex: none;
   margin: 0 12px;
 }
-.activity-chart > p {
+.activity-chart-loading {
   display: grid;
   height: 100%;
-  margin: 0;
   place-items: center;
-  color: var(--text-secondary);
-  font-size: 11px;
 }
 .activity-chart-data {
   display: flex;
@@ -2918,6 +3083,22 @@ button:where(:has(> .lucide)) > span {
 .repository-landing-header p {
   margin: 0;
   color: var(--text-secondary);
+}
+.repository-landing-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+.repository-landing-actions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.repository-landing-actions > button > svg {
+  width: 15px;
+  height: 15px;
 }
 .repository-landing-header .primary {
   flex: none;
@@ -3231,6 +3412,7 @@ button:where(:has(> .lucide)) > span {
   font-size: 12px;
 }
 .switcher-list {
+  position: relative;
   flex: none;
   height: calc(56px * 5);
   min-height: 0;
@@ -3250,7 +3432,7 @@ button:where(:has(> .lucide)) > span {
 .switcher-option,
 .switcher-option:hover:not(:disabled) {
   display: grid;
-  grid-template-columns: 20px 24px minmax(0, 1fr) auto;
+  grid-template-columns: 20px 24px minmax(0, 1fr) auto auto;
   align-items: center;
   width: 100%;
   min-height: 56px;
@@ -3263,14 +3445,14 @@ button:where(:has(> .lucide)) > span {
   text-align: left;
 }
 .switcher-option-row:hover:not(.is-disabled) {
-  background: var(--selection-muted);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .switcher-option-row.is-selected {
-  background: var(--interactive-selected-surface);
-  color: var(--interactive-selected-foreground);
+  background: var(--list-selection-surface);
+  color: var(--text-primary);
 }
 .switcher-option-row.is-selected:hover:not(.is-disabled) {
-  background: var(--interactive-selected-hover);
+  background: var(--list-selection-hover);
 }
 .switcher-option-row.is-selected .switcher-option {
   color: inherit;
@@ -3281,10 +3463,6 @@ button:where(:has(> .lucide)) > span {
 .switcher-option-row:focus-within,
 .switcher-option-row.is-focused {
   box-shadow: inset 0 0 0 2px var(--focus);
-}
-.switcher-option-row.is-selected:focus-within,
-.switcher-option-row.is-selected.is-focused {
-  box-shadow: inset 0 0 0 2px var(--interactive-selected-foreground);
 }
 .switcher-option[aria-disabled='true'] {
   opacity: 0.48;
@@ -3300,10 +3478,7 @@ button:where(:has(> .lucide)) > span {
   color: var(--accent);
 }
 .switcher-option-row.is-selected :is(.switcher-check, .switcher-option-icon) {
-  color: var(--interactive-selected-foreground);
-}
-.switcher-option-row.is-selected .switcher-status-dot {
-  background: var(--interactive-selected-foreground);
+  color: var(--text-primary);
 }
 .switcher-check > svg,
 .switcher-option-icon > svg {
@@ -3340,16 +3515,16 @@ button:where(:has(> .lucide)) > span {
   font-size: 11px;
 }
 .switcher-option-row.is-selected :is(.switcher-option-copy small, .switcher-status small) {
-  color: var(--interactive-selected-muted-foreground);
+  color: var(--text-secondary);
 }
 .switcher-option-row .switcher-action-trigger {
   margin-right: 4px;
 }
 .switcher-option-row.is-selected .switcher-action-trigger {
-  color: var(--interactive-selected-foreground);
+  color: var(--text-primary);
 }
 .switcher-option-row.is-selected .switcher-action-trigger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--interactive-selected-foreground) 18%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .switcher-status {
   display: inline-flex;
@@ -3357,6 +3532,22 @@ button:where(:has(> .lucide)) > span {
   gap: 6px;
   padding-left: 10px;
   white-space: nowrap;
+}
+.switcher-count-badge {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 10px;
+  padding: 0 5px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
 }
 .switcher-empty {
   display: block;
@@ -3366,11 +3557,11 @@ button:where(:has(> .lucide)) > span {
   text-align: center;
 }
 .switcher-loading {
-  display: block;
-  padding: 8px 16px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  text-align: center;
+  position: absolute;
+  display: grid;
+  inset: 0;
+  place-items: center;
+  pointer-events: none;
 }
 .switcher-footer {
   display: flex;
@@ -3385,7 +3576,7 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 32px;
+  min-height: 36px;
   gap: 7px;
   white-space: nowrap;
 }
@@ -3441,6 +3632,16 @@ button:where(:has(> .lucide)) > span {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.git-flow-overview-loading dt .loading-pulse {
+  width: 62px;
+  height: 16px;
+}
+
+.git-flow-overview-loading dd .loading-pulse {
+  width: min(132px, 100%);
+  height: 19px;
 }
 .git-flow-fields {
   display: grid;
@@ -3514,9 +3715,8 @@ button:where(:has(> .lucide)) > span {
 }
 
 @media (max-width: 900px) {
-  .titlebar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding-left: 78px;
+  .window-header-content {
+    gap: 6px;
   }
   .repo-path {
     display: none;

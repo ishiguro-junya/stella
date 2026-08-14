@@ -27,6 +27,10 @@ export interface SwitcherDialogItem {
     label: string;
     tone: 'danger' | 'muted' | 'warning';
   };
+  badge?: {
+    count: number;
+    label: string;
+  };
 }
 
 export interface SwitcherDialogProps {
@@ -106,11 +110,11 @@ export function SwitcherDialog({
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        moveActive((Math.max(activeIndex, -1) + 1) % filteredItems.length);
+        moveActive(Math.min(Math.max(activeIndex, -1) + 1, filteredItems.length - 1));
         break;
       case 'ArrowUp':
         event.preventDefault();
-        moveActive((activeIndex <= 0 ? filteredItems.length : activeIndex) - 1);
+        moveActive(Math.max(activeIndex - 1, 0));
         break;
       case 'Home':
         event.preventDefault();
@@ -138,11 +142,11 @@ export function SwitcherDialog({
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        focusOption((index + 1) % filteredItems.length);
+        focusOption(Math.min(index + 1, filteredItems.length - 1));
         break;
       case 'ArrowUp':
         event.preventDefault();
-        focusOption((index - 1 + filteredItems.length) % filteredItems.length);
+        focusOption(Math.max(index - 1, 0));
         break;
       case 'Home':
         event.preventDefault();
@@ -210,7 +214,13 @@ export function SwitcherDialog({
           {hint}
         </p>
       ) : null}
-      <div id={listId} className="switcher-list" role="listbox" aria-label={title}>
+      <div
+        id={listId}
+        className="switcher-list"
+        role="listbox"
+        aria-label={title}
+        aria-busy={loading}
+      >
         {filteredItems.length ? (
           filteredItems.map((item, index) => {
             const selected = item.id === effectiveActiveId;
@@ -264,6 +274,11 @@ export function SwitcherDialog({
                       <small>{item.status.label}</small>
                     </span>
                   ) : null}
+                  {item.badge ? (
+                    <span className="switcher-count-badge" aria-label={item.badge.label}>
+                      {item.badge.count}
+                    </span>
+                  ) : null}
                 </button>
                 {item.actions?.length && onAction ? (
                   <RowActionMenu
@@ -285,13 +300,14 @@ export function SwitcherDialog({
               </div>
             );
           })
-        ) : loading ? (
-          <output className="switcher-empty">{t('loading')}</output>
-        ) : (
+        ) : loading ? null : (
           <p className="switcher-empty">{emptyMessage}</p>
         )}
-        {loading && filteredItems.length ? (
-          <output className="switcher-loading">{t('loading')}</output>
+        {loading ? (
+          <output className="switcher-loading">
+            <span className="loading-pulse" aria-hidden="true" />
+            <span className="sr-only">{t('loading')}</span>
+          </output>
         ) : null}
       </div>
       {footer ? <div className="switcher-footer">{footer}</div> : null}

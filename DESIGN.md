@@ -18,12 +18,13 @@
 ## 画面全体の比較
 
 参照画面と最終Changes画面を、1つの比較画像として並べて確認しました。  
-ChangesとHistoryはtitlebarではなく、左paneの階層の先頭に配置されています。  
+画面ナビゲーションとリポジトリ情報は、ペイン境界で分割しない全幅の共通ヘッダーへまとめています。  
+サイドバーの開閉ボタンはmacOSのウィンドウ操作ボタンの下段左端に置き、リポジトリ名とブランチ名はウィンドウ操作ボタンの直後から表示します。  
 
-- Commit formは常時縦方向の領域を占有せず、左pane上部のCommitからDialogとして開きます。
-- Commit、Pull、Push、Fetchはiconとlabelを付けて左pane上部に常時表示し、CommitをPullの左、Fetchを最後に配置します。
-- 操作バーが狭い場合は通常サイズのiconだけを表示し、各操作名はtooltipとアクセシブル名で維持します。
-- 操作buttonの下でStagedとUnstagedを上下に等分します。
+- コミットフォームは常時領域を占有せず、左ペイン下部のコミットボタンからダイアログとして開きます。
+- コミット、プル、プッシュ、フェッチは左ペイン下部フッターの右端へアイコンだけで表示します。
+- 各操作名はツールチップとアクセシブル名で維持します。
+- 操作フッターの上でステージ済みと未ステージを上下に等分します。
 
 StagedとUnstagedは常に表示される独立したgroupとして残し、それぞれのfile listを個別にscrollできます。  
 
@@ -54,15 +55,15 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 
 ## 注目箇所の比較
 
-最終layoutでは、常時展開されていたCommit formとtitlebarの重複した画面navigationを削除しました。  
+最終レイアウトでは独立した上部メニューとペインごとのヘッダーを削除し、全幅の共通ヘッダーへまとめました。  
 
-- compactな左sidebarにnavigation、change group、file row、4つの操作buttonをまとめています。
+- コンパクトな左サイドバーに変更グループ、ファイル行、4つの操作ボタンをまとめています。
 - diffは以前の右pane全体の幅を使えるようになりました。
 - CommitはDialogで入力し、Historyにもactive viewの見出しを重複表示しません。
 
 ## 再現性が必要な要素
 
-- 階層: repository contextはtitlebarに置き、画面navigationとchange操作は左paneに置きます。
+- 階層: リポジトリ情報と画面ナビゲーションは全幅の共通ヘッダー、変更操作は左ペイン下部に置きます。
 - 密度: 通常状態ではchange group、file、選択中のpath、diffだけを表示します。
 - typography: Diffと通常Editorのcode本文は共通の13pxを使用します。
 - 操作性: Commit Dialogはfocus trap、focus復帰、IME変換中のEscape抑止を共通Dialogと揃えます。
@@ -87,11 +88,11 @@ StagedとUnstagedは常に表示される独立したgroupとして残し、そ�
 選択した参照画像と最終native Repository switcherを、1つの比較画像として並べて確認しました。  
 実装では、上部中央のmodal配置、暗くしたworkspace、検索を先頭にした階層、選択行の表現、常に表示する操作footerを維持しています。  
 mockとの差異は承認済みの方針に従ったものです。  
-RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧はOpenやRecentの見出しがないflatな構成にしています。  
+リポジトリとブランチは共通ヘッダーの独立した操作要素とし、リポジトリ一覧はOpenやRecentの見出しがないflatな構成にしています。  
 
 - Branch controlは約400pxまでbranch名を省略せずに表示し、それを超える場合は末尾を省略します。
-- Branch controlのfocus ringはcontrol内側へ表示し、titlebar端で欠けないようにします。
-- titlebarは左右のmenuを含む空き領域をwindowのdrag regionとし、操作button自体はno-dragにしてclick操作を維持します。
+- Branch controlのfocus ringはcontrol内側へ表示し、header端で欠けないようにします。
+- 共通ヘッダーの空き領域をウィンドウのドラッグ領域とし、操作ボタン自体はドラッグ対象外にしてクリック操作を維持します。
 - 最終利用時刻のlabelとshortcut記号は表示せず、Changes／Historyは既存のsegmented designを維持します。
 
 - Repository検索の対象はname、path、branchです。  
@@ -108,7 +109,7 @@ RepositoryとBranchはtitlebarの独立したcontrolとし、repository一覧は
 - 手動の「さらに読み込む」は表示しません。
 - 左paneの検索欄はCommit件名、Author、hash、refを読込済みに限らず全履歴から検索し、Command-Fでfocusします。
 - 矢印、Home、End、Enter、Escape、Tabのfocus trap、triggerへのfocus復元をcomponent testで確認しました。
-- native footerの「Add Repository…」から、Remote URL入力とFinderのLocal選択を同じSheetで開始できます。  
+- native footerでは「リポジトリを追加」と「リポジトリをクローン」を分け、既存のローカルリポジトリとURLからのクローンを別のSheetで開始できます。  
   非表示のCommand-Shift-OでもRepository Dialogを開けますが、shortcutは画面上に表示しません。
 - Repository DialogとBranch Dialogは、1180 x 760および最小sizeの860 x 560で全体を表示できます。  
   長いpathは行内で省略し、footerのlabelは欠けません。
@@ -235,7 +236,7 @@ P3の追加対応も不要です。
 - spacingとlayout rhythm: 行の寸法、padding、icon alignment、radius、周囲のgroup spacingは変更していません。
 - colorとvisual token: Application操作の選択状態は`--interactive-selected-surface`と白系の前景を使います。  
   Dark appearanceのaccent blueはLightより明度を抑え、白い前景とのcontrastを確保します。  
-  上部navigationはグレーの選択背景と通常の前景を維持します。  
+  共通ヘッダーのナビゲーションはグレーの選択背景と通常の前景を維持します。  
   Diff行選択用の`--diff-selection-surface`、未保存の黄色いdot、Repository logoは変更しません。  
   History graphのlane colorは選択状態の前景色に置き換えません。  
   History graphは選択中もlane colorを維持し、lane 0には選択背景でも識別できるvioletの`--history-lane-0`、未コミット区間には低彩度の`--history-working-tree`を使います。  
@@ -244,7 +245,7 @@ P3の追加対応も不要です。
   既存のvector iconは変更していません。
 - 文言とcontent: 変更していません。
 - 操作検証: native E2Eで、選択中のchange、History Commit、Activity行、switcher、競合、segmented controlがprimary buttonと同じ背景を使うことを確認しました。  
-  titlebar destinationはprimary buttonと異なるグレー背景を使うことを確認しました。  
+  共通ヘッダーの移動先はprimary buttonと異なるグレー背景を使うことを確認しました。  
   選択中の補助文字、状態icon、3点リーダーは白系へ切り替え、keyboard focus ringは白で表示します。  
   Stage／Unstageはfile／group checkboxから行い、file行はdrag sourceにしません。
 
@@ -253,7 +254,7 @@ P3の追加対応も不要です。
 ### 選択highlightの比較履歴
 
 - 1回目の検出事項: 丸みのある選択surfaceの左端に青いinsetがあり、radiusと視覚的に競合していました。
-- 1回目の修正: 背景highlightを維持したまま、共通の左端selection railとtitlebar destinationのunderlineを削除しました。
+- 1回目の修正: 背景highlightを維持したまま、共通の左端selection railとheader destinationのunderlineを削除しました。
 - 2回目の修正: 選択highlightを決定buttonと同じaccent blueへ変更し、選択中の前景とfocus ringを白系へ揃えました。
 - 修正後の確認: native E2Eで各選択stateとprimary buttonのcomputed colorを比較し、Diff行選択が別tokenのまま維持されることを確認しました。
 

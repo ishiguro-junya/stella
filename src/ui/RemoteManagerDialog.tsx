@@ -85,8 +85,7 @@ export function RemoteManagerDialog({
         descriptionId="remote-manager-description"
         description={t('manageRemotesDescription')}
       />
-      <DialogBody>
-        {loading ? <output>{t('loading')}</output> : null}
+      <DialogBody aria-busy={loading}>
         {error ? (
           <div className="remote-manager-error">
             <p>{error}</p>

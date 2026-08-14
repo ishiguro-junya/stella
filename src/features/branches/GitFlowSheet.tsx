@@ -272,7 +272,11 @@ export function GitFlowSheet({
         description={t('gitFlowDescription')}
       />
       <DialogBody>
-        <section className="git-flow-overview" aria-labelledby="git-flow-overview-title">
+        <section
+          className="git-flow-overview"
+          aria-labelledby="git-flow-overview-title"
+          aria-busy={loading}
+        >
           <div className="git-flow-section-header">
             <h3 id="git-flow-overview-title">{t('gitFlowOverview')}</h3>
             <button type="button" onClick={onReload} disabled={loading || busy}>
@@ -280,7 +284,18 @@ export function GitFlowSheet({
             </button>
           </div>
           {loading ? (
-            <p>{t('loading')}</p>
+            <dl className="git-flow-overview-loading" aria-hidden="true">
+              {[0, 1, 2, 3].map((index) => (
+                <div key={index}>
+                  <dt>
+                    <span className="loading-pulse" />
+                  </dt>
+                  <dd>
+                    <span className="loading-pulse" />
+                  </dd>
+                </div>
+              ))}
+            </dl>
           ) : overview?.available ? (
             <dl>
               <div>

@@ -45,9 +45,15 @@ describe('assignHistoryLanes', () => {
     expect(graph.map((commit) => commit.lane)).toEqual([0, 1, 0, 0]);
     expect(graph[1]).toMatchObject({
       activeLanes: [0],
-      nextActiveLanes: [0],
-      parentEdges: [{ parentOid: 'base', fromLane: 1, toLane: 0 }],
+      nextActiveLanes: [0, 1],
+      parentEdges: [{ parentOid: 'base', fromLane: 1, toLane: 1 }],
       laneCount: 2,
+    });
+    expect(graph[2]).toMatchObject({
+      incomingEdges: [
+        { fromLane: 0, toLane: 0 },
+        { fromLane: 1, toLane: 0 },
+      ],
     });
   });
 
@@ -70,9 +76,15 @@ describe('assignHistoryLanes', () => {
     });
     expect(graph[2]).toMatchObject({
       activeLanes: [0, 1],
-      nextActiveLanes: [0],
+      nextActiveLanes: [0, 1],
       incomingEdges: [{ fromLane: 1, toLane: 1 }],
-      parentEdges: [{ parentOid: 'root', fromLane: 1, toLane: 0 }],
+      parentEdges: [{ parentOid: 'root', fromLane: 1, toLane: 1 }],
+    });
+    expect(graph[3]).toMatchObject({
+      incomingEdges: [
+        { fromLane: 0, toLane: 0 },
+        { fromLane: 1, toLane: 0 },
+      ],
     });
   });
 
@@ -108,15 +120,18 @@ describe('assignHistoryLanes', () => {
     expect(graph[2]).toMatchObject({
       lane: 1,
       activeLanes: [0, 1],
-      nextActiveLanes: [0],
+      nextActiveLanes: [0, 1],
       incomingEdges: [{ fromLane: 1, toLane: 1 }],
-      parentEdges: [{ parentOid: 'shared', fromLane: 1, toLane: 0 }],
+      parentEdges: [{ parentOid: 'shared', fromLane: 1, toLane: 1 }],
       laneCount: 2,
     });
     expect(graph[3]).toMatchObject({
       lane: 0,
-      activeLanes: [0],
-      incomingEdges: [{ fromLane: 0, toLane: 0 }],
+      activeLanes: [0, 1],
+      incomingEdges: [
+        { fromLane: 0, toLane: 0 },
+        { fromLane: 1, toLane: 0 },
+      ],
     });
   });
 

@@ -1,5 +1,13 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -13,7 +21,7 @@ import {
 } from 'lucide-react';
 
 import { isPullDivergenceError, type WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { patchContainsMultipleFiles } from '../../domain/diffProfile';
+import { editorLineForDiffSelection, patchContainsMultipleFiles } from '../../domain/diffProfile';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import type {
   ChangeEntry,
@@ -37,8 +45,9 @@ import {
   type SurfaceSelection,
 } from '../diff/DiffSurface';
 import {
-  CHANGES_PANE_MIN_WIDTH,
   DEFAULT_EDITOR_WRAP_COLUMN,
+  LEFT_PANE_MAX_WIDTH,
+  LEFT_PANE_MIN_WIDTH,
   type ChangeListDisplay,
   type PaneWidths,
 } from '../../persistence/preferences';
@@ -138,7 +147,7 @@ export function ChangesView({
   paneWidths,
   diffStyle = 'unified',
   splitStageView = true,
-  changeListDisplay = 'nameAndPath',
+  changeListDisplay = 'fullPath',
   useConventionalCommits = false,
   stickyFileHeaders = false,
   editorLineWrapping = false,
@@ -162,6 +171,9 @@ export function ChangesView({
   );
   const [conflict, setConflict] = useState<ConflictDocument>();
   const [selection, setSelection] = useState<LineDiffSelection>();
+  const [selectionItemId, setSelectionItemId] = useState<string>();
+  const [selectionPatchActionable, setSelectionPatchActionable] = useState(true);
+  const [restoredDiffSelection, setRestoredDiffSelection] = useState<SurfaceSelection>();
   const [selectionMenuContext, setSelectionMenuContext] = useState<{
     point: RowActionMenuPoint;
     text: string;
@@ -177,6 +189,7 @@ export function ChangesView({
     path: string;
     originalEntry: ChangeEntry;
     initialScrollLine?: number;
+    returnSelection?: SurfaceSelection;
   }>();
   const [fileDocument, setFileDocument] = useState<FileDocument>();
   const [fileEditorExternalStateChanged, setFileEditorExternalStateChanged] = useState(false);
@@ -214,6 +227,10 @@ export function ChangesView({
   const selectedFromSnapshot = repo.changes.find(
     (entry) => `${entry.area}:${entry.path}` === selectedKey,
   );
+  const deferredSelectedKey = useDeferredValue(selectedKey);
+  const deferredSelectedFromSnapshot = repo.changes.find(
+    (entry) => `${entry.area}:${entry.path}` === deferredSelectedKey,
+  );
   const conflictMissingFromSnapshot = Boolean(
     conflictDirty &&
     conflict &&
@@ -224,6 +241,7 @@ export function ChangesView({
       ? { path: conflict.path, area: 'conflicted', status: 'conflicted' }
       : undefined;
   const selected = pinnedConflictEntry ?? selectedFromSnapshot ?? repo.changes[0];
+  const displayedSelected = pinnedConflictEntry ?? deferredSelectedFromSnapshot ?? repo.changes[0];
   const editingEntry = editingTarget
     ? (repo.changes.find(
         (entry) =>
@@ -254,10 +272,19 @@ export function ChangesView({
   };
   const unsavedDirty = conflictDirty || fileEditorDirty;
   const selectedFileKeysSignature = selectedFileKeys.join('\0');
-  const selectedArea = selected?.area;
-  const selectedPath = selected?.path;
+  const selectedArea = displayedSelected?.area;
+  const selectedPath = displayedSelected?.path;
   const visibleDiff =
     diff && diff.path === selectedPath && diff.area === selectedArea ? diff : undefined;
+  const selectedSurfaceSelection: SurfaceSelection | undefined = selection
+    ? {
+        ...(selectionItemId ? { itemId: selectionItemId } : {}),
+        side: selection.side,
+        startLine: selection.startLine,
+        endLine: selection.endLine,
+        patchActionable: selectionPatchActionable,
+      }
+    : undefined;
   const effectiveConflict =
     conflict && selectedArea === 'conflicted' && conflict.path === selectedPath
       ? conflict
@@ -281,7 +308,7 @@ export function ChangesView({
     ? patchContainsMultipleFiles(visibleDiff.patch)
     : false;
   const partialSelectionEligible = Boolean(
-    visibleDiff && selected && supportsPartialDiffActions(visibleDiff, selected),
+    visibleDiff && displayedSelected && supportsPartialDiffActions(visibleDiff, displayedSelected),
   );
   const lineSelectionEnabled = partialSelectionEligible && !repositoryActionsDisabled;
   const reportRuntimeError = useCallback(
@@ -484,6 +511,7 @@ export function ChangesView({
 
   useEffect(() => {
     setFileActionNotice(undefined);
+    setRestoredDiffSelection(undefined);
     setEditingTarget(undefined);
     setFileDocument(undefined);
     setFileEditorDirty(false);
@@ -613,6 +641,7 @@ export function ChangesView({
     setEditingTarget(undefined);
     setFileDocument(undefined);
     setFileEditorExternalStateChanged(false);
+    setRestoredDiffSelection(undefined);
     setSelectedKey(nextSelectedKey);
     setSelectedFileKeys([nextSelectedKey]);
   };
@@ -627,6 +656,7 @@ export function ChangesView({
       setEditingTarget(undefined);
       setFileDocument(undefined);
     }
+    setRestoredDiffSelection(undefined);
     setSelectedKey(nextSelectedKey);
   };
 
@@ -639,6 +669,7 @@ export function ChangesView({
       setEditingTarget(undefined);
       setFileDocument(undefined);
     }
+    setRestoredDiffSelection(undefined);
     setSelectedFileKeys(keys);
   };
 
@@ -650,6 +681,7 @@ export function ChangesView({
 
   const completeDisplayExit = (): void => {
     setFileEditorDirty(false);
+    setRestoredDiffSelection(editingTarget?.returnSelection);
     setEditingTarget(undefined);
     setFileDocument(undefined);
     setFileEditorExternalStateChanged(false);
@@ -735,7 +767,21 @@ export function ChangesView({
     setSelectionMenuContext(undefined);
     if (!surfaceSelection || !diff) {
       setSelection(undefined);
+      setSelectionItemId(undefined);
+      setSelectionPatchActionable(true);
+      setRestoredDiffSelection(undefined);
       return;
+    }
+    setSelectionItemId(surfaceSelection.itemId);
+    setSelectionPatchActionable(surfaceSelection.patchActionable);
+    if (
+      restoredDiffSelection &&
+      (restoredDiffSelection.itemId !== surfaceSelection.itemId ||
+        restoredDiffSelection.side !== surfaceSelection.side ||
+        restoredDiffSelection.startLine !== surfaceSelection.startLine ||
+        restoredDiffSelection.endLine !== surfaceSelection.endLine)
+    ) {
+      setRestoredDiffSelection(undefined);
     }
     setSelection({
       kind: 'lines',
@@ -755,28 +801,33 @@ export function ChangesView({
     | 'unstageSelection'
     | 'discardSelection';
 
+  const copySelectedLines = async (text: string): Promise<void> => {
+    setFileActionNotice(undefined);
+    try {
+      await navigator.clipboard.writeText(text);
+      setFileActionNotice({ level: 'info', message: { id: 'copiedSelectedLines' } });
+    } catch (cause) {
+      if (onError) {
+        reportRuntimeError(t('copySelectedLinesFailedTitle'), cause, t('copySelectedLinesFailed'));
+      } else {
+        setFileActionNotice({ level: 'error', message: { id: 'copySelectedLinesFailed' } });
+      }
+    }
+  };
+
   const runSelectionAction = async (kind: SelectionActionKind): Promise<void> => {
     if (kind === 'editLines') {
-      if (selected && selection) startEditing(selected, selection.startLine);
+      if (displayedSelected && selectedSurfaceSelection)
+        startEditing(
+          displayedSelected,
+          selectedSurfaceSelection.startLine,
+          selectedSurfaceSelection,
+        );
       return;
     }
     if (kind === 'copySelection') {
       if (!selectionMenuContext) return;
-      setFileActionNotice(undefined);
-      try {
-        await navigator.clipboard.writeText(selectionMenuContext.text);
-        setFileActionNotice({ level: 'info', message: { id: 'copiedSelectedLines' } });
-      } catch (cause) {
-        if (onError) {
-          reportRuntimeError(
-            t('copySelectedLinesFailedTitle'),
-            cause,
-            t('copySelectedLinesFailed'),
-          );
-        } else {
-          setFileActionNotice({ level: 'error', message: { id: 'copySelectedLinesFailed' } });
-        }
-      }
+      await copySelectedLines(selectionMenuContext.text);
       setSelectionMenuContext(undefined);
       return;
     }
@@ -869,7 +920,7 @@ export function ChangesView({
         }
       : undefined;
 
-  const hunkAction = createHunkAction(visibleDiff, selected, true);
+  const hunkAction = createHunkAction(visibleDiff, displayedSelected, true);
 
   const copySelectionMenuItem: RowActionMenuItem<SelectionActionKind> = {
     action: 'copySelection',
@@ -880,44 +931,46 @@ export function ChangesView({
     action: 'editLines',
     label: t('actionEditLines'),
     icon: <Pencil aria-hidden="true" focusable="false" size={15} />,
-    disabled: busy || unsavedDirty || selected?.status === 'deleted',
+    disabled: busy || unsavedDirty || displayedSelected?.status === 'deleted',
   };
   const discardSelectionMenuItem: RowActionMenuItem<SelectionActionKind> = {
     action: 'discardSelection',
     label: t('actionDiscardSelectedLines'),
     icon: <Trash2 aria-hidden="true" focusable="false" size={15} />,
-    disabled: repositoryActionsDisabled || selected?.area === 'untracked',
+    disabled: repositoryActionsDisabled || displayedSelected?.area === 'untracked',
     danger: true,
     separatorBefore: true,
   };
-  const selectionMenuItems: RowActionMenuItem<SelectionActionKind>[] = !splitStageView
-    ? selected?.area === 'staged'
-      ? [editLinesMenuItem, copySelectionMenuItem]
-      : [editLinesMenuItem, copySelectionMenuItem, discardSelectionMenuItem]
-    : selected?.area === 'staged'
-      ? [
-          editLinesMenuItem,
-          copySelectionMenuItem,
-          {
-            action: 'unstageSelection',
-            label: t('actionUnstageSelectedLines'),
-            icon: <Upload aria-hidden="true" focusable="false" size={15} />,
-            disabled: repositoryActionsDisabled,
-            separatorBefore: true,
-          },
-        ]
-      : [
-          editLinesMenuItem,
-          copySelectionMenuItem,
-          {
-            action: 'stageSelection',
-            label: t('actionStageSelectedLines'),
-            icon: <Download aria-hidden="true" focusable="false" size={15} />,
-            disabled: repositoryActionsDisabled,
-            separatorBefore: true,
-          },
-          discardSelectionMenuItem,
-        ];
+  const selectionMenuItems: RowActionMenuItem<SelectionActionKind>[] = !selectionPatchActionable
+    ? [editLinesMenuItem, copySelectionMenuItem]
+    : !splitStageView
+      ? displayedSelected?.area === 'staged'
+        ? [editLinesMenuItem, copySelectionMenuItem]
+        : [editLinesMenuItem, copySelectionMenuItem, discardSelectionMenuItem]
+      : displayedSelected?.area === 'staged'
+        ? [
+            editLinesMenuItem,
+            copySelectionMenuItem,
+            {
+              action: 'unstageSelection',
+              label: t('actionUnstageSelectedLines'),
+              icon: <Upload aria-hidden="true" focusable="false" size={15} />,
+              disabled: repositoryActionsDisabled,
+              separatorBefore: true,
+            },
+          ]
+        : [
+            editLinesMenuItem,
+            copySelectionMenuItem,
+            {
+              action: 'stageSelection',
+              label: t('actionStageSelectedLines'),
+              icon: <Download aria-hidden="true" focusable="false" size={15} />,
+              disabled: repositoryActionsDisabled,
+              separatorBefore: true,
+            },
+            discardSelectionMenuItem,
+          ];
 
   const runStageTransition = async (request: StageTransitionRequest): Promise<void> => {
     const transitioningSelectedPath = request.paths.find(
@@ -943,20 +996,32 @@ export function ChangesView({
     }
   };
 
-  const startEditing = (entry: ChangeEntry, initialScrollLine?: number): void => {
+  const startEditing = (
+    entry: ChangeEntry,
+    initialScrollLine?: number,
+    returnSelection?: SurfaceSelection,
+  ): void => {
     if (entry.area === 'conflicted' || entry.status === 'deleted' || entry.status === 'binary') {
       setFileActionNotice({ level: 'error', message: { id: 'fileEditUnsupported' } });
       return;
     }
+    const editorLine =
+      returnSelection && visibleDiff
+        ? editorLineForDiffSelection(visibleDiff.patch, visibleDiff.diffId, returnSelection)
+        : initialScrollLine;
     setEditingTarget({
       path: entry.path,
       originalEntry: entry,
-      ...(initialScrollLine ? { initialScrollLine } : {}),
+      ...(editorLine ? { initialScrollLine: editorLine } : {}),
+      ...(returnSelection ? { returnSelection } : {}),
     });
     setFileDocument(undefined);
     setFileEditorDirty(false);
     setFileEditorExternalStateChanged(false);
+    setRestoredDiffSelection(undefined);
     setSelection(undefined);
+    setSelectionItemId(undefined);
+    setSelectionPatchActionable(true);
     setSelectionMenuContext(undefined);
     setError(undefined);
   };
@@ -1088,103 +1153,97 @@ export function ChangesView({
   };
 
   const repositoryActions = (
-    <section className="changes-action-section">
-      <fieldset className="changes-action-bar" aria-label={t('actions')}>
+    <fieldset className="changes-action-bar" aria-label={t('actions')}>
+      <button
+        type="button"
+        className="changes-action-button quiet"
+        aria-label={t('commit')}
+        aria-haspopup="dialog"
+        aria-expanded={commitDialogOpen}
+        title={t('commit')}
+        disabled={busy || unsavedDirty}
+        onClick={() => setCommitDialogOpen(true)}
+      >
+        <GitCommitHorizontal aria-hidden="true" focusable="false" size={14} />
+      </button>
+      <button
+        type="button"
+        className="changes-action-button quiet"
+        aria-label={t('pull')}
+        aria-haspopup="dialog"
+        aria-expanded={remoteDialog === 'pull'}
+        title={t('pull')}
+        disabled={repositoryActionsDisabled || repo.branch.detached}
+        aria-describedby={
+          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+        }
+        onClick={() => setRemoteDialog('pull')}
+      >
+        <Download aria-hidden="true" focusable="false" size={14} />
+      </button>
+      <button
+        type="button"
+        className="changes-action-button quiet"
+        aria-label={t('push')}
+        aria-haspopup="dialog"
+        aria-expanded={remoteDialog === 'push'}
+        title={t('push')}
+        disabled={repositoryActionsDisabled || repo.branch.detached}
+        aria-describedby={
+          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+        }
+        onClick={() => setRemoteDialog('push')}
+      >
+        <Upload aria-hidden="true" focusable="false" size={14} />
+      </button>
+      <button
+        type="button"
+        className="changes-action-button quiet"
+        aria-label={t('fetch')}
+        title={t('fetch')}
+        disabled={repositoryActionsDisabled}
+        aria-describedby={
+          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+        }
+        onClick={() => settleAction(onAction({ kind: 'fetch' }))}
+      >
+        <RefreshCw aria-hidden="true" focusable="false" size={14} />
+      </button>
+    </fieldset>
+  );
+  const pullResolution = divergedPull ? (
+    <section
+      className="inline-alert warning pull-resolution"
+      aria-labelledby="pull-resolution-title"
+    >
+      <div>
+        <strong id="pull-resolution-title">{t('fastForwardUnavailable')}</strong>
+        <p>{t('fetchCompleteResolve', { target: divergedPull.target })}</p>
+      </div>
+      <div className="button-row">
         <button
           type="button"
-          className="changes-action-button quiet"
-          aria-label={t('commit')}
-          aria-haspopup="dialog"
-          aria-expanded={commitDialogOpen}
-          title={t('commit')}
-          disabled={busy || unsavedDirty}
-          onClick={() => setCommitDialogOpen(true)}
-        >
-          <GitCommitHorizontal aria-hidden="true" focusable="false" size={14} />
-          <span>{t('commit')}</span>
-        </button>
-        <button
-          type="button"
-          className="changes-action-button quiet"
-          aria-label={t('pull')}
-          aria-haspopup="dialog"
-          aria-expanded={remoteDialog === 'pull'}
-          title={t('pull')}
-          disabled={repositoryActionsDisabled || repo.branch.detached}
-          aria-describedby={
-            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-          }
-          onClick={() => setRemoteDialog('pull')}
-        >
-          <Download aria-hidden="true" focusable="false" size={14} />
-          <span>{t('pull')}</span>
-        </button>
-        <button
-          type="button"
-          className="changes-action-button quiet"
-          aria-label={t('push')}
-          aria-haspopup="dialog"
-          aria-expanded={remoteDialog === 'push'}
-          title={t('push')}
-          disabled={repositoryActionsDisabled || repo.branch.detached}
-          aria-describedby={
-            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-          }
-          onClick={() => setRemoteDialog('push')}
-        >
-          <Upload aria-hidden="true" focusable="false" size={14} />
-          <span>{t('push')}</span>
-        </button>
-        <button
-          type="button"
-          className="changes-action-button quiet"
-          aria-label={t('fetch')}
-          title={t('fetch')}
           disabled={repositoryActionsDisabled}
           aria-describedby={
             operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
           }
-          onClick={() => settleAction(onAction({ kind: 'fetch' }))}
+          onClick={() => settleAction(resolveDivergedPull('merge'))}
         >
-          <RefreshCw aria-hidden="true" focusable="false" size={14} />
-          <span>{t('fetch')}</span>
+          {t('merge')}
         </button>
-      </fieldset>
-      {divergedPull ? (
-        <section
-          className="inline-alert warning pull-resolution"
-          aria-labelledby="pull-resolution-title"
+        <button
+          type="button"
+          disabled={repositoryActionsDisabled}
+          aria-describedby={
+            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          }
+          onClick={() => settleAction(resolveDivergedPull('rebase'))}
         >
-          <div>
-            <strong id="pull-resolution-title">{t('fastForwardUnavailable')}</strong>
-            <p>{t('fetchCompleteResolve', { target: divergedPull.target })}</p>
-          </div>
-          <div className="button-row">
-            <button
-              type="button"
-              disabled={repositoryActionsDisabled}
-              aria-describedby={
-                operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-              }
-              onClick={() => settleAction(resolveDivergedPull('merge'))}
-            >
-              {t('merge')}
-            </button>
-            <button
-              type="button"
-              disabled={repositoryActionsDisabled}
-              aria-describedby={
-                operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
-              }
-              onClick={() => settleAction(resolveDivergedPull('rebase'))}
-            >
-              {t('rebase')}
-            </button>
-          </div>
-        </section>
-      ) : null}
+          {t('rebase')}
+        </button>
+      </div>
     </section>
-  );
+  ) : null;
 
   const renderDiffFileHeader = ({
     entry,
@@ -1248,7 +1307,9 @@ export function ChangesView({
             mode="display"
             editDisabled={busy || unsavedDirty || fileActionInvalid}
             onDisplay={() => undefined}
-            onEdit={() => startEditing(entry)}
+            onEdit={() =>
+              startEditing(entry, selectedSurfaceSelection?.startLine, selectedSurfaceSelection)
+            }
           />
           <FileActionMenu
             path={entry.path}
@@ -1274,374 +1335,385 @@ export function ChangesView({
   };
 
   const paneStyle: CSSProperties & { '--left-pane': string; '--right-pane': string } = {
-    '--left-pane': `${Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.left)}px`,
+    '--left-pane': `${Math.max(LEFT_PANE_MIN_WIDTH, paneWidths.left)}px`,
     '--right-pane': `${paneWidths.right}px`,
   };
 
   return (
-    <div className="three-pane changes-view changes-two-pane" style={paneStyle}>
-      <aside className="pane changes-list-pane changes-sidebar-pane" aria-label={t('changes')}>
-        {repositoryActions}
-        <section className="changes-files-scroll-region" aria-label={t('changedFiles')}>
-          {fileActionNotice ? (
-            <p
-              className={`file-action-notice ${fileActionNotice.level}`}
-              role={fileActionNotice.level === 'error' ? 'alert' : 'status'}
-              aria-live={fileActionNotice.level === 'error' ? 'assertive' : 'polite'}
-            >
-              {message(fileActionNotice.message)}
-            </p>
-          ) : null}
-          {unsavedDirty && !operationActionDisabledReason ? (
-            <p id="changes-unsaved-stage-action-reason" className="sr-only">
-              {stageActionDisabledReason}
-            </p>
-          ) : null}
-          <ChangeList
-            repoId={repo.repoId}
-            generation={repo.generation}
-            entries={repo.changes}
-            splitStageView={splitStageView}
-            display={changeListDisplay}
-            selectedKey={selected ? `${selected.area}:${selected.path}` : ''}
-            selectionKeys={selectedFileKeys}
-            unsavedFileKey={
-              fileEditorDirty && editingTarget
-                ? `${editingTarget.originalEntry.area}:${editingTarget.path}`
-                : undefined
-            }
-            disabled={stageActionsDisabled}
-            disabledReasonId={stageActionDisabledReasonId}
-            fileActionsDisabled={busy}
-            fileEditDisabled={unsavedDirty}
-            fileOpenDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
-            fileTrashDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
-            onSelect={requestFileSelection}
-            onSelectedKeysChange={requestSelectedFiles}
-            onStageTransition={runStageTransition}
-            onFileAction={runFileAction}
-          />
-        </section>
-        <footer className="changes-list-footer" aria-live="polite">
-          {multipleFilesSelected ? (
-            t('selectedFilesSummary', { count: selectedFileCount })
-          ) : (
-            <>
-              <span>{t('uncommittedFileCount', { count: changedFileCount })}</span>
-              <span className="additions">+{formatNumber(changeTotals.additions)}</span>
-              <span className="deletions">−{formatNumber(changeTotals.deletions)}</span>
-            </>
-          )}
-        </footer>
-      </aside>
-      <PaneResizer
-        label={t('changesListWidth')}
-        value={Math.max(CHANGES_PANE_MIN_WIDTH, paneWidths.left)}
-        direction="growRight"
-        min={CHANGES_PANE_MIN_WIDTH}
-        onChange={(left) => onPaneWidthsChange({ ...paneWidths, left })}
-      />
-
-      {editingTarget && editingEntry && fileDocument ? (
-        <FileEditorSurface
-          key={`${repo.repoId}:${editingTarget.path}`}
-          document={fileDocument}
-          entry={editingEntry}
-          busy={busy}
-          externalStateChanged={fileEditorExternalStateChanged}
-          lineWrapping={editorLineWrapping}
-          wrapColumn={editorWrapColumn}
-          initialScrollLine={editingTarget.initialScrollLine}
-          headerActions={
-            <FileActionMenu
-              path={editingEntry.path}
-              selectedPaths={[editingEntry.path]}
-              open={detailFileMenuOpen}
-              disabled={busy}
-              editDisabled
-              openDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
-              discardDisabled={
-                Boolean(operationActionDisabledReason) ||
-                unsavedDirty ||
-                editingEntry.area !== 'unstaged' ||
-                editingEntry.status === 'deleted'
+    <>
+      <div className="three-pane changes-view changes-two-pane" style={paneStyle}>
+        <aside className="pane changes-list-pane changes-sidebar-pane" aria-label={t('changes')}>
+          {pullResolution}
+          <section className="changes-files-scroll-region" aria-label={t('changedFiles')}>
+            {fileActionNotice ? (
+              <p
+                className={`file-action-notice ${fileActionNotice.level}`}
+                role={fileActionNotice.level === 'error' ? 'alert' : 'status'}
+                aria-live={fileActionNotice.level === 'error' ? 'assertive' : 'polite'}
+              >
+                {message(fileActionNotice.message)}
+              </p>
+            ) : null}
+            {unsavedDirty && !operationActionDisabledReason ? (
+              <p id="changes-unsaved-stage-action-reason" className="sr-only">
+                {stageActionDisabledReason}
+              </p>
+            ) : null}
+            <ChangeList
+              repoId={repo.repoId}
+              generation={repo.generation}
+              entries={repo.changes}
+              splitStageView={splitStageView}
+              display={changeListDisplay}
+              selectedKey={selected ? `${selected.area}:${selected.path}` : ''}
+              selectionKeys={selectedFileKeys}
+              unsavedFileKey={
+                fileEditorDirty && editingTarget
+                  ? `${editingTarget.originalEntry.area}:${editingTarget.path}`
+                  : undefined
               }
-              deleteDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
-              persistentTrigger
-              onOpenChange={(open) => {
-                setDetailFileMenuOpen(open);
-                if (!open) setDetailFileMenuContextPoint(undefined);
-              }}
-              onTriggerOpen={() => setDetailFileMenuContextPoint(undefined)}
-              onAction={(fileAction) => runFileAction([editingEntry], fileAction)}
+              disabled={stageActionsDisabled}
+              disabledReasonId={stageActionDisabledReasonId}
+              fileActionsDisabled={busy}
+              fileEditDisabled={unsavedDirty}
+              fileOpenDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+              fileTrashDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+              onSelect={requestFileSelection}
+              onSelectedKeysChange={requestSelectedFiles}
+              onStageTransition={runStageTransition}
+              onFileAction={runFileAction}
             />
-          }
-          onDisplay={completeDisplayExit}
-          onSave={saveFile}
-          onReload={reloadEditedFile}
-          onSaved={handleFileSaved}
-          onDirtyChange={setFileEditorDirty}
-          onLeaveHandleChange={handleUnsavedLeaveHandleChange}
+          </section>
+          <footer className="changes-list-footer">
+            <div className="changes-list-summary" aria-live="polite">
+              {multipleFilesSelected ? (
+                t('selectedFilesSummary', { count: selectedFileCount })
+              ) : (
+                <>
+                  <span>{t('uncommittedFileCount', { count: changedFileCount })}</span>
+                  <span className="additions">+{formatNumber(changeTotals.additions)}</span>
+                  <span className="deletions">−{formatNumber(changeTotals.deletions)}</span>
+                </>
+              )}
+            </div>
+            {repositoryActions}
+          </footer>
+        </aside>
+        <PaneResizer
+          label={t('changesListWidth')}
+          value={Math.max(LEFT_PANE_MIN_WIDTH, paneWidths.left)}
+          direction="growRight"
+          min={LEFT_PANE_MIN_WIDTH}
+          max={LEFT_PANE_MAX_WIDTH}
+          onChange={(left) => onPaneWidthsChange({ ...paneWidths, left })}
         />
-      ) : effectiveConflict && !multipleFilesSelected ? (
-        <main className="pane conflict-pane-span changes-content-pane">
-          <ConflictSurface
-            key={`${effectiveConflict.repoId}:${effectiveConflict.path}`}
-            document={effectiveConflict}
-            actions={conflictActions}
-            externalStateChanged={conflictMissingFromSnapshot}
+
+        {editingTarget && editingEntry && fileDocument ? (
+          <FileEditorSurface
+            key={`${repo.repoId}:${editingTarget.path}`}
+            document={fileDocument}
+            entry={editingEntry}
+            busy={busy}
+            externalStateChanged={fileEditorExternalStateChanged}
             lineWrapping={editorLineWrapping}
             wrapColumn={editorWrapColumn}
-            onError={reportRuntimeError}
-            onDirtyChange={handleConflictDirtyChange}
+            initialScrollLine={editingTarget.initialScrollLine}
+            headerActions={
+              <FileActionMenu
+                path={editingEntry.path}
+                selectedPaths={[editingEntry.path]}
+                open={detailFileMenuOpen}
+                disabled={busy}
+                editDisabled
+                openDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+                discardDisabled={
+                  Boolean(operationActionDisabledReason) ||
+                  unsavedDirty ||
+                  editingEntry.area !== 'unstaged' ||
+                  editingEntry.status === 'deleted'
+                }
+                deleteDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+                persistentTrigger
+                onOpenChange={(open) => {
+                  setDetailFileMenuOpen(open);
+                  if (!open) setDetailFileMenuContextPoint(undefined);
+                }}
+                onTriggerOpen={() => setDetailFileMenuContextPoint(undefined)}
+                onAction={(fileAction) => runFileAction([editingEntry], fileAction)}
+              />
+            }
+            onDisplay={completeDisplayExit}
+            onSave={saveFile}
+            onReload={reloadEditedFile}
+            onSaved={handleFileSaved}
+            onDirtyChange={setFileEditorDirty}
             onLeaveHandleChange={handleUnsavedLeaveHandleChange}
-            diffStyle={diffStyle}
-            onResolved={() => {
-              setConflict(undefined);
-              handleConflictDirtyChange(false);
-            }}
           />
-        </main>
-      ) : (
-        <main
-          className={`pane diff-pane changes-content-pane${stickyFileHeaders ? '' : ' has-static-file-headers'}`}
-          aria-label={multipleFilesSelected || !selected ? t('diff') : undefined}
-          aria-labelledby={!multipleFilesSelected && selected ? 'selected-file-title' : undefined}
-        >
-          {selected && !multipleFilesSelected
-            ? renderDiffFileHeader({
-                entry: selected,
-                menuOpen: detailFileMenuOpen,
-                menuContextPoint: detailFileMenuContextPoint,
-                titleId: 'selected-file-title',
-                onMenuOpenChange: setDetailFileMenuOpen,
-                onMenuContextPointChange: setDetailFileMenuContextPoint,
-              })
-            : null}
-          {operationActionDisabledReason ? (
-            <p id="changes-operation-action-reason" className="sr-only">
-              {operationActionDisabledReason}
-            </p>
-          ) : null}
-          {error ? (
-            <div className="inline-alert error" role="alert">
-              <WorkspaceErrorDetails error={error} />
-            </div>
-          ) : null}
-          {multipleFilesSelected ? (
-            <div className="multi-diff-list">
-              {multiDiffs.map((document) => {
-                const entry = selectedFileEntries.find(
-                  (candidate) =>
-                    candidate.path === document.path && candidate.area === document.area,
-                ) ?? {
-                  path: document.path,
-                  area: document.area,
-                  status: document.binary ? ('binary' as const) : ('modified' as const),
-                };
-                const itemKey = `${document.area}:${document.path}`;
-                const collapsed = collapsedMultiDiffKeys.has(itemKey);
-                const toggle = () => {
-                  setCollapsedMultiDiffKeys((current) => {
-                    const next = new Set(current);
-                    if (next.has(itemKey)) next.delete(itemKey);
-                    else next.add(itemKey);
-                    return next;
-                  });
-                };
-                const header = renderDiffFileHeader({
-                  entry,
-                  collapsed,
-                  menuOpen: multiDetailFileMenuKey === itemKey,
-                  menuContextPoint:
-                    multiDetailFileMenuContext?.key === itemKey
-                      ? multiDetailFileMenuContext.point
-                      : undefined,
-                  onToggle: toggle,
-                  onMenuOpenChange: (open) => setMultiDetailFileMenuKey(open ? itemKey : undefined),
-                  onMenuContextPointChange: (point) =>
-                    setMultiDetailFileMenuContext(point ? { key: itemKey, point } : undefined),
-                });
-                const multiHunkAction = createHunkAction(document, entry, false);
-                return document.binary ? (
-                  <section
-                    key={`${document.area}:${document.path}:${document.diffId}`}
-                    className="multi-diff-binary"
-                  >
-                    {header}
-                    {!collapsed ? (
-                      <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
-                    ) : null}
-                  </section>
-                ) : (
-                  <section
-                    key={`${document.area}:${document.path}:${document.diffId}`}
-                    className="multi-diff-item"
-                  >
-                    {header}
-                    {document.truncated && !collapsed ? (
-                      <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
-                    ) : null}
-                    <DiffSurface
-                      source={
-                        document.tooLarge || patchContainsMultipleFiles(document.patch)
-                          ? {
-                              kind: 'codeView',
-                              patch: document.patch,
-                              cacheKey: document.diffId,
-                            }
-                          : {
-                              kind: 'patch',
-                              patch: document.patch,
-                              path: document.path,
-                              cacheKey: document.diffId,
-                            }
-                      }
-                      diffStyle={diffStyle}
-                      lineWrapping={editorLineWrapping}
-                      wrapColumn={editorWrapColumn}
-                      performanceMode={Boolean(document.tooLarge)}
-                      collapsed={collapsed}
-                      {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
-                      ariaLabel={t('fileDiffAria', { path: document.path })}
-                    />
-                  </section>
-                );
-              })}
-            </div>
-          ) : null}
-          {!multipleFilesSelected && visibleDiff?.binary ? (
-            <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
-          ) : null}
-          {!multipleFilesSelected && visibleDiff?.truncated ? (
-            <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
-          ) : null}
-          {!multipleFilesSelected && visibleDiff && !visibleDiff.binary ? (
-            <DiffSurface
-              source={
-                visibleDiff.tooLarge || diffContainsMultipleFiles
-                  ? {
-                      kind: 'codeView',
-                      patch: visibleDiff.patch,
-                      cacheKey: visibleDiff.diffId,
-                    }
-                  : {
-                      kind: 'patch',
-                      patch: visibleDiff.patch,
-                      path: visibleDiff.path,
-                      cacheKey: visibleDiff.diffId,
-                    }
-              }
-              selectable={lineSelectionEnabled}
-              {...(hunkAction ? { hunkAction } : {})}
-              diffStyle={diffStyle}
+        ) : effectiveConflict && !multipleFilesSelected ? (
+          <main className="pane conflict-pane-span changes-content-pane">
+            <ConflictSurface
+              key={`${effectiveConflict.repoId}:${effectiveConflict.path}`}
+              document={effectiveConflict}
+              actions={conflictActions}
+              externalStateChanged={conflictMissingFromSnapshot}
               lineWrapping={editorLineWrapping}
               wrapColumn={editorWrapColumn}
-              performanceMode={Boolean(visibleDiff.tooLarge)}
-              onSelectionChange={handleSurfaceSelection}
-              onSelectionContextMenu={(_surfaceSelection, point, text) =>
-                setSelectionMenuContext({ point, text })
-              }
-              ariaLabel={t('fileDiffAria', { path: visibleDiff.path })}
-            />
-          ) : null}
-          {!multipleFilesSelected && selection ? (
-            <RowActionMenu
-              triggerLabel={t('selectedLines')}
-              triggerTitle={t('selectedLines')}
-              menuLabel={t('selectedLines')}
-              items={selectionMenuItems}
-              open={selectionMenuContext !== undefined}
-              disabled={repositoryActionsDisabled}
-              contextPoint={selectionMenuContext?.point}
-              contextOnly
-              onOpenChange={(open) => {
-                if (!open) setSelectionMenuContext(undefined);
+              onError={reportRuntimeError}
+              onDirtyChange={handleConflictDirtyChange}
+              onLeaveHandleChange={handleUnsavedLeaveHandleChange}
+              diffStyle={diffStyle}
+              onResolved={() => {
+                setConflict(undefined);
+                handleConflictDirtyChange(false);
               }}
-              onTriggerOpen={() => undefined}
-              onAction={runSelectionAction}
             />
-          ) : null}
-        </main>
-      )}
-      {commitDialogOpen ? (
-        <Dialog
-          labelledBy="commit-dialog-title"
-          dismissible={!busy}
-          onDismiss={() => {
-            if (!busy) setCommitDialogOpen(false);
-          }}
-          role="dialog"
-        >
-          <DialogHeader titleId="commit-dialog-title" title={t('commit')} />
-          <CommitForm
-            key={repo.path}
-            draftKey={repo.path}
-            disabled={Boolean(disabledCommitReason)}
-            disabledReason={disabledCommitReason}
-            hideDisabledReason={disabledCommitReason === t('stageChangesToCommit')}
-            busy={busy}
-            showHeading={false}
-            labelledBy="commit-dialog-title"
-            useConventionalCommits={useConventionalCommits}
-            onCancel={() => setCommitDialogOpen(false)}
-            onCommitted={() => setCommitDialogOpen(false)}
-            onError={reportRuntimeError}
-            onCommit={(input) =>
-              onAction({ kind: 'commit', input, includeAllChanges: !splitStageView })
+          </main>
+        ) : (
+          <main
+            className={`pane diff-pane changes-content-pane${stickyFileHeaders ? '' : ' has-static-file-headers'}`}
+            aria-label={multipleFilesSelected || !displayedSelected ? t('diff') : undefined}
+            aria-labelledby={
+              !multipleFilesSelected && displayedSelected ? 'selected-file-title' : undefined
             }
+          >
+            {displayedSelected && !multipleFilesSelected
+              ? renderDiffFileHeader({
+                  entry: displayedSelected,
+                  menuOpen: detailFileMenuOpen,
+                  menuContextPoint: detailFileMenuContextPoint,
+                  titleId: 'selected-file-title',
+                  onMenuOpenChange: setDetailFileMenuOpen,
+                  onMenuContextPointChange: setDetailFileMenuContextPoint,
+                })
+              : null}
+            {operationActionDisabledReason ? (
+              <p id="changes-operation-action-reason" className="sr-only">
+                {operationActionDisabledReason}
+              </p>
+            ) : null}
+            {error ? (
+              <div className="inline-alert error" role="alert">
+                <WorkspaceErrorDetails error={error} />
+              </div>
+            ) : null}
+            {multipleFilesSelected ? (
+              <div className="multi-diff-list">
+                {multiDiffs.map((document) => {
+                  const entry = selectedFileEntries.find(
+                    (candidate) =>
+                      candidate.path === document.path && candidate.area === document.area,
+                  ) ?? {
+                    path: document.path,
+                    area: document.area,
+                    status: document.binary ? ('binary' as const) : ('modified' as const),
+                  };
+                  const itemKey = `${document.area}:${document.path}`;
+                  const collapsed = collapsedMultiDiffKeys.has(itemKey);
+                  const toggle = () => {
+                    setCollapsedMultiDiffKeys((current) => {
+                      const next = new Set(current);
+                      if (next.has(itemKey)) next.delete(itemKey);
+                      else next.add(itemKey);
+                      return next;
+                    });
+                  };
+                  const header = renderDiffFileHeader({
+                    entry,
+                    collapsed,
+                    menuOpen: multiDetailFileMenuKey === itemKey,
+                    menuContextPoint:
+                      multiDetailFileMenuContext?.key === itemKey
+                        ? multiDetailFileMenuContext.point
+                        : undefined,
+                    onToggle: toggle,
+                    onMenuOpenChange: (open) =>
+                      setMultiDetailFileMenuKey(open ? itemKey : undefined),
+                    onMenuContextPointChange: (point) =>
+                      setMultiDetailFileMenuContext(point ? { key: itemKey, point } : undefined),
+                  });
+                  const multiHunkAction = createHunkAction(document, entry, false);
+                  return document.binary ? (
+                    <section
+                      key={`${document.area}:${document.path}:${document.diffId}`}
+                      className="multi-diff-binary"
+                    >
+                      {header}
+                      {!collapsed ? (
+                        <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
+                      ) : null}
+                    </section>
+                  ) : (
+                    <section
+                      key={`${document.area}:${document.path}:${document.diffId}`}
+                      className="multi-diff-item"
+                    >
+                      {header}
+                      {document.truncated && !collapsed ? (
+                        <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
+                      ) : null}
+                      <DiffSurface
+                        source={
+                          document.tooLarge || patchContainsMultipleFiles(document.patch)
+                            ? {
+                                kind: 'codeView',
+                                patch: document.patch,
+                                cacheKey: document.diffId,
+                              }
+                            : {
+                                kind: 'patch',
+                                patch: document.patch,
+                                path: document.path,
+                                cacheKey: document.diffId,
+                              }
+                        }
+                        diffStyle={diffStyle}
+                        lineWrapping={editorLineWrapping}
+                        wrapColumn={editorWrapColumn}
+                        performanceMode={Boolean(document.tooLarge)}
+                        collapsed={collapsed}
+                        {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
+                        ariaLabel={t('fileDiffAria', { path: document.path })}
+                      />
+                    </section>
+                  );
+                })}
+              </div>
+            ) : null}
+            {!multipleFilesSelected && visibleDiff?.binary ? (
+              <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
+            ) : null}
+            {!multipleFilesSelected && visibleDiff?.truncated ? (
+              <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
+            ) : null}
+            {!multipleFilesSelected && visibleDiff && !visibleDiff.binary ? (
+              <DiffSurface
+                source={
+                  visibleDiff.tooLarge || diffContainsMultipleFiles
+                    ? {
+                        kind: 'codeView',
+                        patch: visibleDiff.patch,
+                        cacheKey: visibleDiff.diffId,
+                      }
+                    : {
+                        kind: 'patch',
+                        patch: visibleDiff.patch,
+                        path: visibleDiff.path,
+                        cacheKey: visibleDiff.diffId,
+                      }
+                }
+                selectable={lineSelectionEnabled}
+                {...(hunkAction ? { hunkAction } : {})}
+                diffStyle={diffStyle}
+                lineWrapping={editorLineWrapping}
+                wrapColumn={editorWrapColumn}
+                performanceMode={Boolean(visibleDiff.tooLarge)}
+                initialSelection={restoredDiffSelection}
+                onSelectionChange={handleSurfaceSelection}
+                onSelectionContextMenu={(_surfaceSelection, point, text) =>
+                  setSelectionMenuContext({ point, text })
+                }
+                onSelectionCopy={(text) => void copySelectedLines(text)}
+                ariaLabel={t('fileDiffAria', { path: visibleDiff.path })}
+              />
+            ) : null}
+            {!multipleFilesSelected && selection ? (
+              <RowActionMenu
+                triggerLabel={t('selectedLines')}
+                triggerTitle={t('selectedLines')}
+                menuLabel={t('selectedLines')}
+                items={selectionMenuItems}
+                open={selectionMenuContext !== undefined}
+                disabled={repositoryActionsDisabled}
+                contextPoint={selectionMenuContext?.point}
+                contextOnly
+                onOpenChange={(open) => {
+                  if (!open) setSelectionMenuContext(undefined);
+                }}
+                onTriggerOpen={() => undefined}
+                onAction={runSelectionAction}
+              />
+            ) : null}
+          </main>
+        )}
+        {commitDialogOpen ? (
+          <Dialog
+            labelledBy="commit-dialog-title"
+            dismissible={!busy}
+            onDismiss={() => {
+              if (!busy) setCommitDialogOpen(false);
+            }}
+            role="dialog"
+          >
+            <DialogHeader titleId="commit-dialog-title" title={t('commit')} />
+            <CommitForm
+              key={repo.path}
+              draftKey={repo.path}
+              disabled={Boolean(disabledCommitReason)}
+              disabledReason={disabledCommitReason}
+              hideDisabledReason={disabledCommitReason === t('stageChangesToCommit')}
+              busy={busy}
+              showHeading={false}
+              labelledBy="commit-dialog-title"
+              useConventionalCommits={useConventionalCommits}
+              onCancel={() => setCommitDialogOpen(false)}
+              onCommitted={() => setCommitDialogOpen(false)}
+              onError={reportRuntimeError}
+              onCommit={(input) =>
+                onAction({ kind: 'commit', input, includeAllChanges: !splitStageView })
+              }
+            />
+          </Dialog>
+        ) : null}
+        {remoteDialog ? (
+          <RemoteOperationDialog
+            key={`${repo.repoId}:${remoteDialog}`}
+            kind={remoteDialog}
+            repo={repo}
+            adapter={adapter}
+            busy={busy}
+            onDismiss={() => setRemoteDialog(undefined)}
+            onRefreshBranches={(remote) => onAction({ kind: 'fetch', remote })}
+            onPull={pull}
+            onPush={onAction}
           />
-        </Dialog>
-      ) : null}
-      {remoteDialog ? (
-        <RemoteOperationDialog
-          key={`${repo.repoId}:${remoteDialog}`}
-          kind={remoteDialog}
-          repo={repo}
-          adapter={adapter}
-          busy={busy}
-          onDismiss={() => setRemoteDialog(undefined)}
-          onRefreshBranches={(remote) => onAction({ kind: 'fetch', remote })}
-          onPull={pull}
-          onPush={onAction}
-        />
-      ) : null}
-      {pendingSelectedKey ? (
-        <Dialog
-          labelledBy="leave-edited-file-title"
-          role="alertdialog"
-          onDismiss={() => setPendingSelectedKey(undefined)}
-        >
-          <DialogHeader
-            titleId="leave-edited-file-title"
-            title={t(fileEditorDirty ? 'unsavedChanges' : 'unsavedResult')}
-            description={t('saveOrDiscardBeforeChangingFile')}
-          />
-          <DialogFooter>
-            <button
-              type="button"
-              data-dialog-initial-focus
-              onClick={() => setPendingSelectedKey(undefined)}
-            >
-              {t('cancel')}
-            </button>
-            <button
-              type="button"
-              className="danger-quiet"
-              onClick={() => completeFileSelection(pendingSelectedKey)}
-            >
-              {t('leaveWithoutSaving')}
-            </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => settleAction(saveAndSelectFile())}
-            >
-              {t('saveAndLeave')}
-            </button>
-          </DialogFooter>
-        </Dialog>
-      ) : null}
-    </div>
+        ) : null}
+        {pendingSelectedKey ? (
+          <Dialog
+            labelledBy="leave-edited-file-title"
+            role="alertdialog"
+            onDismiss={() => setPendingSelectedKey(undefined)}
+          >
+            <DialogHeader
+              titleId="leave-edited-file-title"
+              title={t(fileEditorDirty ? 'unsavedChanges' : 'unsavedResult')}
+              description={t('saveOrDiscardBeforeChangingFile')}
+            />
+            <DialogFooter>
+              <button
+                type="button"
+                data-dialog-initial-focus
+                onClick={() => setPendingSelectedKey(undefined)}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="danger-quiet"
+                onClick={() => completeFileSelection(pendingSelectedKey)}
+              >
+                {t('leaveWithoutSaving')}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => settleAction(saveAndSelectFile())}
+              >
+                {t('saveAndLeave')}
+              </button>
+            </DialogFooter>
+          </Dialog>
+        ) : null}
+      </div>
+    </>
   );
 }

@@ -36,6 +36,10 @@ vi.mock('@tauri-apps/api/window', () => ({
   }),
 }));
 
+vi.mock('@tauri-apps/api/path', () => ({
+  documentDir: async () => '/tmp',
+}));
+
 vi.mock('./features/update/appUpdate', () => ({
   checkForAppUpdate: appUpdateMock.check,
   installAppUpdate: appUpdateMock.install,
@@ -122,8 +126,6 @@ async function enterRepositoryPath(
   path: string,
 ): Promise<void> {
   const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
-  const pathTab = within(dialog).getByRole('tab', { name: 'Path' });
-  if (pathTab.getAttribute('aria-selected') !== 'true') await user.click(pathTab);
   await user.type(within(dialog).getByRole('textbox', { name: 'Repository path' }), path);
 }
 
@@ -184,7 +186,10 @@ describe('App repository attach', () => {
     expect(screen.getByText('No repositories have been added yet.')).toBeVisible();
     expect(container.querySelector('.brand, .brand-mark')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add Repository' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clone Repository' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Activity' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Forward' })).not.toBeInTheDocument();
     const settings = screen.getByRole('button', { name: 'Settings' });
     expect(settings).toBeVisible();
     const titlebarActions = container.querySelector('.titlebar-actions');
@@ -198,7 +203,7 @@ describe('App repository attach', () => {
     expect(container).not.toHaveTextContent('Workspace Log');
   });
 
-  it('keeps Changes, History, Activity, and Settings as peer titlebar destinations', async () => {
+  it('keeps Changes, History, Activity, and Settings as peer right-pane destinations', async () => {
     const user = userEvent.setup();
     const repo = repoSnapshot();
     const adapter: WorkspaceAdapter = {
@@ -235,11 +240,16 @@ describe('App repository attach', () => {
     const settings = screen.getByRole('button', { name: 'Settings' });
     expect(changes).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close Sidebar' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Close Sidebar' }));
+    expect(screen.getByTestId('app-shell')).toHaveClass('is-sidebar-closed');
+    await user.click(screen.getByRole('button', { name: 'Open Sidebar' }));
+    expect(screen.getByTestId('app-shell')).not.toHaveClass('is-sidebar-closed');
     const changesResizer = screen.getByRole('separator', { name: 'Changes list width' });
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '320');
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '360');
     changesResizer.focus();
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '344');
+    expect(changesResizer).toHaveAttribute('aria-valuenow', '384');
 
     await user.click(activity);
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -247,11 +257,18 @@ describe('App repository attach', () => {
     expect(activity).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /Current repository/u })).toBeVisible();
     expect(screen.getByRole('button', { name: /Current branch/u })).toBeVisible();
-    const activityResizer = await screen.findByRole('separator', { name: 'Operations width' });
-    expect(activityResizer).toHaveAttribute('aria-valuenow', '560');
+    const activityMetric = await screen.findByRole('combobox', { name: 'Activity metric' });
+    expect(activityMetric).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Activity range' })).toBeVisible();
+    expect(document.querySelector('.activity-analytics-header select')).toBe(activityMetric);
+    expect(activityMetric.closest('.left-pane-toolbar')).toBeInTheDocument();
+    const activityResizer = await screen.findByRole('separator', {
+      name: 'Repository analytics width',
+    });
+    expect(activityResizer).toHaveAttribute('aria-valuenow', '384');
     activityResizer.focus();
     await user.keyboard('{Shift>}{ArrowLeft}{/Shift}');
-    expect(activityResizer).toHaveAttribute('aria-valuenow', '536');
+    expect(activityResizer).toHaveAttribute('aria-valuenow', '360');
 
     await user.click(activity);
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -264,38 +281,36 @@ describe('App repository attach', () => {
     expect(activity).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
       'aria-valuenow',
-      '344',
+      '360',
     );
 
     await user.click(history);
     expect(history).toHaveAttribute('aria-current', 'page');
     expect(history).toHaveFocus();
     const historyResizer = await screen.findByRole('separator', { name: 'History list width' });
-    expect(historyResizer).toHaveAttribute('aria-valuenow', '320');
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '360');
     historyResizer.focus();
-    await user.keyboard('{ArrowLeft}');
-    expect(historyResizer).toHaveAttribute('aria-valuenow', '312');
+    await user.keyboard('{ArrowRight}');
+    expect(historyResizer).toHaveAttribute('aria-valuenow', '368');
 
     await user.click(settings);
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
     expect(settings).toHaveFocus();
     expect(settings).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('button', { name: /Current repository/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Current branch/u })).not.toBeInTheDocument();
 
     await user.click(activity);
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(activity).toHaveFocus();
     expect(activity).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('separator', { name: 'Operations width' })).toHaveAttribute(
+    expect(screen.getByRole('separator', { name: 'Repository analytics width' })).toHaveAttribute(
       'aria-valuenow',
-      '536',
+      '368',
     );
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
-        paneWidths: {
-          changes: { left: 344, right: 336 },
-          history: { left: 312 },
-          activity: { left: 536 },
-        },
+        paneWidths: { left: 368, right: 336 },
       }),
     );
 
@@ -444,19 +459,25 @@ describe('App repository attach', () => {
     render(<App adapter={adapter} directoryPicker={async () => '/tmp'} />);
     await waitFor(() => expect(subscriber).toBeDefined());
 
-    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/repository.git',
     );
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
+        name: 'Clone Repository',
+      }),
+    );
 
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Repositories' }));
     expect(screen.getByRole('heading', { name: 'Repositories' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Activity' })).toHaveFocus();
+    expect(
+      screen.getByRole('row', { name: /Running Clone Repository Cloning repository/u }),
+    ).toHaveFocus();
     expect(attach).toHaveBeenCalledWith({
       kind: 'clone',
       remoteUrl: 'https://example.com/repository.git',
@@ -473,12 +494,16 @@ describe('App repository attach', () => {
     expect(await screen.findByText('The operation was cancelled.')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Repositories' }));
-    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/another.git',
     );
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
+        name: 'Clone Repository',
+      }),
+    );
     await waitFor(() => expect(attach).toHaveBeenCalledTimes(2));
   });
 
@@ -519,8 +544,8 @@ describe('App repository attach', () => {
     expect(screen.getByRole('button', { name: /Current branch main/u })).toBeVisible();
     const changes = screen.getByRole('button', { name: 'Changes' });
     const history = screen.getByRole('button', { name: 'History' });
-    expect(changes.closest('.titlebar')).toBeInTheDocument();
-    expect(history.closest('.titlebar')).toBeInTheDocument();
+    expect(changes.closest('.window-header-content')).toBeInTheDocument();
+    expect(history.closest('.window-header-content')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
 
     await user.click(history);
@@ -863,7 +888,6 @@ describe('App repository attach', () => {
     render(<App adapter={adapter} directoryPicker={directoryPicker} />);
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
-    await user.click(screen.getByRole('tab', { name: 'Path' }));
     await user.click(screen.getByRole('button', { name: 'Choose Repository' }));
 
     expect(directoryPicker).toHaveBeenCalledWith('Choose Repository');
@@ -880,9 +904,9 @@ describe('App repository attach', () => {
     expect(readPreferences().repositoryNames).toEqual({ [repo.path]: 'Stella Desktop' });
   });
 
-  it('rejects an invalid remote location before asking for a Clone destination', async () => {
+  it('uses a Finder-selected Clone destination and rejects an invalid remote location', async () => {
     const user = userEvent.setup();
-    const directoryPicker = vi.fn<() => Promise<string>>(async () => '/tmp');
+    const directoryPicker = vi.fn<() => Promise<string>>(async () => '/tmp/clones');
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
       query: vi.fn<WorkspaceAdapter['query']>(async () => ({
@@ -900,16 +924,22 @@ describe('App repository attach', () => {
     };
     render(<App adapter={adapter} directoryPicker={directoryPicker} />);
 
-    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Choose Repository' }));
+    expect(directoryPicker).toHaveBeenCalledWith('Choose Repository');
+    expect(screen.getByRole('textbox', { name: 'Repository path' })).toHaveValue('/tmp/clones');
     await user.type(screen.getByRole('textbox', { name: 'Repository URL' }), 'invalid');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
+        name: 'Clone Repository',
+      }),
+    );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a supported remote URL.');
-    expect(directoryPicker).not.toHaveBeenCalled();
     expect(adapter.attach).not.toHaveBeenCalled();
   });
 
-  it('keeps the Add sheet open when choosing a Clone destination is cancelled', async () => {
+  it('requires an absolute destination path without opening Finder', async () => {
     const user = userEvent.setup();
     const directoryPicker = vi.fn<() => Promise<string | null>>(async () => null);
     const adapter: WorkspaceAdapter = {
@@ -929,19 +959,27 @@ describe('App repository attach', () => {
     };
     render(<App adapter={adapter} directoryPicker={directoryPicker} />);
 
-    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Repository URL' }),
       'git@example.com:owner/repository.git',
     );
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    const destination = screen.getByRole('textbox', { name: 'Repository path' });
+    await user.clear(destination);
+    await user.type(destination, 'relative/path');
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
+        name: 'Clone Repository',
+      }),
+    );
 
-    expect(directoryPicker).toHaveBeenCalledWith('Choose Clone Location');
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter an absolute local path.');
+    expect(directoryPicker).not.toHaveBeenCalled();
     expect(adapter.attach).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: 'Add Repository' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Clone Repository' })).toBeVisible();
   });
 
-  it('updates repository analytics after switching through peer titlebar navigation', async () => {
+  it('updates repository analytics after switching repositories', async () => {
     const user = userEvent.setup();
     const first = repoSnapshot({ repoId: 'repo-1', name: 'first', path: '/tmp/first' });
     const second = repoSnapshot({ repoId: 'repo-2', name: 'second', path: '/tmp/second' });
@@ -1089,6 +1127,10 @@ describe('App repository attach', () => {
       resolvedTargets: [{ input: 'feature-oid', oid: 'feature-oid' }],
       destructive: false,
     }));
+    let resolveBranches!: (result: QueryResult) => void;
+    const branchesResult = new Promise<QueryResult>((resolve) => {
+      resolveBranches = resolve;
+    });
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
         repos: [repo],
@@ -1096,26 +1138,7 @@ describe('App repository attach', () => {
         activities: [],
       })),
       query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
-        if (request.kind === 'branches')
-          return {
-            kind: 'branches' as const,
-            branches: [
-              {
-                fullName: 'refs/heads/main',
-                shortName: 'main',
-                oid: 'main',
-                current: true,
-                remote: false,
-              },
-              {
-                fullName: 'refs/heads/feature',
-                shortName: 'feature',
-                oid: 'feature',
-                current: false,
-                remote: false,
-              },
-            ],
-          };
+        if (request.kind === 'branches') return branchesResult;
         if (request.kind === 'snapshot') return { kind: 'snapshot' as const, snapshot: repo };
         return { kind: 'activity' as const, entries: [] };
       }),
@@ -1130,6 +1153,31 @@ describe('App repository attach', () => {
     await enterRepositoryPath(user, repo.path);
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await user.click(await screen.findByRole('button', { name: /Current branch main/u }));
+    await waitFor(() =>
+      expect(adapter.query).toHaveBeenCalledWith({ kind: 'branches', repoId: repo.repoId }),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Switch Branch' })).not.toBeInTheDocument();
+    act(() =>
+      resolveBranches({
+        kind: 'branches',
+        branches: [
+          {
+            fullName: 'refs/heads/main',
+            shortName: 'main',
+            oid: 'main',
+            current: true,
+            remote: false,
+          },
+          {
+            fullName: 'refs/heads/feature',
+            shortName: 'feature',
+            oid: 'feature',
+            current: false,
+            remote: false,
+          },
+        ],
+      }),
+    );
     const dialog = await screen.findByRole('dialog', { name: 'Switch Branch' });
     await user.dblClick(within(dialog).getByRole('option', { name: 'feature' }));
 
@@ -1160,7 +1208,7 @@ describe('App repository attach', () => {
       },
     });
     const confirmation = screen.getByRole('alertdialog', { name: 'Create Branch' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Run' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Create Branch' }));
     expect(execute).toHaveBeenLastCalledWith({
       repoId: repo.repoId,
       action: {
@@ -1244,7 +1292,7 @@ describe('App repository attach', () => {
     expect(screen.queryByText('Changes staged')).not.toBeInTheDocument();
   });
 
-  it('uses the same Add Repository sheet after a repository is open', async () => {
+  it('opens separate Add and Clone dialogs after a repository is open', async () => {
     const user = userEvent.setup();
     const repo = repoSnapshot();
     const adapter: WorkspaceAdapter = {
@@ -1278,12 +1326,26 @@ describe('App repository attach', () => {
 
     await openAddRepositoryDialog(user);
     const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
-    expect(within(dialog).getByRole('textbox', { name: 'Repository URL' })).toBeVisible();
+    expect(
+      within(dialog).queryByRole('textbox', { name: 'Repository URL' }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Repository path' })).toBeVisible();
     expect(within(dialog).getByRole('textbox', { name: 'Repository name' })).toBeVisible();
-    await user.click(within(dialog).getByRole('tab', { name: 'Path' }));
     expect(within(dialog).getByRole('button', { name: 'Choose Repository' })).toBeVisible();
-    expect(within(dialog).queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Clone' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('tab')).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await user.click(screen.getByRole('button', { name: /Switch repository/u }));
+    const switcher = screen.getByRole('dialog', { name: 'Switch Repository' });
+    await user.click(within(switcher).getByRole('button', { name: 'Clone Repository' }));
+    const cloneDialog = screen.getByRole('dialog', { name: 'Clone Repository' });
+    expect(within(cloneDialog).getByRole('textbox', { name: 'Repository URL' })).toBeVisible();
+    expect(within(cloneDialog).getByRole('textbox', { name: 'Repository path' })).toHaveValue(
+      '/tmp',
+    );
+    expect(within(cloneDialog).getByRole('textbox', { name: 'Repository name' })).toBeVisible();
+    expect(within(cloneDialog).getByRole('button', { name: 'Choose Repository' })).toBeVisible();
+    expect(within(cloneDialog).queryByRole('tab')).not.toBeInTheDocument();
   });
 
   it('guards selection of a newly attached repository while a conflict Result is dirty', async () => {
@@ -2393,7 +2455,7 @@ describe('App repository recovery', () => {
     expect(
       within(confirmation).getByRole('button', { name: 'Remove Registration Only' }),
     ).toBeVisible();
-    await user.click(within(confirmation).getByRole('button', { name: 'Delete Repository' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Move to Trash' }));
 
     await waitFor(() => expect(deleteRepository).toHaveBeenCalledWith(path));
     expect(readPreferences().registeredRepoPaths).toEqual([]);

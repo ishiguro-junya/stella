@@ -172,7 +172,7 @@ export function ChangeList({
   generation,
   entries,
   splitStageView = true,
-  display = 'nameAndPath',
+  display = 'fullPath',
   selectedKey,
   selectionKeys,
   unsavedFileKey,
@@ -207,6 +207,7 @@ export function ChangeList({
   const groupCheckboxRefs = useRef(new Map<StageGroup, HTMLInputElement>());
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const groupFocusRefs = useRef(new Map<DisplayGroup, HTMLElement>());
+  const focusedRepoRef = useRef<RepoId | undefined>(undefined);
   const interactionsDisabled = disabled || transferPending;
   const controlledSelectionSignature = selectionKeys?.join('\0');
 
@@ -261,6 +262,14 @@ export function ChangeList({
         ?.flatMap((row) => (row.kind === 'file' ? [entryKey(row.entry)] : [])) ?? [],
   );
   const allEntryKeys = groups.flatMap((group) => group.entries.map(entryKey));
+
+  useEffect(() => {
+    if (focusedRepoRef.current === repoId || !selectedKey) return;
+    const target = rowRefs.current.get(selectedKey);
+    if (!target) return;
+    target.focus();
+    focusedRepoRef.current = repoId;
+  }, [entries, repoId, selectedKey]);
 
   const selectFile = (event: ReactMouseEvent<HTMLButtonElement>, key: string): void => {
     const commandSelection = event.metaKey || event.ctrlKey;
@@ -760,7 +769,7 @@ export function ChangeList({
                             else rowRefs.current.delete(key);
                           }}
                           type="button"
-                          className={`change-row${display === 'nameAndPath' ? '' : ' is-single-line'}`}
+                          className={`change-row${display === 'nameAndPath' ? '' : ' is-single-line'}${display === 'fullPath' ? ' is-full-path' : ''}`}
                           style={
                             display === 'tree' ? { paddingLeft: 26 + row.depth * 14 } : undefined
                           }

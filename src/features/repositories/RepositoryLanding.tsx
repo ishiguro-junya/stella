@@ -1,4 +1,4 @@
-import { FolderGit2, FolderPlus, Link2, Trash2, Wrench } from 'lucide-react';
+import { Download, FolderGit2, FolderPlus, Link2, Trash2, Wrench } from 'lucide-react';
 
 import { useI18n } from '../../i18n/i18n';
 import { RepositoryLogo, type RepositoryListItem } from './RepositoryLogo';
@@ -6,7 +6,8 @@ import { RepositoryLogo, type RepositoryListItem } from './RepositoryLogo';
 export interface RepositoryLandingProps {
   repositories: readonly RepositoryListItem[];
   busy: boolean;
-  onAdd: () => void;
+  onAddLocal: () => void;
+  onClone: () => void;
   onOpen: (path: string) => void;
   onRepair: (path: string) => void;
   onManageRemotes: (path: string) => void;
@@ -37,7 +38,8 @@ function remoteHealthLabel(
 export function RepositoryLanding({
   repositories,
   busy,
-  onAdd,
+  onAddLocal,
+  onClone,
   onOpen,
   onRepair,
   onManageRemotes,
@@ -55,10 +57,16 @@ export function RepositoryLanding({
             </h1>
             <p>{t('repositoriesDescription')}</p>
           </div>
-          <button type="button" className="primary" disabled={busy} onClick={onAdd}>
-            <FolderPlus aria-hidden="true" focusable="false" />
-            {t('addRepository')}
-          </button>
+          <div className="repository-landing-actions">
+            <button type="button" className="primary" disabled={busy} onClick={onAddLocal}>
+              <FolderPlus aria-hidden="true" focusable="false" />
+              {t('addLocalRepository')}
+            </button>
+            <button type="button" disabled={busy} onClick={onClone}>
+              <Download aria-hidden="true" focusable="false" />
+              {t('cloneRepository')}
+            </button>
+          </div>
         </header>
 
         {repositories.length ? (
