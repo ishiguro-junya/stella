@@ -52,12 +52,15 @@ pub(crate) fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry, tauri_plugin_up
     tauri_plugin_updater::Builder::new().build()
 }
 
-fn endpoint(version: &str) -> &'static str {
+fn endpoint(version: &str) -> Option<&'static str> {
+    if version == "0.0.0-dev" {
+        return None;
+    }
     let version_without_build = version.split('+').next().unwrap_or(version);
     if version_without_build.contains('-') {
-        PRERELEASE_ENDPOINT
+        Some(PRERELEASE_ENDPOINT)
     } else {
-        STABLE_ENDPOINT
+        Some(STABLE_ENDPOINT)
     }
 }
 
@@ -71,7 +74,10 @@ pub(crate) async fn app_update_check(
         return Ok(Some(update.into()));
     }
 
-    let endpoint = endpoint(&app.package_info().version.to_string())
+    let Some(endpoint) = endpoint(&app.package_info().version.to_string()) else {
+        return Ok(None);
+    };
+    let endpoint = endpoint
         .parse()
         .map_err(|error| format!("更新先URLが不正です: {error}"))?;
     let update = app
@@ -127,12 +133,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prereleases_and_stable_versions_use_separate_feeds() {
-        assert_eq!(endpoint("1.0.0-alpha.1"), PRERELEASE_ENDPOINT);
-        assert_eq!(endpoint("1.0.0-beta.1"), PRERELEASE_ENDPOINT);
-        assert_eq!(endpoint("1.0.0-rc.1"), PRERELEASE_ENDPOINT);
-        assert_eq!(endpoint("1.0.0"), STABLE_ENDPOINT);
-        assert_eq!(endpoint("1.0.0+build.1"), STABLE_ENDPOINT);
+    fn development_versions_skip_updates_and_releases_use_separate_feeds() {
+        assert_eq!(endpoint("0.0.0-dev"), None);
+        assert_eq!(endpoint("1.0.0-alpha.1"), Some(PRERELEASE_ENDPOINT));
+        assert_eq!(endpoint("1.0.0-beta.1"), Some(PRERELEASE_ENDPOINT));
+        assert_eq!(endpoint("1.0.0-rc.1"), Some(PRERELEASE_ENDPOINT));
+        assert_eq!(endpoint("1.0.0"), Some(STABLE_ENDPOINT));
+        assert_eq!(endpoint("1.0.0+build.1"), Some(STABLE_ENDPOINT));
     }
 
     #[test]

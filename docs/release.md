@@ -1,6 +1,6 @@
 # リリース手順
 
-このドキュメントでは、Stellaのバージョンの更新から、GitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
+このドキュメントでは、StellaのGitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
 StellaはApple Silicon向けに配布します。  
 Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
 
@@ -74,53 +74,23 @@ gh release view "$STELLA_TAG" --repo ishiguro-junya/stella
 
 タグまたはGitHub Releaseが見つかった場合は、公開済みバージョンを上書きせず、新しいバージョンを決めます。  
 
-## 2. バージョンを更新する
+## 2. リリース対象を確定する
 
-最新の`main`からリリース作業用ブランチを作成します。  
+最新の`main`を取得します。  
 
 ```sh
 git switch main
 git pull --ff-only origin main
 git status --short
-git switch -c "chore/release-${STELLA_TAG}"
 ```
 
 `git status --short`に何も表示されないことを確認してから進めます。  
-次の4ファイルを同じバージョンへ更新します。  
-
-- `package.json`の`version`
-- `src-tauri/Cargo.toml`の`version`
-- `src-tauri/tauri.conf.json`の`version`
-- `Cargo.lock`にある`stella`パッケージの`version`
-
-更新後、4ファイルのバージョンが一致していることを確認します。  
-
-```sh
-rg -nF "$STELLA_VERSION" \
-  package.json \
-  src-tauri/Cargo.toml \
-  src-tauri/tauri.conf.json \
-  Cargo.lock
-```
-
-バージョン更新だけをコミットし、`main`へマージします。  
-
-```sh
-git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json Cargo.lock
-git commit -m "chore(release): ${STELLA_TAG}へ更新"
-git push -u origin "chore/release-${STELLA_TAG}"
-```
-
-プルリクエストを作成し、検証に成功した変更を`main`へマージします。  
 
 ## 3. 検証してビルドする
 
-バージョン更新を`main`へマージした後、最新の`main`を取得して検証します。  
+確定した`main`を検証し、`STELLA_VERSION`を配布アプリへ設定してビルドします。  
 
 ```sh
-git switch main
-git pull --ff-only origin main
-git status --short
 mise run lint
 mise run typecheck
 mise run test
@@ -130,7 +100,9 @@ export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password \
   -a ishiguro \
   -s com.emuni.stella.updater \
   -w)"
-pnpm exec tauri build --config src-tauri/tauri.updater.conf.json
+pnpm exec tauri build \
+  --config src-tauri/tauri.updater.conf.json \
+  --config "{\"version\":\"${STELLA_VERSION}\"}"
 unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
