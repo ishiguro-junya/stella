@@ -1,11 +1,11 @@
 use crate::commit::{MessageFile, build_message};
 use crate::conflict::{self, ConflictSession};
-use crate::git::{GitCommand, GitExecutor, GitOutput, RunControl, SequencerAction};
+use crate::git::{GitCommand, GitExecutor, GitOutput, OUTPUT_LIMIT, RunControl, SequencerAction};
 use crate::git_flow;
 use crate::journal::{JournalPhase, JournalStore, OperationJournal, default_journal_directory};
 use crate::model::*;
 use crate::patch::build_selected_patch;
-use crate::worktree_text::{load_editable_file, save_editable_file};
+use crate::worktree_text::{load_editable_file, load_raw_file, save_editable_file};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::ffi::OsString;
@@ -897,6 +897,227 @@ impl Workspace {
         }
     }
 
+    fn image_bytes(&self, request: ImageBytesRequest) -> WorkspaceResult<Vec<u8>> {
+        let repo = self.repo(&request.repo_id)?;
+        match request.target {
+            ImageBytesTarget::Changes {
+                path,
+                previous_path,
+                area,
+                generation,
+                diff_id,
+            } => {
+                validate_path(&path)?;
+                if let Some(previous_path) = &previous_path {
+                    validate_path(previous_path)?;
+                }
+                let snapshot = self.snapshot(&repo)?;
+                ensure_generation(generation, snapshot.repo_generation)?;
+                let diff_target = match area {
+                    ImageChangeArea::Staged => DiffTarget::Staged,
+                    ImageChangeArea::Unstaged => DiffTarget::Unstaged,
+                    ImageChangeArea::Untracked => DiffTarget::Unstaged,
+                };
+                let mut diff_paths = previous_path.iter().cloned().collect::<Vec<_>>();
+                if !diff_paths.iter().any(|candidate| candidate == &path) {
+                    diff_paths.push(path.clone());
+                }
+                let material =
+                    self.diff_material(&repo, &snapshot, diff_target, &diff_paths, None)?;
+                if material.bytes.is_empty() || hash(&material.bytes) != diff_id {
+                    return Err(stale_image_error());
+                }
+                ensure_image_target_in_patch(&material.bytes, &path, previous_path.as_deref())?;
+                let before_path = previous_path.as_deref().unwrap_or(&path);
+                match (area, request.side) {
+                    (ImageChangeArea::Staged, ImageDiffSide::Before) => {
+                        let head = snapshot_head_oid(&snapshot).ok_or_else(image_side_missing)?;
+                        self.tree_image_bytes(&repo, &head, before_path)
+                    }
+                    (ImageChangeArea::Staged, ImageDiffSide::After) => {
+                        self.index_image_bytes(&repo, &path)
+                    }
+                    (ImageChangeArea::Unstaged, ImageDiffSide::Before) => {
+                        self.index_image_bytes(&repo, before_path)
+                    }
+                    (ImageChangeArea::Unstaged, ImageDiffSide::After)
+                    | (ImageChangeArea::Untracked, ImageDiffSide::After) => {
+                        load_raw_file(&repo.root, &path, OUTPUT_LIMIT)
+                    }
+                    (ImageChangeArea::Untracked, ImageDiffSide::Before) => {
+                        Err(image_side_missing())
+                    }
+                }
+            }
+            ImageBytesTarget::Commit {
+                oid,
+                path,
+                previous_path,
+                diff_id,
+            } => {
+                validate_revision(&oid)?;
+                validate_path(&path)?;
+                if let Some(previous_path) = &previous_path {
+                    validate_path(previous_path)?;
+                }
+                let resolved = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::Resolve { revision: oid },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?
+                    .stdout_text()
+                    .trim()
+                    .to_owned();
+                let parents = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::CommitParents {
+                            oid: resolved.clone(),
+                        },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?
+                    .stdout_text()
+                    .split_whitespace()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let patch = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::CommitPatch {
+                            oid: resolved.clone(),
+                            parent: parents.first().cloned(),
+                        },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?;
+                if hash(&patch.stdout) != diff_id {
+                    return Err(stale_image_error());
+                }
+                ensure_image_target_in_patch(&patch.stdout, &path, previous_path.as_deref())?;
+                match request.side {
+                    ImageDiffSide::Before => {
+                        let parent = parents.first().ok_or_else(image_side_missing)?;
+                        self.tree_image_bytes(
+                            &repo,
+                            parent,
+                            previous_path.as_deref().unwrap_or(&path),
+                        )
+                    }
+                    ImageDiffSide::After => self.tree_image_bytes(&repo, &resolved, &path),
+                }
+            }
+        }
+    }
+
+    fn index_image_bytes(&self, repo: &RepoContext, path: &str) -> WorkspaceResult<Vec<u8>> {
+        let output = self
+            .git
+            .run(
+                Some(&repo.root),
+                GitCommand::IndexEntries {
+                    paths: vec![path.to_owned()],
+                },
+                None,
+                None,
+            )?
+            .ensure_success()?;
+        let entry = parse_index_entries(&output.stdout)?
+            .into_iter()
+            .find(|entry| entry.stage == 0 && entry.path == path)
+            .ok_or_else(image_side_missing)?;
+        self.git_blob_image_bytes(repo, path, &entry.mode, &entry.oid)
+    }
+
+    fn tree_image_bytes(
+        &self,
+        repo: &RepoContext,
+        treeish: &str,
+        path: &str,
+    ) -> WorkspaceResult<Vec<u8>> {
+        let output = self
+            .git
+            .run(
+                Some(&repo.root),
+                GitCommand::TreeEntries {
+                    treeish: treeish.to_owned(),
+                    paths: vec![path.to_owned()],
+                },
+                None,
+                None,
+            )?
+            .ensure_success()?;
+        let entry = parse_tree_entries(&output.stdout)?
+            .into_iter()
+            .find(|entry| entry.path == path)
+            .ok_or_else(image_side_missing)?;
+        if entry.kind != "blob" {
+            return Err(image_file_type_error(path));
+        }
+        self.git_blob_image_bytes(repo, path, &entry.mode, &entry.oid)
+    }
+
+    fn git_blob_image_bytes(
+        &self,
+        repo: &RepoContext,
+        path: &str,
+        mode: &str,
+        oid: &str,
+    ) -> WorkspaceResult<Vec<u8>> {
+        if !mode.starts_with("100") {
+            return Err(image_file_type_error(path));
+        }
+        let size = self
+            .git
+            .run(
+                Some(&repo.root),
+                GitCommand::CatFileSize {
+                    oid: oid.to_owned(),
+                },
+                None,
+                None,
+            )?
+            .ensure_success()?
+            .stdout_text()
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| {
+                WorkspaceError::new(
+                    ErrorCode::UnsupportedRepository,
+                    "Failed to read the image blob size",
+                )
+            })?;
+        if size > OUTPUT_LIMIT {
+            return Err(image_too_large_error(path));
+        }
+        let output = self
+            .git
+            .run(
+                Some(&repo.root),
+                GitCommand::CatFile {
+                    oid: oid.to_owned(),
+                },
+                None,
+                None,
+            )?
+            .ensure_success()?;
+        if output.truncated || output.stdout.len() != size {
+            return Err(WorkspaceError::new(
+                ErrorCode::GitFailed,
+                "The image blob changed while it was being read",
+            ));
+        }
+        Ok(output.stdout)
+    }
+
     fn repository_availability(&self, path: String) -> RepositoryAvailabilityResult {
         let requested = PathBuf::from(&path);
         let availability = match requested.canonicalize() {
@@ -1601,7 +1822,13 @@ impl Workspace {
                 control,
             )?
             .ensure_success()?;
-        parse_tree_entries(&output.stdout)
+        Ok(parse_tree_entries(&output.stdout)?
+            .into_iter()
+            .map(|entry| WorktreeWriteTarget {
+                mode: entry.mode,
+                path: entry.path,
+            })
+            .collect())
     }
 
     fn index_write_targets(
@@ -4215,6 +4442,18 @@ pub async fn workspace_query(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn workspace_image_bytes(
+    workspace: tauri::State<'_, Arc<Workspace>>,
+    request: ImageBytesRequest,
+) -> WorkspaceResult<tauri::ipc::Response> {
+    let workspace = workspace.inner().clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || workspace.image_bytes(request))
+        .await
+        .map_err(join_error)??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn workspace_preview(
     workspace: tauri::State<'_, Arc<Workspace>>,
     request: PreviewRequest,
@@ -4501,12 +4740,15 @@ fn untracked_placeholder(path: &str, mode: &str, message: &str) -> Vec<u8> {
 }
 
 fn quote_patch_path(prefix: &str, path: &str) -> String {
-    let value = format!("{prefix}/{path}");
+    quote_patch_value(&format!("{prefix}/{path}"))
+}
+
+fn quote_patch_value(value: &str) -> String {
     if value
         .bytes()
         .all(|byte| byte.is_ascii_graphic() && byte != b'"' && byte != b'\\')
     {
-        return value;
+        return value.to_owned();
     }
     let mut quoted = String::from("\"");
     for byte in value.bytes() {
@@ -4522,6 +4764,69 @@ fn quote_patch_path(prefix: &str, path: &str) -> String {
     }
     quoted.push('"');
     quoted
+}
+
+fn ensure_image_target_in_patch(
+    patch: &[u8],
+    path: &str,
+    previous_path: Option<&str>,
+) -> WorkspaceResult<()> {
+    let previous_or_current = previous_path.unwrap_or(path);
+    let left = [
+        quote_patch_path("a", previous_or_current),
+        format!("a/{previous_or_current}"),
+    ];
+    let right = [quote_patch_path("b", path), format!("b/{path}")];
+    let svg = path.to_ascii_lowercase().ends_with(".svg")
+        || previous_path.is_some_and(|value| value.to_ascii_lowercase().ends_with(".svg"));
+    let mut in_target = false;
+    let mut binary = false;
+    let mut pure_rename = false;
+    let mut rename_from = false;
+    let mut rename_to = false;
+
+    let target_matches = |binary, pure_rename, rename_from, rename_to| {
+        let rename_matches = previous_path.is_none() || (rename_from && rename_to);
+        rename_matches && (binary || svg || (previous_path.is_some() && pure_rename))
+    };
+
+    for line in String::from_utf8_lossy(patch).lines() {
+        if line.starts_with("diff --git ") {
+            if in_target && target_matches(binary, pure_rename, rename_from, rename_to) {
+                return Ok(());
+            }
+            in_target = left.iter().any(|left| {
+                right
+                    .iter()
+                    .any(|right| line == format!("diff --git {left} {right}"))
+            });
+            binary = false;
+            pure_rename = false;
+            rename_from = false;
+            rename_to = false;
+            continue;
+        }
+        if !in_target {
+            continue;
+        }
+        binary |= line == "GIT binary patch"
+            || (line.starts_with("Binary files ") && line.ends_with(" differ"));
+        pure_rename |= line == "similarity index 100%";
+        rename_from |= previous_path.is_some_and(|value| {
+            line == format!("rename from {}", quote_patch_value(value))
+                || line == format!("rename from {value}")
+        });
+        rename_to |= previous_path.is_some_and(|_| {
+            line == format!("rename to {}", quote_patch_value(path))
+                || line == format!("rename to {path}")
+        });
+    }
+
+    if in_target && target_matches(binary, pure_rename, rename_from, rename_to) {
+        Ok(())
+    } else {
+        Err(image_target_mismatch_error())
+    }
 }
 
 fn snapshot_head_oid(snapshot: &RepoSnapshot) -> Option<String> {
@@ -4550,6 +4855,7 @@ fn parse_nul_paths(bytes: &[u8]) -> WorkspaceResult<Vec<String>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedIndexEntry {
     mode: String,
+    oid: String,
     stage: u8,
     path: String,
 }
@@ -4578,7 +4884,7 @@ fn parse_index_entries(bytes: &[u8]) -> WorkspaceResult<Vec<ParsedIndexEntry>> {
                     "Failed to parse the index mode safely",
                 )
             })?;
-            let _oid = fields.next().ok_or_else(|| {
+            let oid = fields.next().ok_or_else(|| {
                 WorkspaceError::new(
                     ErrorCode::UnsupportedRepository,
                     "Failed to parse the index OID safely",
@@ -4602,6 +4908,7 @@ fn parse_index_entries(bytes: &[u8]) -> WorkspaceResult<Vec<ParsedIndexEntry>> {
             }
             Ok(ParsedIndexEntry {
                 mode: mode.to_owned(),
+                oid: oid.to_owned(),
                 stage,
                 path: path.to_owned(),
             })
@@ -4609,7 +4916,15 @@ fn parse_index_entries(bytes: &[u8]) -> WorkspaceResult<Vec<ParsedIndexEntry>> {
         .collect()
 }
 
-fn parse_tree_entries(bytes: &[u8]) -> WorkspaceResult<Vec<WorktreeWriteTarget>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedTreeEntry {
+    mode: String,
+    kind: String,
+    oid: String,
+    path: String,
+}
+
+fn parse_tree_entries(bytes: &[u8]) -> WorkspaceResult<Vec<ParsedTreeEntry>> {
     bytes
         .split(|byte| *byte == 0)
         .filter(|record| !record.is_empty())
@@ -4633,13 +4948,13 @@ fn parse_tree_entries(bytes: &[u8]) -> WorkspaceResult<Vec<WorktreeWriteTarget>>
                     "Failed to parse the tree mode safely",
                 )
             })?;
-            let _kind = fields.next().ok_or_else(|| {
+            let kind = fields.next().ok_or_else(|| {
                 WorkspaceError::new(
                     ErrorCode::UnsupportedRepository,
                     "Failed to parse the tree object type safely",
                 )
             })?;
-            let _oid = fields.next().ok_or_else(|| {
+            let oid = fields.next().ok_or_else(|| {
                 WorkspaceError::new(
                     ErrorCode::UnsupportedRepository,
                     "Failed to parse the tree OID safely",
@@ -4651,8 +4966,10 @@ fn parse_tree_entries(bytes: &[u8]) -> WorkspaceResult<Vec<WorktreeWriteTarget>>
                     "Failed to parse the tree entry safely",
                 ));
             }
-            Ok(WorktreeWriteTarget {
+            Ok(ParsedTreeEntry {
                 mode: mode.to_owned(),
+                kind: kind.to_owned(),
+                oid: oid.to_owned(),
                 path: path.to_owned(),
             })
         })
@@ -5562,6 +5879,43 @@ fn ensure_generation(expected: RepoGeneration, actual: RepoGeneration) -> Worksp
         .detail("actual", actual.to_string()));
     }
     Ok(())
+}
+
+fn stale_image_error() -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::StaleGeneration,
+        "The displayed diff changed before the image was read",
+    )
+}
+
+fn image_target_mismatch_error() -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "The requested image does not belong to the displayed diff",
+    )
+}
+
+fn image_side_missing() -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "The requested side of the image diff does not exist",
+    )
+}
+
+fn image_file_type_error(path: &str) -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "Symlinks and submodules cannot be previewed as images",
+    )
+    .detail("path", path)
+}
+
+fn image_too_large_error(path: &str) -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "The image exceeds the preview size limit",
+    )
+    .detail("path", path)
 }
 
 fn ensure_action_allowed(
@@ -12909,6 +13263,321 @@ mod tests {
         assert!(fixture.repo.join("ignored.txt").is_file());
     }
 
+    #[test]
+    fn image_bytes_follow_worktree_index_and_commit_sources() {
+        let fixture = GitFixture::new();
+        let base = b"\0base-image";
+        let changed = b"\0changed-image";
+        fs::write(fixture.repo.join("image.bin"), base).unwrap();
+        fixture.write("unchanged.bin", "not part of the image diff");
+        fixture.git(&["add", "--", "image.bin", "unchanged.bin"]);
+        fixture.git(&["commit", "-m", "test: base image"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        fs::write(fixture.repo.join("image.bin"), changed).unwrap();
+        let unstaged = diff_for_target(
+            &workspace,
+            &attached.repo_id,
+            "image.bin",
+            DiffTarget::Unstaged,
+        );
+        let changes_target = |area, diff: &DiffResult| ImageBytesTarget::Changes {
+            path: "image.bin".into(),
+            previous_path: None,
+            area,
+            generation: diff.repo_generation,
+            diff_id: diff.diff_revision.clone(),
+        };
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: changes_target(ImageChangeArea::Unstaged, &unstaged),
+                    side: ImageDiffSide::Before,
+                })
+                .unwrap(),
+            base
+        );
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: changes_target(ImageChangeArea::Unstaged, &unstaged),
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+
+        let untracked_bytes = b"\0untracked-image";
+        fs::write(fixture.repo.join("untracked.bin"), untracked_bytes).unwrap();
+        let untracked = diff_for_path(&workspace, &attached.repo_id, "untracked.bin");
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: ImageBytesTarget::Changes {
+                        path: "untracked.bin".into(),
+                        previous_path: None,
+                        area: ImageChangeArea::Untracked,
+                        generation: untracked.repo_generation,
+                        diff_id: untracked.diff_revision,
+                    },
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            untracked_bytes
+        );
+
+        fixture.git(&["add", "--", "image.bin"]);
+        let staged = diff_for_target(
+            &workspace,
+            &attached.repo_id,
+            "image.bin",
+            DiffTarget::Staged,
+        );
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: changes_target(ImageChangeArea::Staged, &staged),
+                    side: ImageDiffSide::Before,
+                })
+                .unwrap(),
+            base
+        );
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: changes_target(ImageChangeArea::Staged, &staged),
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+
+        fixture.git(&["commit", "-m", "test: changed image"]);
+        let oid = fixture.git_output(&["rev-parse", "HEAD"]);
+        let details = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitDetails { oid: oid.clone() },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitDetails(details) => details,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        let commit_target = ImageBytesTarget::Commit {
+            oid,
+            path: "image.bin".into(),
+            previous_path: None,
+            diff_id: details.diff_revision.clone(),
+        };
+        let forged_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: ImageBytesTarget::Commit {
+                    oid: details.oid,
+                    path: "unchanged.bin".into(),
+                    previous_path: None,
+                    diff_id: details.diff_revision,
+                },
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(forged_error.code, ErrorCode::InvalidRequest);
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: commit_target.clone(),
+                    side: ImageDiffSide::Before,
+                })
+                .unwrap(),
+            base
+        );
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id,
+                    target: commit_target,
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+    }
+
+    #[test]
+    fn image_bytes_support_a_pure_binary_rename_without_a_binary_patch_marker() {
+        let fixture = GitFixture::new();
+        let bytes = b"\0renamed-image";
+        fs::write(fixture.repo.join("old.bin"), bytes).unwrap();
+        fixture.git(&["add", "--", "old.bin"]);
+        fixture.git(&["commit", "-m", "test: base image"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        fixture.git(&["mv", "--", "old.bin", "new.bin"]);
+        let diff = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::Diff {
+                    target: DiffTarget::Staged,
+                    paths: vec!["old.bin".into(), "new.bin".into()],
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::Diff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(diff.patch.contains("similarity index 100%"));
+        assert!(!diff.patch.contains("GIT binary patch"));
+        let target = ImageBytesTarget::Changes {
+            path: "new.bin".into(),
+            previous_path: Some("old.bin".into()),
+            area: ImageChangeArea::Staged,
+            generation: diff.repo_generation,
+            diff_id: diff.diff_revision,
+        };
+
+        for side in [ImageDiffSide::Before, ImageDiffSide::After] {
+            assert_eq!(
+                workspace
+                    .image_bytes(ImageBytesRequest {
+                        repo_id: attached.repo_id.clone(),
+                        target: target.clone(),
+                        side,
+                    })
+                    .unwrap(),
+                bytes
+            );
+        }
+    }
+
+    #[test]
+    fn image_bytes_reject_stale_escaping_symlink_and_oversized_worktree_reads() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = GitFixture::new();
+        fixture.write("tracked.bin", "base");
+        fixture.git(&["add", "--", "tracked.bin"]);
+        fixture.git(&["commit", "-m", "test: base"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        fixture.write("tracked.bin", "changed");
+        let stale = diff_for_path(&workspace, &attached.repo_id, "tracked.bin");
+        fixture.write("tracked.bin", "changed again");
+        let stale_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: ImageBytesTarget::Changes {
+                    path: "tracked.bin".into(),
+                    previous_path: None,
+                    area: ImageChangeArea::Unstaged,
+                    generation: stale.repo_generation,
+                    diff_id: stale.diff_revision,
+                },
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(stale_error.code, ErrorCode::StaleGeneration);
+
+        let current = diff_for_path(&workspace, &attached.repo_id, "tracked.bin");
+        let forged_previous_path_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: ImageBytesTarget::Changes {
+                    path: "tracked.bin".into(),
+                    previous_path: Some("unrelated.bin".into()),
+                    area: ImageChangeArea::Unstaged,
+                    generation: current.repo_generation,
+                    diff_id: current.diff_revision,
+                },
+                side: ImageDiffSide::Before,
+            })
+            .unwrap_err();
+        assert_eq!(forged_previous_path_error.code, ErrorCode::InvalidRequest);
+
+        symlink("tracked.bin", fixture.repo.join("link.bin")).unwrap();
+        let link = diff_for_path(&workspace, &attached.repo_id, "link.bin");
+        let link_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: ImageBytesTarget::Changes {
+                    path: "link.bin".into(),
+                    previous_path: None,
+                    area: ImageChangeArea::Untracked,
+                    generation: link.repo_generation,
+                    diff_id: link.diff_revision,
+                },
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(link_error.code, ErrorCode::InvalidRequest);
+
+        File::create(fixture.repo.join("large.bin"))
+            .unwrap()
+            .set_len((OUTPUT_LIMIT + 1) as u64)
+            .unwrap();
+        let large = diff_for_path(&workspace, &attached.repo_id, "large.bin");
+        let large_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: ImageBytesTarget::Changes {
+                    path: "large.bin".into(),
+                    previous_path: None,
+                    area: ImageChangeArea::Untracked,
+                    generation: large.repo_generation,
+                    diff_id: large.diff_revision.clone(),
+                },
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(large_error.code, ErrorCode::InvalidRequest);
+
+        let path_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id,
+                target: ImageBytesTarget::Changes {
+                    path: "../outside.bin".into(),
+                    previous_path: None,
+                    area: ImageChangeArea::Untracked,
+                    generation: large.repo_generation,
+                    diff_id: large.diff_revision,
+                },
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(path_error.code, ErrorCode::InvalidRequest);
+    }
+
     struct GitFixture {
         temp: TempDir,
         repo: PathBuf,
@@ -13053,11 +13722,20 @@ mod tests {
     }
 
     fn diff_for_path(workspace: &Workspace, repo_id: &str, path: &str) -> DiffResult {
+        diff_for_target(workspace, repo_id, path, DiffTarget::Unstaged)
+    }
+
+    fn diff_for_target(
+        workspace: &Workspace,
+        repo_id: &str,
+        path: &str,
+        target: DiffTarget,
+    ) -> DiffResult {
         match workspace
             .query(QueryRequest {
                 repo_id: repo_id.to_owned(),
                 query: Query::Diff {
-                    target: DiffTarget::Unstaged,
+                    target,
                     paths: vec![path.to_owned()],
                 },
             })

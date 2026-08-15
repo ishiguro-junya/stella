@@ -82,6 +82,33 @@ pub(crate) fn load_editable_file(
     parse_editable_bytes(path, bytes)
 }
 
+pub(crate) fn load_raw_file(root: &Path, path: &str, max_bytes: usize) -> WorkspaceResult<Vec<u8>> {
+    let absolute = checked_worktree_path(root, path)?;
+    let before = fs::symlink_metadata(&absolute).map_err(file_io_error)?;
+    if before.file_type().is_symlink() || !before.is_file() {
+        return Err(preview_unsupported(path));
+    }
+    if before.len() > max_bytes as u64 {
+        return Err(preview_too_large(path));
+    }
+
+    let before_fingerprint = metadata_fingerprint(&before);
+    let mut bytes = Vec::with_capacity(before.len() as usize);
+    File::open(&absolute)
+        .map_err(file_io_error)?
+        .take((max_bytes + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(file_io_error)?;
+    if bytes.len() > max_bytes {
+        return Err(preview_too_large(path));
+    }
+    let after = fs::symlink_metadata(&absolute).map_err(file_io_error)?;
+    if after.file_type().is_symlink() || metadata_fingerprint(&after) != before_fingerprint {
+        return Err(file_changed(path));
+    }
+    Ok(bytes)
+}
+
 pub(crate) fn save_editable_file(
     git: &GitExecutor,
     root: &Path,
@@ -427,6 +454,22 @@ fn file_changed(path: &str) -> WorkspaceError {
         "The file changed after it was loaded",
     )
     .localized_message(LocalizedMessage::new("fileEditExternalChange"))
+    .detail("path", path)
+}
+
+fn preview_unsupported(path: &str) -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "Only regular files can be previewed as images",
+    )
+    .detail("path", path)
+}
+
+fn preview_too_large(path: &str) -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "The image exceeds the preview size limit",
+    )
     .detail("path", path)
 }
 

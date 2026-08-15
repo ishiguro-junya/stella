@@ -1,5 +1,7 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import {
   expectAttachedTabs,
@@ -74,6 +76,27 @@ async function waitForEditorPosition(expectedLine: string): Promise<EditorPositi
   return position;
 }
 
+async function selectAndExpectImagePreview(path: string): Promise<void> {
+  await browser.execute((selectedPath) => {
+    const item = [...document.querySelectorAll<HTMLElement>('.change-item')].find((row) =>
+      row.querySelector('.file-path strong')?.textContent?.includes(selectedPath),
+    );
+    item?.querySelector<HTMLButtonElement>('button.change-row')?.click();
+  }, path);
+  const toggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
+  await toggle.waitForDisplayed({ timeout: 20_000 });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await browser.waitUntil(
+    async () =>
+      browser.execute(() => {
+        const image = document.querySelector<HTMLImageElement>('.image-diff-preview img');
+        return Boolean(image?.complete && image.naturalWidth > 0);
+      }),
+    { timeout: 20_000, timeoutMsg: `${path} was not decoded by WebKit.` },
+  );
+  await expect($('.image-diff-side figcaption')).toHaveText(expect.stringContaining('変更後'));
+}
+
 describe('Changes', () => {
   let fixturePath = '';
   let repositoryPath = '';
@@ -92,6 +115,35 @@ describe('Changes', () => {
     await removeFixture(fixturePath);
     fixturePath = '';
     repositoryPath = '';
+  });
+
+  it('previews PNG and SVG changes in WebKit while keeping SVG diff and editing available', async () => {
+    await writeFile(
+      join(repositoryPath, 'preview.png'),
+      Buffer.from(
+        '89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c020000000b4944415478da63fcff1f0003030200efa39dc50000000049454e44ae426082',
+        'hex',
+      ),
+    );
+    await writeRepositoryFile(
+      repositoryPath,
+      'preview.svg',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><rect width="2" height="2" fill="#087ff5"/></svg>\n',
+    );
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ preview.png"]').waitForExist({ timeout: 20_000 });
+    await $('input[aria-label="ステージ preview.svg"]').waitForExist({ timeout: 20_000 });
+
+    await selectAndExpectImagePreview('preview.png');
+    await selectAndExpectImagePreview('preview.svg');
+
+    const svgToggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
+    await svgToggle.click();
+    await expect(svgToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect($('.diff-surface')).toBeDisplayed();
+    await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
+    await expect(svgToggle).not.toExist();
+    await expect($('.file-editor')).toBeDisplayed();
   });
 
   it('defaults to full paths and keeps keyboard file navigation responsive', async () => {

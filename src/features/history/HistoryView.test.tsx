@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useEffect } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +64,34 @@ vi.mock('../diff/DiffSurface', () => ({
     diffSurfaceMock(props);
     return <div>Diff</div>;
   },
+}));
+vi.mock('../diff/ImageDiffPreview', () => ({
+  ImageDiffPreview: ({
+    hidden,
+    onProbeResult,
+  }: {
+    hidden?: boolean;
+    onProbeResult?: (previewable: boolean) => void;
+  }) => {
+    useEffect(() => onProbeResult?.(true), [onProbeResult]);
+    return hidden ? null : <div>Image preview content</div>;
+  },
+  ImagePreviewToggle: ({
+    pressed,
+    onPressedChange,
+  }: {
+    pressed: boolean;
+    onPressedChange: (pressed: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      aria-label="Image preview"
+      aria-pressed={pressed}
+      onClick={() => onPressedChange(!pressed)}
+    >
+      Image
+    </button>
+  ),
 }));
 
 function adapterWithQuery(query: WorkspaceAdapter['query']): WorkspaceAdapter {
@@ -172,6 +201,101 @@ async function openCommitAction(
 }
 
 describe('HistoryView', () => {
+  it('toggles only the image section and keeps a mixed commit diff visible', async () => {
+    const user = userEvent.setup();
+    const mixedDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'mixed-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/app.ts b/app.ts
+--- a/app.ts
++++ b/app.ts
+@@ -1 +1 @@
+-old
++new
+diff --git a/image.png b/image.png
+index 1111111..2222222 100644
+GIT binary patch
+literal 1
+abc
+`,
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(mixedDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Image preview' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Image preview content')).toBeVisible();
+    expect(screen.getByText('Diff')).toBeVisible();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('Image preview content')).not.toBeInTheDocument();
+    expect(screen.getByText('Diff')).toBeVisible();
+  });
+
+  it('shows the History image button after a pure raster rename passes the probe', async () => {
+    const renameDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'rename-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/old.png b/new.png
+similarity index 100%
+rename from old.png
+rename to new.png
+`,
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(renameDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Image preview' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Image preview content')).toBeVisible();
+    expect(screen.getByText('Diff')).toBeVisible();
+  });
+
   it('focuses the selected commit when opened and moves it with the arrow keys', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithQuery(

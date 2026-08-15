@@ -132,6 +132,25 @@ beforeEach(() => {
 });
 
 describe('tauriWorkspaceAdapter', () => {
+  it('returns raw image bytes without JSON or Base64 conversion', async () => {
+    invokeMock.mockResolvedValue(Uint8Array.from([0, 1, 2, 255]).buffer);
+    const adapter = createTauriWorkspaceAdapter();
+    const target = {
+      kind: 'changes' as const,
+      path: 'image.png',
+      area: 'unstaged' as const,
+      generation: 3,
+      diffId: 'diff-3',
+    };
+
+    await expect(
+      adapter.query({ kind: 'imageBytes', repoId: 'repo-1', target, side: 'after' }),
+    ).resolves.toEqual({ kind: 'imageBytes', bytes: Uint8Array.from([0, 1, 2, 255]) });
+    expect(invokeMock).toHaveBeenCalledWith('workspace_image_bytes', {
+      request: { repoId: 'repo-1', target, side: 'after' },
+    });
+  });
+
   it('queries repository availability without attaching a session', async () => {
     invokeMock.mockResolvedValue({
       kind: 'repositoryAvailability',
@@ -582,6 +601,40 @@ describe('tauriWorkspaceAdapter', () => {
         truncated: true,
         tooLarge: true,
       }),
+    });
+  });
+
+  it('queries both rename paths so Git can preserve rename metadata', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'diff') {
+        return {
+          kind: 'diff',
+          data: {
+            patch: 'diff --git a/old.png b/new.png\n',
+            diffRevision: 'rename-revision',
+            repoGeneration: 1,
+            truncated: false,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    await adapter.query({
+      kind: 'diff',
+      repoId: 'repo-1',
+      path: 'new.png',
+      previousPath: 'old.png',
+      area: 'staged',
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('workspace_query', {
+      request: {
+        repoId: 'repo-1',
+        query: { kind: 'diff', target: 'staged', paths: ['old.png', 'new.png'] },
+      },
     });
   });
 

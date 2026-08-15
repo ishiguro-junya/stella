@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -166,6 +166,34 @@ vi.mock('../diff/DiffSurface', () => ({
     );
   },
 }));
+vi.mock('../diff/ImageDiffPreview', () => ({
+  ImageDiffPreview: ({
+    hidden,
+    onProbeResult,
+  }: {
+    hidden?: boolean;
+    onProbeResult?: (previewable: boolean) => void;
+  }) => {
+    useEffect(() => onProbeResult?.(true), [onProbeResult]);
+    return hidden ? null : <div>Image preview content</div>;
+  },
+  ImagePreviewToggle: ({
+    pressed,
+    onPressedChange,
+  }: {
+    pressed: boolean;
+    onPressedChange: (pressed: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      aria-label="Image preview"
+      aria-pressed={pressed}
+      onClick={() => onPressedChange(!pressed)}
+    >
+      Image
+    </button>
+  ),
+}));
 vi.mock('../conflict/ConflictSurface', () => ({
   ConflictSurface: (props: MockConflictSurfaceProps) => {
     conflictSurfaceMock(props);
@@ -228,7 +256,7 @@ vi.mock('./FileEditorSurface', () => ({
 }));
 
 function adapterWithDiff(
-  options: { patch?: string; tooLarge?: boolean; truncated?: boolean } = {},
+  options: { patch?: string; binary?: boolean; tooLarge?: boolean; truncated?: boolean } = {},
 ): WorkspaceAdapter {
   let revision = 0;
   return {
@@ -245,7 +273,7 @@ function adapterWithDiff(
           area: request.area,
           generation: revision,
           patch: options.patch ?? `diff --git a/${request.path} b/${request.path}\n`,
-          binary: false,
+          binary: options.binary ?? false,
           tooLarge: options.tooLarge ?? Boolean(options.truncated),
           ...(options.truncated === undefined ? {} : { truncated: options.truncated }),
         },
@@ -341,6 +369,187 @@ async function openCommit(user: ReturnType<typeof userEvent.setup>): Promise<HTM
 }
 
 describe('ChangesView diff lifecycle', () => {
+  it('uses an independent pressed image button without changing the display and edit tabs', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [{ path: 'image.png', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff({
+          binary: true,
+          patch: `diff --git a/image.png b/image.png
+index 1111111..2222222 100644
+GIT binary patch
+literal 1
+abc
+`,
+        })}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Image preview' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('tablist', { name: 'File view mode' })).toBeVisible();
+    expect(screen.getByText('Image preview content')).toBeVisible();
+    expect(
+      screen.getByRole('tablist', { name: 'File view mode' }).compareDocumentPosition(toggle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    const actions = toggle.closest('.diff-file-actions');
+    if (!actions) throw new Error('Expected the selected file actions.');
+    const menu = actions.querySelector<HTMLButtonElement>('.file-action-trigger');
+    if (!menu) throw new Error('Expected the selected file menu.');
+    expect(toggle.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('Image preview content')).not.toBeInTheDocument();
+    expect(screen.getByText('Binary files can be managed only as whole files.')).toBeVisible();
+    expect(screen.getByRole('tablist', { name: 'File view mode' })).toBeVisible();
+  });
+
+  it('keeps image preview disabled when the same selected file receives a new diff', async () => {
+    const user = userEvent.setup();
+    const workspace = adapterWithDiff({
+      binary: true,
+      patch: `diff --git a/image.png b/image.png
+index 1111111..2222222 100644
+GIT binary patch
+literal 1
+abc
+`,
+    });
+    const view = render(
+      <ChangesView
+        repo={repoSnapshot({
+          generation: 1,
+          changes: [{ path: 'image.png', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={workspace}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Image preview' });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    view.rerender(
+      <ChangesView
+        repo={repoSnapshot({
+          generation: 2,
+          changes: [{ path: 'image.png', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={workspace}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(workspace.query).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: 'Image preview' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('shows a pure raster rename only after its bytes pass the image probe', async () => {
+    const workspace = adapterWithDiff({
+      patch: `diff --git a/old.png b/new.png
+similarity index 100%
+rename from old.png
+rename to new.png
+`,
+    });
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            {
+              path: 'new.png',
+              previousPath: 'old.png',
+              area: 'staged',
+              status: 'renamed',
+            },
+          ],
+        })}
+        adapter={workspace}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Image preview' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Image preview content')).toBeVisible();
+    expect(workspace.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'diff',
+        path: 'new.png',
+        previousPath: 'old.png',
+      }),
+    );
+  });
+
+  it('toggles image previews independently for multiple selected files', async () => {
+    const user = userEvent.setup();
+    const adapter = adapterWithDiff();
+    adapter.query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind !== 'diff') return { kind: 'activity', entries: [] };
+      const path = request.path;
+      return {
+        kind: 'diff',
+        diff: {
+          diffId: `revision-${path}`,
+          repoId: request.repoId,
+          path,
+          area: request.area,
+          generation: 1,
+          patch: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+new\n`,
+          binary: false,
+          tooLarge: false,
+        },
+      };
+    });
+    render(
+      <ChangesView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'first.svg', area: 'unstaged', status: 'modified' },
+            { path: 'second.svg', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapter}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+    const first = changeRow(/first\.svg/u);
+    const second = changeRow(/second\.svg/u);
+    await user.click(first);
+    fireEvent.click(second, { shiftKey: true });
+
+    await waitFor(() => expect(screen.getAllByText('Image preview content')).toHaveLength(2));
+    const toggles = screen.getAllByRole('button', { name: 'Image preview' });
+    expect(toggles).toHaveLength(2);
+    await user.click(toggles[0]!);
+    expect(toggles[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText('Image preview content')).toHaveLength(1);
+    expect(screen.getAllByText('Diff')).toHaveLength(1);
+  });
+
   it('forwards diff query failures to the shared error dialog handler', async () => {
     const failure = new Error('Diff query failed.');
     const adapter = adapterWithDiff();

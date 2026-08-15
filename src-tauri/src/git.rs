@@ -15,7 +15,7 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
-const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
+pub(crate) const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub(crate) struct GitExecutor {

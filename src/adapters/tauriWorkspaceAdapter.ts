@@ -981,10 +981,14 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
           return { kind: 'snapshot', snapshot };
         }
         case 'diff': {
+          const paths =
+            request.previousPath && request.previousPath !== request.path
+              ? [request.previousPath, request.path]
+              : [request.path];
           const outcome = await queryWire(request.repoId, {
             kind: 'diff',
             target: queryTarget(request.area),
-            paths: [request.path],
+            paths,
           });
           if (outcome.kind !== 'diff') throw new Error('Invalid diff response.');
           const profile = profileDiffPatch(outcome.data.patch, outcome.data.truncated);
@@ -1083,6 +1087,17 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
               generation: outcome.data.repoGeneration,
             },
           };
+        }
+        case 'imageBytes': {
+          const raw = await invokeWorkspace<ArrayBuffer | Uint8Array>('workspace_image_bytes', {
+            request: {
+              repoId: request.repoId,
+              target: request.target,
+              side: request.side,
+            },
+          });
+          throwIfAborted(options?.signal);
+          return { kind: 'imageBytes', bytes: new Uint8Array(raw) };
         }
         case 'remotes': {
           const outcome = await queryWire(request.repoId, { kind: 'remotes' });

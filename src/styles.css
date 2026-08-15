@@ -1310,6 +1310,77 @@ button:where(:has(> .lucide)) > span {
   align-items: center;
   gap: 6px;
 }
+.image-preview-toggle {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  place-items: center;
+}
+.image-preview-toggle[aria-pressed='true'] {
+  background: var(--interactive-selected-surface);
+  color: var(--interactive-selected-foreground);
+}
+.image-preview-toggle[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--interactive-selected-hover);
+}
+.image-diff-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+}
+.image-diff-side {
+  min-width: 0;
+  margin: 0;
+}
+.image-diff-side figcaption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.image-diff-side figcaption code {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-diff-canvas {
+  display: grid;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  place-items: center;
+}
+.image-diff-canvas img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.image-preview-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+}
+.history-image-previews {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.history-image-preview-item > h3 {
+  margin: 0;
+  padding: 12px 20px 0;
+  font-size: 0.875rem;
+}
 .file-editor-pane {
   display: flex;
   min-width: 0;
@@ -2506,7 +2577,13 @@ button:where(:has(> .lucide)) > span {
   justify-content: space-between;
   gap: 16px;
 }
-.commit-detail-heading > .history-action-trigger {
+.commit-detail-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.commit-detail-actions > .history-action-trigger {
   align-self: flex-start;
 }
 .commit-detail-heading h2 {

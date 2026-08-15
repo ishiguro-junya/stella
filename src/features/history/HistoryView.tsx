@@ -11,7 +11,7 @@ import {
 import { GitBranch, GitCommitHorizontal, LoaderCircle, Search, Tag } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { patchContainsMultipleFiles } from '../../domain/diffProfile';
+import { imageDiffCandidates, patchContainsMultipleFiles } from '../../domain/diffProfile';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
 import {
@@ -23,11 +23,13 @@ import type {
   CommitDetails,
   CommitSummary,
   DiffStyle,
+  ImageDiffCandidate,
   RepoSnapshot,
   WorkspaceAction,
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import { DiffSurface } from '../diff/DiffSurface';
+import { ImageDiffPreview, ImagePreviewToggle } from '../diff/ImageDiffPreview';
 import {
   DEFAULT_EDITOR_WRAP_COLUMN,
   LEFT_PANE_MAX_WIDTH,
@@ -384,6 +386,10 @@ function initialHistoryPage(commits: RepoSnapshot['history']): HistoryPageState 
   };
 }
 
+function imageCandidateKey(candidate: ImageDiffCandidate): string {
+  return `${candidate.previousPath ?? ''}\0${candidate.path}`;
+}
+
 function appendUniqueCommits(
   current: RepoSnapshot['history'],
   incoming: RepoSnapshot['history'],
@@ -426,6 +432,8 @@ export function HistoryView({
   const [selectedOid, setSelectedOid] = useState(repo.selectedCommitOid ?? repo.history[0]?.oid);
   const deferredSelectedOid = useDeferredValue(selectedOid);
   const [details, setDetails] = useState<CommitDetails>();
+  const [imagePreviewEnabled, setImagePreviewEnabled] = useState(true);
+  const [imageProbeResults, setImageProbeResults] = useState<Map<string, boolean>>(() => new Map());
   const [error, setError] = useState<WorkspaceErrorContent>();
   const [openMenu, setOpenMenu] = useState<{ oid: string; source: HistoryMenuSource }>();
   const [contextMenu, setContextMenu] = useState<
@@ -450,6 +458,15 @@ export function HistoryView({
     () => assignHistoryLanes(historyPage.commits),
     [historyPage.commits],
   );
+  const imageCandidates = useMemo(
+    () => (details?.diff ? imageDiffCandidates(details.diff.patch, details.diff.diffId) : []),
+    [details],
+  );
+  const previewableImageCandidates = imageCandidates.filter(
+    (candidate) =>
+      candidate.format !== 'probe' || imageProbeResults.get(imageCandidateKey(candidate)) === true,
+  );
+  const imageDiffId = details?.diff?.diffId;
   const moveCommitSelection = useCallback(
     (index: number, offset: -1 | 1): void => {
       historyListRef.current?.classList.add('is-keyboard-navigating');
@@ -484,6 +501,20 @@ export function HistoryView({
     },
     [onError],
   );
+
+  useEffect(() => {
+    setImagePreviewEnabled(true);
+    setImageProbeResults(new Map());
+  }, [repo.repoId, selectedOid]);
+
+  const setImageProbeResult = (key: string, previewable: boolean): void => {
+    setImageProbeResults((current) => {
+      if (current.get(key) === previewable) return current;
+      const next = new Map(current);
+      next.set(key, previewable);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!deferredSelectedOid) {
@@ -956,21 +987,29 @@ export function HistoryView({
                   <h2 id="commit-detail-title">{details.subject}</h2>
                   <HistoryRefs refs={details.refs} />
                 </div>
-                <HistoryActionMenu
-                  target={actionTargetFor(details)}
-                  open={openMenu?.source === 'detail' && openMenu.oid === details.oid}
-                  disabled={repositoryActionsDisabled || details.oid !== selectedOid}
-                  persistentTrigger
-                  onOpenChange={(open) => {
-                    setOpenMenu(open ? { oid: details.oid, source: 'detail' } : undefined);
-                    if (!open) setContextMenu(undefined);
-                  }}
-                  onTriggerOpen={() => {
-                    setContextMenu(undefined);
-                    setOpenMenu({ oid: details.oid, source: 'detail' });
-                  }}
-                  onAction={(kind) => openActionDialog(kind, actionTargetFor(details))}
-                />
+                <div className="commit-detail-actions">
+                  {previewableImageCandidates.length ? (
+                    <ImagePreviewToggle
+                      pressed={imagePreviewEnabled}
+                      onPressedChange={setImagePreviewEnabled}
+                    />
+                  ) : null}
+                  <HistoryActionMenu
+                    target={actionTargetFor(details)}
+                    open={openMenu?.source === 'detail' && openMenu.oid === details.oid}
+                    disabled={repositoryActionsDisabled || details.oid !== selectedOid}
+                    persistentTrigger
+                    onOpenChange={(open) => {
+                      setOpenMenu(open ? { oid: details.oid, source: 'detail' } : undefined);
+                      if (!open) setContextMenu(undefined);
+                    }}
+                    onTriggerOpen={() => {
+                      setContextMenu(undefined);
+                      setOpenMenu({ oid: details.oid, source: 'detail' });
+                    }}
+                    onAction={(kind) => openActionDialog(kind, actionTargetFor(details))}
+                  />
+                </div>
               </div>
               {commitBody && commitBody !== details.subject.trim() ? <p>{commitBody}</p> : null}
               <dl className="metadata-list inline">
@@ -995,13 +1034,59 @@ export function HistoryView({
                 </div>
               </dl>
             </header>
-            {details.diff?.binary ? (
+            {details.diff?.truncated ? (
+              <output className="inline-alert warning">{t('diffBeginningOnly')}</output>
+            ) : null}
+            {details.diff && imageDiffId && imageCandidates.length ? (
+              <div
+                className="history-image-previews"
+                hidden={!imagePreviewEnabled || previewableImageCandidates.length === 0}
+              >
+                {imageCandidates.map((candidate) => {
+                  const candidateKey = imageCandidateKey(candidate);
+                  const probeResult = imageProbeResults.get(candidateKey);
+                  const probePending = candidate.format === 'probe' && probeResult === undefined;
+                  const previewable = candidate.format !== 'probe' || probeResult === true;
+                  if (!probePending && (!imagePreviewEnabled || !previewable)) return null;
+                  return (
+                    <section
+                      key={candidateKey}
+                      className="history-image-preview-item"
+                      hidden={probePending}
+                    >
+                      <h3>{candidate.path}</h3>
+                      <ImageDiffPreview
+                        adapter={adapter}
+                        repoId={repo.repoId}
+                        target={{
+                          kind: 'commit',
+                          oid: details.oid,
+                          path: candidate.path,
+                          ...(candidate.previousPath
+                            ? { previousPath: candidate.previousPath }
+                            : {}),
+                          diffId: imageDiffId,
+                        }}
+                        candidate={candidate}
+                        binaryFallback={t('binaryDiffUnavailable')}
+                        hidden={probePending}
+                        {...(candidate.format === 'probe'
+                          ? {
+                              onProbeResult: (canPreview: boolean) =>
+                                setImageProbeResult(candidateKey, canPreview),
+                            }
+                          : {})}
+                      />
+                    </section>
+                  );
+                })}
+              </div>
+            ) : null}
+            {details.diff?.binary &&
+            (!imagePreviewEnabled || !previewableImageCandidates.length) ? (
               <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>
             ) : details.diff ? (
-              <>
-                {details.diff.truncated ? (
-                  <output className="inline-alert warning">{t('diffBeginningOnly')}</output>
-                ) : null}
+              !details.diff.binary ? (
                 <DiffSurface
                   source={
                     details.diff.tooLarge || patchContainsMultipleFiles(details.diff.patch)
@@ -1026,7 +1111,7 @@ export function HistoryView({
                   hunkSeparators="simple"
                   ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
                 />
-              </>
+              ) : null
             ) : (
               <p className="empty-state-small">{t('noCommitChanges')}</p>
             )}

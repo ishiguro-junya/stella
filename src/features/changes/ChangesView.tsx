@@ -22,7 +22,11 @@ import {
 
 import { Button } from '../../ui/Button';
 import { isPullDivergenceError, type WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { editorLineForDiffSelection, patchContainsMultipleFiles } from '../../domain/diffProfile';
+import {
+  editorLineForDiffSelection,
+  imageDiffCandidates,
+  patchContainsMultipleFiles,
+} from '../../domain/diffProfile';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import type {
   ChangeEntry,
@@ -31,6 +35,8 @@ import type {
   DiffDocument,
   DiffStyle,
   FileDocument,
+  ImageBytesTarget,
+  ImageDiffCandidate,
   LineDiffSelection,
   RepoSnapshot,
   WorkspaceAction,
@@ -45,6 +51,7 @@ import {
   type SurfaceHunkSelection,
   type SurfaceSelection,
 } from '../diff/DiffSurface';
+import { ImageDiffPreview, ImagePreviewToggle } from '../diff/ImageDiffPreview';
 import {
   DEFAULT_EDITOR_WRAP_COLUMN,
   LEFT_PANE_MAX_WIDTH,
@@ -136,6 +143,21 @@ function supportsPartialDiffActions(document: DiffDocument, entry: ChangeEntry):
   );
 }
 
+function imageTarget(
+  document: DiffDocument,
+  candidate: ImageDiffCandidate,
+): ImageBytesTarget | undefined {
+  if (document.area === 'conflicted') return undefined;
+  return {
+    kind: 'changes',
+    path: candidate.path,
+    ...(candidate.previousPath ? { previousPath: candidate.previousPath } : {}),
+    area: document.area,
+    generation: document.generation,
+    diffId: document.diffId,
+  };
+}
+
 export function ChangesView({
   repo,
   adapter,
@@ -170,6 +192,10 @@ export function ChangesView({
   const [collapsedMultiDiffKeys, setCollapsedMultiDiffKeys] = useState<Set<string>>(
     () => new Set(),
   );
+  const [disabledImagePreviewKeys, setDisabledImagePreviewKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [imageProbeResults, setImageProbeResults] = useState<Map<string, boolean>>(() => new Map());
   const [conflict, setConflict] = useState<ConflictDocument>();
   const [selection, setSelection] = useState<LineDiffSelection>();
   const [selectionItemId, setSelectionItemId] = useState<string>();
@@ -275,8 +301,18 @@ export function ChangesView({
   const selectedFileKeysSignature = selectedFileKeys.join('\0');
   const selectedArea = displayedSelected?.area;
   const selectedPath = displayedSelected?.path;
+  const selectedPreviousPath = displayedSelected?.previousPath;
   const visibleDiff =
     diff && diff.path === selectedPath && diff.area === selectedArea ? diff : undefined;
+  const visibleImageCandidate = useMemo(
+    () =>
+      visibleDiff
+        ? imageDiffCandidates(visibleDiff.patch, visibleDiff.diffId).find(
+            (candidate) => candidate.path === visibleDiff.path,
+          )
+        : undefined,
+    [visibleDiff],
+  );
   const selectedSurfaceSelection: SurfaceSelection | undefined = selection
     ? {
         ...(selectionItemId ? { itemId: selectionItemId } : {}),
@@ -332,9 +368,53 @@ export function ChangesView({
 
   useEffect(() => {
     setCollapsedMultiDiffKeys(new Set());
+    setDisabledImagePreviewKeys(new Set());
+    setImageProbeResults(new Map());
     setMultiDetailFileMenuKey(undefined);
     setMultiDetailFileMenuContext(undefined);
   }, [repo.repoId, selectedFileKeysSignature]);
+
+  const setImagePreviewEnabled = (key: string, enabled: boolean): void => {
+    setDisabledImagePreviewKeys((current) => {
+      const next = new Set(current);
+      if (enabled) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    if (enabled) {
+      setSelection(undefined);
+      setSelectionMenuContext(undefined);
+    }
+  };
+
+  const setImageProbeResult = (key: string, previewable: boolean): void => {
+    setImageProbeResults((current) => {
+      if (current.get(key) === previewable) return current;
+      const next = new Map(current);
+      next.set(key, previewable);
+      return next;
+    });
+  };
+
+  const visibleImageKey = visibleDiff ? `${visibleDiff.area}:${visibleDiff.path}` : '';
+  const visibleImageProbeKey = visibleDiff ? `${visibleImageKey}:${visibleDiff.diffId}` : '';
+  const visibleImageTarget =
+    visibleDiff && visibleImageCandidate
+      ? imageTarget(visibleDiff, visibleImageCandidate)
+      : undefined;
+  const visibleImageProbeResult = imageProbeResults.get(visibleImageProbeKey);
+  const visibleImageProbePending = Boolean(
+    visibleImageTarget &&
+    visibleImageCandidate?.format === 'probe' &&
+    visibleImageProbeResult === undefined,
+  );
+  const visibleImageAvailable = Boolean(
+    visibleImageTarget &&
+    visibleImageCandidate &&
+    (visibleImageCandidate.format !== 'probe' || visibleImageProbeResult === true),
+  );
+  const visibleImagePreviewEnabled =
+    visibleImageAvailable && !disabledImagePreviewKeys.has(visibleImageKey);
 
   useEffect(() => {
     if (busy) {
@@ -393,6 +473,7 @@ export function ChangesView({
             kind: 'diff',
             repoId: repo.repoId,
             path: selectedPath,
+            ...(selectedPreviousPath ? { previousPath: selectedPreviousPath } : {}),
             area: selectedArea,
           });
 
@@ -425,6 +506,7 @@ export function ChangesView({
     reportRuntimeError,
     selectedArea,
     selectedPath,
+    selectedPreviousPath,
     t,
   ]);
 
@@ -443,6 +525,7 @@ export function ChangesView({
           kind: 'diff',
           repoId: repo.repoId,
           path: entry.path,
+          ...(entry.previousPath ? { previousPath: entry.previousPath } : {}),
           area: entry.area,
         });
         if (result.kind !== 'diff') throw new Error('Could not load the selected file diff.');
@@ -1256,6 +1339,8 @@ export function ChangesView({
     menuOpen,
     menuContextPoint,
     titleId,
+    binary = false,
+    imagePreview,
     onToggle,
     onMenuOpenChange,
     onMenuContextPointChange,
@@ -1265,12 +1350,17 @@ export function ChangesView({
     menuOpen: boolean;
     menuContextPoint: FileActionMenuPoint | undefined;
     titleId?: string;
+    binary?: boolean;
+    imagePreview?: { pressed: boolean; onPressedChange: (pressed: boolean) => void } | undefined;
     onToggle?: () => void;
     onMenuOpenChange: (open: boolean) => void;
     onMenuContextPointChange: (point: FileActionMenuPoint | undefined) => void;
   }) => {
     const fileActionInvalid =
-      entry.area === 'conflicted' || entry.status === 'deleted' || entry.status === 'binary';
+      binary ||
+      entry.area === 'conflicted' ||
+      entry.status === 'deleted' ||
+      entry.status === 'binary';
     const openDisabled =
       Boolean(operationActionDisabledReason) || unsavedDirty || fileActionInvalid;
     const discardDisabled =
@@ -1316,6 +1406,12 @@ export function ChangesView({
               startEditing(entry, selectedSurfaceSelection?.startLine, selectedSurfaceSelection)
             }
           />
+          {imagePreview ? (
+            <ImagePreviewToggle
+              pressed={imagePreview.pressed}
+              onPressedChange={imagePreview.onPressedChange}
+            />
+          ) : null}
           <FileActionMenu
             path={entry.path}
             selectedPaths={[entry.path]}
@@ -1484,6 +1580,16 @@ export function ChangesView({
             {displayedSelected && !multipleFilesSelected
               ? renderDiffFileHeader({
                   entry: displayedSelected,
+                  binary: Boolean(visibleDiff?.binary),
+                  ...(visibleImageAvailable
+                    ? {
+                        imagePreview: {
+                          pressed: visibleImagePreviewEnabled,
+                          onPressedChange: (pressed: boolean) =>
+                            setImagePreviewEnabled(visibleImageKey, pressed),
+                        },
+                      }
+                    : {}),
                   menuOpen: detailFileMenuOpen,
                   menuContextPoint: detailFileMenuContextPoint,
                   titleId: 'selected-file-title',
@@ -1513,6 +1619,23 @@ export function ChangesView({
                     status: document.binary ? ('binary' as const) : ('modified' as const),
                   };
                   const itemKey = `${document.area}:${document.path}`;
+                  const imageKey = itemKey;
+                  const imageProbeKey = `${itemKey}:${document.diffId}`;
+                  const imageCandidate = imageDiffCandidates(document.patch, document.diffId).find(
+                    (candidate) => candidate.path === document.path,
+                  );
+                  const target = imageCandidate ? imageTarget(document, imageCandidate) : undefined;
+                  const imageProbeResult = imageProbeResults.get(imageProbeKey);
+                  const imageProbePending = Boolean(
+                    target && imageCandidate?.format === 'probe' && imageProbeResult === undefined,
+                  );
+                  const imageAvailable = Boolean(
+                    target &&
+                    imageCandidate &&
+                    (imageCandidate.format !== 'probe' || imageProbeResult === true),
+                  );
+                  const imagePreviewEnabled =
+                    imageAvailable && !disabledImagePreviewKeys.has(imageKey);
                   const collapsed = collapsedMultiDiffKeys.has(itemKey);
                   const toggle = () => {
                     setCollapsedMultiDiffKeys((current) => {
@@ -1524,6 +1647,16 @@ export function ChangesView({
                   };
                   const header = renderDiffFileHeader({
                     entry,
+                    binary: Boolean(document.binary),
+                    ...(imageAvailable
+                      ? {
+                          imagePreview: {
+                            pressed: imagePreviewEnabled,
+                            onPressedChange: (pressed: boolean) =>
+                              setImagePreviewEnabled(imageKey, pressed),
+                          },
+                        }
+                      : {}),
                     collapsed,
                     menuOpen: multiDetailFileMenuKey === itemKey,
                     menuContextPoint:
@@ -1537,60 +1670,95 @@ export function ChangesView({
                       setMultiDetailFileMenuContext(point ? { key: itemKey, point } : undefined),
                   });
                   const multiHunkAction = createHunkAction(document, entry, false);
-                  return document.binary ? (
+                  return (
                     <section
                       key={`${document.area}:${document.path}:${document.diffId}`}
-                      className="multi-diff-binary"
-                    >
-                      {header}
-                      {!collapsed ? (
-                        <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
-                      ) : null}
-                    </section>
-                  ) : (
-                    <section
-                      key={`${document.area}:${document.path}:${document.diffId}`}
-                      className="multi-diff-item"
+                      className={document.binary ? 'multi-diff-binary' : 'multi-diff-item'}
                     >
                       {header}
                       {document.truncated && !collapsed ? (
                         <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
                       ) : null}
-                      <DiffSurface
-                        source={
-                          document.tooLarge || patchContainsMultipleFiles(document.patch)
+                      {!collapsed &&
+                      target &&
+                      imageCandidate &&
+                      (imagePreviewEnabled || imageProbePending) ? (
+                        <ImageDiffPreview
+                          adapter={adapter}
+                          repoId={repo.repoId}
+                          target={target}
+                          candidate={imageCandidate}
+                          hidden={imageProbePending}
+                          {...(imageCandidate.format === 'probe'
                             ? {
-                                kind: 'codeView',
-                                patch: document.patch,
-                                cacheKey: document.diffId,
+                                onProbeResult: (previewable: boolean) =>
+                                  setImageProbeResult(imageProbeKey, previewable),
                               }
-                            : {
-                                kind: 'patch',
-                                patch: document.patch,
-                                path: document.path,
-                                cacheKey: document.diffId,
-                              }
-                        }
-                        diffStyle={diffStyle}
-                        lineWrapping={editorLineWrapping}
-                        wrapColumn={editorWrapColumn}
-                        performanceMode={Boolean(document.tooLarge)}
-                        collapsed={collapsed}
-                        {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
-                        ariaLabel={t('fileDiffAria', { path: document.path })}
-                      />
+                            : {})}
+                        />
+                      ) : null}
+                      {document.binary ? (
+                        !imagePreviewEnabled && !collapsed ? (
+                          <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
+                        ) : null
+                      ) : !imagePreviewEnabled ? (
+                        <DiffSurface
+                          source={
+                            document.tooLarge || patchContainsMultipleFiles(document.patch)
+                              ? {
+                                  kind: 'codeView',
+                                  patch: document.patch,
+                                  cacheKey: document.diffId,
+                                }
+                              : {
+                                  kind: 'patch',
+                                  patch: document.patch,
+                                  path: document.path,
+                                  cacheKey: document.diffId,
+                                }
+                          }
+                          diffStyle={diffStyle}
+                          lineWrapping={editorLineWrapping}
+                          wrapColumn={editorWrapColumn}
+                          performanceMode={Boolean(document.tooLarge)}
+                          collapsed={collapsed}
+                          {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
+                          ariaLabel={t('fileDiffAria', { path: document.path })}
+                        />
+                      ) : null}
                     </section>
                   );
                 })}
               </div>
             ) : null}
-            {!multipleFilesSelected && visibleDiff?.binary ? (
+            {!multipleFilesSelected &&
+            visibleImageTarget &&
+            visibleImageCandidate &&
+            (visibleImagePreviewEnabled || visibleImageProbePending) ? (
+              <ImageDiffPreview
+                adapter={adapter}
+                repoId={repo.repoId}
+                target={visibleImageTarget}
+                candidate={visibleImageCandidate}
+                hidden={visibleImageProbePending}
+                {...(visibleImageCandidate.format === 'probe'
+                  ? {
+                      onProbeResult: (previewable: boolean) =>
+                        setImageProbeResult(visibleImageProbeKey, previewable),
+                    }
+                  : {})}
+              />
+            ) : null}
+            {!multipleFilesSelected && visibleDiff?.binary && !visibleImagePreviewEnabled ? (
               <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
             ) : null}
             {!multipleFilesSelected && visibleDiff?.truncated ? (
               <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
             ) : null}
-            {!multipleFilesSelected && visibleDiff && !visibleDiff.binary ? (
+            {!multipleFilesSelected &&
+            visibleDiff &&
+            !visibleDiff.binary &&
+            !visibleImagePreviewEnabled ? (
               <DiffSurface
                 source={
                   visibleDiff.tooLarge || diffContainsMultipleFiles

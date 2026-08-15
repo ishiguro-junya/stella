@@ -39,6 +39,32 @@ export interface DiffDocument {
   truncated?: boolean;
 }
 
+export type ImageChangeKind = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export interface ImageDiffCandidate {
+  path: string;
+  previousPath?: string;
+  changeKind: ImageChangeKind;
+  format: 'binary' | 'svg' | 'probe';
+}
+
+export type ImageBytesTarget =
+  | {
+      kind: 'changes';
+      path: string;
+      previousPath?: string;
+      area: Exclude<ChangeArea, 'conflicted'>;
+      generation: Generation;
+      diffId: string;
+    }
+  | {
+      kind: 'commit';
+      oid: string;
+      path: string;
+      previousPath?: string;
+      diffId: string;
+    };
+
 interface DiffSelectionBase {
   diffId: string;
   path: string;
@@ -423,13 +449,19 @@ export type AttachRequest =
 export type WorkspaceQuery =
   | { kind: 'repositoryAvailability'; path: string }
   | { kind: 'snapshot'; repoId: RepoId }
-  | { kind: 'diff'; repoId: RepoId; path: string; area: ChangeArea }
+  | { kind: 'diff'; repoId: RepoId; path: string; previousPath?: string; area: ChangeArea }
   | { kind: 'history'; repoId: RepoId; limit: number; skip: number; search?: string }
   | { kind: 'commitDetails'; repoId: RepoId; oid: string }
   | { kind: 'branches'; repoId: RepoId }
   | { kind: 'gitFlowOverview'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }
   | { kind: 'fileContents'; repoId: RepoId; path: string }
+  | {
+      kind: 'imageBytes';
+      repoId: RepoId;
+      target: ImageBytesTarget;
+      side: 'before' | 'after';
+    }
   | { kind: 'remotes'; repoId: RepoId }
   | { kind: 'activity'; repoId?: RepoId }
   | {
@@ -448,6 +480,7 @@ export type QueryResult =
   | { kind: 'gitFlowOverview'; overview: GitFlowOverview }
   | { kind: 'conflict'; document: ConflictDocument }
   | { kind: 'fileContents'; document: FileDocument }
+  | { kind: 'imageBytes'; bytes: Uint8Array }
   | { kind: 'remotes'; remotes: RemoteDefinition[]; generation: Generation }
   | { kind: 'activity'; entries: ActivityEntry[] }
   | { kind: 'commitActivity'; series: CommitActivitySeries };

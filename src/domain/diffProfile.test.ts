@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   editorLineForDiffSelection,
+  imageDiffCandidates,
   patchContainsMultipleFiles,
   profileDiffPatch,
 } from './diffProfile';
@@ -28,6 +29,92 @@ abc
 `;
 
     expect(profileDiffPatch(patch).binary).toBe(false);
+    expect(imageDiffCandidates(patch, 'mixed')).toEqual([
+      {
+        path: 'image.png',
+        changeKind: 'modified',
+        format: 'binary',
+      },
+    ]);
+  });
+
+  it('finds SVG renames separately from binary images', () => {
+    const patch = `diff --git a/old.svg b/new.SVG
+similarity index 100%
+rename from old.svg
+rename to new.SVG
+`;
+
+    expect(imageDiffCandidates(patch, 'svg-rename')).toEqual([
+      {
+        path: 'new.SVG',
+        previousPath: 'old.svg',
+        changeKind: 'renamed',
+        format: 'svg',
+      },
+    ]);
+  });
+
+  it('probes a pure raster rename whose patch has no binary marker', () => {
+    const patch = `diff --git a/old.png b/new.png
+similarity index 100%
+rename from old.png
+rename to new.png
+`;
+
+    expect(imageDiffCandidates(patch, 'raster-rename')).toEqual([
+      {
+        path: 'new.png',
+        previousPath: 'old.png',
+        changeKind: 'renamed',
+        format: 'probe',
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      'added',
+      `diff --git a/new.png b/new.png
+new file mode 100644
+index 0000000..1111111
+GIT binary patch
+literal 1
+abc
+`,
+      { path: 'new.png', changeKind: 'added', format: 'binary' },
+    ],
+    [
+      'deleted',
+      `diff --git a/old.png b/old.png
+deleted file mode 100644
+index 1111111..0000000
+GIT binary patch
+literal 0
+
+literal 1
+abc
+`,
+      { path: 'old.png', changeKind: 'deleted', format: 'binary' },
+    ],
+  ] as const)('recognizes the existing side of an %s image', (_kind, patch, expected) => {
+    expect(imageDiffCandidates(patch, `binary-${_kind}`)).toEqual([expected]);
+  });
+
+  it('keeps a binary candidate from the available prefix of a truncated patch', () => {
+    const patch = `diff --git a/image b/image
+index 1111111..2222222 100644
+GIT binary patch
+literal 100
+abc`;
+
+    expect(imageDiffCandidates(patch, 'truncated')).toEqual([
+      {
+        path: 'image',
+        changeKind: 'modified',
+        format: 'binary',
+      },
+    ]);
   });
 
   it('enables performance mode above the ordinary line limit', () => {

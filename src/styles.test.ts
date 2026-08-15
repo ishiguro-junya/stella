@@ -76,7 +76,7 @@ describe('history action placement', () => {
       /\.history-commit-item \.history-action-trigger\s*\{[^}]*margin-right:\s*8px;/u,
     );
     expect(styles).toMatch(
-      /\.commit-detail-heading > \.history-action-trigger\s*\{[^}]*align-self:\s*flex-start;/u,
+      /\.commit-detail-actions > \.history-action-trigger\s*\{[^}]*align-self:\s*flex-start;/u,
     );
   });
 });

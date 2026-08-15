@@ -85,6 +85,51 @@ pub struct QueryRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageBytesRequest {
+    pub repo_id: String,
+    pub target: ImageBytesTarget,
+    pub side: ImageDiffSide,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
+pub enum ImageBytesTarget {
+    Changes {
+        path: String,
+        previous_path: Option<String>,
+        area: ImageChangeArea,
+        generation: RepoGeneration,
+        diff_id: String,
+    },
+    Commit {
+        oid: String,
+        path: String,
+        previous_path: Option<String>,
+        diff_id: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ImageChangeArea {
+    Staged,
+    Unstaged,
+    Untracked,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ImageDiffSide {
+    Before,
+    After,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(
     rename_all = "camelCase",
     rename_all_fields = "camelCase",
