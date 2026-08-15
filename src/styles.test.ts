@@ -89,9 +89,7 @@ describe('workspace pane resizing', () => {
     expect(styles).toMatch(
       /\.window-header-content\s*\{[^}]*height:\s*100%;[^}]*padding:\s*0 10px 0 76px;/u,
     );
-    expect(styles).toMatch(
-      /\.app-header > \.sidebar-toggle-button\s*\{[^}]*bottom:\s*10px;[^}]*left:\s*3px;/u,
-    );
+    expect(styles).toMatch(/\.titlebar-left-actions\s*\{[^}]*bottom:\s*10px;[^}]*left:\s*3px;/u);
     expect(styles).toMatch(
       /\.left-pane-toolbar\s*\{[^}]*min-height:\s*56px;[^}]*border-bottom:\s*1px solid var\(--border-subtle\);/u,
     );

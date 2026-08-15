@@ -706,11 +706,13 @@ kbd {
   padding: 0 10px 0 76px;
 }
 
-.app-header > .sidebar-toggle-button {
+.titlebar-left-actions {
   position: absolute;
   z-index: 1;
   bottom: 10px;
   left: 3px;
+  display: flex;
+  gap: 4px;
 }
 
 .window-header-leading {
@@ -924,9 +926,17 @@ button:where(:has(> .lucide)) > span {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
-.app-header .titlebar-update-button,
-.app-header .titlebar-update-button:hover:not(:disabled) {
+.icon-button.titlebar-update-button {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+.app-header .titlebar-update-button {
   background: var(--accent);
+  color: var(--accent-contrast);
+}
+.app-header .titlebar-update-button:hover:not(:disabled) {
+  background: var(--accent-hover);
   color: var(--accent-contrast);
 }
 .app-update-notes {

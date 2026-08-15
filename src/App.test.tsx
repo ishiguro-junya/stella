@@ -140,7 +140,7 @@ function addRepositorySubmitButton(): HTMLElement {
 }
 
 describe('App repository attach', () => {
-  it('shows an available update at launch and keeps its button left of Settings', async () => {
+  it('shows an available update as an icon button on the titlebar left', async () => {
     appUpdateMock.check.mockResolvedValueOnce({
       currentVersion: '1.0.0-alpha.4',
       version: '1.0.0-beta.1',
@@ -164,13 +164,23 @@ describe('App repository attach', () => {
     expect(
       await screen.findByRole('alertdialog', { name: 'An update is available' }),
     ).toBeVisible();
+    const updateButton = screen.getByRole('button', { name: 'Update to version 1.0.0-beta.1' });
+    const leftActions = container.querySelector<HTMLElement>('.titlebar-left-actions');
+    if (!leftActions) throw new Error('titlebar left actions not found');
+    expect(within(leftActions).getAllByRole('button')).toEqual([updateButton]);
+    expect(updateButton.textContent).toBe('');
+    expect(updateButton.querySelector('svg')).toBeInTheDocument();
+
     const actions = container.querySelector<HTMLElement>('.titlebar-actions');
     if (!actions) throw new Error('titlebar actions not found');
     expect(
       within(actions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Update', 'Settings']);
+    ).toEqual(['Settings']);
+
+    fireEvent.focus(updateButton);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Update to version 1.0.0-beta.1');
   });
 
   it('keeps product branding out of the window content and names icon-only controls', () => {

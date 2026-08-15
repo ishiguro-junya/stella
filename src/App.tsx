@@ -1799,7 +1799,22 @@ export function App({
           style={appShellStyle}
         >
           <header className="app-header" data-tauri-drag-region="deep">
-            {sidebarAvailable ? sidebarControl : null}
+            {sidebarAvailable || availableUpdate ? (
+              <div className="titlebar-left-actions">
+                {sidebarAvailable ? sidebarControl : null}
+                {availableUpdate ? (
+                  <Button
+                    type="button"
+                    className="icon-button titlebar-update-button"
+                    aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
+                    tooltip={t('updateAvailableAria', { version: availableUpdate.version })}
+                    onClick={() => setUpdateDialogOpen(true)}
+                  >
+                    <RefreshCw aria-hidden="true" focusable="false" />
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <div className="window-header-content">
               <div className="window-header-leading">
                 {page !== 'settings' ? (
@@ -1858,17 +1873,6 @@ export function App({
                 ) : null}
               </div>
               <nav className="titlebar-actions" aria-label={t('appNavigation')}>
-                {availableUpdate ? (
-                  <Button
-                    type="button"
-                    className="titlebar-menu-button titlebar-update-button"
-                    aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
-                    onClick={() => setUpdateDialogOpen(true)}
-                  >
-                    <RefreshCw aria-hidden="true" focusable="false" />
-                    <span>{t('update')}</span>
-                  </Button>
-                ) : null}
                 {repo ? (
                   <>
                     <Button
