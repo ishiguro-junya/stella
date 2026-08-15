@@ -1,0 +1,80 @@
+name: Homebrew Caskを検証
+
+on:
+  pull_request:
+    paths:
+      - 'Casks/**'
+      - 'scripts/update-stella-cask.rb'
+      - '.github/workflows/homebrew-cask.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Casks/**'
+      - 'scripts/update-stella-cask.rb'
+      - '.github/workflows/homebrew-cask.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-cask-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Homebrew Cask
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTOREMOVE: '1'
+
+    steps:
+      - name: Tapを取得
+        uses: actions/checkout@v6.0.2
+
+      - name: CaskをTapとして登録
+        env:
+          TAP_NAME: ishiguro-junya/stella
+          CASK_NAME: ishiguro-junya/stella/stella
+        run: |
+          brew tap "$TAP_NAME" "$GITHUB_WORKSPACE"
+          brew trust --cask "$CASK_NAME"
+
+      - name: Caskを監査
+        env:
+          CASK_NAME: ishiguro-junya/stella/stella
+        run: |
+          brew style "$CASK_NAME"
+          # 完全修飾したCask名で配布するため、homebrew/coreの同名Formulaとの既知の衝突だけを除外する。
+          brew audit --cask --strict --except=token_conflicts "$CASK_NAME"
+
+      - name: 更新スクリプトの冪等性を確認
+        run: |
+          # Rubyへ正規表現をそのまま渡すため、シェル展開は行わない。
+          # shellcheck disable=SC2016
+          version="$(ruby -ne 'puts $1 if $_ =~ /^  version "([^"]+)"$/' Casks/stella.rb)"
+          # shellcheck disable=SC2016
+          sha256="$(ruby -ne 'puts $1 if $_ =~ /^  sha256 "([0-9a-f]{64})"$/' Casks/stella.rb)"
+          ruby scripts/update-stella-cask.rb "$version" "$sha256"
+          git diff --exit-code
+
+      - name: Caskをインストールして確認
+        env:
+          CASK_NAME: ishiguro-junya/stella/stella
+        run: |
+          brew install --cask --require-sha "$CASK_NAME"
+          cleanup() {
+            brew uninstall --cask --force "$CASK_NAME"
+          }
+          trap cleanup EXIT
+
+          app_path="/Applications/Stella.app"
+          test -d "$app_path"
+          test "$(plutil -extract CFBundleIdentifier raw -o - "$app_path/Contents/Info.plist")" = "com.emuni.stella"
+          # Rubyへ正規表現をそのまま渡すため、シェル展開は行わない。
+          # shellcheck disable=SC2016
+          expected_version="$(ruby -ne 'puts $1 if $_ =~ /^  version "([^"]+)"$/' Casks/stella.rb)"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app_path/Contents/Info.plist")" = "$expected_version"
+          file "$app_path/Contents/MacOS/stella" | grep -q "arm64"
