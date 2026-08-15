@@ -1539,7 +1539,7 @@ mod tests {
         )
         .unwrap();
         let error = validate_bundled_root(directory.path()).unwrap_err();
-        assert!(error.contains("lock manifest"));
+        assert!(error.contains("ロックマニフェスト"));
     }
 
     #[test]
@@ -1562,7 +1562,7 @@ mod tests {
         )
         .unwrap();
         let error = validate_bundled_root(directory.path()).unwrap_err();
-        assert!(error.contains("checksum"));
+        assert!(error.contains("チェックサム"));
         assert!(error.contains("bin/git"));
     }
 
@@ -1581,7 +1581,7 @@ mod tests {
         .unwrap();
 
         let error = validate_bundled_root(directory.path()).unwrap_err();
-        assert!(error.contains("checksum"));
+        assert!(error.contains("チェックサム"));
         assert!(error.contains("bin/git"));
     }
 }
