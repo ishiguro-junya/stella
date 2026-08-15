@@ -33,6 +33,9 @@ describe('AddRepositoryDialog', () => {
     expect(url).not.toHaveAttribute('placeholder');
     const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
     expect(path).toHaveValue('/Users/example/Documents');
+    expect(within(dialog).getByRole('button', { name: 'Clone Repository' })).toHaveTextContent(
+      'Clone',
+    );
     const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
     expect(path.parentElement).toContainElement(picker);
     await user.click(picker);
@@ -68,6 +71,7 @@ describe('AddRepositoryDialog', () => {
     const name = within(dialog).getByRole('textbox', { name: 'Repository name' });
     expect(path).not.toHaveAttribute('placeholder');
     expect(name).not.toHaveAttribute('placeholder');
+    expect(within(dialog).getByRole('button', { name: 'Add Repository' })).toHaveTextContent('Add');
     const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
     expect(path.parentElement).toContainElement(picker);
     expect(picker).not.toHaveTextContent(/Finder|Choose/u);

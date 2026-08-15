@@ -304,7 +304,7 @@ describe('Visual QA', () => {
         860,
         560,
       );
-      await $('button=Add Repository').click();
+      await $('button=Add').click();
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'add-repository-sheet-light-1180x760.png'),
         1180,
@@ -345,7 +345,7 @@ describe('Visual QA', () => {
         860,
         560,
       );
-      await $('button=Add Repository').click();
+      await $('button=Add').click();
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'add-repository-sheet-dark-1180x760.png'),
         1180,

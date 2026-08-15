@@ -260,7 +260,7 @@ export async function openRepository(
   options: { language?: Language; inspectDialog?: boolean } = {},
 ): Promise<void> {
   const language = options.language ?? 'ja';
-  await $(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
+  await $(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
   await expect(dialog).toBeDisplayed();
   if (options.inspectDialog) {
@@ -278,7 +278,7 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
   await $('.repository-toggle').click();
   const switcher = $('[role="dialog"]');
   await expect(switcher).toBeDisplayed();
-  await switcher.$(`button=${language === 'ja' ? 'リポジトリを追加' : 'Add Repository'}`).click();
+  await switcher.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
   await expect(dialog).toBeDisplayed();
   await dialog.$('#repository-location').setValue(path);

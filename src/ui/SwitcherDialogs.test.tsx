@@ -226,12 +226,12 @@ describe('RepositorySwitcherDialog', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['Switch Repository', 'Change Remote URLs', 'Delete Repository']);
+    ).toEqual(['Switch', 'Change Remote URLs', 'Delete']);
     await user.keyboard('{Escape}');
     expect(secondOption).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'More actions for second' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Switch Repository' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Switch' }));
     expect(onSelectOpen).toHaveBeenCalledWith('repo-2');
     expect(secondOption).toHaveFocus();
 
@@ -241,11 +241,11 @@ describe('RepositorySwitcherDialog', () => {
     expect(onManageRemotes).toHaveBeenCalledWith('/tmp/second');
 
     await user.click(screen.getByRole('button', { name: 'More actions for second' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Repository' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(onForget).toHaveBeenCalledWith('/tmp/second');
 
     await user.click(screen.getByRole('button', { name: 'More actions for first' }));
-    expect(screen.getByRole('menuitem', { name: 'Switch Repository' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Switch' })).toBeDisabled();
   });
 });
 
@@ -366,22 +366,22 @@ describe('BranchSwitcherDialog', () => {
     const feature = screen.getByRole('option', { name: 'feature/search' });
     fireEvent.contextMenu(feature, { clientX: 80, clientY: 120 });
     let menu = screen.getByRole('menu', { name: 'feature/search actions' });
-    expect(within(menu).getByRole('menuitem', { name: 'Switch Branch' })).toHaveFocus();
+    expect(within(menu).getByRole('menuitem', { name: 'Switch' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(feature).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'More actions for feature/search' }));
     menu = screen.getByRole('menu', { name: 'feature/search actions' });
-    await user.click(within(menu).getByRole('menuitem', { name: 'Switch Branch' }));
+    await user.click(within(menu).getByRole('menuitem', { name: 'Switch' }));
     expect(onCheckout).toHaveBeenCalledWith('feature/search');
 
     await user.click(screen.getByRole('button', { name: 'More actions for feature/search' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Branch' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(onDelete).toHaveBeenCalledWith('feature/search');
 
     await user.click(screen.getByRole('button', { name: 'More actions for main' }));
-    expect(screen.getByRole('menuitem', { name: 'Switch Branch' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Branch' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Switch' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
   });
 
   it('orders the current and exact base branches before the remaining Git order', () => {

@@ -134,6 +134,11 @@ async function enterRepositoryPath(
   await user.type(within(dialog).getByRole('textbox', { name: 'Repository path' }), path);
 }
 
+function addRepositorySubmitButton(): HTMLElement {
+  const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
+  return within(dialog).getByRole('button', { name: 'Add Repository' });
+}
+
 describe('App repository attach', () => {
   it('shows an available update at launch and keeps its button left of Settings', async () => {
     appUpdateMock.check.mockResolvedValueOnce({
@@ -241,7 +246,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
 
     const changes = await screen.findByRole('button', { name: 'Changes' });
     const history = screen.getByRole('button', { name: 'History' });
@@ -359,7 +364,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     expect(await screen.findByRole('heading', { name: 'src/app.ts' })).toBeVisible();
 
     const history = screen.getByRole('button', { name: 'History' });
@@ -411,7 +416,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect((await screen.findAllByText('Fetch completed')).length).toBeGreaterThan(0);
     expect(screen.getByText('archived-repo')).toBeVisible();
@@ -545,7 +550,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, '/tmp/stella');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await waitFor(() =>
       expect(adapter.attach).toHaveBeenCalledWith({ kind: 'open', path: '/tmp/stella' }),
     );
@@ -903,7 +908,7 @@ describe('App repository attach', () => {
     expect(screen.getByRole('textbox', { name: 'Repository path' })).toHaveValue(repo.path);
     expect(adapter.attach).not.toHaveBeenCalled();
     await user.type(screen.getByRole('textbox', { name: 'Repository name' }), 'Stella Desktop');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await waitFor(() =>
       expect(adapter.attach).toHaveBeenCalledWith({ kind: 'open', path: repo.path }),
     );
@@ -1027,7 +1032,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, first.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await screen.findByRole('button', { name: /Current repository first/u });
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect(await screen.findByText('1 commit')).toBeVisible();
@@ -1075,7 +1080,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await screen.findByRole('button', { name: /Current repository stella/u });
 
     fireEvent.keyDown(window, { key: 'o', metaKey: true, shiftKey: true });
@@ -1160,7 +1165,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: /Current branch main/u }));
     await waitFor(() =>
       expect(adapter.query).toHaveBeenCalledWith({ kind: 'branches', repoId: repo.repoId }),
@@ -1217,7 +1222,7 @@ describe('App repository attach', () => {
       },
     });
     const confirmation = screen.getByRole('alertdialog', { name: 'Create Branch' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Create Branch' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Create' }));
     expect(execute).toHaveBeenLastCalledWith({
       repoId: repo.repoId,
       action: {
@@ -1290,7 +1295,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('checkbox', { name: 'Stage src/app.ts' }));
 
     expect(execute).toHaveBeenCalledWith({
@@ -1330,7 +1335,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, '/tmp/stella');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await screen.findByRole('button', { name: /Current repository stella/u });
 
     await openAddRepositoryDialog(user);
@@ -1407,14 +1412,14 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, first.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await openAddRepositoryDialog(user);
     await enterRepositoryPath(user, second.path);
     await user.click(
       within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
-        name: 'Add',
+        name: 'Add Repository',
       }),
     );
 
@@ -1488,14 +1493,14 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, first.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await screen.findByRole('button', { name: 'Edit Result' });
 
     await openAddRepositoryDialog(user);
     await enterRepositoryPath(user, second.path);
     await user.click(
       within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
-        name: 'Add',
+        name: 'Add Repository',
       }),
     );
     await waitFor(() => expect(resolveAttach).toBeDefined());
@@ -1559,7 +1564,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, '/tmp/stella');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'Abort' }));
     expect(await screen.findByText('1234567890ab')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Run' }));
@@ -1623,9 +1628,9 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'More actions for src/app.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     expect(preview).toHaveBeenCalledWith({
       repoId: repo.repoId,
@@ -1633,7 +1638,7 @@ describe('App repository attach', () => {
     });
     const dialog = screen.getByRole('alertdialog', { name: 'Delete Files' });
     expect(within(dialog).getByText('src/app.ts')).toBeVisible();
-    await user.click(within(dialog).getByRole('button', { name: 'Delete Files' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(execute).toHaveBeenCalledWith({
       repoId: repo.repoId,
       action: { kind: 'fileAction', paths: ['src/app.ts'], operation: 'moveToTrash' },
@@ -1700,7 +1705,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, '/tmp/first');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(
       within(await screen.findByRole('group', { name: 'Actions' })).getByRole('button', {
         name: 'Commit',
@@ -1766,7 +1771,7 @@ describe('App repository attach', () => {
     render(<App adapter={adapter} />);
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, '/tmp/stella');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await waitFor(() => expect(subscriber).toBeDefined());
 
     act(() => {
@@ -2043,7 +2048,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(screen.getByRole('button', { name: 'Pull' }));
     const pullDialog = await screen.findByRole('dialog', { name: 'Pull' });
     await waitFor(() =>
@@ -2120,7 +2125,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, conflictedRepo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await user.click(screen.getByRole('button', { name: 'History' }));
@@ -2234,7 +2239,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('tab', { name: 'Edit' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
       target: { value: 'const value = 2;\n' },
@@ -2325,7 +2330,7 @@ describe('App repository attach', () => {
     const rendered = render(<App adapter={adapter} />);
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('tab', { name: 'Edit' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
       target: { value: 'draft\n' },
@@ -2409,7 +2414,7 @@ describe('App repository attach', () => {
 
       await user.click(screen.getByRole('button', { name: 'Add Repository' }));
       await enterRepositoryPath(user, conflictedRepo.path);
-      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await user.click(addRepositorySubmitButton());
       await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
       const operation = screen.getByRole('button', { name: label });

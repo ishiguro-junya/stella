@@ -184,6 +184,14 @@ button {
   min-height: var(--control-height);
 }
 
+.button-loading-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  animation: activity-status-spin 1s linear infinite;
+}
+
 button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--border-strong) 60%, var(--text-secondary));
   background: color-mix(in srgb, var(--surface-raised) 82%, var(--text-primary) 7%);

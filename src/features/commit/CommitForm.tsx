@@ -336,6 +336,7 @@ export function CommitForm({
           variant="primary"
           className={onCancel ? undefined : 'full'}
           tooltip={disabledReason}
+          loading={busy}
           aria-describedby={disabled && disabledReason ? 'commit-disabled-reason' : undefined}
           disabled={disabled || busy}
         >

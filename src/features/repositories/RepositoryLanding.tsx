@@ -49,13 +49,19 @@ export function RepositoryLanding({
   const { t } = useI18n();
   const repositoryActions = (
     <div className="repository-landing-actions">
-      <Button type="button" variant="primary" disabled={busy} onClick={onAddLocal}>
+      <Button
+        type="button"
+        variant="primary"
+        aria-label={t('addLocalRepository')}
+        disabled={busy}
+        onClick={onAddLocal}
+      >
         <FolderPlus aria-hidden="true" focusable="false" />
-        {t('addLocalRepository')}
+        {t('add')}
       </Button>
-      <Button type="button" disabled={busy} onClick={onClone}>
+      <Button type="button" aria-label={t('cloneRepository')} disabled={busy} onClick={onClone}>
         <Download aria-hidden="true" focusable="false" />
-        {t('cloneRepository')}
+        {t('clone')}
       </Button>
     </div>
   );
@@ -127,7 +133,7 @@ export function RepositoryLanding({
                       onClick={() => onForget(repository.path)}
                     >
                       <Trash2 aria-hidden="true" focusable="false" />
-                      {t('deleteRepository')}
+                      {t('delete')}
                     </Button>
                   </div>
                 </li>

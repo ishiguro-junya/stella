@@ -52,11 +52,11 @@ describe('FileActionMenu', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
     await user.keyboard('{End}');
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
     await user.keyboard('{Home}');
     expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('FileActionMenu', () => {
     trigger.focus();
 
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
     await user.tab();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Outside' })).toHaveFocus();
@@ -104,7 +104,7 @@ describe('FileActionMenu', () => {
     trigger.focus();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveFocus();
 
     await user.click(screen.getByRole('menuitem', { name: 'Copy Path' }));

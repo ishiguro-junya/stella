@@ -1013,8 +1013,8 @@ rename to new.png
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
     await user.keyboard('{Escape}');
     await user.click(changeRow(/other\.ts/u));
 
@@ -1355,8 +1355,8 @@ rename to new.png
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
     await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: 'Select diff lines' }));
@@ -1731,8 +1731,8 @@ rename to new.png
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
   });
 
   it('keeps the Diff visible until the editor document is ready', async () => {
@@ -1954,7 +1954,7 @@ rename to new.png
   it.each([
     ['Open in Default App', 'openInDefaultApp'],
     ['Show in Finder', 'revealInFinder'],
-    ['Delete Files…', 'moveToTrash'],
+    ['Delete', 'moveToTrash'],
   ] as const)('routes %s through the typed file action', async (itemName, operation) => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: WorkspaceAction) => Promise<void>>(async () => undefined);
@@ -2003,7 +2003,7 @@ rename to new.png
     await user.click(first);
     fireEvent.click(second, { shiftKey: true });
     fireEvent.contextMenu(second, { clientX: 100, clientY: 100 });
-    await user.click(screen.getByRole('menuitem', { name: 'Discard Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Discard' }));
 
     expect(onAction).toHaveBeenCalledWith({
       kind: 'discardFiles',

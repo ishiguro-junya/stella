@@ -72,6 +72,17 @@ describe('Stella i18n', () => {
 
   it('uses natural Japanese for navigation, Git operations, and general UI terms', () => {
     expect(translate('en', 'appActivity')).toBe('Activity');
+    expect(translate('en', 'copy')).toBe('Copy');
+    expect(translate('en', 'create')).toBe('Create');
+    expect(translate('en', 'clone')).toBe('Clone');
+    expect(translate('en', 'switch')).toBe('Switch');
+    expect(translate('en', 'merge')).toBe('Merge');
+    expect(translate('en', 'rebase')).toBe('Rebase');
+    expect(translate('en', 'cherryPick')).toBe('Cherry-pick');
+    expect(translate('en', 'revert')).toBe('Revert');
+    expect(translate('en', 'reset')).toBe('Reset');
+    expect(translate('en', 'actionCopySelectedLines')).toBe('Copy Selected Lines');
+    expect(translate('en', 'actionCloneRepository')).toBe('Clone Repository');
     expect(translate('ja', 'appActivity')).toBe('活動');
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
     expect(translate('ja', 'changes')).toBe('変更');
@@ -109,13 +120,17 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'actionEditLines')).toBe('選択した行を編集');
     expect(translate('ja', 'actionCopySelectedLines')).toBe('選択した行をコピー');
     expect(translate('ja', 'actionStageSelectedLines')).toBe('選択した行をステージ');
+    expect(translate('ja', 'copy')).toBe('コピー');
+    expect(translate('ja', 'create')).toBe('作成');
+    expect(translate('ja', 'clone')).toBe('クローン');
+    expect(translate('ja', 'switch')).toBe('切り替え');
     expect(translate('ja', 'createBranchMenu')).toBe('ブランチを作成');
     expect(translate('ja', 'createTagMenu')).toBe('タグを作成');
-    expect(translate('ja', 'mergeMenu')).toBe('マージを実行');
-    expect(translate('ja', 'rebaseMenu')).toBe('リベースを実行');
-    expect(translate('ja', 'cherryPickMenu')).toBe('チェリーピックを実行');
-    expect(translate('ja', 'revertMenu')).toBe('リバートを実行');
-    expect(translate('ja', 'resetMenu')).toBe('リセットを実行');
+    expect(translate('ja', 'merge')).toBe('マージ');
+    expect(translate('ja', 'rebase')).toBe('リベース');
+    expect(translate('ja', 'cherryPick')).toBe('チェリーピック');
+    expect(translate('ja', 'revert')).toBe('リバート');
+    expect(translate('ja', 'reset')).toBe('リセット');
     expect(translate('ja', 'resetMode')).toBe('リセット方法');
     expect(translate('ja', 'actionCheckoutBranch')).toBe('ブランチをチェックアウト');
     expect(translate('ja', 'actionContinueOperation')).toBe('操作を続行');

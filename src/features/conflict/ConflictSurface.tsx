@@ -526,11 +526,20 @@ export function ConflictSurface({
             <p>{t('conflictExternalChangesPreserved')}</p>
           </div>
           <div className="button-row">
-            <Button type="button" onClick={() => void copyDraft()}>
-              {t('conflictCopyResult')}
+            <Button
+              type="button"
+              aria-label={t('conflictCopyResult')}
+              onClick={() => void copyDraft()}
+            >
+              {t('copy')}
             </Button>
-            <Button type="button" variant="dangerQuiet" onClick={() => setConfirmReload(true)}>
-              {t('conflictReloadExternalChanges')}
+            <Button
+              type="button"
+              variant="dangerQuiet"
+              aria-label={t('conflictReloadExternalChanges')}
+              onClick={() => setConfirmReload(true)}
+            >
+              {t('reload')}
             </Button>
           </div>
         </div>
@@ -591,8 +600,13 @@ export function ConflictSurface({
                 {t('conflictOpenExternalEditor')}
               </Button>
             ) : null}
-            <Button type="button" disabled={Boolean(busy)} onClick={() => void reloadExternal()}>
-              {t('conflictReloadGitStatus')}
+            <Button
+              type="button"
+              aria-label={t('conflictReloadGitStatus')}
+              disabled={Boolean(busy)}
+              onClick={() => void reloadExternal()}
+            >
+              {t('reload')}
             </Button>
             <Button
               ref={markResolvedRef}
@@ -739,10 +753,10 @@ export function ConflictSurface({
                       onClick={() => void choose(selectedBlock.id, choice)}
                     >
                       {choice === 'current'
-                        ? t('conflictUseCurrent')
+                        ? t('conflictCurrent')
                         : choice === 'incoming'
-                          ? t('conflictUseIncoming')
-                          : t('conflictUseBoth')}
+                          ? t('conflictIncoming')
+                          : t('conflictBoth')}
                     </Button>
                   ))}
                 </div>

@@ -54,6 +54,23 @@ describe('GitFlowSheet', () => {
     expect(within(dialog).getAllByRole('option')).toHaveLength(28);
   });
 
+  it('shows a loading icon while running', () => {
+    render(
+      <GitFlowSheet
+        busy
+        overview={OVERVIEW}
+        onDismiss={() => undefined}
+        onRun={() => undefined}
+        onReload={() => undefined}
+      />,
+    );
+
+    const run = screen.getByRole('button', { name: 'Running…' });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('aria-busy', 'true');
+    expect(run.firstElementChild).toHaveClass('button-loading-icon');
+  });
+
   it('builds a safe finish request and disables signing without GPG', async () => {
     const user = userEvent.setup();
     const onRun = vi.fn<(request: GitFlowRequest) => void>();

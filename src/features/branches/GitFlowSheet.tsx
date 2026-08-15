@@ -594,7 +594,12 @@ export function GitFlowSheet({
         <Button type="button" onClick={onDismiss} disabled={busy}>
           {t('cancel')}
         </Button>
-        <Button type="submit" variant="primary" disabled={busy || !overview?.available}>
+        <Button
+          type="submit"
+          variant="primary"
+          loading={busy}
+          disabled={busy || !overview?.available}
+        >
           {busy ? t('running') : t('run')}
         </Button>
       </DialogFooter>

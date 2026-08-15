@@ -238,16 +238,10 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
 
 function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): string {
   if (action.kind === 'setRemoteUrl') return t('changeRemoteUrlAction');
-  if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('deleteFiles');
-  if (action.kind === 'discardFiles') return t('discardFiles');
-  if (action.kind === 'createBranch') return t('createBranchMenu');
-  if (action.kind === 'deleteBranch') return t('deleteBranch');
-  if (action.kind === 'createTag') return t('createTagMenu');
-  if (action.kind === 'merge') return t('mergeMenu');
-  if (action.kind === 'rebase') return t('rebaseMenu');
-  if (action.kind === 'cherryPick') return t('cherryPickMenu');
-  if (action.kind === 'revert') return t('revertMenu');
-  if (action.kind === 'reset') return t('resetMenu');
+  if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('delete');
+  if (action.kind === 'discardFiles') return t('discard');
+  if (action.kind === 'createBranch' || action.kind === 'createTag') return t('create');
+  if (action.kind === 'deleteBranch') return t('delete');
   return t('run');
 }
 

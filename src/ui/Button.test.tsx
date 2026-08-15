@@ -28,4 +28,12 @@ describe('Button', () => {
     fireEvent.focus(button);
     expect(screen.getByRole('tooltip')).toHaveTextContent('Save changes');
   });
+
+  it('places an animated loading icon before the label', () => {
+    render(<Button loading>Saving…</Button>);
+
+    const button = screen.getByRole('button', { name: 'Saving…' });
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(button.firstElementChild).toHaveClass('button-loading-icon');
+  });
 });

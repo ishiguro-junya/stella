@@ -459,7 +459,7 @@ describe('History', () => {
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await $('button=履歴').click();
 
-    await runHistoryAction(baseOid, 'ブランチを作成', 'createBranch', 'ブランチを作成', {
+    await runHistoryAction(baseOid, 'ブランチを作成', 'createBranch', '作成', {
       label: 'ブランチ名',
       value: 'e2e-created-branch',
     });
@@ -475,7 +475,7 @@ describe('History', () => {
       (await runGit(repositoryPath, ['rev-parse', 'refs/heads/e2e-created-branch'])).trim(),
     ).toBe(baseOid);
 
-    await runHistoryAction(baseOid, 'タグを作成', 'createTag', 'タグを作成', {
+    await runHistoryAction(baseOid, 'タグを作成', 'createTag', '作成', {
       label: 'タグ名',
       value: 'e2e-history-actions',
     });
@@ -491,13 +491,13 @@ describe('History', () => {
       (await runGit(repositoryPath, ['rev-parse', 'refs/tags/e2e-history-actions'])).trim(),
     ).toBe(baseOid);
 
-    await runHistoryAction(rebaseOid, 'リベースを実行', 'rebase', 'リベースを実行');
+    await runHistoryAction(rebaseOid, 'リベース', 'rebase', '実行');
     await browser.waitUntil(
       async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() === rebaseOid,
       { timeout: 20_000, timeoutMsg: 'Rebase did not update HEAD.' },
     );
 
-    await runHistoryAction(mergeOid, 'マージを実行', 'merge', 'マージを実行');
+    await runHistoryAction(mergeOid, 'マージ', 'merge', '実行');
     const operationBanner = $('[aria-label="Git操作が進行中"]');
     await expect(operationBanner).toBeDisplayed();
     await expect(operationBanner.$('button=続行')).toBeDisabled();
@@ -511,12 +511,7 @@ describe('History', () => {
     );
     const mergedHead = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
 
-    await runHistoryAction(
-      cherryPickOid,
-      'チェリーピックを実行',
-      'cherryPick',
-      'チェリーピックを実行',
-    );
+    await runHistoryAction(cherryPickOid, 'チェリーピック', 'cherryPick', '実行');
     const runtimeError = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
     await browser.waitUntil(
       async () =>
@@ -541,7 +536,7 @@ describe('History', () => {
       'e2e-cherry-target',
     );
 
-    await runHistoryAction(cherryPickedHead, 'リバートを実行', 'revert', 'リバートを実行');
+    await runHistoryAction(cherryPickedHead, 'リバート', 'revert', '実行');
     await browser.waitUntil(
       async () =>
         (await runtimeError.isExisting()) ||
@@ -566,7 +561,7 @@ describe('History', () => {
       ).trim(),
     ).toBe('');
 
-    await runHistoryAction(mergedHead, 'リセットを実行', 'reset', 'リセットを実行');
+    await runHistoryAction(mergedHead, 'リセット', 'reset', '実行');
     await browser.waitUntil(
       async () => (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim() === mergedHead,
       { timeout: 20_000, timeoutMsg: 'Reset did not move HEAD to the selected commit.' },
@@ -925,11 +920,11 @@ describe('History', () => {
     ).toEqual([
       'ブランチを作成',
       'タグを作成',
-      'マージを実行',
-      'リベースを実行',
-      'チェリーピックを実行',
-      'リバートを実行',
-      'リセットを実行',
+      'マージ',
+      'リベース',
+      'チェリーピック',
+      'リバート',
+      'リセット',
     ]);
     await historyActionsMenu.$('button=タグを作成').click();
     const historyActionsDialog = $('[role="dialog"][aria-labelledby="history-createTag-title"]');
@@ -947,7 +942,7 @@ describe('History', () => {
     const tagConfirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(tagConfirmation).toBeDisplayed();
     await expect(historyActionsDialog).not.toExist();
-    await tagConfirmation.$('button=タグを作成').click();
+    await tagConfirmation.$('button=作成').click();
     await expect(tagConfirmation).not.toExist();
     await expect($(`.ref-chip.tag[aria-label="タグ ${tagName}"]`)).toHaveText(tagName);
     expect(await runGit(repositoryPath, ['rev-parse', `refs/tags/${tagName}`])).toMatch(
@@ -967,7 +962,7 @@ describe('History', () => {
     const branchName = 'history-double-click';
     await $('.branch-toggle').click();
     let switcher = $('[role="dialog"][aria-labelledby]');
-    const createBranchButton = switcher.$('button=ブランチを作成');
+    const createBranchButton = switcher.$('button=作成');
     await expect(createBranchButton).toBeEnabled();
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
@@ -978,7 +973,7 @@ describe('History', () => {
     await branchDialog.$('button=影響を確認').click();
     const branchConfirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(branchConfirmation).toBeDisplayed();
-    await branchConfirmation.$('button=ブランチを作成').click();
+    await branchConfirmation.$('button=作成').click();
     await expect(branchConfirmation).not.toExist();
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining(branchName));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe(`${branchName}\n`);

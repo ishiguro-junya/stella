@@ -89,7 +89,7 @@ export function RepositorySwitcherDialog({
         actions: [
           {
             action: 'select',
-            label: t('switchRepository'),
+            label: t('switch'),
             icon: <FolderGit2 aria-hidden="true" focusable="false" />,
             disabled: repo.repoId === selectedRepoId,
           },
@@ -101,7 +101,7 @@ export function RepositorySwitcherDialog({
           },
           {
             action: 'forget',
-            label: t('deleteRepository'),
+            label: t('delete'),
             icon: <Trash2 aria-hidden="true" focusable="false" />,
             disabled: busy || repo.operation.kind !== 'none',
             danger: true,
@@ -134,7 +134,7 @@ export function RepositorySwitcherDialog({
           actions: [
             {
               action: 'select',
-              label: t('switchRepository'),
+              label: t('switch'),
               icon: <FolderGit2 aria-hidden="true" focusable="false" />,
               disabled: busy,
             },
@@ -146,7 +146,7 @@ export function RepositorySwitcherDialog({
             },
             {
               action: 'forget',
-              label: t('deleteRepository'),
+              label: t('delete'),
               icon: <Trash2 aria-hidden="true" focusable="false" />,
               disabled: busy,
               danger: true,
@@ -194,13 +194,18 @@ export function RepositorySwitcherDialog({
       }}
       footer={
         <>
-          <Button type="button" disabled={busy} onClick={onAddLocal}>
+          <Button
+            type="button"
+            aria-label={t('addLocalRepository')}
+            disabled={busy}
+            onClick={onAddLocal}
+          >
             <FolderPlus aria-hidden="true" focusable="false" />
-            <span>{t('addLocalRepository')}</span>
+            <span>{t('add')}</span>
           </Button>
-          <Button type="button" disabled={busy} onClick={onClone}>
+          <Button type="button" aria-label={t('cloneRepository')} disabled={busy} onClick={onClone}>
             <Download aria-hidden="true" focusable="false" />
-            <span>{t('cloneRepository')}</span>
+            <span>{t('clone')}</span>
           </Button>
         </>
       }

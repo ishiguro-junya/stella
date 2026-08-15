@@ -45,7 +45,7 @@ describe('Repository and Branch navigation', () => {
   });
 
   it('separates local Add from URL Clone and aligns the Clone fields', async () => {
-    await $('button=リポジトリをクローン').click();
+    await $('button=クローン').click();
     const dialog = $('[role="dialog"][aria-labelledby="clone-repository-title"]');
     await expect(dialog).toBeDisplayed();
     await expect(dialog.$('#repository-url')).toBeDisplayed();
@@ -131,11 +131,11 @@ describe('Repository and Branch navigation', () => {
         { timeoutMsg: 'The local Git daemon did not become ready.' },
       );
 
-      await $('button=リポジトリをクローン').click();
+      await $('button=クローン').click();
       const dialog = $('[role="dialog"][aria-labelledby="clone-repository-title"]');
       await dialog.$('#repository-url').setValue(remoteUrl);
       await dialog.$('#repository-clone-parent').setValue(cloneParentPath);
-      await dialog.$('button=リポジトリをクローン').click();
+      await dialog.$('button=クローン').click();
 
       await $(`.repository-toggle[data-repository-path="${clonedPath}"]`).waitForDisplayed({
         timeout: 20_000,
@@ -356,10 +356,10 @@ describe('Repository and Branch navigation', () => {
       palette: 'neutral',
     });
     expect(await switcher.getText()).not.toMatch(/Open repositories|Recent|[⌘⇧]/u);
-    await expect(switcher.$('button=リポジトリを追加')).toBeDisplayed();
-    await expect(switcher.$('button=リポジトリをクローン')).not.toHaveElementClass('primary');
+    await expect(switcher.$('button=追加')).toBeDisplayed();
+    await expect(switcher.$('button=クローン')).not.toHaveElementClass('primary');
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
-    await $('button=リポジトリを削除').click();
+    await $('button=削除').click();
     const deleteConfirmation = $('[role="alertdialog"][aria-labelledby="forget-repository-title"]');
     await expect(deleteConfirmation.$('button=登録だけ解除')).toBeDisplayed();
     await expect(deleteConfirmation.$('button=ゴミ箱に移動')).toBeDisplayed();
@@ -378,8 +378,8 @@ describe('Repository and Branch navigation', () => {
         () => document.activeElement?.matches('[role="option"][aria-current="true"]') ?? false,
       ),
     ).toBe(true);
-    await expect(switcher.$('button=ブランチを作成')).not.toHaveElementClass('primary');
-    await expect(switcher.$('button=ブランチを作成')).toBeDisabled();
+    await expect(switcher.$('button=作成')).not.toHaveElementClass('primary');
+    await expect(switcher.$('button=作成')).toBeDisabled();
     await expect(switcher.$('button=Git Flow')).not.toExist();
     await browser.keys(['Escape']);
     expect(
@@ -403,7 +403,7 @@ describe('Repository and Branch navigation', () => {
     await $('button[aria-label="Changes"]').click();
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
-    await expect(switcher.$('button=Create branch')).toBeDisplayed();
+    await expect(switcher.$('button=Create')).toBeDisplayed();
     await expect(switcher.$('button=Git Flow')).not.toExist();
   });
 
@@ -412,11 +412,11 @@ describe('Repository and Branch navigation', () => {
     await $('.repository-toggle').click();
     const switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
-    await $('button=リポジトリを削除').click();
+    await $('button=削除').click();
     const confirmation = $('[role="alertdialog"][aria-labelledby="forget-repository-title"]');
     await confirmation.$('button=登録だけ解除').click();
 
-    await expect($('button=リポジトリを追加')).toBeDisplayed();
+    await expect($('button=追加')).toBeDisplayed();
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe('');
     expect(
       await browser.execute(() => {
@@ -471,7 +471,7 @@ describe('Repository and Branch navigation', () => {
     switcher = $('[role="dialog"][aria-labelledby]');
     const targetOption = switcher.$('[data-switcher-item-label="target"]');
     await expect(targetOption).toBeEnabled();
-    await expect(switcher.$('button=ブランチを作成')).toBeEnabled();
+    await expect(switcher.$('button=作成')).toBeEnabled();
     await targetOption.click();
     await expect(switcher).toBeDisplayed();
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
@@ -483,7 +483,7 @@ describe('Repository and Branch navigation', () => {
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.waitForDisplayed();
-    const createBranchButton = switcher.$('button=ブランチを作成');
+    const createBranchButton = switcher.$('button=作成');
     await expect(createBranchButton).toBeEnabled();
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
@@ -492,7 +492,7 @@ describe('Repository and Branch navigation', () => {
     await branchDialog.$('button=影響を確認').click();
     const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(confirmation).toBeDisplayed();
-    await confirmation.$('button=ブランチを作成').click();
+    await confirmation.$('button=作成').click();
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('created-with-changes'));
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
   });
@@ -513,12 +513,12 @@ describe('Repository and Branch navigation', () => {
     const switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.waitForDisplayed();
     await switcher.$('[data-switcher-item-label="delete-me"] + .switcher-action-trigger').click();
-    await $('button=ブランチを削除').click();
+    await $('button=削除').click();
 
     const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(confirmation).toHaveText(expect.stringContaining('delete-me'));
     await expect(confirmation).toHaveText(expect.stringContaining('未マージのコミットがあります'));
-    await confirmation.$('button=ブランチを削除').click();
+    await confirmation.$('button=削除').click();
     await confirmation.waitForDisplayed({ reverse: true });
 
     await browser.waitUntil(

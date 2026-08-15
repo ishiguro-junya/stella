@@ -174,6 +174,9 @@ describe('loading layout stability', () => {
     expect(styles).toMatch(/\.settings-toolchain-components dd\s*\{[^}]*min-height:\s*36px;/u);
     expect(styles).toMatch(/\.settings-toolchain-modes\s*\{[^}]*min-height:\s*35px;/u);
     expect(styles).toMatch(/\.settings-toolchain-components\s*\{[^}]*min-height:\s*120px;/u);
+    expect(styles).toMatch(
+      /\.button-loading-icon\s*\{[^}]*animation:\s*activity-status-spin 1s linear infinite;/u,
+    );
   });
 });
 

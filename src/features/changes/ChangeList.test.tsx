@@ -475,7 +475,7 @@ describe('ChangeList file actions', () => {
     fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
     expect(screen.getByRole('menu', { name: '3 selected files actions' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    await user.click(screen.getByRole('menuitem', { name: 'Discard Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Discard' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'discardChanges');
   });
 
@@ -499,8 +499,8 @@ describe('ChangeList file actions', () => {
 
     fireEvent.contextMenu(first, { clientX: 80, clientY: 100 });
     expect(screen.getByRole('menu', { name: '2 selected files actions' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'moveToTrash');
   });
 
@@ -615,8 +615,8 @@ describe('ChangeList file actions', () => {
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard Files…' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete Files…' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
   });
 
   it('closes the open menu when repository generation or identity changes', async () => {
@@ -673,7 +673,7 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/first.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     rerender(
       <ChangeList
@@ -706,7 +706,7 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(changeRow(/app\.ts/u)).toHaveFocus();
 
     rerender(
@@ -740,7 +740,7 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/only.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete Files…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     rerender(<ChangeList {...props} generation={2} entries={[]} />);
     expect(screen.getByRole('region', { name: 'Staged' })).toBeVisible();

@@ -34,6 +34,8 @@ describe('RepositoryLanding', () => {
     const cloneButton = within(emptyState).getByRole('button', {
       name: 'Clone Repository',
     });
+    expect(addButton).toHaveTextContent('Add');
+    expect(cloneButton).toHaveTextContent('Clone');
     await user.click(addButton);
     await user.click(cloneButton);
     expect(onAddLocal).toHaveBeenCalledOnce();

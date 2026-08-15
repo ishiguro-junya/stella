@@ -69,7 +69,11 @@ describe('App deferred Activity navigation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await user.type(screen.getByRole('textbox', { name: 'Repository path' }), repo.path);
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
+        name: 'Add Repository',
+      }),
+    );
 
     expect(attach).toHaveBeenCalledOnce();
     expect(attach).toHaveBeenLastCalledWith({ kind: 'open', path: repo.path });

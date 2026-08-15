@@ -156,11 +156,12 @@ export function AddRepositoryDialog({
         <Button
           type="submit"
           variant="primary"
+          aria-label={t(source === 'url' ? 'cloneRepository' : 'addLocalRepository')}
           disabled={
             busy || (source === 'url' ? !url.trim() || !cloneParentPath.trim() : !localPath.trim())
           }
         >
-          {t(source === 'url' ? 'cloneRepository' : 'add')}
+          {t(source === 'url' ? 'clone' : 'add')}
         </Button>
       </DialogFooter>
     </Dialog>

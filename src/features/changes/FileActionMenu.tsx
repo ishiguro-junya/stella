@@ -75,7 +75,7 @@ export function FileActionMenu({
     },
     {
       action: 'discardChanges',
-      label: t('discardFilesEllipsis'),
+      label: t('discard'),
       icon: <Undo2 aria-hidden="true" focusable="false" size={15} />,
       disabled: discardDisabled,
       danger: true,
@@ -83,7 +83,7 @@ export function FileActionMenu({
     },
     {
       action: 'moveToTrash',
-      label: t('deleteFilesEllipsis'),
+      label: t('delete'),
       icon: <Trash2 aria-hidden="true" focusable="false" size={15} />,
       disabled: deleteDisabled,
       danger: true,

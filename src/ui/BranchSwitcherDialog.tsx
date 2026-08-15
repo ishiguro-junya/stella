@@ -109,13 +109,13 @@ export function BranchSwitcherDialog({
     actions: [
       {
         action: 'select',
-        label: t('switchBranch'),
+        label: t('switch'),
         icon: <GitBranch aria-hidden="true" focusable="false" />,
         disabled: branch.current || Boolean(disabledReason),
       },
       {
         action: 'delete',
-        label: t('deleteBranch'),
+        label: t('delete'),
         icon: <Trash2 aria-hidden="true" focusable="false" />,
         disabled: branch.current || Boolean(disabledReason),
         danger: true,
@@ -186,12 +186,13 @@ export function BranchSwitcherDialog({
       footer={
         <Button
           type="button"
+          aria-label={t('createBranch')}
           disabled={loading || Boolean(error) || Boolean(createDisabledReason)}
           tooltip={createDisabledReason}
           onClick={() => setCreating(true)}
         >
           <GitBranchPlus aria-hidden="true" focusable="false" />
-          {t('createBranch')}
+          {t('create')}
         </Button>
       }
       onDismiss={onDismiss}

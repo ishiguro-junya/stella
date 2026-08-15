@@ -211,7 +211,7 @@ describe('FileEditorSurface', () => {
     expect(await screen.findByText('This file changed outside the editor')).toBeVisible();
     expect(editor).toHaveValue('draft');
     expect(editor).toHaveAttribute('readonly');
-    expect(screen.getByRole('button', { name: 'Copy Draft' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Copy Draft' })).toHaveTextContent('Copy');
     expect(screen.getByRole('button', { name: 'Reload' })).toBeVisible();
 
     await user.click(screen.getByRole('tab', { name: 'Display' }));

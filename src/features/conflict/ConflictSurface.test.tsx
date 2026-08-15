@@ -330,7 +330,7 @@ describe('ConflictSurface', () => {
       screen.getAllByRole('group', { name: /Resolution options for conflict \d+/u }),
     ).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Apply current to conflict 1' })).toHaveTextContent(
-      'Use Current',
+      'Current',
     );
     expect(
       screen.queryByRole('button', { name: 'Apply current to conflict 2' }),
@@ -342,7 +342,7 @@ describe('ConflictSurface', () => {
       screen.getByRole('group', { name: 'Resolution options for conflict 2' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply current to conflict 2' })).toHaveTextContent(
-      'Use Current',
+      'Current',
     );
     expect(
       screen.queryByRole('button', { name: 'Apply current to conflict 1' }),
@@ -418,7 +418,7 @@ describe('ConflictSurface', () => {
       />,
     );
     expect(await screen.findByRole('alert')).toHaveTextContent('External changes detected');
-    expect(screen.getByRole('button', { name: 'Copy Result' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Result' })).toHaveTextContent('Copy');
   });
 
   it('keeps a dirty draft copyable when the conflict disappears from an external snapshot', async () => {

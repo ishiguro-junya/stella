@@ -227,8 +227,8 @@ export function FileEditorSurface({
             <p>{t('fileEditExternalDescription')}</p>
           </div>
           <div className="button-row">
-            <Button type="button" onClick={() => void copyDraft()}>
-              {t('copyDraft')}
+            <Button type="button" aria-label={t('copyDraft')} onClick={() => void copyDraft()}>
+              {t('copy')}
             </Button>
             <Button type="button" onClick={() => setConfirmReload(true)}>
               {t('reload')}
