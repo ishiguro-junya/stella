@@ -45,7 +45,15 @@
 ## 📦 インストール
 
 ```sh
-brew install --cask ishiguro-junya/tap/stella
+brew tap ishiguro-junya/stella https://github.com/ishiguro-junya/stella
+brew install --cask ishiguro-junya/stella/stella
+```
+
+旧Tapを利用していた場合は、次のコマンドで移行します。  
+
+```sh
+brew untap ishiguro-junya/tap
+brew tap ishiguro-junya/stella https://github.com/ishiguro-junya/stella
 ```
 
 ## 🌱 開発を始める
@@ -80,6 +88,7 @@ mise run dev
 
 ```text
 .
+├── Casks/                  # Homebrew Cask
 ├── src/                    # 画面と操作を実装するReactとTypeScriptのコード
 │   ├── adapters/           # Tauriとの通信
 │   ├── domain/             # Gitの型とルール

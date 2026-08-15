@@ -9,7 +9,6 @@ Developer ID署名とApple公証は行いませんが、自動更新用ファイ
 次の権限とコマンドを使用できる状態にします。  
 
 - `ishiguro-junya/stella`の`main`ブランチとGitHub Releaseへの書き込み権限
-- `ishiguro-junya/homebrew-tap`の`main`ブランチへの書き込み権限
 - GitHub CLIの認証
 - Homebrew
 - mise
@@ -224,47 +223,39 @@ fi
 
 ## 6. Homebrew Caskを更新する
 
-Homebrew Tapを初回だけ`.tmp/homebrew-tap`へクローンします。  
-すでにクローン済みの場合は、このコマンドを省略します。  
+リリース成果物のバージョンとSHA-256を、同じリポジトリのCaskへ反映します。  
 
 ```sh
-git clone git@github.com:ishiguro-junya/homebrew-tap.git .tmp/homebrew-tap
-```
-
-Tapの`main`を最新の状態に更新し、リリース成果物のバージョンとSHA-256をCaskへ反映します。  
-
-```sh
-git -C .tmp/homebrew-tap switch main
-git -C .tmp/homebrew-tap pull --ff-only origin main
-ruby .tmp/homebrew-tap/scripts/update-stella-cask.rb \
+ruby scripts/update-stella-cask.rb \
   "$STELLA_VERSION" \
   "$STELLA_SHA256"
-ruby -c .tmp/homebrew-tap/scripts/update-stella-cask.rb
-brew style .tmp/homebrew-tap/Casks/stella.rb
-git -C .tmp/homebrew-tap diff --check
-git -C .tmp/homebrew-tap diff -- Casks/stella.rb
+ruby -c scripts/update-stella-cask.rb
+brew style Casks/stella.rb
+git diff --check
+git diff -- Casks/stella.rb
 ```
 
 Caskの`version`と`sha256`だけが変更されていることを確認してコミットします。  
 
 ```sh
-git -C .tmp/homebrew-tap add Casks/stella.rb
-git -C .tmp/homebrew-tap commit \
-  -m "chore(cask): Stella ${STELLA_TAG}へ更新"
-git -C .tmp/homebrew-tap push origin main
+git add Casks/stella.rb
+git commit -m "chore(cask): Stella ${STELLA_TAG}へ更新"
+git push origin main
 ```
 
 TapのGitHub Actionsが成功するまで待ちます。  
 
 ```sh
-STELLA_TAP_RUN_ID="$(gh run list \
-  --repo ishiguro-junya/homebrew-tap \
-  --workflow test.yml \
+STELLA_CASK_RUN_ID="$(gh run list \
+  --repo ishiguro-junya/stella \
+  --workflow homebrew-cask.yml \
+  --branch main \
+  --event push \
   --limit 1 \
   --json databaseId \
   --jq '.[0].databaseId')"
-gh run watch "$STELLA_TAP_RUN_ID" \
-  --repo ishiguro-junya/homebrew-tap \
+gh run watch "$STELLA_CASK_RUN_ID" \
+  --repo ishiguro-junya/stella \
   --exit-status
 ```
 
@@ -274,17 +265,18 @@ Homebrewが新しいCaskを取得できることを確認します。
 
 ```sh
 brew update
-brew info --cask ishiguro-junya/tap/stella
+brew info --cask ishiguro-junya/stella/stella
 ```
 
 新規環境では次のコマンドでインストールできます。  
 
 ```sh
-brew install --cask ishiguro-junya/tap/stella
+brew tap ishiguro-junya/stella https://github.com/ishiguro-junya/stella
+brew install --cask ishiguro-junya/stella/stella
 ```
 
 インストール済みの環境では次のコマンドで更新できます。  
 
 ```sh
-brew upgrade --cask ishiguro-junya/tap/stella
+brew upgrade --cask ishiguro-junya/stella/stella
 ```
