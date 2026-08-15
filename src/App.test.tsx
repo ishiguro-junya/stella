@@ -2627,7 +2627,7 @@ describe('App repository recovery', () => {
     const confirmation = await screen.findByRole('alertdialog', { name: 'Confirm New Location' });
     expect(confirmation).toHaveTextContent(oldPath);
     expect(confirmation).toHaveTextContent(newPath);
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace Location' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Update Registration' }));
 
     await waitFor(() =>
       expect(adapter.attach).toHaveBeenCalledWith({ kind: 'openExisting', path: newPath }),
@@ -2744,7 +2744,7 @@ describe('App repository recovery', () => {
     const confirmation = await screen.findByRole('alertdialog', {
       name: 'Confirm New Location',
     });
-    await user.click(within(confirmation).getByRole('button', { name: 'Replace Location' }));
+    await user.click(within(confirmation).getByRole('button', { name: 'Update Registration' }));
 
     return { user, oldPath, newPath, oldRepo, newRepo, execute, detach };
   }
@@ -2772,7 +2772,7 @@ describe('App repository recovery', () => {
       await prepareFileRelocation('external-hash');
 
     const error = await screen.findByRole('alertdialog', {
-      name: 'Could not replace repository location',
+      name: 'Could not update repository registration',
     });
     await user.click(within(error).getByRole('button', { name: 'Close' }));
     expect(execute).not.toHaveBeenCalled();
