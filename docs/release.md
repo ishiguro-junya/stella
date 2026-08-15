@@ -124,7 +124,6 @@ git status --short
 mise run lint
 mise run typecheck
 mise run test
-mise run test:e2e
 : "${STELLA_UPDATER_KEY:?自動更新用の秘密鍵のパスを設定してください}"
 export TAURI_SIGNING_PRIVATE_KEY="$STELLA_UPDATER_KEY"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password \

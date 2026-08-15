@@ -7,19 +7,22 @@
 
 | 変更内容 | コマンド | 確認対象 |
 | --- | --- | --- |
-| フロントエンドまたはRustのロジック | `mise run test` | フロントエンドの単体テスト、Rustの単体・統合テスト |
+| ReactまたはRustのロジック | `mise run test:unit` | ReactとRustの単体テスト |
+| `Workspace`を介したGit操作 | `mise run test:integration` | 一時リポジトリを使うRustの統合テスト |
 | TypeScriptの型 | `mise run typecheck` | TypeScript全体の型整合性 |
-| コード、設定、ドキュメント、コミット履歴 | `mise run lint` | 書式、静的解析、設定、Markdown、文章、リンク |
+| コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、設定、Markdown、文章、リンク |
 | ネイティブ画面とGit操作 | `mise run test:e2e` | Tauriアプリを使ったE2Eテスト |
+| 全てのテスト | `mise run test` | 単体テスト、統合テスト、E2Eテスト |
 | READMEの画面画像 | `mise run screenshot` | `docs/assets`に置くREADME用画像 |
 
 まず変更箇所に近いテストを実行します。  
 完了前には、その変更を含む範囲の検証も実行します。  
-ドキュメントだけを変更した場合は`mise run lint:docs`でMarkdownの書式、文章、リンクを確認します。  
+ドキュメントを変更した場合も`mise run lint`を実行し、Markdownの書式、文章、リンクを確認します。  
+フレーキーなテストには、分かっている再現条件と修正方針をコードコメントで残します。  
 
 ## 各テスト層の責務
 
-### フロントエンドの単体テスト
+### Reactの単体テスト
 
 VitestとTesting Libraryを使い、状態遷移、表示条件、キーボード操作、ARIA属性、永続化の境界を確認します。  
 見た目の細部を文字列化したスナップショットへ固定せず、利用者が認識または操作する状態を検証します。  
@@ -28,6 +31,7 @@ VitestとTesting Libraryを使い、状態遷移、表示条件、キーボー�
 
 Rustの単体テストでは、Git出力の解析、入力検証、安全判定、ファイル操作を確認します。  
 統合テストでは一時リポジトリとローカルのベアリモートを使い、`Workspace`の公開境界からGit操作を確認します。  
+`Workspace`の統合テストは`workspace::tests`モジュールに置き、`mise run test:integration`で実行します。  
 
 ### ネイティブE2Eテスト
 
@@ -63,5 +67,5 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 ## プッシュ前の検証
 
 Lefthookのプッシュ前フックは、`mise run lint`とアプリケーションの検証を実行します。  
-アプリケーションの検証では、`mise run test`に続けて`mise run test:e2e`を実行します。  
+アプリケーションの検証では`mise run test`を実行し、単体テスト、統合テスト、E2Eテストの順に実行します。  
 配布物固有の検証は[リリース手順](release.md)に従います。  
