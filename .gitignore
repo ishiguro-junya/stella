@@ -6,7 +6,6 @@ Thumbs.db
 node_modules/
 .pnpm-store/
 dist/*
-!dist/.gitkeep
 coverage/
 *.tsbuildinfo
 .vite/
