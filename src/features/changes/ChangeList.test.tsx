@@ -201,7 +201,13 @@ describe('ChangeList staging controls', () => {
       selectedKey: 'unstaged:src/features/app.ts',
     });
     const fullPathRow = changeRow(/Modified src\/features\/app\.ts/u);
-    expect(within(fullPathRow).getByText('src/features/app.ts')).toBeVisible();
+    const fullPathLabel = fullPathRow.querySelector<HTMLElement>('.file-path strong');
+    if (!fullPathLabel) throw new Error('The full-path label was not found.');
+    expect(fullPathLabel).toHaveTextContent('src/features/app.ts');
+    expect(within(fullPathLabel).getByText('src/features/')).toHaveClass('file-path-prefix');
+    expect(
+      changeRow(/Modified README\.md/u).querySelector('.file-path-prefix'),
+    ).not.toBeInTheDocument();
     expect(fullPathRow).toHaveClass('is-single-line', 'is-full-path');
     fullPath.unmount();
 
@@ -446,6 +452,23 @@ describe('ChangeList staging controls', () => {
 });
 
 describe('ChangeList file actions', () => {
+  it('shows the selected image preview state in the row menu', async () => {
+    const user = userEvent.setup();
+    const onPressedChange = vi.fn<(pressed: boolean) => void>();
+    renderList({
+      entries: [{ path: 'image.png', area: 'unstaged', status: 'binary' }],
+      selectedKey: 'unstaged:image.png',
+      imagePreview: { key: 'unstaged:image.png', pressed: true, onPressedChange },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'More actions for image.png' }));
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    expect(imagePreview).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(imagePreview);
+    expect(onPressedChange).toHaveBeenCalledWith(false);
+  });
+
   it('selects a range and opens the selected files menu from a right-click', async () => {
     const user = userEvent.setup();
     const entries: ChangeEntry[] = [

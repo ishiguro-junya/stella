@@ -122,4 +122,18 @@ describe('FileActionMenu', () => {
     await user.click(trigger);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
+
+  it('exposes and toggles the image preview state', async () => {
+    const user = userEvent.setup();
+    const onPressedChange = vi.fn<(pressed: boolean) => void>();
+    render(<Harness imagePreview={{ pressed: true, onPressedChange }} />);
+
+    await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    expect(imagePreview).toHaveAttribute('aria-checked', 'true');
+    expect(imagePreview).toHaveFocus();
+
+    await user.click(imagePreview);
+    expect(onPressedChange).toHaveBeenCalledWith(false);
+  });
 });

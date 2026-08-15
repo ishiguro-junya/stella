@@ -56,6 +56,19 @@ const STELLA_DIFF_THEMES = {
   light: STELLA_DIFF_THEME,
   dark: STELLA_DIFF_THEME,
 } as const;
+
+function FilePathLabel({ path }: { path: string }) {
+  const fileNameStart = path.lastIndexOf('/') + 1;
+  return (
+    <span>
+      {fileNameStart > 0 ? (
+        <span className="file-path-prefix">{path.slice(0, fileNameStart)}</span>
+      ) : null}
+      {path.slice(fileNameStart)}
+    </span>
+  );
+}
+
 const STELLA_DIFF_HIGHLIGHT_CSS = `
 :host {
   --diffs-font-family: var(--font-mono);
@@ -798,7 +811,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
             setSingleFileCollapsed((current) => !current);
           })}
           <FileStatusIcon status={fileStatusForDiffType(fileDiff.type)} />
-          <span>{fileDiff.name}</span>
+          <FilePathLabel path={fileDiff.name} />
         </div>
         <div className="diff-file-custom-header-counts" aria-hidden="true">
           {deletions > 0 || additions === 0 ? (
@@ -836,7 +849,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
           <FileStatusIcon
             status={item.type === 'diff' ? fileStatusForDiffType(item.fileDiff.type) : 'modified'}
           />
-          <span>{path}</span>
+          <FilePathLabel path={path} />
         </div>
         {additions !== undefined && deletions !== undefined ? (
           <div className="diff-file-custom-header-counts" aria-hidden="true">

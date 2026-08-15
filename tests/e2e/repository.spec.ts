@@ -246,8 +246,8 @@ describe('Repository and Branch navigation', () => {
           menuButtonPaddingTop: menuButtonStyle.paddingTop,
           paneResizerWidth: paneResizer.getBoundingClientRect().width,
           paneSeparatorWidth: getComputedStyle(paneResizer, '::before').width,
-          paneSeparatorMatchesContent:
-            getComputedStyle(paneResizer, '::before').backgroundColor ===
+          paneSeparatorDiffersFromContent:
+            getComputedStyle(paneResizer, '::before').backgroundColor !==
             getComputedStyle(content).backgroundColor,
           contentLeft: content.getBoundingClientRect().left,
         };
@@ -282,7 +282,7 @@ describe('Repository and Branch navigation', () => {
       menuButtonVertical: [52, 5.5, 6.5],
       paneResizerWidth: 5,
       paneSeparatorWidth: '1px',
-      paneSeparatorMatchesContent: true,
+      paneSeparatorDiffersFromContent: true,
       contentLeft: 361,
     });
     await $('button[aria-label="サイドバーを閉じる"]').click();

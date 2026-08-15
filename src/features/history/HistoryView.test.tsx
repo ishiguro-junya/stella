@@ -862,6 +862,35 @@ rename to new.png
     expect(commitIdGroup.nextElementSibling?.nextElementSibling).toHaveTextContent('Date');
   });
 
+  it('shows a distinct commit body as secondary detail text', async () => {
+    const details = {
+      ...commitDetails(undefined),
+      body: '変更理由を補足します。',
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: details };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [details] })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByText(details.body)).toHaveClass('commit-detail-body');
+  });
+
   it('shows Tag and shortened branch decorations in the list and commit details', async () => {
     const refs = ['refs/remotes/origin/main', 'tag: refs/tags/v1.2.3', 'HEAD -> refs/heads/main'];
     const details = { ...commitDetails(undefined), refs };
@@ -891,8 +920,13 @@ rename to new.png
 
     await waitFor(() => expect(screen.getAllByLabelText('Tag v1.2.3')).toHaveLength(2));
     const tags = screen.getAllByLabelText('Tag v1.2.3');
+    const branchChips = document.querySelectorAll('.ref-chip.branch, .ref-chip.remote');
     expect(screen.getAllByText('main')).toHaveLength(2);
     expect(screen.getAllByText('origin/main')).toHaveLength(2);
+    expect(branchChips).toHaveLength(4);
+    expect([...branchChips].every((chip) => !chip.hasAttribute('tabindex'))).toBe(true);
+    fireEvent.focus(branchChips[0]!);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(tags.every((tag) => !tag.hasAttribute('title'))).toBe(true);
     expect(tags[0]).toHaveAttribute('tabindex', '0');
     fireEvent.focus(tags[0]!);
@@ -945,6 +979,42 @@ rename to new.png
         )
         ?.style.getPropertyValue('--history-lane-color'),
     ).toBe('var(--history-lane-1)');
+  });
+
+  it('joins three converging lanes with parallel diagonal segments', () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'branches'
+          ? { kind: 'branches' as const, branches: [] }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: 'amended', detached: false, ahead: 0, behind: 0 },
+          history: [
+            commitSummary('amended', ['base', 'side']),
+            commitSummary('original', ['base', 'side']),
+            commitSummary('side', ['base']),
+            commitSummary('base'),
+          ],
+        })}
+        adapter={adapter}
+        onShowChanges={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const graph = screen.getByTestId('history-graph-base');
+    expect(
+      graph.querySelector('[data-edge-kind="incoming"][data-from-lane="1"]')?.getAttribute('d'),
+    ).toBe('M 18 0 L 18 4 L 6 8');
+    expect(
+      graph.querySelector('[data-edge-kind="incoming"][data-from-lane="2"]')?.getAttribute('d'),
+    ).toBe('M 30 0 L 18 4');
   });
 
   it('renders merge connectors as decorative SVG while exposing parent ids in the row', () => {

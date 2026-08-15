@@ -1,4 +1,3 @@
-/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- 参照名の補足をキーボード操作でも確認できるようにする。 */
 import {
   useCallback,
   useDeferredValue,
@@ -19,6 +18,7 @@ import {
   assignHistoryLanes,
   HISTORY_PAGE_SIZE,
   type HistoryGraphNode,
+  type HistoryIncomingEdge,
 } from '../../domain/historyLanes';
 import type {
   CommitDetails,
@@ -101,6 +101,27 @@ function graphCornerPath(fromLane: number, toLane: number): string {
   return `M ${laneX(fromLane)} 0 L ${laneX(toLane)} ${GRAPH_CORNER_HEIGHT}`;
 }
 
+function graphConvergingCornerPath(
+  edge: HistoryIncomingEdge,
+  incomingEdges: readonly HistoryIncomingEdge[],
+): string {
+  const converging = incomingEdges
+    .filter((candidate) => candidate.toLane === edge.toLane)
+    .toSorted((left, right) => left.fromLane - right.fromLane);
+  const sourceIndex = converging.findIndex((candidate) => candidate.fromLane === edge.fromLane);
+  const contiguous = converging.every(
+    (candidate, index) => candidate.fromLane === edge.toLane + index,
+  );
+  if (sourceIndex <= 0 || !contiguous) return graphCornerPath(edge.fromLane, edge.toLane);
+
+  const steps = converging.length - 1;
+  const startY = (GRAPH_CORNER_HEIGHT * (steps - sourceIndex)) / steps;
+  const endY = (GRAPH_CORNER_HEIGHT * (steps - sourceIndex + 1)) / steps;
+  const fromX = laneX(edge.fromLane);
+  const vertical = startY > 0 ? ` L ${fromX} ${startY}` : '';
+  return `M ${fromX} 0${vertical} L ${laneX(edge.fromLane - 1)} ${endY}`;
+}
+
 type HistoryRefKind = 'tag' | 'branch' | 'remote' | 'head' | 'other';
 
 interface HistoryRefLabel {
@@ -172,11 +193,13 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
 
   return (
     <span className="ref-list">
-      {labels.map((ref) => (
-        <Tooltip key={ref.raw} content={ref.raw}>
+      {labels.map((ref) => {
+        const isBranch = ref.kind === 'branch' || ref.kind === 'remote';
+        const chip = (
           <span
+            key={ref.raw}
             className={`ref-chip ${ref.kind}`}
-            tabIndex={0}
+            tabIndex={isBranch ? undefined : 0}
             data-local-branch={ref.kind === 'branch' ? ref.label : undefined}
             aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
           >
@@ -189,8 +212,15 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
             )}
             <span>{ref.label}</span>
           </span>
-        </Tooltip>
-      ))}
+        );
+        return isBranch ? (
+          chip
+        ) : (
+          <Tooltip key={ref.raw} content={ref.raw}>
+            {chip}
+          </Tooltip>
+        );
+      })}
     </span>
   );
 }
@@ -282,7 +312,7 @@ function HistoryGraph({
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
             style={historyLaneStyle(edge.fromLane)}
-            d={graphCornerPath(edge.fromLane, edge.toLane)}
+            d={graphConvergingCornerPath(edge, commit.incomingEdges)}
           />
         ))}
       </svg>
@@ -1014,7 +1044,9 @@ export function HistoryView({
                   />
                 </div>
               </div>
-              {commitBody && commitBody !== details.subject.trim() ? <p>{commitBody}</p> : null}
+              {commitBody && commitBody !== details.subject.trim() ? (
+                <p className="commit-detail-body">{commitBody}</p>
+              ) : null}
               <dl className="metadata-list inline">
                 <div>
                   <dt>{t('commitId')}</dt>

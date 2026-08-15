@@ -1,4 +1,12 @@
-import { AppWindowMac, Copy, FolderOpen, Pencil, Trash2, Undo2 } from 'lucide-react';
+import {
+  AppWindowMac,
+  Copy,
+  FolderOpen,
+  Image as ImageIcon,
+  Pencil,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 
 import { useI18n } from '../../i18n/i18n';
 import {
@@ -26,6 +34,7 @@ export interface FileActionMenuProps {
   openDisabled: boolean;
   discardDisabled: boolean;
   deleteDisabled: boolean;
+  imagePreview?: { pressed: boolean; onPressedChange: (pressed: boolean) => void } | undefined;
   persistentTrigger?: boolean | undefined;
   contextPoint?: FileActionMenuPoint | undefined;
   onOpenChange: (open: boolean) => void;
@@ -42,6 +51,7 @@ export function FileActionMenu({
   openDisabled,
   discardDisabled,
   deleteDisabled,
+  imagePreview,
   persistentTrigger = false,
   contextPoint,
   onOpenChange,
@@ -49,7 +59,17 @@ export function FileActionMenu({
   onAction,
 }: FileActionMenuProps) {
   const { t } = useI18n();
-  const items: RowActionMenuItem<FileActionKind>[] = [
+  const items: RowActionMenuItem<FileActionKind | 'imagePreview'>[] = [
+    ...(imagePreview
+      ? [
+          {
+            action: 'imagePreview' as const,
+            label: t('imagePreview'),
+            icon: <ImageIcon aria-hidden="true" focusable="false" size={15} />,
+            checked: imagePreview.pressed,
+          },
+        ]
+      : []),
     {
       action: 'editFile',
       label: t('editFile'),
@@ -112,7 +132,11 @@ export function FileActionMenu({
       getActionFocusTarget={(trigger) =>
         trigger.closest('.change-item')?.querySelector<HTMLButtonElement>('.change-row')
       }
-      onAction={onAction}
+      onAction={(action) =>
+        action === 'imagePreview'
+          ? imagePreview?.onPressedChange(!imagePreview.pressed)
+          : onAction(action)
+      }
     />
   );
 }

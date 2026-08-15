@@ -45,6 +45,12 @@ describe('changes file selection', () => {
     expect(styles).toMatch(
       /\.file-view-mode-tabs button\[aria-selected='true'\]:focus-visible\s*\{[^}]*outline-color:\s*var\(--focus\);/u,
     );
+    expect(styles).toMatch(
+      /\.image-preview-toggle\[aria-pressed='true'\]\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*box-shadow:\s*none;[^}]*color:\s*var\(--text-primary\);/u,
+    );
+    expect(styles).toMatch(
+      /\.image-preview-toggle\[aria-pressed='true'\]:focus-visible\s*\{[^}]*outline-color:\s*var\(--focus\);/u,
+    );
   });
 });
 
@@ -104,10 +110,10 @@ describe('workspace pane resizing', () => {
     );
   });
 
-  it('keeps a wide drag target without a contrasting pane line', () => {
+  it('keeps a wide drag target with a visible pane line', () => {
     expect(styles).toMatch(/\.pane-resizer\s*\{[^}]*width:\s*5px;[^}]*background:\s*transparent;/u);
     expect(styles).toMatch(
-      /\.pane-resizer::before\s*\{[^}]*width:\s*1px;[^}]*background:\s*var\(--surface-raised\);/u,
+      /\.pane-resizer::before\s*\{[^}]*width:\s*1px;[^}]*background:\s*var\(--border-subtle\);/u,
     );
     expect(styles).not.toMatch(/\.pane-resizer:(?:hover|active)[^{]*\{[^}]*background:/u);
   });

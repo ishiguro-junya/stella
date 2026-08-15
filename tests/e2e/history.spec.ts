@@ -161,6 +161,74 @@ describe('History', () => {
     ).toEqual({ detailOverflowY: 'auto', detailScrolls: true, diffOverflowY: 'visible' });
   });
 
+  it('separates a commit body from the subject as secondary text', async () => {
+    await writeRepositoryFile(repositoryPath, 'src/commit-body.md', 'Commit body spacing\n');
+    await runGit(repositoryPath, ['add', 'src/commit-body.md']);
+    await runGit(repositoryPath, [
+      'commit',
+      '-m',
+      'test: コミット本文の表示を確認する',
+      '-m',
+      'この変更が必要な理由を補足します。',
+    ]);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+    await expect($('.commit-detail-body')).toHaveText('この変更が必要な理由を補足します。');
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 1, {
+      timeout: 10_000,
+      timeoutMsg: 'The commit body History diff did not render.',
+    });
+
+    expect(
+      await browser.execute(() => {
+        const heading = document.querySelector<HTMLElement>('.commit-detail-heading');
+        const body = document.querySelector<HTMLElement>('.commit-detail-body');
+        const path = document.querySelector<HTMLElement>(
+          '.diff-file-custom-header-title > span:last-child',
+        );
+        const pathPrefix = path?.querySelector<HTMLElement>('.file-path-prefix');
+        if (!heading || !body || !path || !pathPrefix) {
+          throw new Error('The commit body or nested file path was not found.');
+        }
+        const secondaryProbe = document.createElement('span');
+        secondaryProbe.style.color = 'var(--text-secondary)';
+        const tertiaryProbe = document.createElement('span');
+        tertiaryProbe.style.color = 'var(--text-tertiary)';
+        document.body.append(secondaryProbe, tertiaryProbe);
+        const result = {
+          gapAbove: body.getBoundingClientRect().top - heading.getBoundingClientRect().bottom,
+          usesSecondaryColor:
+            getComputedStyle(body).color === getComputedStyle(secondaryProbe).color,
+          fullPath: path.textContent,
+          pathPrefix: pathPrefix.textContent,
+          prefixUsesTertiaryColor:
+            getComputedStyle(pathPrefix).color === getComputedStyle(tertiaryProbe).color,
+        };
+        secondaryProbe.remove();
+        tertiaryProbe.remove();
+        return result;
+      }),
+    ).toEqual({
+      gapAbove: 8,
+      usesSecondaryColor: true,
+      fullPath: 'src/commit-body.md',
+      pathPrefix: 'src/',
+      prefixUsesTertiaryColor: true,
+    });
+
+    if (visualQaDirectory) {
+      await saveLogicalScreenshot(
+        join(visualQaDirectory, 'history-commit-body-1180x760.png'),
+        1180,
+        760,
+      );
+    }
+  });
+
   it('shows a tooltip when focusing a single-file diff toggle', async () => {
     await writeRepositoryFile(repositoryPath, 'single-tooltip.txt', 'single file\n');
     await runGit(repositoryPath, ['add', 'single-tooltip.txt']);

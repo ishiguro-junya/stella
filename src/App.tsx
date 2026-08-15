@@ -1832,7 +1832,6 @@ export function App({
                           })}
                           aria-haspopup="dialog"
                           aria-expanded={repositorySwitcherOpen}
-                          tooltip={repo.path}
                           data-repository-path={repo.path}
                           onClick={openRepositorySwitcher}
                         >
@@ -1856,11 +1855,6 @@ export function App({
                           })}
                           aria-haspopup="dialog"
                           aria-expanded={Boolean(branchDialog)}
-                          tooltip={
-                            repo.branch.detached
-                              ? t('detachedHead')
-                              : (repo.branch.name ?? undefined)
-                          }
                           onClick={openBranchSwitcher}
                         >
                           <GitBranch aria-hidden="true" focusable="false" />

@@ -1401,6 +1401,12 @@ export function ChangesView({
           </h2>
         </div>
         <div className="diff-file-actions">
+          {imagePreview ? (
+            <ImagePreviewToggle
+              pressed={imagePreview.pressed}
+              onPressedChange={imagePreview.onPressedChange}
+            />
+          ) : null}
           <FileViewModeTabs
             mode="display"
             editDisabled={busy || unsavedDirty || fileActionInvalid}
@@ -1409,12 +1415,6 @@ export function ChangesView({
               startEditing(entry, selectedSurfaceSelection?.startLine, selectedSurfaceSelection)
             }
           />
-          {imagePreview ? (
-            <ImagePreviewToggle
-              pressed={imagePreview.pressed}
-              onPressedChange={imagePreview.onPressedChange}
-            />
-          ) : null}
           <FileActionMenu
             path={entry.path}
             selectedPaths={[entry.path]}
@@ -1424,6 +1424,7 @@ export function ChangesView({
             openDisabled={openDisabled}
             discardDisabled={discardDisabled}
             deleteDisabled={openDisabled}
+            imagePreview={imagePreview}
             persistentTrigger
             contextPoint={menuContextPoint}
             onOpenChange={(open) => {
@@ -1482,6 +1483,16 @@ export function ChangesView({
               fileEditDisabled={unsavedDirty}
               fileOpenDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
               fileTrashDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+              imagePreview={
+                !multipleFilesSelected && visibleImageAvailable
+                  ? {
+                      key: visibleImageKey,
+                      pressed: visibleImagePreviewEnabled,
+                      onPressedChange: (pressed) =>
+                        setImagePreviewEnabled(visibleImageKey, pressed),
+                    }
+                  : undefined
+              }
               onSelect={requestFileSelection}
               onSelectedKeysChange={requestSelectedFiles}
               onStageTransition={runStageTransition}

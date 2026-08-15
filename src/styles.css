@@ -1290,7 +1290,7 @@ button:where(:has(> .lucide)) > span {
   bottom: 0;
   left: 2px;
   width: 1px;
-  background: var(--surface-raised);
+  background: var(--border-subtle);
   content: '';
   pointer-events: none;
 }
@@ -1355,11 +1355,15 @@ button:where(:has(> .lucide)) > span {
   place-items: center;
 }
 .image-preview-toggle[aria-pressed='true'] {
-  background: var(--interactive-selected-surface);
-  color: var(--interactive-selected-foreground);
+  background: var(--list-selection-surface);
+  box-shadow: none;
+  color: var(--text-primary);
 }
 .image-preview-toggle[aria-pressed='true']:hover:not(:disabled) {
-  background: var(--interactive-selected-hover);
+  background: var(--list-selection-hover);
+}
+.image-preview-toggle[aria-pressed='true']:focus-visible {
+  outline-color: var(--focus);
 }
 .image-diff-preview {
   display: flex;
@@ -2091,6 +2095,9 @@ button:where(:has(> .lucide)) > span {
   font-size: 0.78125rem;
   font-weight: 550;
 }
+.file-path-prefix {
+  color: var(--text-tertiary);
+}
 .file-path small {
   color: var(--text-tertiary);
   font-size: 0.625rem;
@@ -2665,6 +2672,10 @@ button:where(:has(> .lucide)) > span {
 }
 .commit-detail-heading .ref-list {
   margin-top: 6px;
+}
+.commit-detail-body {
+  margin-top: 8px;
+  color: var(--text-secondary);
 }
 .metadata-list {
   display: grid;

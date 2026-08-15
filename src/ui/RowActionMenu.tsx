@@ -22,6 +22,7 @@ export interface RowActionMenuItem<Action extends string> {
   action: Action;
   label: string;
   icon: ReactNode;
+  checked?: boolean | undefined;
   disabled?: boolean | undefined;
   danger?: boolean | undefined;
   separatorBefore?: boolean | undefined;
@@ -68,7 +69,11 @@ const DOCUMENT_TAB_STOP = [
 ].join(',');
 
 function enabledItems(menu: HTMLElement): HTMLButtonElement[] {
-  return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+  return [
+    ...menu.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)',
+    ),
+  ];
 }
 
 export function RowActionMenu<Action extends string>({
@@ -281,7 +286,8 @@ export function RowActionMenu<Action extends string>({
                   <Button
                     type="button"
                     className={item.danger ? 'danger-menu-item' : undefined}
-                    role="menuitem"
+                    role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                    aria-checked={item.checked}
                     disabled={item.disabled}
                     onClick={() => runAction(item.action)}
                   >

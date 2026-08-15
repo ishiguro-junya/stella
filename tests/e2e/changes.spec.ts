@@ -232,9 +232,14 @@ describe('Changes', () => {
     await selectAndExpectImagePreview('preview.svg');
 
     const svgToggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
-    await svgToggle.click();
+    const displayTab = $('.diff-file-toolbar [role="tab"][aria-label="表示"]');
+    expect((await svgToggle.getLocation('x')) < (await displayTab.getLocation('x'))).toBe(true);
+    await $('.diff-file-toolbar .file-action-trigger').click();
+    await $('button=画像プレビュー').click();
     await expect(svgToggle).toHaveAttribute('aria-pressed', 'false');
     await expect($('.diff-surface')).toBeDisplayed();
+    await svgToggle.click();
+    await expect(svgToggle).toHaveAttribute('aria-pressed', 'true');
     await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
     await expect(svgToggle).not.toExist();
     await expect($('.file-editor')).toBeDisplayed();
@@ -269,10 +274,22 @@ describe('Changes', () => {
       );
       const fullPathRow = fullPath?.querySelector<HTMLElement>('.change-row');
       const fullPathRowStyle = fullPathRow ? getComputedStyle(fullPathRow) : undefined;
+      const fullPathLabel = fullPath?.querySelector<HTMLElement>('.file-path strong');
+      const pathPrefix = fullPath?.querySelector<HTMLElement>('.file-path-prefix');
+      const tertiaryProbe = document.createElement('span');
+      tertiaryProbe.style.color = 'var(--text-tertiary)';
+      document.body.append(tertiaryProbe);
+      const prefixUsesTertiaryColor =
+        pathPrefix !== undefined &&
+        pathPrefix !== null &&
+        getComputedStyle(pathPrefix).color === getComputedStyle(tertiaryProbe).color;
+      tertiaryProbe.remove();
       return {
         selectedIndex,
         rowCount: rows.length,
-        fullPath: fullPath?.querySelector('.file-path strong')?.textContent,
+        fullPath: fullPathLabel?.textContent,
+        pathPrefix: pathPrefix?.textContent,
+        prefixUsesTertiaryColor,
         hasSecondaryPath: Boolean(fullPath?.querySelector('.file-path small')),
         fullPathRowHeight: fullPathRow?.getBoundingClientRect().height,
         fullPathRowPaddingBlock: fullPathRowStyle
@@ -289,6 +306,8 @@ describe('Changes', () => {
       selectedIndex: expect.any(Number),
       rowCount: 2,
       fullPath: 'src/keyboard-navigation.md',
+      pathPrefix: 'src/',
+      prefixUsesTertiaryColor: true,
       hasSecondaryPath: false,
       fullPathRowHeight: 38,
       fullPathRowPaddingBlock: ['6px', '6px'],

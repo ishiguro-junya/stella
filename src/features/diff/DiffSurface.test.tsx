@@ -379,6 +379,29 @@ describe('DiffSurface line selection', () => {
     );
   });
 
+  it('deemphasizes the parent path in file headers', () => {
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'src/features/example.txt',
+          cacheKey: 'revision-1',
+        }}
+        showFileHeaders
+      />,
+    );
+
+    const renderCustomHeader = patchDiffPropsMock.mock.lastCall?.[0].renderCustomHeader;
+    const { container } = render(
+      renderCustomHeader?.({ name: 'src/features/example.txt', type: 'change', hunks: [] }),
+    );
+    expect(container.querySelector('.file-path-prefix')).toHaveTextContent('src/features/');
+    expect(
+      container.querySelector('.diff-file-custom-header-title > span:last-child'),
+    ).toHaveTextContent('src/features/example.txt');
+  });
+
   it('renders the shared file status icon in CodeView file headers', () => {
     parsePatchFilesMock.mockReturnValue([{ files: [{ name: 'new.txt', type: 'new', hunks: [] }] }]);
     render(

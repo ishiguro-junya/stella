@@ -87,6 +87,13 @@ export interface ChangeListProps {
   fileEditDisabled?: boolean | undefined;
   fileOpenDisabled: boolean;
   fileTrashDisabled: boolean;
+  imagePreview?:
+    | {
+        key: string;
+        pressed: boolean;
+        onPressedChange: (pressed: boolean) => void;
+      }
+    | undefined;
   onSelect: (key: string) => void;
   onSelectedKeysChange?: ((keys: string[]) => void) | undefined;
   onStageTransition: (request: StageTransitionRequest) => Promise<void>;
@@ -184,6 +191,7 @@ export function ChangeList({
   fileEditDisabled = false,
   fileOpenDisabled,
   fileTrashDisabled,
+  imagePreview,
   onSelect,
   onSelectedKeysChange,
   onStageTransition,
@@ -803,7 +811,11 @@ export function ChangeList({
                           >
                             <span className="file-name">
                               <strong>
-                                {display === 'fullPath' ? entry.path : fileName(entry.path)}
+                                {display === 'fullPath' ? (
+                                  <InlineFilePath path={entry.path} />
+                                ) : (
+                                  fileName(entry.path)
+                                )}
                               </strong>
                               {unsavedFileKey === key ? (
                                 <output className="unsaved-file-dot" aria-label={t('unsaved')} />
@@ -831,6 +843,7 @@ export function ChangeList({
                           }
                           discardDisabled={discardDisabled}
                           deleteDisabled={fileTrashDisabled || invalidFileActionEntry}
+                          imagePreview={imagePreview?.key === key ? imagePreview : undefined}
                           contextPoint={contextMenu?.key === key ? contextMenu.point : undefined}
                           onOpenChange={(open) => {
                             setOpenMenuKey(open ? key : undefined);
@@ -871,4 +884,14 @@ function fileName(path: string): string {
 function parentPath(path: string): string {
   const parts = path.split('/');
   return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+}
+
+function InlineFilePath({ path }: { path: string }) {
+  const parent = parentPath(path);
+  return (
+    <>
+      {parent ? <span className="file-path-prefix">{parent}/</span> : null}
+      {fileName(path)}
+    </>
+  );
 }

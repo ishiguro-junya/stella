@@ -392,24 +392,36 @@ abc
     );
 
     const toggle = await screen.findByRole('button', { name: 'Image preview' });
+    const viewTabs = screen.getByRole('tablist', { name: 'File view mode' });
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('tablist', { name: 'File view mode' })).toBeVisible();
+    expect(viewTabs).toBeVisible();
     expect(screen.getByText('Image preview content')).toBeVisible();
-    expect(
-      screen.getByRole('tablist', { name: 'File view mode' }).compareDocumentPosition(toggle) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).not.toBe(0);
+    expect(toggle.compareDocumentPosition(viewTabs) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     const actions = toggle.closest('.diff-file-actions');
     if (!actions) throw new Error('Expected the selected file actions.');
     const menu = actions.querySelector<HTMLButtonElement>('.file-action-trigger');
     if (!menu) throw new Error('Expected the selected file menu.');
     expect(toggle.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 
+    await user.click(screen.getByRole('button', { name: 'More actions for image.png' }));
+    const rowImagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    expect(rowImagePreview).toHaveAttribute('aria-checked', 'true');
+    await user.click(rowImagePreview);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
     await user.click(toggle);
+    await user.click(menu);
+    const detailImagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    expect(detailImagePreview).toHaveAttribute('aria-checked', 'true');
+    await user.click(detailImagePreview);
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByText('Image preview content')).not.toBeInTheDocument();
     expect(screen.getByText('Binary files can be managed only as whole files.')).toBeVisible();
-    expect(screen.getByRole('tablist', { name: 'File view mode' })).toBeVisible();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Image preview content')).toBeVisible();
+    expect(viewTabs).toBeVisible();
   });
 
   it('keeps image preview disabled when the same selected file receives a new diff', async () => {
@@ -683,7 +695,7 @@ rename to new.png
     );
 
     const row = changeRow(/Modified src\/features\/app\.ts/u);
-    expect(within(row).getByText('src/features/app.ts')).toBeVisible();
+    expect(row.querySelector('.file-path strong')).toHaveTextContent('src/features/app.ts');
     expect(row).toHaveClass('is-single-line');
   });
 
