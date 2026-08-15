@@ -142,6 +142,25 @@ describe('History', () => {
     await expect($('.history-view .diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  it('scrolls the commit details in the right pane', async () => {
+    await $('button=履歴').click();
+    await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
+
+    expect(
+      await browser.execute(() => {
+        const detailPane = document.querySelector<HTMLElement>('.commit-detail-pane');
+        const diffSurface = detailPane?.querySelector<HTMLElement>('.diff-surface');
+        if (!detailPane || !diffSurface) throw new Error('The History right pane was not found.');
+        detailPane.scrollTop = detailPane.scrollHeight;
+        return {
+          detailOverflowY: getComputedStyle(detailPane).overflowY,
+          detailScrolls: detailPane.scrollTop > 0,
+          diffOverflowY: getComputedStyle(diffSurface).overflowY,
+        };
+      }),
+    ).toEqual({ detailOverflowY: 'auto', detailScrolls: true, diffOverflowY: 'visible' });
+  });
+
   it('shows a tooltip when focusing a single-file diff toggle', async () => {
     await writeRepositoryFile(repositoryPath, 'single-tooltip.txt', 'single file\n');
     await runGit(repositoryPath, ['add', 'single-tooltip.txt']);

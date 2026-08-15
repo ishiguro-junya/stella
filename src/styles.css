@@ -2489,6 +2489,11 @@ button:where(:has(> .lucide)) > span {
 .history-view {
   grid-template-columns: var(--left-pane) 1px minmax(320px, 1fr);
 }
+.history-view .diff-surface {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
 .history-graph {
   --history-node-center-y: 17px;
   --history-corner-height: 8px;
