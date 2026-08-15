@@ -156,6 +156,23 @@ describe('Stella i18n', () => {
     }
   });
 
+  it('uses the requested global ignore list copy in both languages', () => {
+    expect(translate('en', 'ignorePatternsTitle')).toBe('Global Ignore List');
+    expect(translate('en', 'ignorePatternsDescription')).toBe(
+      'Enter one pattern per line using .gitignore syntax. This applies to every repository opened in the app without affecting Terminal or other Git clients. Existing global Git ignore rules continue to apply.',
+    );
+    expect(translate('en', 'ignorePatternsChangeFailed')).toBe(
+      'The global ignore list could not be changed.',
+    );
+    expect(translate('ja', 'ignorePatternsTitle')).toBe('グローバル無視リスト');
+    expect(translate('ja', 'ignorePatternsDescription')).toBe(
+      '1行に1つ、.gitignoreと同じ書式で入力します。このアプリで開くすべてのリポジトリに適用し、ターミナルや他のGitクライアントには影響しません。既存のGitの共通無視設定も引き続き適用されます。',
+    );
+    expect(translate('ja', 'ignorePatternsChangeFailed')).toBe(
+      'グローバル無視リストを変更できませんでした。',
+    );
+  });
+
   it('uses the requested Japanese Git toolchain copy', () => {
     expect(translate('ja', 'appearanceDescription')).toBe(
       '外観のテーマをシステムに合わせるか、固定します。',

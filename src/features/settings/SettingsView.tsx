@@ -69,6 +69,7 @@ export interface SettingsViewProps {
   onStickyFileHeadersChange: (sticky: boolean) => void;
   onEditorLineWrappingChange: (enabled: boolean) => void;
   onEditorWrapColumnChange: (column: number) => void;
+  onIgnorePatternsChange: (patterns: string) => void;
   onToolchainModeChange: (mode: ToolchainMode) => void;
 }
 
@@ -128,6 +129,7 @@ export function SettingsView({
   onStickyFileHeadersChange,
   onEditorLineWrappingChange,
   onEditorWrapColumnChange,
+  onIgnorePatternsChange,
   onToolchainModeChange,
 }: SettingsViewProps) {
   const { t } = useI18n();
@@ -135,6 +137,9 @@ export function SettingsView({
   const [wrapColumnDraft, setWrapColumnDraft] = useState(String(editorWrapColumn));
   const [repositoryBasePathDraft, setRepositoryBasePathDraft] = useState(repositoryBasePath);
   const [repositoryBasePathError, setRepositoryBasePathError] = useState(false);
+  const [ignorePatternsDraft, setIgnorePatternsDraft] = useState(
+    toolchainStatus?.ignorePatterns ?? '',
+  );
   const categories = [
     { id: 'general', label: t('settingsCategoryGeneral'), Icon: SettingsIcon },
     { id: 'permissions', label: t('settingsCategoryPermissions'), Icon: ShieldCheck },
@@ -151,6 +156,9 @@ export function SettingsView({
     setRepositoryBasePathDraft(repositoryBasePath);
     setRepositoryBasePathError(false);
   }, [repositoryBasePath]);
+  useEffect(() => {
+    if (toolchainStatus) setIgnorePatternsDraft(toolchainStatus.ignorePatterns);
+  }, [toolchainStatus]);
 
   const commitWrapColumn = (): void => {
     const value = wrapColumnDraft.trim()
@@ -169,6 +177,11 @@ export function SettingsView({
     setRepositoryBasePathDraft(path);
     setRepositoryBasePathError(false);
     onRepositoryBasePathChange(path);
+  };
+
+  const commitIgnorePatterns = (): void => {
+    if (!toolchainStatus || ignorePatternsDraft === toolchainStatus.ignorePatterns) return;
+    onIgnorePatternsChange(ignorePatternsDraft);
   };
 
   return (
@@ -661,6 +674,29 @@ export function SettingsView({
               {t('settingsCategoryGit')}
             </h2>
             <div className="settings-panel">
+              <section
+                className="settings-row settings-wide-row settings-ignore-patterns-row"
+                aria-labelledby="ignore-patterns-title"
+                aria-busy={!toolchainStatus || toolchainBusy}
+              >
+                <div className="settings-row-copy">
+                  <h3 id="ignore-patterns-title">{t('ignorePatternsTitle')}</h3>
+                  <p id="ignore-patterns-description">{t('ignorePatternsDescription')}</p>
+                </div>
+                <textarea
+                  className="settings-ignore-patterns"
+                  name="ignore-patterns"
+                  value={ignorePatternsDraft}
+                  disabled={!toolchainStatus || toolchainBusy}
+                  aria-labelledby="ignore-patterns-title"
+                  aria-describedby="ignore-patterns-description"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(event) => setIgnorePatternsDraft(event.currentTarget.value)}
+                  onBlur={commitIgnorePatterns}
+                />
+              </section>
               <section
                 className="settings-row settings-wide-row settings-toolchain-row"
                 aria-labelledby="toolchain-title"

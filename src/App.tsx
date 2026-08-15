@@ -647,6 +647,21 @@ export function App({
     [showError, t, toolchainAdapter, toolchainBusy],
   );
 
+  const changeIgnorePatterns = useCallback(
+    (patterns: string): void => {
+      if (!toolchainAdapter || toolchainBusy) return;
+      setToolchainBusy(true);
+      void toolchainAdapter
+        .setIgnorePatterns(patterns)
+        .then(setToolchainStatus)
+        .catch((cause: unknown) =>
+          showError(t('ignorePatternsTitle'), cause, t('ignorePatternsChangeFailed')),
+        )
+        .finally(() => setToolchainBusy(false));
+    },
+    [showError, t, toolchainAdapter, toolchainBusy],
+  );
+
   useEffect(() => {
     applyAppearance(appearance);
     void applyNativeAppearance(appearance);
@@ -1984,6 +1999,7 @@ export function App({
               onStickyFileHeadersChange={setStickyFileHeaders}
               onEditorLineWrappingChange={setEditorLineWrapping}
               onEditorWrapColumnChange={setEditorWrapColumn}
+              onIgnorePatternsChange={changeIgnorePatterns}
               onToolchainModeChange={changeToolchainMode}
             />
           ) : null}

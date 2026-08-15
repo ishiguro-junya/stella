@@ -17,11 +17,13 @@ export interface ToolchainStatus {
   gitLfs: ToolchainComponentStatus;
   gitFlow: ToolchainComponentStatus;
   gpgAvailable: boolean;
+  ignorePatterns: string;
 }
 
 export interface ToolchainAdapter {
   status: () => Promise<ToolchainStatus>;
   setMode: (mode: ToolchainMode) => Promise<ToolchainStatus>;
+  setIgnorePatterns: (patterns: string) => Promise<ToolchainStatus>;
 }
 
 export function createTauriToolchainAdapter(): ToolchainAdapter {
@@ -30,6 +32,10 @@ export function createTauriToolchainAdapter(): ToolchainAdapter {
     setMode: (mode) =>
       invoke<ToolchainStatus>('toolchain_set_mode', {
         request: { mode },
+      }),
+    setIgnorePatterns: (patterns) =>
+      invoke<ToolchainStatus>('toolchain_set_ignore_patterns', {
+        request: { patterns },
       }),
   };
 }

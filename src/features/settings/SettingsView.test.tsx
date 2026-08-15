@@ -25,6 +25,7 @@ describe('SettingsView', () => {
       onRepositoryBasePathChange: vi.fn<SettingsViewProps['onRepositoryBasePathChange']>(),
       onChooseRepositoryBasePath: vi.fn<SettingsViewProps['onChooseRepositoryBasePath']>(),
       onOpenFilesAndFoldersSettings: vi.fn<SettingsViewProps['onOpenFilesAndFoldersSettings']>(),
+      onIgnorePatternsChange: vi.fn<SettingsViewProps['onIgnorePatternsChange']>(),
       onToolchainModeChange: vi.fn<SettingsViewProps['onToolchainModeChange']>(),
     };
     const settingsProps: ComponentProps<typeof SettingsView> = {
@@ -51,6 +52,7 @@ describe('SettingsView', () => {
         gitLfs: { available: true, path: '/app/git-lfs', version: 'git-lfs/3.7.1', error: null },
         gitFlow: { available: true, path: '/app/git-flow', version: '1.2.0', error: null },
         gpgAvailable: true,
+        ignorePatterns: '.DS_Store\n._*\nThumbs.db\n[Dd]esktop.ini',
       },
       ...handlers,
     };
@@ -189,7 +191,36 @@ describe('SettingsView', () => {
     await user.click(gitButton);
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
-    ).toEqual(['Git Toolchain']);
+    ).toEqual(['Global Ignore List', 'Git Toolchain']);
+    const ignorePatterns = screen.getByRole('textbox', { name: 'Global Ignore List' });
+    expect(ignorePatterns).toHaveValue('.DS_Store\n._*\nThumbs.db\n[Dd]esktop.ini');
+    await user.click(ignorePatterns);
+    await user.tab();
+    expect(handlers.onIgnorePatternsChange).not.toHaveBeenCalled();
+    await user.clear(ignorePatterns);
+    await user.type(ignorePatterns, '# custom\n*.tmp\n!important.tmp');
+    await user.tab();
+    expect(handlers.onIgnorePatternsChange).toHaveBeenCalledWith('# custom\n*.tmp\n!important.tmp');
+    expect(ignorePatterns).toHaveValue('# custom\n*.tmp\n!important.tmp');
+    rerender(<SettingsView {...settingsProps} toolchainBusy />);
+    expect(screen.getByRole('textbox', { name: 'Global Ignore List' })).toBeDisabled();
+    rerender(<SettingsView {...settingsProps} />);
+    expect(screen.getByRole('textbox', { name: 'Global Ignore List' })).toHaveValue(
+      '# custom\n*.tmp\n!important.tmp',
+    );
+    rerender(
+      <SettingsView
+        {...settingsProps}
+        toolchainStatus={{
+          ...settingsProps.toolchainStatus!,
+          ignorePatterns: '# custom\n*.tmp\n!important.tmp',
+        }}
+      />,
+    );
+    const savedIgnorePatterns = screen.getByRole('textbox', { name: 'Global Ignore List' });
+    await user.clear(savedIgnorePatterns);
+    await user.tab();
+    expect(handlers.onIgnorePatternsChange).toHaveBeenLastCalledWith('');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Git Toolchain' }), 'system');
     expect(handlers.onToolchainModeChange).toHaveBeenCalledWith('system');
     expect(screen.getByText('Current session')).toBeVisible();
@@ -198,6 +229,11 @@ describe('SettingsView', () => {
     const loadingSettingsProps = { ...settingsProps };
     delete loadingSettingsProps.toolchainStatus;
     rerender(<SettingsView {...loadingSettingsProps} />);
+    expect(screen.getByRole('region', { name: 'Global Ignore List' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(screen.getByRole('textbox', { name: 'Global Ignore List' })).toBeDisabled();
     const toolchain = screen.getByRole('region', { name: 'Git Toolchain' });
     expect(toolchain).toHaveAttribute('aria-busy', 'true');
     expect(toolchain.querySelectorAll('.settings-toolchain-modes > div')).toHaveLength(2);

@@ -122,8 +122,9 @@ mockとの差異は承認済みの方針に従ったものです。
 
 - ActivityとSettingsは隣接した独立画面で、Activityを先に配置し、Workspace Log drawerは設けていません。
 - Settingsは左側の幅200pxの一覧から一般、権限、外観、変更、エディタ、Gitを切り替え、右側の詳細paneだけをスクロールします。  
-  選択式の設定項目はselectで選択し、リポジトリの保存先とGitツールチェーンの操作欄は説明の下に表示します。  
-  リポジトリの保存先は最大560px、Gitツールチェーンの選択欄は220pxで表示します。
+  選択式の設定項目はselectで選択し、リポジトリの保存先、グローバル無視リスト、Gitツールチェーンの操作欄は説明の下に表示します。
+  グローバル無視リストはGitカテゴリの先頭に複数行入力で表示します。
+  リポジトリの保存先とグローバル無視リストは最大560px、Gitツールチェーンの選択欄は220pxで表示します。
 - 上部のCommit、Active、Contributor、Branchのsummary領域は表示しません。
 - 全体の操作tableにはStatus、Action、Summary、Timestamp、Durationを表示し、行全体をpointerとkeyboardで選択できます。
 - 操作tableのStatus列と下部の詳細領域には、内容がpane端へ密着しない余白を設けます。

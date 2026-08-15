@@ -231,6 +231,40 @@ describe('Changes', () => {
     await expect($('.diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  it('applies the global ignore list without changing plain Git behavior', async () => {
+    const ignoredPath = 'stella-e2e-only.ignore';
+    await writeRepositoryFile(repositoryPath, ignoredPath, 'ignored by Stella\n');
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    const stageIgnoredFile = `input[aria-label="ステージ ${ignoredPath}"]`;
+    await $(stageIgnoredFile).waitForExist();
+
+    await $('button=設定').click();
+    await $('button[data-settings-category="git"]').click();
+    const ignorePatterns = $('textarea[name="ignore-patterns"]');
+    await ignorePatterns.waitForEnabled();
+    const originalPatterns = await ignorePatterns.getValue();
+    const testPatterns = `${originalPatterns}${originalPatterns.endsWith('\n') ? '' : '\n'}${ignoredPath}`;
+
+    try {
+      await ignorePatterns.setValue(testPatterns);
+      await browser.keys(['Tab']);
+      await ignorePatterns.waitForEnabled();
+      await $('button=変更').click();
+      await $(stageIgnoredFile).waitForExist({ reverse: true, timeout: 10_000 });
+      expect(await runGit(repositoryPath, ['status', '--short'])).toContain(ignoredPath);
+    } finally {
+      await $('button=設定').click();
+      await $('button[data-settings-category="git"]').click();
+      const restorePatterns = $('textarea[name="ignore-patterns"]');
+      await restorePatterns.waitForEnabled();
+      await restorePatterns.setValue(originalPatterns);
+      await browser.keys(['Tab']);
+      await restorePatterns.waitForEnabled();
+      await $('button=変更').click();
+      await $(stageIgnoredFile).waitForExist({ timeout: 10_000 });
+    }
+  });
+
   it('commits every change when Stage display is hidden', async () => {
     await $('button=設定').click();
     await selectSetting('stage-display', 'hide');

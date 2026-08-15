@@ -16,6 +16,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const SETTINGS_FILE: &str = "toolchain.json";
+const EFFECTIVE_IGNORE_FILE: &str = "effective.gitignore";
+const DEFAULT_IGNORE_PATTERNS: &str = ".DS_Store\n._*\nThumbs.db\n[Dd]esktop.ini";
 const BUNDLED_DIRECTORY: &str = "toolchain";
 const SEARCH_DIRECTORIES: [&str; 3] = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
 const SYSTEM_FALLBACK_DIRECTORIES: [&str; 5] = [
@@ -106,6 +108,7 @@ pub struct ToolchainStatus {
     pub git_lfs: ToolchainComponentStatus,
     pub git_flow: ToolchainComponentStatus,
     pub gpg_available: bool,
+    pub ignore_patterns: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -114,11 +117,27 @@ pub struct SetToolchainModeRequest {
     pub mode: ToolchainMode,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetIgnorePatternsRequest {
+    pub patterns: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct PersistedSettings {
     #[serde(default)]
     toolchain_mode: ToolchainMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ignore_patterns: Option<String>,
+}
+
+impl PersistedSettings {
+    fn ignore_patterns(&self) -> &str {
+        self.ignore_patterns
+            .as_deref()
+            .unwrap_or(DEFAULT_IGNORE_PATTERNS)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,11 +158,11 @@ struct ResolvedToolchain {
 }
 
 impl ResolvedToolchain {
-    fn executor(&self, active_system_path: Option<&OsStr>) -> GitExecutor {
-        let git_path = self
-            .git
-            .path_buf()
-            .unwrap_or_else(|| PathBuf::from("/nonexistent/stella-git"));
+    fn environment(
+        &self,
+        active_system_path: Option<&OsStr>,
+        effective_ignore_path: Option<&Path>,
+    ) -> Vec<(OsString, OsString)> {
         let mut environment = Vec::<(OsString, OsString)>::new();
         let path = match &self.root {
             Some(root) => join_search_path(
@@ -193,7 +212,32 @@ impl ResolvedToolchain {
             environment.push((format!("GIT_CONFIG_KEY_{index}").into(), key.into()));
             environment.push((format!("GIT_CONFIG_VALUE_{index}").into(), value.into()));
         }
-        environment.push(("GIT_CONFIG_COUNT".into(), "4".into()));
+        let mut config_count = lfs_filter.len();
+        if let Some(path) = effective_ignore_path {
+            environment.push((
+                format!("GIT_CONFIG_KEY_{config_count}").into(),
+                "core.excludesFile".into(),
+            ));
+            environment.push((
+                format!("GIT_CONFIG_VALUE_{config_count}").into(),
+                path.as_os_str().to_owned(),
+            ));
+            config_count += 1;
+        }
+        environment.push(("GIT_CONFIG_COUNT".into(), config_count.to_string().into()));
+        environment
+    }
+
+    fn executor(
+        &self,
+        active_system_path: Option<&OsStr>,
+        effective_ignore_path: Option<&Path>,
+    ) -> GitExecutor {
+        let git_path = self
+            .git
+            .path_buf()
+            .unwrap_or_else(|| PathBuf::from("/nonexistent/stella-git"));
+        let environment = self.environment(active_system_path, effective_ignore_path);
 
         GitExecutor::configured(
             git_path,
@@ -204,7 +248,12 @@ impl ResolvedToolchain {
         )
     }
 
-    fn status(&self, active_mode: ToolchainMode, selected_mode: ToolchainMode) -> ToolchainStatus {
+    fn status(
+        &self,
+        active_mode: ToolchainMode,
+        selected_mode: ToolchainMode,
+        ignore_patterns: String,
+    ) -> ToolchainStatus {
         ToolchainStatus {
             active_mode,
             selected_mode,
@@ -213,20 +262,22 @@ impl ResolvedToolchain {
             git_lfs: self.git_lfs.clone(),
             git_flow: self.git_flow.clone(),
             gpg_available: self.gpg_available,
+            ignore_patterns,
         }
     }
 }
 
 pub struct ToolchainManager {
     settings_path: PathBuf,
+    effective_ignore_path: PathBuf,
     resource_directory: PathBuf,
-    selected_mode: Mutex<ToolchainMode>,
+    settings: Mutex<PersistedSettings>,
     active: ResolvedToolchain,
     active_system_path: Option<OsString>,
 }
 
 impl ToolchainManager {
-    pub fn load(config_directory: PathBuf, resource_directory: PathBuf) -> Self {
+    pub fn load(config_directory: PathBuf, resource_directory: PathBuf) -> WorkspaceResult<Self> {
         Self::load_with_system_path_resolver(
             config_directory,
             resource_directory,
@@ -238,9 +289,11 @@ impl ToolchainManager {
         config_directory: PathBuf,
         resource_directory: PathBuf,
         system_path_resolver: impl FnOnce(&ResolvedToolchain) -> OsString,
-    ) -> Self {
+    ) -> WorkspaceResult<Self> {
         let settings_path = config_directory.join(SETTINGS_FILE);
-        let selected_mode = read_settings(&settings_path).toolchain_mode;
+        let effective_ignore_path = config_directory.join(EFFECTIVE_IGNORE_FILE);
+        let settings = read_settings(&settings_path);
+        let selected_mode = settings.toolchain_mode;
         let (active, active_system_path) = match selected_mode {
             ToolchainMode::Bundled => (resolve_bundled(&resource_directory), None),
             ToolchainMode::System => {
@@ -249,32 +302,48 @@ impl ToolchainManager {
                 (active, Some(path))
             }
         };
-        Self {
+        let global_ignore_path =
+            resolve_global_ignore_path(&active, active_system_path.as_deref())?;
+        write_effective_ignore_file(
+            &effective_ignore_path,
+            global_ignore_path.as_deref(),
+            settings.ignore_patterns(),
+        )?;
+        Ok(Self {
             settings_path,
+            effective_ignore_path,
             resource_directory,
-            selected_mode: Mutex::new(selected_mode),
+            settings: Mutex::new(settings),
             active,
             active_system_path,
-        }
+        })
     }
 
     pub(crate) fn executor(&self) -> GitExecutor {
-        self.active.executor(self.active_system_path.as_deref())
+        self.active.executor(
+            self.active_system_path.as_deref(),
+            Some(&self.effective_ignore_path),
+        )
     }
 
     pub fn status(&self) -> ToolchainStatus {
-        let selected_mode = *self
-            .selected_mode
+        let settings = self
+            .settings
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        let selected_mode = settings.toolchain_mode;
+        let ignore_patterns = settings.ignore_patterns().to_owned();
         if self.active.mode == selected_mode {
-            return self.active.status(self.active.mode, selected_mode);
+            return self
+                .active
+                .status(self.active.mode, selected_mode, ignore_patterns);
         }
         let selected = match selected_mode {
             ToolchainMode::Bundled => resolve_bundled(&self.resource_directory),
             ToolchainMode::System => resolve_system(),
         };
-        selected.status(self.active.mode, selected_mode)
+        selected.status(self.active.mode, selected_mode, ignore_patterns)
     }
 
     pub fn set_mode(&self, mode: ToolchainMode) -> WorkspaceResult<ToolchainStatus> {
@@ -296,11 +365,39 @@ impl ToolchainManager {
                     .unwrap_or_else(|| "Git unavailable".into()),
             ));
         }
-        write_settings(&self.settings_path, mode)?;
-        *self
-            .selected_mode
+        let mut settings = self
+            .settings
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = mode;
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut updated = settings.clone();
+        updated.toolchain_mode = mode;
+        write_settings(&self.settings_path, &updated)?;
+        *settings = updated;
+        drop(settings);
+        Ok(self.status())
+    }
+
+    pub fn set_ignore_patterns(&self, patterns: String) -> WorkspaceResult<ToolchainStatus> {
+        let global_ignore_path =
+            resolve_global_ignore_path(&self.active, self.active_system_path.as_deref())?;
+        let mut settings = self
+            .settings
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = settings.clone();
+        let mut updated = previous.clone();
+        updated.ignore_patterns = Some(patterns);
+        write_settings(&self.settings_path, &updated)?;
+        if let Err(error) = write_effective_ignore_file(
+            &self.effective_ignore_path,
+            global_ignore_path.as_deref(),
+            updated.ignore_patterns(),
+        ) {
+            let _ = write_settings(&self.settings_path, &previous);
+            return Err(error);
+        }
+        *settings = updated;
+        drop(settings);
         Ok(self.status())
     }
 }
@@ -575,24 +672,112 @@ fn read_settings(path: &Path) -> PersistedSettings {
         .unwrap_or_default()
 }
 
-fn write_settings(path: &Path, mode: ToolchainMode) -> WorkspaceResult<()> {
+fn write_settings(path: &Path, settings: &PersistedSettings) -> WorkspaceResult<()> {
     let parent = path.parent().ok_or_else(|| {
         WorkspaceError::new(ErrorCode::Internal, "toolchain設定pathを解決できません。")
     })?;
     fs::create_dir_all(parent).map_err(settings_io_error)?;
     let temporary = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(&PersistedSettings {
-        toolchain_mode: mode,
-    })
-    .map_err(|error| WorkspaceError::new(ErrorCode::Internal, error.to_string()))?;
+    let bytes = serde_json::to_vec_pretty(settings)
+        .map_err(|error| WorkspaceError::new(ErrorCode::Internal, error.to_string()))?;
     fs::write(&temporary, bytes).map_err(settings_io_error)?;
     fs::rename(&temporary, path).map_err(settings_io_error)
+}
+
+fn resolve_global_ignore_path(
+    toolchain: &ResolvedToolchain,
+    active_system_path: Option<&OsStr>,
+) -> WorkspaceResult<Option<PathBuf>> {
+    if let Some(git_path) = toolchain.git.path_buf() {
+        for scope in ["--global", "--system"] {
+            let output = Command::new(&git_path)
+                .args(["config", scope, "--path", "--get", "core.excludesFile"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .env("LC_ALL", "C")
+                .env("LANG", "C")
+                .envs(toolchain.environment(active_system_path, None))
+                .output()
+                .map_err(ignore_io_error)?;
+            if output.status.success() {
+                let mut path = output.stdout;
+                while path
+                    .last()
+                    .is_some_and(|byte| matches!(byte, b'\n' | b'\r'))
+                {
+                    path.pop();
+                }
+                return Ok((!path.is_empty()).then(|| PathBuf::from(OsString::from_vec(path))));
+            }
+            if output.status.code() != Some(1) {
+                return Err(WorkspaceError::new(
+                    ErrorCode::Io,
+                    format!(
+                        "Git共通無視設定を確認できませんでした: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(default_global_ignore_path())
+}
+
+fn default_global_ignore_path() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .map(|directory| directory.join("git/ignore"))
+}
+
+fn effective_ignore_contents(
+    global_ignore_path: Option<&Path>,
+    ignore_patterns: &str,
+) -> WorkspaceResult<Vec<u8>> {
+    let mut contents = match global_ignore_path.map(fs::read).transpose() {
+        Ok(Some(contents)) => contents,
+        Ok(None) => Vec::new(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(ignore_io_error(error)),
+    };
+    if !contents.is_empty() && !ignore_patterns.is_empty() && !contents.ends_with(b"\n") {
+        contents.push(b'\n');
+    }
+    contents.extend_from_slice(ignore_patterns.as_bytes());
+    Ok(contents)
+}
+
+fn write_effective_ignore_file(
+    path: &Path,
+    global_ignore_path: Option<&Path>,
+    ignore_patterns: &str,
+) -> WorkspaceResult<()> {
+    let parent = path.parent().ok_or_else(|| {
+        WorkspaceError::new(
+            ErrorCode::Internal,
+            "有効な無視リストのパスを解決できません。",
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(ignore_io_error)?;
+    let contents = effective_ignore_contents(global_ignore_path, ignore_patterns)?;
+    let temporary = path.with_extension("gitignore.tmp");
+    fs::write(&temporary, contents).map_err(ignore_io_error)?;
+    fs::rename(&temporary, path).map_err(ignore_io_error)
 }
 
 fn settings_io_error(error: std::io::Error) -> WorkspaceError {
     WorkspaceError::new(
         ErrorCode::Io,
         format!("toolchain設定を保存できませんでした: {error}"),
+    )
+}
+
+fn ignore_io_error(error: std::io::Error) -> WorkspaceError {
+    WorkspaceError::new(
+        ErrorCode::Io,
+        format!("グローバル無視リストを処理できませんでした: {error}"),
     )
 }
 
@@ -607,6 +792,14 @@ pub fn toolchain_set_mode(
     request: SetToolchainModeRequest,
 ) -> WorkspaceResult<ToolchainStatus> {
     manager.set_mode(request.mode)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn toolchain_set_ignore_patterns(
+    manager: tauri::State<'_, ToolchainManager>,
+    request: SetIgnorePatternsRequest,
+) -> WorkspaceResult<ToolchainStatus> {
+    manager.set_ignore_patterns(request.patterns)
 }
 
 #[cfg(test)]
@@ -661,20 +854,317 @@ mod tests {
     #[test]
     fn missing_setting_defaults_to_bundled() {
         let directory = TempDir::new().unwrap();
-        assert_eq!(
-            read_settings(&directory.path().join(SETTINGS_FILE)).toolchain_mode,
-            ToolchainMode::Bundled
-        );
+        let settings = read_settings(&directory.path().join(SETTINGS_FILE));
+        assert_eq!(settings.toolchain_mode, ToolchainMode::Bundled);
+        assert_eq!(settings.ignore_patterns(), DEFAULT_IGNORE_PATTERNS);
+    }
+
+    #[test]
+    fn saved_empty_ignore_patterns_are_not_replaced_with_defaults() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(SETTINGS_FILE);
+        let settings = PersistedSettings {
+            ignore_patterns: Some(String::new()),
+            ..PersistedSettings::default()
+        };
+        write_settings(&path, &settings).unwrap();
+
+        assert_eq!(read_settings(&path).ignore_patterns(), "");
     }
 
     #[test]
     fn selected_mode_is_saved_without_changing_active_mode() {
         let directory = TempDir::new().unwrap();
         let settings_path = directory.path().join(SETTINGS_FILE);
-        write_settings(&settings_path, ToolchainMode::System).unwrap();
+        write_settings(
+            &settings_path,
+            &PersistedSettings {
+                toolchain_mode: ToolchainMode::System,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
         assert_eq!(
             read_settings(&settings_path).toolchain_mode,
             ToolchainMode::System
+        );
+    }
+
+    #[test]
+    fn persisted_settings_keep_mode_and_ignore_patterns_together() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(SETTINGS_FILE);
+        let settings = PersistedSettings {
+            toolchain_mode: ToolchainMode::System,
+            ignore_patterns: Some("custom.tmp\n!keep.tmp".into()),
+        };
+        write_settings(&path, &settings).unwrap();
+
+        assert_eq!(read_settings(&path), settings);
+    }
+
+    #[test]
+    fn manager_updates_keep_mode_and_ignore_patterns_together() {
+        let directory = TempDir::new().unwrap();
+        let settings_path = directory.path().join(SETTINGS_FILE);
+        let effective_ignore_path = directory.path().join(EFFECTIVE_IGNORE_FILE);
+        let missing_global_ignore = directory.path().join("missing-global-ignore");
+        let git = directory.path().join("git");
+        write_executable(
+            &git,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' '{}'\n",
+                missing_global_ignore.display()
+            ),
+        );
+        let persisted = PersistedSettings {
+            toolchain_mode: ToolchainMode::System,
+            ignore_patterns: None,
+        };
+        write_settings(&settings_path, &persisted).unwrap();
+        let manager = ToolchainManager {
+            settings_path: settings_path.clone(),
+            effective_ignore_path,
+            resource_directory: directory.path().join("resources"),
+            settings: Mutex::new(persisted),
+            active: system_toolchain(&git),
+            active_system_path: Some(fixed_system_path()),
+        };
+
+        manager.set_ignore_patterns("custom.tmp".into()).unwrap();
+        assert_eq!(
+            read_settings(&settings_path),
+            PersistedSettings {
+                toolchain_mode: ToolchainMode::System,
+                ignore_patterns: Some("custom.tmp".into()),
+            }
+        );
+        manager.set_mode(ToolchainMode::System).unwrap();
+        assert_eq!(
+            read_settings(&settings_path).ignore_patterns(),
+            "custom.tmp"
+        );
+    }
+
+    #[test]
+    fn effective_ignore_joins_global_and_stella_patterns_without_normalizing_them() {
+        let directory = TempDir::new().unwrap();
+        let global = directory.path().join("global-ignore");
+        fs::write(&global, b"# global\nglobal-only.tmp").unwrap();
+
+        let contents =
+            effective_ignore_contents(Some(&global), "# stella\n!keep.tmp\nstella-only.tmp\n")
+                .unwrap();
+
+        assert_eq!(
+            contents,
+            b"# global\nglobal-only.tmp\n# stella\n!keep.tmp\nstella-only.tmp\n"
+        );
+        assert_eq!(
+            effective_ignore_contents(Some(&global), "").unwrap(),
+            b"# global\nglobal-only.tmp"
+        );
+    }
+
+    #[test]
+    fn global_ignore_resolution_uses_only_global_and_system_scopes() {
+        let directory = TempDir::new().unwrap();
+        let git = directory.path().join("git");
+        let system_ignore = directory.path().join("system-ignore");
+        write_executable(
+            &git,
+            format!(
+                "#!/bin/sh\ncase \"$2\" in\n  --global) exit 1 ;;\n  --system) printf '%s\\n' '{}' ;;\n  *) printf '%s\\n' '/repo-local-ignore' ;;\nesac\n",
+                system_ignore.display()
+            ),
+        );
+
+        assert_eq!(
+            resolve_global_ignore_path(&system_toolchain(&git), None).unwrap(),
+            Some(system_ignore)
+        );
+    }
+
+    #[test]
+    fn configured_empty_global_ignore_disables_the_xdg_fallback() {
+        let directory = TempDir::new().unwrap();
+        let git = directory.path().join("git");
+        write_executable(
+            &git,
+            "#!/bin/sh\ncase \"$2\" in\n  --global) printf '\\n' ;;\n  --system) printf '%s\\n' '/system-ignore' ;;\nesac\n",
+        );
+
+        assert_eq!(
+            resolve_global_ignore_path(&system_toolchain(&git), None).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn failed_effective_ignore_write_keeps_the_previous_file() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(EFFECTIVE_IGNORE_FILE);
+        fs::write(&path, b"previous\n").unwrap();
+        fs::create_dir(path.with_extension("gitignore.tmp")).unwrap();
+
+        assert!(write_effective_ignore_file(&path, None, "replacement").is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"previous\n");
+    }
+
+    #[test]
+    fn effective_ignore_applies_only_to_the_configured_executor() {
+        let directory = TempDir::new().unwrap();
+        let repo = directory.path().join("repo");
+        let effective = directory.path().join(EFFECTIVE_IGNORE_FILE);
+        fs::write(&effective, b"global-only.tmp\nstella-only.tmp\n").unwrap();
+        let resolved = system_toolchain(Path::new("/usr/bin/git"));
+        let executor = resolved.executor(None, Some(&effective));
+        executor
+            .run(
+                None,
+                crate::git::GitCommand::Init {
+                    path: repo.clone(),
+                    initial_branch: "main".into(),
+                },
+                None,
+                None,
+            )
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+        fs::write(repo.join(".gitignore"), b"repository-only.tmp\n").unwrap();
+        fs::write(repo.join(".git/info/exclude"), b"info-only.tmp\n").unwrap();
+        for path in [
+            "global-only.tmp",
+            "stella-only.tmp",
+            "repository-only.tmp",
+            "info-only.tmp",
+        ] {
+            fs::write(repo.join(path), b"content\n").unwrap();
+        }
+
+        let stella_status = executor
+            .run(Some(&repo), crate::git::GitCommand::Status, None, None)
+            .unwrap()
+            .ensure_success()
+            .unwrap()
+            .stdout_text();
+        for ignored in [
+            "global-only.tmp",
+            "stella-only.tmp",
+            "repository-only.tmp",
+            "info-only.tmp",
+        ] {
+            assert!(!stella_status.contains(ignored));
+        }
+
+        let plain_status = Command::new("/usr/bin/git")
+            .args(["status", "--porcelain", "--untracked-files=all"])
+            .current_dir(&repo)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(plain_status.status.success());
+        let plain_status = String::from_utf8_lossy(&plain_status.stdout);
+        assert!(plain_status.contains("global-only.tmp"));
+        assert!(plain_status.contains("stella-only.tmp"));
+
+        executor
+            .run(Some(&repo), crate::git::GitCommand::AddAll, None, None)
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+        let staged = Command::new("/usr/bin/git")
+            .args(["diff", "--cached", "--name-only"])
+            .current_dir(&repo)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .output()
+            .unwrap();
+        assert!(staged.status.success());
+        let staged = String::from_utf8_lossy(&staged.stdout);
+        assert!(!staged.contains("global-only.tmp"));
+        assert!(!staged.contains("stella-only.tmp"));
+
+        let forced = Command::new("/usr/bin/git")
+            .args(["add", "--force", "--", "stella-only.tmp"])
+            .current_dir(&repo)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .status()
+            .unwrap();
+        assert!(forced.success());
+        fs::write(repo.join("stella-only.tmp"), b"updated\n").unwrap();
+        let tracked_status = executor
+            .run(Some(&repo), crate::git::GitCommand::Status, None, None)
+            .unwrap()
+            .ensure_success()
+            .unwrap()
+            .stdout_text();
+        assert!(tracked_status.contains("stella-only.tmp"));
+    }
+
+    #[test]
+    fn existing_executor_observes_saved_ignore_patterns() {
+        let directory = TempDir::new().unwrap();
+        let git = directory.path().join("git");
+        write_executable(
+            &git,
+            "#!/bin/sh\nif [ \"$1\" = config ]; then printf '\\n'; exit 0; fi\nexec /usr/bin/git \"$@\"\n",
+        );
+        let settings_path = directory.path().join(SETTINGS_FILE);
+        let effective_ignore_path = directory.path().join(EFFECTIVE_IGNORE_FILE);
+        let settings = PersistedSettings {
+            toolchain_mode: ToolchainMode::System,
+            ignore_patterns: Some(String::new()),
+        };
+        write_settings(&settings_path, &settings).unwrap();
+        write_effective_ignore_file(&effective_ignore_path, None, "").unwrap();
+        let manager = ToolchainManager {
+            settings_path,
+            effective_ignore_path,
+            resource_directory: directory.path().join("resources"),
+            settings: Mutex::new(settings),
+            active: system_toolchain(&git),
+            active_system_path: Some(fixed_system_path()),
+        };
+        let executor = manager.executor();
+        let repo = directory.path().join("repo");
+        executor
+            .run(
+                None,
+                crate::git::GitCommand::Init {
+                    path: repo.clone(),
+                    initial_branch: "main".into(),
+                },
+                None,
+                None,
+            )
+            .unwrap()
+            .ensure_success()
+            .unwrap();
+        fs::write(repo.join("saved.ignore"), b"content\n").unwrap();
+        assert!(
+            executor
+                .run(Some(&repo), crate::git::GitCommand::Status, None, None)
+                .unwrap()
+                .ensure_success()
+                .unwrap()
+                .stdout_text()
+                .contains("saved.ignore")
+        );
+
+        manager.set_ignore_patterns("saved.ignore".into()).unwrap();
+
+        assert!(
+            !executor
+                .run(Some(&repo), crate::git::GitCommand::Status, None, None)
+                .unwrap()
+                .ensure_success()
+                .unwrap()
+                .stdout_text()
+                .contains("saved.ignore")
         );
     }
 
@@ -689,7 +1179,11 @@ mod tests {
             git_flow: component,
             gpg_available: false,
         };
-        let status = selected.status(ToolchainMode::Bundled, ToolchainMode::System);
+        let status = selected.status(
+            ToolchainMode::Bundled,
+            ToolchainMode::System,
+            DEFAULT_IGNORE_PATTERNS.into(),
+        );
         assert!(status.restart_required);
         assert_eq!(status.active_mode, ToolchainMode::Bundled);
         assert_eq!(status.selected_mode, ToolchainMode::System);
@@ -852,7 +1346,8 @@ mod tests {
             directory.path().join("config"),
             directory.path().join("resources"),
             |_| panic!("System PATH resolver must not run in bundled mode"),
-        );
+        )
+        .unwrap();
     }
 
     #[test]
@@ -860,7 +1355,14 @@ mod tests {
         let directory = TempDir::new().unwrap();
         let config = directory.path().join("config");
         let settings = config.join(SETTINGS_FILE);
-        write_settings(&settings, ToolchainMode::System).unwrap();
+        write_settings(
+            &settings,
+            &PersistedSettings {
+                toolchain_mode: ToolchainMode::System,
+                ..PersistedSettings::default()
+            },
+        )
+        .unwrap();
         let calls = Cell::new(0);
         let manager = ToolchainManager::load_with_system_path_resolver(
             config,
@@ -869,7 +1371,8 @@ mod tests {
                 calls.set(calls.get() + 1);
                 fixed_system_path()
             },
-        );
+        )
+        .unwrap();
         let _ = manager.executor();
         let _ = manager.executor();
 
@@ -902,7 +1405,7 @@ mod tests {
             git_flow: unavailable,
             gpg_available: false,
         };
-        let executor = resolved.executor(None);
+        let executor = resolved.executor(None, None);
         let directory = TempDir::new().unwrap();
         executor
             .run(
@@ -955,7 +1458,7 @@ mod tests {
         );
         let resolved = system_toolchain(Path::new("/usr/bin/git"));
         let active_path = resolve_system_path_for_shell(&resolved, &shell, Duration::from_secs(5));
-        let executor = resolved.executor(Some(&active_path));
+        let executor = resolved.executor(Some(&active_path), None);
         let repo = directory.path().join("repo");
         executor
             .run(

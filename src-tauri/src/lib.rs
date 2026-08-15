@@ -43,7 +43,7 @@ pub fn run() {
             let manager = toolchain::ToolchainManager::load(
                 app.path().app_config_dir()?,
                 app.path().resource_dir()?,
-            );
+            )?;
             let executor = manager
                 .executor()
                 .guard_development_build()
@@ -71,7 +71,8 @@ pub fn run() {
             app_menu::set_app_language,
             app_menu::open_files_and_folders_settings,
             toolchain::toolchain_status,
-            toolchain::toolchain_set_mode
+            toolchain::toolchain_set_mode,
+            toolchain::toolchain_set_ignore_patterns
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stella");
