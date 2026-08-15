@@ -13,7 +13,7 @@ export const config: WebdriverIO.Config = {
     [
       '@wdio/tauri-service',
       {
-        appBinaryPath: './target/release/stella',
+        appBinaryPath: './target/release/Stella (TEST)',
         driverProvider: 'embedded',
         embeddedPort: 4445,
         startTimeout: 60_000,

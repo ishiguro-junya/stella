@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stella (TEST)",
   "identifier": "com.emuni.stella.e2e",
   "bundle": {
     "icon": ["icons/icon.png"]
