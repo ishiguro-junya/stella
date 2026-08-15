@@ -573,7 +573,7 @@ describe('Changes', () => {
     const peerPath = await cloneLocalRemote(fixturePath, remotePath, 'pull-peer');
     await writeRepositoryFile(peerPath, 'remote-update.md', 'remote update\n');
     await runGit(peerPath, ['add', 'remote-update.md']);
-    await runGit(peerPath, ['commit', '-m', 'test: remoteから更新する']);
+    await runGit(peerPath, ['commit', '-m', 'test: リモートから更新する']);
     await runGit(peerPath, ['push', 'origin', 'main']);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
@@ -665,9 +665,24 @@ describe('Changes', () => {
     const tags = pushDialog.$('label=すべてのローカルタグをプッシュ').$('input');
     await force.click();
     await tags.click();
-    await expect(pushDialog.$('.inline-alert.warning')).toBeDisplayed();
+    await setLogicalWindowSize(860, 560);
+    const forceWarning = pushDialog.$('.inline-alert.warning');
+    await expect(forceWarning).toBeDisplayed();
+    await expect(forceWarning).toHaveText(
+      'リモートブランチの履歴を書き換える可能性があります。\nリモートブランチが想定外に更新されている場合は失敗します。',
+    );
+    expect((await forceWarning.getCSSProperty('white-space')).value).toBe('pre-line');
+    expect(
+      await browser.execute(() => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="push-dialog-title"]',
+        );
+        return dialog ? dialog.scrollWidth <= dialog.clientWidth : false;
+      }),
+    ).toBe(true);
     await expect(pushDialog.$('button[type="submit"]')).not.toHaveElementClass('danger');
     await pushDialog.$('button=キャンセル').click();
+    await setLogicalWindowSize(1180, 760);
 
     await $('.changes-action-button[aria-label="プッシュ"]').click();
     pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
@@ -685,7 +700,7 @@ describe('Changes', () => {
     const remotePath = `${fixturePath}/push-remote.git`;
     await ensureLocalBareRemote(repositoryPath, remotePath);
     await runGit(repositoryPath, ['add', 'README.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: remoteへ送信する']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: リモートへ送信する']);
     await runGit(repositoryPath, ['tag', 'e2e-local-tag']);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
@@ -710,10 +725,10 @@ describe('Changes', () => {
 
     await writeRepositoryFile(repositoryPath, 'local-update.md', 'local update\n');
     await runGit(repositoryPath, ['add', 'local-update.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: localを更新する']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: ローカルを更新する']);
     await writeRepositoryFile(peerPath, 'peer-update.md', 'peer update\n');
     await runGit(peerPath, ['add', 'peer-update.md']);
-    await runGit(peerPath, ['commit', '-m', 'test: peerから更新する']);
+    await runGit(peerPath, ['commit', '-m', 'test: ピアから更新する']);
     await runGit(peerPath, ['push', 'origin', 'main']);
     const peerHead = (await runGit(peerPath, ['rev-parse', 'HEAD'])).trim();
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
@@ -1326,11 +1341,11 @@ describe('Changes', () => {
     await runGit(repositoryPath, ['checkout', '-b', 'incoming']);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Incoming\n');
     await runGit(repositoryPath, ['add', 'README.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: Incoming側を変更する']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 取り込み側を変更する']);
     await runGit(repositoryPath, ['checkout', 'main']);
     await writeRepositoryFile(repositoryPath, 'README.md', '# Current\n');
     await runGit(repositoryPath, ['add', 'README.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: Current側を変更する']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 現在側を変更する']);
 
     let mergeConflicted = false;
     try {
@@ -1598,7 +1613,7 @@ describe('Changes', () => {
       .replace('old-b', 'new-b');
     await writeRepositoryFile(repositoryPath, 'README.md', base);
     await runGit(repositoryPath, ['add', '--', 'README.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: Hunk操作の基準を作る']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: ハンク操作の基準を作る']);
     await writeRepositoryFile(repositoryPath, 'README.md', changed);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await $('.change-item .file-status.modified').waitForExist({ timeout: 10_000 });

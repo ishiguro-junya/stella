@@ -732,7 +732,7 @@ rename to new.png
     const dialog = await openCommitAction(user, 'Create Tag', 'Create Tag');
     const input = within(dialog).getByRole('textbox', { name: 'Tag name' });
     expect(
-      screen.getByText('Creates a lightweight Tag locally. It is not pushed to a remote.'),
+      screen.getByText('Creates a lightweight tag locally. It is not pushed to a remote.'),
     ).toBeVisible();
     await user.type(input, 'v1.0.0');
     await user.click(within(dialog).getByRole('button', { name: 'Next' }));

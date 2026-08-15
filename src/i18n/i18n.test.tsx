@@ -3,7 +3,13 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { detectLanguage, I18nProvider, translate, useI18n, type Language } from './i18n';
-import { resources } from './messages';
+import { isMessageKey, resources } from './messages';
+
+function interpolationVariables(value: string) {
+  return [...value.matchAll(/\{\{([^,}]+)/gu)]
+    .flatMap((match) => (match[1] ? [match[1]] : []))
+    .toSorted((left, right) => left.localeCompare(right));
+}
 
 function Probe() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -38,6 +44,31 @@ describe('Stella i18n', () => {
     );
   });
 
+  it('keeps interpolation variables and sentence breaks aligned between catalogs', () => {
+    for (const id of Object.keys(resources.en.translation)) {
+      if (!isMessageKey(id)) throw new Error(`Unknown translation key: ${id}`);
+      const english = resources.en.translation[id];
+      const japanese = resources.ja.translation[id];
+      expect({ id, variables: interpolationVariables(japanese) }).toEqual({
+        id,
+        variables: interpolationVariables(english),
+      });
+      expect({ id, lines: japanese.split('\n').length }).toEqual({
+        id,
+        lines: english.split('\n').length,
+      });
+    }
+  });
+
+  it('starts each sentence on a new line', () => {
+    for (const translation of Object.values(resources.ja.translation)) {
+      expect(translation).not.toMatch(/[。！？](?=.)/u);
+    }
+    for (const translation of Object.values(resources.en.translation)) {
+      expect(translation).not.toMatch(/[.!?] (?=[A-Z{])/u);
+    }
+  });
+
   it('does not fall back to English when the selected catalog has no message', () => {
     i18next.removeResourceBundle('ja', 'translation');
     try {
@@ -63,7 +94,7 @@ describe('Stella i18n', () => {
       }),
     ).toBe('Stage all 2 unstaged files');
     expect(translate('ja', 'previewDeleteFiles', { count: 2 })).toBe(
-      '2ファイルを削除します。削除後はゴミ箱から復元できます。',
+      '2ファイルをゴミ箱へ移動します。\nゴミ箱から復元できます。',
     );
     expect(translate('en', 'uncommittedFileCount', { count: 1 })).toBe('1 file');
     expect(translate('en', 'uncommittedFileCount', { count: 2 })).toBe('2 files');
@@ -174,14 +205,14 @@ describe('Stella i18n', () => {
   it('uses the requested global ignore list copy in both languages', () => {
     expect(translate('en', 'ignorePatternsTitle')).toBe('Global Ignore List');
     expect(translate('en', 'ignorePatternsDescription')).toBe(
-      'Enter one pattern per line using .gitignore syntax. This applies to every repository opened in the app without affecting Terminal or other Git clients. Existing global Git ignore rules continue to apply.',
+      'Enter one pattern per line using .gitignore syntax.\nThis applies to every repository opened in the app without affecting Terminal or other Git clients.\nExisting global Git ignore rules continue to apply.',
     );
     expect(translate('en', 'ignorePatternsChangeFailed')).toBe(
       'The global ignore list could not be changed.',
     );
     expect(translate('ja', 'ignorePatternsTitle')).toBe('グローバル無視リスト');
     expect(translate('ja', 'ignorePatternsDescription')).toBe(
-      '1行に1つ、.gitignoreと同じ書式で入力します。このアプリで開くすべてのリポジトリに適用し、ターミナルや他のGitクライアントには影響しません。既存のGitの共通無視設定も引き続き適用されます。',
+      '1行に1つ、.gitignoreと同じ書式で入力します。\nこのアプリで開くすべてのリポジトリに適用し、ターミナルや他のGitクライアントには影響しません。\n既存のGitの共通無視設定も引き続き適用されます。',
     );
     expect(translate('ja', 'ignorePatternsChangeFailed')).toBe(
       'グローバル無視リストを変更できませんでした。',
@@ -190,11 +221,11 @@ describe('Stella i18n', () => {
 
   it('uses the requested Japanese Git toolchain copy', () => {
     expect(translate('ja', 'appearanceDescription')).toBe(
-      '外観のテーマをシステムに合わせるか、固定します。',
+      'macOSの外観に合わせるか、ライトまたはダークに固定します。',
     );
     expect(translate('ja', 'toolchainTitle')).toBe('Gitツールチェーン');
     expect(translate('ja', 'toolchainDescription')).toBe(
-      'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
+      '内蔵のGitツールチェーンと、このMacにインストール済みのGitツールチェーンから選択します。\n変更は再起動後に反映されます。',
     );
     expect(translate('ja', 'toolchainRestartRequired')).toBe(
       '変更を反映するにはアプリを再起動してください。',

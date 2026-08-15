@@ -841,7 +841,7 @@ describe('App repository attach', () => {
     expect(screen.getByRole('textbox')).toHaveValue('https://example.test/old.git');
   });
 
-  it('前回のリポジトリを復元している間は Repository Landing を表示しない', async () => {
+  it('前回のリポジトリを復元している間はリポジトリ開始画面を表示しない', async () => {
     const repo = repoSnapshot({ path: '/tmp/restored-stella' });
     writePreferences({
       ...DEFAULT_PREFERENCES,
@@ -1646,7 +1646,7 @@ describe('App repository attach', () => {
       repoId: repo.repoId,
       action: { kind: 'fileAction', paths: ['src/app.ts'], operation: 'moveToTrash' },
     });
-    const dialog = screen.getByRole('alertdialog', { name: 'Delete Files' });
+    const dialog = screen.getByRole('alertdialog', { name: 'Move Files to Trash' });
     expect(within(dialog).getByText('src/app.ts')).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(execute).toHaveBeenCalledWith({

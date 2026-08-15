@@ -529,6 +529,20 @@ kbd {
   font-size: 0.75rem;
 }
 
+.settings-row-copy p,
+.dialog-header p,
+.global-notice,
+.inline-alert,
+.file-action-notice,
+.commit-disabled-reason,
+.switcher-hint,
+.workspace-error-message,
+.external-conflict-panel > p,
+.diff-fallback > p,
+#create-tag-help {
+  white-space: pre-line;
+}
+
 .settings-row-copy .settings-permission-warning {
   margin-top: 8px;
   color: var(--danger);

@@ -40,7 +40,7 @@ vi.mock('./features/diff/DiffSurface', async () => {
 import { AppRoot } from './AppRoot';
 
 describe('AppRoot', () => {
-  it('StrictModeの再マウント対象からDiff worker poolを除外する', () => {
+  it('StrictModeの再マウント対象から差分表示用ワーカープールを除外する', () => {
     const view = render(<AppRoot />);
 
     expect(appRender).toHaveBeenCalledTimes(2);

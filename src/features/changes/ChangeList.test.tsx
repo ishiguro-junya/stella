@@ -473,7 +473,7 @@ describe('ChangeList file actions', () => {
     ]);
 
     fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
-    expect(screen.getByRole('menu', { name: '3 selected files actions' })).toBeVisible();
+    expect(screen.getByRole('menu', { name: 'Actions for 3 selected files' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     await user.click(screen.getByRole('menuitem', { name: 'Discard' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'discardChanges');
@@ -498,7 +498,7 @@ describe('ChangeList file actions', () => {
     expect(second).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.contextMenu(first, { clientX: 80, clientY: 100 });
-    expect(screen.getByRole('menu', { name: '2 selected files actions' })).toBeVisible();
+    expect(screen.getByRole('menu', { name: 'Actions for 2 selected files' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'moveToTrash');
