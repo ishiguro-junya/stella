@@ -779,6 +779,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       style={DIFF_FILE_COLLAPSE_TOGGLE_STYLE}
       aria-expanded={!isCollapsed}
       aria-label={t(isCollapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+      tooltip={t(isCollapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();

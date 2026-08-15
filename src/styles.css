@@ -73,6 +73,9 @@
   --shadow-control: 0 1px 1px rgb(20 20 24 / 8%);
   --shadow-panel: 0 10px 28px rgb(20 20 24 / 10%);
   --shadow-sheet: 0 26px 80px rgb(20 20 24 / 24%);
+  --tooltip-surface: light-dark(#1d1e22, #f8f8fa);
+  --tooltip-foreground: light-dark(#ffffff, #1c1c1e);
+  --tooltip-shadow: 0 8px 24px rgb(0 0 0 / 22%);
 }
 
 :root[data-font-size='80'] {
@@ -1821,30 +1824,57 @@ button:where(:has(> .lucide)) > span {
   pointer-events: none;
 }
 
-.row-action-tooltip {
+.app-tooltip {
   position: fixed;
   z-index: 80;
   width: max-content;
-  max-width: 220px;
-  padding: 4px 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-panel);
-  color: var(--text-primary);
-  font-size: 0.6875rem;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--tooltip-surface);
+  box-shadow: var(--tooltip-shadow);
+  color: var(--tooltip-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
   line-height: 1.35;
+  overflow-wrap: anywhere;
   pointer-events: none;
-  transform: translateX(-100%);
-  animation: row-action-tooltip-in 100ms ease 300ms both;
+  animation: app-tooltip-in 100ms ease-out both;
 }
 
-@keyframes row-action-tooltip-in {
+.app-tooltip::after {
+  position: absolute;
+  left: var(--tooltip-arrow-left);
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--tooltip-surface);
+  content: '';
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.app-tooltip[data-side='top']::after {
+  bottom: -4px;
+}
+
+.app-tooltip[data-side='bottom']::after {
+  top: -4px;
+}
+
+@keyframes app-tooltip-in {
   from {
     opacity: 0;
+    scale: 0.98;
   }
   to {
     opacity: 1;
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tooltip {
+    animation: none;
   }
 }
 

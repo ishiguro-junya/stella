@@ -40,7 +40,7 @@ describe('FileActionMenu', () => {
     const trigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
 
     await user.hover(trigger);
-    expect(screen.getByRole('tooltip')).toHaveTextContent('More actions');
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('More actions');
     await user.unhover(trigger);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 

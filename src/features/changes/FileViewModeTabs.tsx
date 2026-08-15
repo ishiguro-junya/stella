@@ -29,7 +29,7 @@ export function FileViewModeTabs({
         role="tab"
         aria-selected={mode === 'display'}
         aria-label={t('displayFile')}
-        title={t('displayFile')}
+        tooltip={t('displayFile')}
         disabled={displayDisabled}
         onClick={onDisplay}
       >
@@ -40,7 +40,7 @@ export function FileViewModeTabs({
         role="tab"
         aria-selected={mode === 'edit'}
         aria-label={t('editFile')}
-        title={t('editFile')}
+        tooltip={t('editFile')}
         disabled={editDisabled}
         onClick={onEdit}
       >

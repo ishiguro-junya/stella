@@ -142,6 +142,41 @@ describe('History', () => {
     await expect($('.history-view .diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  it('shows a tooltip when focusing a single-file diff toggle', async () => {
+    await writeRepositoryFile(repositoryPath, 'single-tooltip.txt', 'single file\n');
+    await runGit(repositoryPath, ['add', 'single-tooltip.txt']);
+    await runGit(repositoryPath, [
+      'commit',
+      '-m',
+      'test: 単一ファイル差分のツールチップを確認する',
+    ]);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 1, {
+      timeout: 10_000,
+      timeoutMsg: 'The single-file History diff did not render.',
+    });
+
+    const toggleLabel = await browser.execute(() => {
+      const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+      const toggle =
+        host?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle') ??
+        host?.shadowRoot?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle');
+      toggle?.focus();
+      return toggle?.getAttribute('aria-label');
+    });
+    if (!toggleLabel) throw new Error('The single-file diff toggle has no accessible label.');
+    await expect($('.app-tooltip')).toHaveText(toggleLabel);
+    await clickHistoryDiffToggle();
+    await browser.waitUntil(async () => (await historyDiffExpanded()) === false, {
+      timeoutMsg: 'The single-file History diff did not collapse.',
+    });
+  });
+
   it('keeps the Commit lane continuous and distinct from the working tree in Light and Dark appearances', async () => {
     await writeRepositoryFile(repositoryPath, 'SECOND.md', 'Second commit\n');
     await runGit(repositoryPath, ['add', 'SECOND.md']);
@@ -629,19 +664,19 @@ describe('History', () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLElement>('.history-commit-item .history-action-trigger')!
-        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
-    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    await expect($('.app-tooltip')).toHaveText('その他の操作');
     await expect($('.commit-detail-heading .history-action-trigger')).toExist();
     await browser.execute(() => {
       document
         .querySelector<HTMLElement>('.history-commit-item .history-action-trigger')!
-        .dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+        .dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
       document
         .querySelector<HTMLElement>('.commit-detail-heading .history-action-trigger')!
-        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
-    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    await expect($('.app-tooltip')).toHaveText('その他の操作');
     expect(
       await browser.execute(() => {
         const listPane = document.querySelector<HTMLElement>('.commit-list-pane')!;

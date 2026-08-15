@@ -648,6 +648,9 @@ export function ChangeList({
                     aria-label={t(groupCollapsed ? 'expandChangeGroup' : 'collapseChangeGroup', {
                       area: label,
                     })}
+                    tooltip={t(groupCollapsed ? 'expandChangeGroup' : 'collapseChangeGroup', {
+                      area: label,
+                    })}
                     onClick={() => {
                       setCollapsedGroups((current) => {
                         const next = new Set(current);

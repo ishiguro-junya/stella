@@ -187,7 +187,7 @@ export function BranchSwitcherDialog({
         <Button
           type="button"
           disabled={loading || Boolean(error) || Boolean(createDisabledReason)}
-          title={createDisabledReason}
+          tooltip={createDisabledReason}
           onClick={() => setCreating(true)}
         >
           <GitBranchPlus aria-hidden="true" focusable="false" />

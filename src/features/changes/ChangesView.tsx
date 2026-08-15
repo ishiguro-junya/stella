@@ -1245,7 +1245,7 @@ export function ChangesView({
         aria-label={t('commit')}
         aria-haspopup="dialog"
         aria-expanded={commitDialogOpen}
-        title={t('commit')}
+        tooltip={t('commit')}
         disabled={busy || unsavedDirty}
         onClick={() => setCommitDialogOpen(true)}
       >
@@ -1258,7 +1258,7 @@ export function ChangesView({
         aria-label={t('pull')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'pull'}
-        title={t('pull')}
+        tooltip={t('pull')}
         disabled={repositoryActionsDisabled || repo.branch.detached}
         aria-describedby={
           operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
@@ -1274,7 +1274,7 @@ export function ChangesView({
         aria-label={t('push')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'push'}
-        title={t('push')}
+        tooltip={t('push')}
         disabled={repositoryActionsDisabled || repo.branch.detached}
         aria-describedby={
           operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
@@ -1288,7 +1288,7 @@ export function ChangesView({
         variant="quiet"
         className="changes-action-button"
         aria-label={t('fetch')}
-        title={t('fetch')}
+        tooltip={t('fetch')}
         disabled={repositoryActionsDisabled}
         aria-describedby={
           operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
@@ -1385,6 +1385,9 @@ export function ChangesView({
               className="selected-file-toggle"
               aria-expanded={!collapsed}
               aria-label={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', {
+                path: entry.path,
+              })}
+              tooltip={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', {
                 path: entry.path,
               })}
               onClick={onToggle}

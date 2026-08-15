@@ -19,7 +19,7 @@ export function ImagePreviewToggle({ pressed, onPressedChange }: ImagePreviewTog
       variant="quiet"
       className="image-preview-toggle"
       aria-label={t('imagePreview')}
-      title={t('imagePreview')}
+      tooltip={t('imagePreview')}
       aria-pressed={pressed}
       onClick={() => onPressedChange(!pressed)}
     >

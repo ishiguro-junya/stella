@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -225,6 +225,10 @@ describe('SettingsView', () => {
     expect(handlers.onToolchainModeChange).toHaveBeenCalledWith('system');
     expect(screen.getByText('Current session')).toBeVisible();
     expect(screen.getByText('Next launch')).toBeVisible();
+    const gitPath = screen.getByText('/app/git', { selector: 'code' });
+    expect(gitPath).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(gitPath);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('/app/git');
 
     const loadingSettingsProps = { ...settingsProps };
     delete loadingSettingsProps.toolchainStatus;

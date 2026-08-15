@@ -283,7 +283,9 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
   await expect(dialog).toBeDisplayed();
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
-  await $(`.repository-toggle[title="${path}"]`).waitForDisplayed({ timeout: 10_000 });
+  await $(`.repository-toggle[data-repository-path="${path}"]`).waitForDisplayed({
+    timeout: 10_000,
+  });
 }
 
 export async function commitCurrentChange(description: string): Promise<void> {

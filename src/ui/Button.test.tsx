@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { describe, expect, it } from 'vitest';
 
@@ -18,5 +18,14 @@ describe('Button', () => {
     expect(button).toHaveClass('app-button', 'primary', 'custom');
     expect(button).toBeDisabled();
     expect(ref.current).toBe(button);
+  });
+
+  it('renders its tooltip without a native title', () => {
+    render(<Button tooltip="Save changes">Save</Button>);
+    const button = screen.getByRole('button', { name: 'Save' });
+
+    expect(button).not.toHaveAttribute('title');
+    fireEvent.focus(button);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Save changes');
   });
 });

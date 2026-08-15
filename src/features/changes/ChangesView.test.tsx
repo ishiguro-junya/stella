@@ -1189,13 +1189,15 @@ rename to new.png
     const pull = screen.getByRole('button', { name: 'Pull' });
     expect(pull).toBeEnabled();
     expect(pull).toHaveClass('changes-action-button');
-    expect(pull).toHaveAttribute('title', 'Pull');
+    fireEvent.focus(pull);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Pull');
+    expect(pull).not.toHaveAttribute('title');
     expect(pull.querySelector('span')).not.toBeInTheDocument();
     expect(pull).toHaveAttribute('aria-expanded', 'false');
     for (const label of ['Commit', 'Push', 'Fetch']) {
       const action = within(actions).getByRole('button', { name: label });
       expect(action).toHaveClass('changes-action-button');
-      expect(action).toHaveAttribute('title', label);
+      expect(action).not.toHaveAttribute('title');
       expect(action.querySelector('span')).not.toBeInTheDocument();
     }
   });
@@ -1610,7 +1612,9 @@ rename to new.png
     const displayTab = screen.getByRole('tab', { name: 'Display' });
     const editButton = screen.getByRole('tab', { name: 'Edit' });
     expect(displayTab).toHaveAttribute('aria-selected', 'true');
-    expect(editButton).toHaveAttribute('title', 'Edit');
+    fireEvent.focus(editButton);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Edit');
+    expect(editButton).not.toHaveAttribute('title');
     expect(editButton).toHaveAttribute('aria-selected', 'false');
     expect(editButton).not.toHaveTextContent('Edit');
     await user.click(editButton);

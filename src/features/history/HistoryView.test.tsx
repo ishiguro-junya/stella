@@ -890,9 +890,13 @@ rename to new.png
     );
 
     await waitFor(() => expect(screen.getAllByLabelText('Tag v1.2.3')).toHaveLength(2));
+    const tags = screen.getAllByLabelText('Tag v1.2.3');
     expect(screen.getAllByText('main')).toHaveLength(2);
     expect(screen.getAllByText('origin/main')).toHaveLength(2);
-    expect(screen.getAllByTitle('tag: refs/tags/v1.2.3')).toHaveLength(2);
+    expect(tags.every((tag) => !tag.hasAttribute('title'))).toBe(true);
+    expect(tags[0]).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(tags[0]!);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('tag: refs/tags/v1.2.3');
   });
 
   it('lays out lanes from every ref immediately', () => {

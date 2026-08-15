@@ -21,7 +21,12 @@ export function DirectoryPickerButton({
     .join(' ');
 
   return (
-    <Button className={classes} aria-label={label} title={iconOnly ? label : undefined} {...props}>
+    <Button
+      className={classes}
+      aria-label={label}
+      tooltip={iconOnly ? label : undefined}
+      {...props}
+    >
       <FolderOpen aria-hidden="true" focusable="false" />
       {iconOnly ? null : label}
     </Button>

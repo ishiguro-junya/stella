@@ -1,3 +1,4 @@
+/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- 省略され得るパスをキーボード操作でも確認できるようにする。 */
 import {
   Code2,
   Files,
@@ -34,6 +35,7 @@ import {
   type UiFont,
 } from '../../theme/typography';
 import { SelectControl } from '../../ui/SelectControl';
+import { Tooltip } from '../../ui/Tooltip';
 
 export interface SettingsViewProps {
   appearance: Appearance;
@@ -764,7 +766,9 @@ export function SettingsView({
                           <dd className={component.available ? undefined : 'is-unavailable'}>
                             {component.version ?? component.error ?? t('toolchainUnavailable')}
                             {component.path ? (
-                              <code title={component.path}>{component.path}</code>
+                              <Tooltip content={component.path}>
+                                <code tabIndex={0}>{component.path}</code>
+                              </Tooltip>
                             ) : null}
                           </dd>
                         </div>

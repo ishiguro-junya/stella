@@ -67,7 +67,7 @@ describe('Activity', () => {
     await expectInteractiveSelectedColors('.activity-list tbody tr[aria-selected="true"]', {
       palette: 'neutral',
     });
-    await expect($(`.repository-toggle[title="${repositoryPath}"]`)).toBeDisplayed();
+    await expect($(`.repository-toggle[data-repository-path="${repositoryPath}"]`)).toBeDisplayed();
     await expect($('.branch-toggle')).toHaveText('main');
     await activity.click();
     await expect($('.activity-view')).toBeDisplayed();

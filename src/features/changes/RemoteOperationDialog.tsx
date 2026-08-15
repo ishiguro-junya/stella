@@ -293,7 +293,7 @@ export function RemoteOperationDialog({
                     className="remote-operation-refresh-button"
                     aria-label={t('refreshBranches')}
                     aria-busy={refreshing}
-                    title={t('refreshBranches')}
+                    tooltip={t('refreshBranches')}
                     disabled={locked || !refreshRemote}
                     onClick={() => void refreshBranches()}
                   >
@@ -308,7 +308,7 @@ export function RemoteOperationDialog({
                     className="remote-operation-refresh-button"
                     aria-label={t('refreshBranches')}
                     aria-busy={refreshing}
-                    title={t('refreshBranches')}
+                    tooltip={t('refreshBranches')}
                     disabled={locked || !refreshRemote}
                     onClick={() => void refreshBranches()}
                   >
@@ -360,7 +360,7 @@ export function RemoteOperationDialog({
                       className="remote-operation-refresh-button"
                       aria-label={t('refreshBranches')}
                       aria-busy={refreshing}
-                      title={t('refreshBranches')}
+                      tooltip={t('refreshBranches')}
                       disabled={locked || !refreshRemote}
                       onClick={() => void refreshBranches()}
                     >

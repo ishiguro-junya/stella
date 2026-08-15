@@ -21,6 +21,23 @@ import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 const visualQaDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
 
+const readTooltipPlacement = async () =>
+  browser.execute(() => {
+    const trigger = document.querySelector<HTMLElement>('button[aria-label="Fetch"]')!;
+    const tooltip = document.querySelector<HTMLElement>('.app-tooltip')!;
+    const triggerRect = trigger.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    return {
+      centerDelta: Math.round(
+        Math.abs(
+          triggerRect.left + triggerRect.width / 2 - (tooltipRect.left + tooltipRect.width / 2),
+        ),
+      ),
+      gap: Math.round(triggerRect.top - tooltipRect.bottom),
+      side: tooltip.dataset.side,
+    };
+  });
+
 describe('Visual QA', () => {
   it('captures repository and branch switcher visual QA states when requested', async function () {
     this.timeout(180_000);
@@ -50,12 +67,44 @@ describe('Visual QA', () => {
         repositoryOptions[repositoryOptionTexts.findIndex((text) => text.includes(currentPath))];
       if (!currentOption) throw new Error('The visual QA repository was not in the switcher.');
       await dispatchDoubleClick('[data-switcher-item-label="stella-visual-qa"]');
-      repositoryToggle = $(`.repository-toggle[title="${currentPath}"]`);
+      repositoryToggle = $(`.repository-toggle[data-repository-path="${currentPath}"]`);
       await repositoryToggle.waitForDisplayed({ timeout: 10_000 });
       await expect($('.changes-view')).toBeDisplayed();
 
       await setLogicalWindowSize(1180, 760);
       const settings = $('.titlebar-actions button:last-child');
+      const captureTooltip = async (
+        fileName: string,
+        expectedColors: { background: string; foreground: string },
+      ) => {
+        await setLogicalWindowSize(860, 560);
+        await browser.execute(() => {
+          document.querySelector<HTMLButtonElement>('button[aria-label="Fetch"]')?.focus();
+        });
+        await expect($('.app-tooltip')).toBeDisplayed();
+        await setLogicalWindowSize(1180, 760);
+        await browser.waitUntil(async () => {
+          const placement = await readTooltipPlacement();
+          return placement.centerDelta === 0 && placement.gap === 8 && placement.side === 'top';
+        });
+        expect(
+          await browser.execute(() => {
+            const tooltip = document.querySelector<HTMLElement>('.app-tooltip')!;
+            return {
+              arrow: getComputedStyle(tooltip, '::after').backgroundColor,
+              background: getComputedStyle(tooltip).backgroundColor,
+              foreground: getComputedStyle(tooltip).color,
+            };
+          }),
+        ).toEqual({
+          arrow: expectedColors.background,
+          background: expectedColors.background,
+          foreground: expectedColors.foreground,
+        });
+        await saveLogicalScreenshot(join(visualQaDirectory, fileName), 1180, 760);
+        expect(await readTooltipPlacement()).toEqual({ centerDelta: 0, gap: 8, side: 'top' });
+        await browser.keys(['Escape']);
+      };
       await settings.click();
       await expect($('.settings-view')).toBeDisplayed();
       await expect($('select[name="diff-layout"]')).toHaveValue('unified');
@@ -148,6 +197,12 @@ describe('Visual QA', () => {
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
         ),
       ).toBe(true);
+      await $('button[aria-label="Changes"]').click();
+      await captureTooltip('tooltip-en-light-1180x760.png', {
+        background: 'rgb(29, 30, 34)',
+        foreground: 'rgb(255, 255, 255)',
+      });
+      await settings.click();
 
       await selectSetting('language', 'ja');
       await saveLogicalScreenshot(
@@ -182,6 +237,11 @@ describe('Visual QA', () => {
         860,
         560,
       );
+      await $('button[aria-label="Changes"]').click();
+      await captureTooltip('tooltip-en-dark-1180x760.png', {
+        background: 'rgb(248, 248, 250)',
+        foreground: 'rgb(28, 28, 30)',
+      });
       const activity = $('button[aria-label="Activity"]');
       await activity.click();
       await expect($('.activity-view')).toBeDisplayed();

@@ -79,9 +79,11 @@ describe('FileEditorSurface', () => {
     const editTab = screen.getByRole('tab', { name: 'Edit' });
 
     expect(displayTab).toHaveAttribute('aria-selected', 'false');
-    expect(displayTab).toHaveAttribute('title', 'Display');
+    fireEvent.focus(displayTab);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Display');
+    expect(displayTab).not.toHaveAttribute('title');
     expect(editTab).toHaveAttribute('aria-selected', 'true');
-    expect(editTab).toHaveAttribute('title', 'Edit');
+    expect(editTab).not.toHaveAttribute('title');
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
     await user.clear(editor);

@@ -137,7 +137,9 @@ describe('Repository and Branch navigation', () => {
       await dialog.$('#repository-clone-parent').setValue(cloneParentPath);
       await dialog.$('button=リポジトリをクローン').click();
 
-      await $(`.repository-toggle[title="${clonedPath}"]`).waitForDisplayed({ timeout: 20_000 });
+      await $(`.repository-toggle[data-repository-path="${clonedPath}"]`).waitForDisplayed({
+        timeout: 20_000,
+      });
       expect((await runGit(clonedPath, ['branch', '--show-current'])).trim()).toBe('main');
       expect((await runGit(clonedPath, ['show', 'HEAD:README.md'])).trim()).toBe('# Clone target');
       expect((await runGit(clonedPath, ['remote', 'get-url', 'origin'])).trim()).toBe(remoteUrl);
@@ -161,7 +163,12 @@ describe('Repository and Branch navigation', () => {
       actionLabels,
     );
     expect(await footerActions.map((button) => button.getText())).toEqual(['', '', '', '']);
-    expect(await footerActions.map((button) => button.getAttribute('title'))).toEqual(actionLabels);
+    expect(await footerActions.map((button) => button.getAttribute('title'))).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
     expect(
       await $$('.titlebar-actions .titlebar-menu-button').map((button) => button.getText()),
     ).toEqual(['変更', '履歴', '活動', '設定']);
@@ -281,15 +288,12 @@ describe('Repository and Branch navigation', () => {
     await $('button[aria-label="サイドバーを閉じる"]').click();
     await expect($('.changes-sidebar-pane')).not.toBeDisplayed();
     await expect($('.window-header-content')).toBeDisplayed();
-    await expect($('button[aria-label="サイドバーを開く"]')).toHaveAttribute(
-      'title',
-      'サイドバーを開く',
-    );
+    await expect($('button[aria-label="サイドバーを開く"]')).not.toHaveAttribute('title');
     await $('button[aria-label="サイドバーを開く"]').click();
     await expect($('.changes-sidebar-pane')).toBeDisplayed();
     await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
 
-    const repositoryToggle = $(`.repository-toggle[title="${repositoryPath}"]`);
+    const repositoryToggle = $(`.repository-toggle[data-repository-path="${repositoryPath}"]`);
     await expect(repositoryToggle).toBeDisplayed();
     await expect($('.branch-toggle')).toHaveText('main');
     expect(
@@ -343,9 +347,9 @@ describe('Repository and Branch navigation', () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLElement>('.switcher-action-trigger')!
-        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
-    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    await expect($('.app-tooltip')).toHaveText('その他の操作');
     await expectInteractiveSelectedColors('[role="dialog"] .switcher-option-row.is-selected', {
       foreground: ['.switcher-check', '.switcher-option-icon'],
       mutedForeground: ['.switcher-option-copy small'],
@@ -544,7 +548,9 @@ describe('Repository and Branch navigation', () => {
     await expect(confirmation).toHaveText(expect.stringContaining(relocatedPath));
     await confirmation.$('button=場所を付け替える').click();
 
-    await $(`.repository-toggle[title="${relocatedPath}"]`).waitForDisplayed({ timeout: 10_000 });
+    await $(`.repository-toggle[data-repository-path="${relocatedPath}"]`).waitForDisplayed({
+      timeout: 10_000,
+    });
     await expect($('.changes-view')).toBeDisplayed();
     expect((await runGit(relocatedPath, ['status', '--short'])).trim()).toBe('');
     expect(

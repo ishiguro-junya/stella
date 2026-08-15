@@ -1773,7 +1773,7 @@ export function App({
       className="icon-button sidebar-toggle-button"
       aria-label={sidebarControlLabel}
       aria-expanded={sidebarOpen}
-      title={sidebarControlLabel}
+      tooltip={sidebarControlLabel}
       onClick={() => setSidebarOpen((current) => !current)}
     >
       {sidebarOpen ? (
@@ -1823,7 +1823,8 @@ export function App({
                           })}
                           aria-haspopup="dialog"
                           aria-expanded={repositorySwitcherOpen}
-                          title={repo.path}
+                          tooltip={repo.path}
+                          data-repository-path={repo.path}
                           onClick={openRepositorySwitcher}
                         >
                           <FolderGit2 aria-hidden="true" focusable="false" />
@@ -1846,7 +1847,7 @@ export function App({
                           })}
                           aria-haspopup="dialog"
                           aria-expanded={Boolean(branchDialog)}
-                          title={
+                          tooltip={
                             repo.branch.detached
                               ? t('detachedHead')
                               : (repo.branch.name ?? undefined)

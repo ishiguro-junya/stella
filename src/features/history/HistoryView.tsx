@@ -1,3 +1,4 @@
+/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- 参照名の補足をキーボード操作でも確認できるようにする。 */
 import {
   useCallback,
   useDeferredValue,
@@ -36,6 +37,7 @@ import {
   LEFT_PANE_MIN_WIDTH,
 } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
+import { Tooltip } from '../../ui/Tooltip';
 import {
   describeWorkspaceError,
   WorkspaceErrorDetails,
@@ -171,22 +173,23 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
   return (
     <span className="ref-list">
       {labels.map((ref) => (
-        <span
-          key={ref.raw}
-          className={`ref-chip ${ref.kind}`}
-          title={ref.raw}
-          data-local-branch={ref.kind === 'branch' ? ref.label : undefined}
-          aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
-        >
-          {ref.kind === 'tag' ? (
-            <Tag aria-hidden="true" focusable="false" />
-          ) : ref.kind === 'head' ? (
-            <GitCommitHorizontal aria-hidden="true" focusable="false" />
-          ) : (
-            <GitBranch aria-hidden="true" focusable="false" />
-          )}
-          <span>{ref.label}</span>
-        </span>
+        <Tooltip key={ref.raw} content={ref.raw}>
+          <span
+            className={`ref-chip ${ref.kind}`}
+            tabIndex={0}
+            data-local-branch={ref.kind === 'branch' ? ref.label : undefined}
+            aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
+          >
+            {ref.kind === 'tag' ? (
+              <Tag aria-hidden="true" focusable="false" />
+            ) : ref.kind === 'head' ? (
+              <GitCommitHorizontal aria-hidden="true" focusable="false" />
+            ) : (
+              <GitBranch aria-hidden="true" focusable="false" />
+            )}
+            <span>{ref.label}</span>
+          </span>
+        </Tooltip>
       ))}
     </span>
   );

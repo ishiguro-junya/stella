@@ -183,6 +183,7 @@ export function Dialog({
               type="button"
               className="dialog-close-button"
               aria-label={t('closeDialog')}
+              tooltip={t('closeDialog')}
               disabled={!dismissible}
               onClick={onDismiss}
             >
@@ -208,6 +209,7 @@ export function Dialog({
               type="button"
               className="dialog-close-button"
               aria-label={t('closeDialog')}
+              tooltip={t('closeDialog')}
               disabled={!dismissible}
               onClick={onDismiss}
             >

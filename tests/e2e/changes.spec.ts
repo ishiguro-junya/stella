@@ -117,6 +117,95 @@ describe('Changes', () => {
     repositoryPath = '';
   });
 
+  it('shows the shared rich tooltip for pointer and keyboard use in both themes', async () => {
+    const groupToggle = $('.change-group-collapse-toggle');
+    await groupToggle.waitForDisplayed();
+    await expect(groupToggle).not.toHaveAttribute('title');
+
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = 'dark';
+    });
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.change-group-collapse-toggle')!
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    });
+    const pointerTooltip = $('.app-tooltip');
+    const groupToggleLabel = await groupToggle.getAttribute('aria-label');
+    if (!groupToggleLabel) throw new Error('The change group toggle has no accessible label.');
+    await expect(pointerTooltip).toHaveText(groupToggleLabel);
+    const darkStyle = await browser.execute(() => {
+      const tooltip = document.querySelector<HTMLElement>('.app-tooltip')!;
+      const rect = tooltip.getBoundingClientRect();
+      const style = getComputedStyle(tooltip);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        boxShadow: style.boxShadow,
+        color: style.color,
+        arrowColor: getComputedStyle(tooltip, '::after').backgroundColor,
+        insideViewport:
+          rect.left >= 8 &&
+          rect.top >= 8 &&
+          rect.right <= window.innerWidth - 8 &&
+          rect.bottom <= window.innerHeight - 8,
+      };
+    });
+    expect(darkStyle).toEqual({
+      backgroundColor: 'rgb(248, 248, 250)',
+      borderRadius: '8px',
+      boxShadow: expect.not.stringMatching(/^none$/u),
+      color: 'rgb(28, 28, 30)',
+      arrowColor: 'rgb(248, 248, 250)',
+      insideViewport: true,
+    });
+
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = 'light';
+      document.querySelector<HTMLButtonElement>('.change-group-collapse-toggle')?.focus();
+    });
+    const keyboardTooltip = $('.app-tooltip');
+    await expect(keyboardTooltip).toBeDisplayed();
+    expect(
+      await browser.execute(() => {
+        const tooltip = document.querySelector<HTMLElement>('.app-tooltip')!;
+        const style = getComputedStyle(tooltip);
+        return { backgroundColor: style.backgroundColor, color: style.color };
+      }),
+    ).toEqual({ backgroundColor: 'rgb(29, 30, 34)', color: 'rgb(255, 255, 255)' });
+    await browser.keys(['Escape']);
+    await expect($('.app-tooltip')).not.toExist();
+
+    await browser.execute(() => {
+      document.querySelector<HTMLButtonElement>('.sidebar-toggle-button')?.focus();
+    });
+    const edgeTooltip = $('.app-tooltip');
+    await expect(edgeTooltip).toBeDisplayed();
+    const edgeMetrics = await browser.execute(() => {
+      const rect = document.querySelector<HTMLElement>('.app-tooltip')!.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, viewportWidth: window.innerWidth };
+    });
+    expect(edgeMetrics.left).toBeGreaterThanOrEqual(8);
+    expect(edgeMetrics.right).toBeLessThanOrEqual(edgeMetrics.viewportWidth - 8);
+    await browser.keys(['Escape']);
+
+    await $('input[aria-label="ステージ README.md"]').click();
+    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    await commitTrigger.waitForClickable({ timeout: 10_000 });
+    await commitTrigger.click();
+    const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    const closeButton = dialog.$('.dialog-close-button');
+    await closeButton.waitForDisplayed({ timeout: 10_000 });
+    await browser.execute(() => {
+      document.querySelector<HTMLButtonElement>('.dialog-close-button')?.focus();
+    });
+    const closeButtonLabel = await closeButton.getAttribute('aria-label');
+    if (!closeButtonLabel) throw new Error('The dialog close button has no accessible label.');
+    await expect($('.app-tooltip')).toHaveText(closeButtonLabel);
+    await closeButton.click();
+    await expect(dialog).not.toExist();
+  });
+
   it('previews PNG and SVG changes in WebKit while keeping SVG diff and editing available', async () => {
     await writeFile(
       join(repositoryPath, 'preview.png'),
@@ -239,9 +328,9 @@ describe('Changes', () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLElement>('.change-item:not(.is-current) .row-action-trigger')!
-        .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
-    await expect($('.row-action-tooltip')).toHaveText('その他の操作');
+    await expect($('.app-tooltip')).toHaveText('その他の操作');
   });
 
   it('applies line wrapping to the displayed Diff and defaults to no wrapping', async () => {
@@ -652,10 +741,10 @@ describe('Changes', () => {
       'フェッチ',
     ]);
     expect(await actionButtons.map((button) => button.getAttribute('title'))).toEqual([
-      'コミット',
-      'プル',
-      'プッシュ',
-      'フェッチ',
+      null,
+      null,
+      null,
+      null,
     ]);
     await expect($('[role="dialog"] [data-commit-field="description"]')).not.toExist();
 
@@ -1014,6 +1103,17 @@ describe('Changes', () => {
       ),
     );
     expect(visibleFileHeaders).toEqual(['README.md', 'second.ts']);
+
+    const multiFileToggle = $('.selected-file-toggle');
+    await browser.execute(() => {
+      document.querySelector<HTMLButtonElement>('.selected-file-toggle')?.focus();
+    });
+    const multiFileToggleLabel = await multiFileToggle.getAttribute('aria-label');
+    if (!multiFileToggleLabel)
+      throw new Error('The multi-file diff toggle has no accessible label.');
+    await expect($('.app-tooltip')).toHaveText(multiFileToggleLabel);
+    await multiFileToggle.click();
+    await expect(multiFileToggle).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('opens a changed file in the editor and returns to its Diff', async () => {
@@ -1068,7 +1168,13 @@ describe('Changes', () => {
     expect(diffLineMetrics.indicator).toMatch(/[+-]/u);
     expect(diffLineMetrics.lineHeight).toBe('20px');
     await editTab.waitForClickable({ timeout: 10_000 });
-    await expect(editTab).toHaveAttribute('title', '編集');
+    await expect(editTab).not.toHaveAttribute('title');
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('.diff-file-toolbar [role="tab"][aria-label="編集"]')!
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    });
+    await expect($('.app-tooltip')).toHaveText('編集');
     await expect(editTab).toHaveText('');
     await editTab.click();
 

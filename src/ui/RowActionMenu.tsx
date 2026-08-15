@@ -58,7 +58,6 @@ interface MenuPosition {
 
 const VIEWPORT_MARGIN = 8;
 const MENU_GAP = 4;
-const TOOLTIP_HEIGHT = 25;
 const DOCUMENT_TAB_STOP = [
   'button:not([disabled])',
   'input:not([disabled])',
@@ -94,21 +93,6 @@ export function RowActionMenu<Action extends string>({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const initialFocusRef = useRef<InitialFocus>('first');
   const [position, setPosition] = useState<MenuPosition>();
-  const [tooltipPosition, setTooltipPosition] = useState<MenuPosition>();
-  const tooltipId = `${menuId}-tooltip`;
-
-  const showTooltip = (trigger: HTMLButtonElement): void => {
-    if (open) return;
-    const rect = trigger.getBoundingClientRect();
-    const below = rect.bottom + MENU_GAP;
-    setTooltipPosition({
-      left: Math.min(window.innerWidth - VIEWPORT_MARGIN, rect.right),
-      top:
-        below + TOOLTIP_HEIGHT <= window.innerHeight - VIEWPORT_MARGIN
-          ? below
-          : Math.max(VIEWPORT_MARGIN, rect.top - MENU_GAP - TOOLTIP_HEIGHT),
-    });
-  };
 
   const positionMenu = useCallback((): void => {
     const trigger = triggerRef.current;
@@ -153,7 +137,6 @@ export function RowActionMenu<Action extends string>({
   const openMenu = (initialFocus: InitialFocus): void => {
     initialFocusRef.current = initialFocus;
     setPosition(undefined);
-    setTooltipPosition(undefined);
     onOpenChange(true);
   };
 
@@ -256,12 +239,8 @@ export function RowActionMenu<Action extends string>({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
-          aria-describedby={tooltipPosition ? tooltipId : undefined}
+          tooltip={triggerTitle}
           disabled={disabled}
-          onMouseEnter={(event) => showTooltip(event.currentTarget)}
-          onMouseLeave={() => setTooltipPosition(undefined)}
-          onFocus={(event) => showTooltip(event.currentTarget)}
-          onBlur={() => setTooltipPosition(undefined)}
           onClick={() => {
             if (open) closeMenu(false);
             else {
@@ -284,19 +263,6 @@ export function RowActionMenu<Action extends string>({
           <Ellipsis aria-hidden="true" focusable="false" size={16} />
         </Button>
       )}
-      {tooltipPosition && !open
-        ? createPortal(
-            <span
-              id={tooltipId}
-              className="row-action-tooltip"
-              role="tooltip"
-              style={tooltipPosition}
-            >
-              {triggerTitle}
-            </span>,
-            document.body,
-          )
-        : null}
       {open
         ? createPortal(
             <div
