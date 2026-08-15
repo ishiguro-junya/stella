@@ -8,7 +8,7 @@ rust = { version = "1.96.0", components = "clippy,rustfmt" }
 taplo = "0.10.0"
 
 [tasks.setup]
-description = "依存package、Git hooks、fixtureの基底を準備する"
+description = "依存パッケージ、Gitフック、開発用データを準備する"
 run = [
   "pnpm install --frozen-lockfile",
   "lefthook install",
@@ -17,75 +17,79 @@ run = [
 ]
 
 [tasks.dev]
-description = "Tauri applicationを開発modeで起動する"
+description = "Tauriアプリを開発モードで起動する"
 run = "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER='node --import tsx ../scripts/mode-app.mts dev' pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
 
 [tasks.reset]
-description = "開発用fixtureを基底状態へ戻す"
+description = "開発用データを初期状態へ戻す"
 run = "node --import tsx scripts/showcase-fixture.mts reset"
 
 [tasks.build]
-description = "通常のTauri application bundleをbuildする"
+description = "配布用のTauriアプリをビルドする"
 run = "pnpm exec tauri build"
 
 [tasks."install"]
-description = "ApplicationをbuildしてApplications folderへinstallする"
+description = "アプリをビルドして`/Applications`へインストールする"
 depends = [ "build" ]
 run = "node --import tsx scripts/install-app.mts"
 
 [tasks.lint]
-description = "Frontend、Rust、設定、文書、Commit履歴をlintする"
+description = "フロントエンド、Rust、設定、ドキュメント、コミット履歴を検査する"
 depends = [ "lint:frontend", "lint:rust", "lint:config", "lint:docs" ]
 run = "node --import tsx scripts/check-commits.mts"
 
 [tasks."lint:frontend"]
-description = "Frontendをformat検査してlintする"
+description = "フロントエンドの書式とコードを検査する"
 run = [
   "pnpm exec oxfmt --check .",
   "pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives .",
 ]
 
 [tasks."lint:rust"]
-description = "Rustをformat検査してlintする"
+description = "Rustの書式とコードを検査する"
 run = [
   "cargo fmt --all --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings",
 ]
 
 [tasks."lint:config"]
-description = "TOMLをformat検査してlintする"
+description = "TOMLの書式と内容を検査する"
 run = [ "taplo fmt --check", "taplo check" ]
 
 [tasks."lint:docs"]
-description = "Markdownとlinkをlintする"
-run = [ "pnpm exec markdownlint-cli2", "lychee --files-from .lycheeinputs" ]
+description = "Markdownの書式、文章、リンクを検査する"
+run = [
+  "pnpm exec markdownlint-cli2",
+  "pnpm exec textlint README.md CONTRIBUTING.md DESIGN.md THIRD_PARTY_NOTICES.md 'docs/**/*.md'",
+  "lychee --files-from .lycheeinputs",
+]
 
 [tasks."lint:commit-message"]
-description = "Commit messageをConventional Commitsとしてlintする"
+description = "コミットメッセージがConventional Commits形式か検査する"
 run = "node --import tsx scripts/verify-commit-message.mts"
 
 [tasks.format]
-description = "Frontend、Rust、TOML、Markdownを整形する"
+description = "フロントエンド、Rust、TOML、Markdownを整形する"
 run = [ "pnpm exec oxfmt .", "cargo fmt --all", "taplo fmt", "pnpm exec markdownlint-cli2 --fix" ]
 
 [tasks.typecheck]
-description = "TypeScriptをtypecheckする"
+description = "TypeScriptの型を検査する"
 run = "pnpm exec tsc -b"
 
 [tasks.test]
-description = "FrontendとRustのtestを実行する"
+description = "フロントエンドとRustのテストを実行する"
 depends = [ "test:frontend", "test:rust" ]
 
 [tasks."test:frontend"]
-description = "FrontendのUnit testを実行する"
+description = "フロントエンドの単体テストを実行する"
 run = "pnpm exec vitest run"
 
 [tasks."test:rust"]
-description = "RustのUnit testと統合testを実行する"
+description = "Rustの単体テストと統合テストを実行する"
 run = "cargo test --workspace --all-targets --all-features"
 
 [tasks."test:e2e"]
-description = "Native applicationのE2E testを実行する"
+description = "ネイティブアプリのE2Eテストを実行する"
 run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",

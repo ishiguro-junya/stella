@@ -1,6 +1,6 @@
-// @ts-check
+import type { MicromarkToken, Rule, RuleOnError, RuleOnErrorInfo, RuleParams } from 'markdownlint';
 
-const sentenceTerminator = '。';
+const sentenceTerminators = new Set(['。', '！', '？', '.', '!', '?']);
 const excludedTokenTypes = new Set([
   'autolink',
   'characterReference',
@@ -34,13 +34,11 @@ const htmlBreak = /^<br(?:\s[^>]*)?\s*\/?\s*>$/iu;
 const sentenceTerminatorName = '句点';
 const explanationParticles = ['が', 'で', 'と', 'に', 'の', 'は', 'へ', 'も', 'を'];
 
-/**
- * @param {Map<number, Uint8Array>} masks Masks by 1-based line number.
- * @param {number} lineNumber 1-based line number.
- * @param {number} lineLength Line length.
- * @returns {Uint8Array} Line mask.
- */
-function lineMask(masks, lineNumber, lineLength) {
+function lineMask(
+  masks: Map<number, Uint8Array>,
+  lineNumber: number,
+  lineLength: number,
+): Uint8Array {
   let mask = masks.get(lineNumber);
   if (!mask) {
     mask = new Uint8Array(lineLength);
@@ -49,12 +47,11 @@ function lineMask(masks, lineNumber, lineLength) {
   return mask;
 }
 
-/**
- * @param {import("markdownlint").MicromarkToken} token Token to mask.
- * @param {string[]} lines Markdown lines.
- * @param {Map<number, Uint8Array>} masks Masks by line.
- */
-function maskToken(token, lines, masks) {
+function maskToken(
+  token: MicromarkToken,
+  lines: readonly string[],
+  masks: Map<number, Uint8Array>,
+): void {
   for (let lineNumber = token.startLine; lineNumber <= token.endLine; lineNumber++) {
     const line = lines[lineNumber - 1] ?? '';
     const start = lineNumber === token.startLine ? token.startColumn - 1 : 0;
@@ -67,13 +64,9 @@ function maskToken(token, lines, masks) {
   }
 }
 
-/**
- * @param {import("markdownlint").MicromarkToken[]} tokens Tokens to search.
- * @returns {import("markdownlint").MicromarkToken[]} Paragraph tokens.
- */
-function collectParagraphs(tokens) {
-  const paragraphs = [];
-  const visit = (token) => {
+function collectParagraphs(tokens: MicromarkToken[]): MicromarkToken[] {
+  const paragraphs: MicromarkToken[] = [];
+  const visit = (token: MicromarkToken) => {
     if (token.type === 'paragraph') {
       paragraphs.push(token);
       return;
@@ -88,17 +81,15 @@ function collectParagraphs(tokens) {
   return paragraphs;
 }
 
-/**
- * @param {import("markdownlint").MicromarkToken} paragraph Paragraph token.
- * @param {string[]} lines Markdown lines.
- * @returns {{breaks: Map<number, number[]>, masks: Map<number, Uint8Array>, skip: boolean}} Syntax exclusions.
- */
-function syntaxExclusions(paragraph, lines) {
-  const masks = new Map();
-  const breaks = new Map();
+function syntaxExclusions(
+  paragraph: MicromarkToken,
+  lines: readonly string[],
+): { breaks: Map<number, number[]>; masks: Map<number, Uint8Array>; skip: boolean } {
+  const masks = new Map<number, Uint8Array>();
+  const breaks = new Map<number, number[]>();
   let skip = false;
 
-  const visit = (token) => {
+  const visit = (token: MicromarkToken) => {
     if (token.type === 'htmlText') {
       maskToken(token, lines, masks);
       if (htmlBreak.test(token.text.trim()) && token.startLine === token.endLine) {
@@ -128,12 +119,7 @@ function syntaxExclusions(paragraph, lines) {
   return { breaks, masks, skip };
 }
 
-/**
- * @param {string} line Line text.
- * @param {number} index Character index.
- * @returns {boolean} Whether the character is escaped.
- */
-function isEscaped(line, index) {
+function isEscaped(line: string, index: number): boolean {
   let backslashes = 0;
   for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor--) {
     backslashes++;
@@ -141,17 +127,15 @@ function isEscaped(line, index) {
   return backslashes % 2 === 1;
 }
 
-/**
- * @param {import("markdownlint").MicromarkToken} paragraph Paragraph token.
- * @param {string[]} lines Markdown lines.
- * @param {Map<number, Uint8Array>} syntaxMasks Syntax masks.
- * @returns {Map<number, Uint8Array>} Delimiter masks.
- */
-function delimiterExclusions(paragraph, lines, syntaxMasks) {
-  const masks = new Map();
+function delimiterExclusions(
+  paragraph: MicromarkToken,
+  lines: readonly string[],
+  syntaxMasks: Map<number, Uint8Array>,
+): Map<number, Uint8Array> {
+  const masks = new Map<number, Uint8Array>();
 
   for (const quote of symmetricQuotes) {
-    const positions = [];
+    const positions: Array<{ index: number; lineNumber: number }> = [];
     for (let lineNumber = paragraph.startLine; lineNumber <= paragraph.endLine; lineNumber++) {
       const line = lines[lineNumber - 1] ?? '';
       const syntaxMask = syntaxMasks.get(lineNumber);
@@ -164,8 +148,8 @@ function delimiterExclusions(paragraph, lines, syntaxMasks) {
       }
     }
     for (let position = 0; position + 1 < positions.length; position += 2) {
-      const opening = positions[position];
-      const closing = positions[position + 1];
+      const opening = positions[position]!;
+      const closing = positions[position + 1]!;
       for (let lineNumber = opening.lineNumber; lineNumber <= closing.lineNumber; lineNumber++) {
         const line = lines[lineNumber - 1] ?? '';
         const start = lineNumber === opening.lineNumber ? opening.index : 0;
@@ -175,8 +159,7 @@ function delimiterExclusions(paragraph, lines, syntaxMasks) {
     }
   }
 
-  /** @type {string[]} */
-  const delimiterStack = [];
+  const delimiterStack: string[] = [];
   for (let lineNumber = paragraph.startLine; lineNumber <= paragraph.endLine; lineNumber++) {
     const line = lines[lineNumber - 1] ?? '';
     const syntaxMask = syntaxMasks.get(lineNumber);
@@ -190,6 +173,9 @@ function delimiterExclusions(paragraph, lines, syntaxMasks) {
       }
 
       const character = line[index];
+      if (character === undefined) {
+        continue;
+      }
       if (delimiterStack.length > 0) {
         delimiterMask[index] = 1;
         if (delimiterStack.at(-1) === character) {
@@ -208,42 +194,32 @@ function delimiterExclusions(paragraph, lines, syntaxMasks) {
   return masks;
 }
 
-/**
- * @param {string} character Character to classify.
- * @returns {boolean} Whether it represents visible prose.
- */
-function isMeaningful(character) {
+function isMeaningful(character: string): boolean {
   return (
     character === '※' ||
     (meaningfulCharacter.test(character) && !ignoredFormattingSymbols.has(character))
   );
 }
 
-/**
- * @param {string} line Line text.
- * @param {number} start Start index.
- * @param {number} end End index.
- * @param {Uint8Array | undefined} syntaxMask Syntax mask.
- * @param {Uint8Array | undefined} delimiterMask Delimiter mask.
- * @returns {boolean} Whether later prose exists.
- */
-function hasLaterProse(line, start, end, syntaxMask, delimiterMask) {
+function hasLaterProse(
+  line: string,
+  start: number,
+  end: number,
+  syntaxMask: Uint8Array | undefined,
+  delimiterMask: Uint8Array | undefined,
+): boolean {
   for (let index = start; index < end; index++) {
-    if (!syntaxMask?.[index] && !delimiterMask?.[index] && isMeaningful(line[index])) {
+    if (!syntaxMask?.[index] && !delimiterMask?.[index] && isMeaningful(line[index] ?? '')) {
       return true;
     }
   }
   return false;
 }
 
-/**
- * @param {string} line Line text.
- * @param {number} index Character index.
- * @returns {boolean} Whether the terminator is being described as punctuation.
- */
-function isSentenceTerminatorExample(line, index) {
+function isSentenceTerminatorExample(line: string, index: number): boolean {
+  if (line[index] !== '。') return false;
   const before = line.slice(0, index);
-  const after = line.slice(index + sentenceTerminator.length);
+  const after = line.slice(index + 1);
   const followsName =
     before.endsWith(sentenceTerminatorName) &&
     explanationParticles.some((particle) => after.startsWith(particle));
@@ -253,12 +229,17 @@ function isSentenceTerminatorExample(line, index) {
   return followsName || precedesName;
 }
 
-/**
- * @param {import("markdownlint").RuleParams} params Rule parameters.
- * @returns {import("markdownlint").RuleOnErrorInfo[]} Violations.
- */
-export function findJapaneseSentenceViolations(params) {
-  const violations = [];
+function isNonTerminalPeriod(line: string, index: number): boolean {
+  if (line[index] !== '.') return false;
+  const previous = line[index - 1] ?? '';
+  const next = line[index + 1] ?? '';
+  if (/\p{L}|\p{N}/u.test(previous) && /\p{L}|\p{N}/u.test(next)) return true;
+  const prefix = line.slice(0, index + 1);
+  return /(?:\b(?:e\.g|i\.e|etc|vs|Mr|Mrs|Ms|Dr|Prof|No|Fig)\.|\b[A-Z]\.)$/iu.test(prefix);
+}
+
+export function findSentenceViolations(params: RuleParams): RuleOnErrorInfo[] {
+  const violations: RuleOnErrorInfo[] = [];
   const paragraphs = collectParagraphs(params.parsers.micromark.tokens);
 
   for (const paragraph of paragraphs) {
@@ -277,13 +258,15 @@ export function findJapaneseSentenceViolations(params) {
       const lineBreaks = breaks.get(lineNumber) ?? [];
 
       for (let index = start; index < end; index++) {
+        const character = line[index] ?? '';
         if (
-          line[index] !== sentenceTerminator ||
+          !sentenceTerminators.has(character) ||
           syntaxMask?.[index] ||
           delimiterMask?.[index] ||
           isSentenceTerminatorExample(line, index) ||
-          line[index - 1] === sentenceTerminator ||
-          line[index + 1] === sentenceTerminator
+          isNonTerminalPeriod(line, index) ||
+          line[index - 1] === character ||
+          line[index + 1] === character
         ) {
           continue;
         }
@@ -292,7 +275,7 @@ export function findJapaneseSentenceViolations(params) {
         if (hasLaterProse(line, index + 1, nextBreak, syntaxMask, delimiterMask)) {
           violations.push({
             lineNumber,
-            detail: 'Japanese sentence must be followed by a line break',
+            detail: 'Sentence must be followed by a line break',
             context: line,
             range: [index + 1, 1],
           });
@@ -304,13 +287,13 @@ export function findJapaneseSentenceViolations(params) {
 }
 
 export default {
-  names: ['japanese-sentence-per-line'],
-  description: 'Japanese sentences must start on a new line after 。',
+  names: ['sentence-per-line'],
+  description: 'Sentences must start on a new line after a terminator',
   tags: ['whitespace', 'language'],
   parser: 'micromark',
-  function: function japaneseSentencePerLine(params, onError) {
-    for (const violation of findJapaneseSentenceViolations(params)) {
+  function: function sentencePerLine(params: RuleParams, onError: RuleOnError) {
+    for (const violation of findSentenceViolations(params)) {
       onError(violation);
     }
   },
-};
+} satisfies Rule;

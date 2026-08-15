@@ -21,5 +21,10 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "scripts/**/*.mts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "scripts/**/*.mts",
+    ".markdownlint-rules/**/*.mts"
+  ]
 }
