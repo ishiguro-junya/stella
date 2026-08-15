@@ -2563,8 +2563,13 @@ button:where(:has(> .lucide)) > span {
   margin-top: 3px;
 }
 .commit-row .ref-list {
+  max-height: calc(3rem + 12px);
   overflow: hidden;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+}
+.commit-row .ref-chip {
+  flex: none;
+  line-height: 1rem;
 }
 .ref-chip {
   display: inline-flex;

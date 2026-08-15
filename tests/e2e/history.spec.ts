@@ -306,11 +306,26 @@ describe('History', () => {
     }
   });
 
-  it('keeps branch corners fixed and refs on one row', async () => {
+  it('keeps branch corners fixed and shows up to three ref rows', async () => {
+    const overflowBranchNames = [
+      'history-ref-layout-alpha',
+      'history-ref-layout-bravo',
+      'history-ref-layout-charlie',
+      'history-ref-layout-delta',
+    ];
+    for (const branchName of overflowBranchNames) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Git参照のロック競合を避けるため直列に作成する。
+      await runGit(repositoryPath, ['branch', branchName, 'HEAD']);
+    }
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await $('button=履歴').click();
     await browser.waitUntil(
-      async () => (await $('.commit-list').getText()).includes('feat: 第一子誕生を発表'),
-      { timeout: 10_000, timeoutMsg: 'The first-child branch was not shown in History.' },
+      () =>
+        browser.execute((branchNames) => {
+          const firstCommit = document.querySelector<HTMLElement>('.history-commit-item');
+          return branchNames.every((branchName) => firstCommit?.textContent?.includes(branchName));
+        }, overflowBranchNames),
+      { timeout: 10_000, timeoutMsg: 'The overflow refs were not shown in History.' },
     );
 
     const layout = await browser.execute(() => {
@@ -334,9 +349,15 @@ describe('History', () => {
         '.history-graph-edge.incoming[data-from-lane="1"][data-to-lane="0"]',
       );
       const refs = [...(firstCommit?.querySelectorAll<HTMLElement>('.ref-chip') ?? [])];
-      if (!corner?.ownerSVGElement || !vertical?.ownerSVGElement || refs.length === 0) return null;
+      const refList = firstCommit?.querySelector<HTMLElement>('.ref-list');
+      if (!corner?.ownerSVGElement || !vertical?.ownerSVGElement || !refList || refs.length === 0)
+        return null;
       const cornerRect = corner.ownerSVGElement.getBoundingClientRect();
       const verticalRect = vertical.ownerSVGElement.getBoundingClientRect();
+      const refListRect = refList.getBoundingClientRect();
+      const visibleRefs = refs.filter(
+        (ref) => ref.getBoundingClientRect().bottom <= refListRect.bottom + 1,
+      );
       return {
         cornerHeight: cornerRect.height,
         cornerPath: corner.getAttribute('d'),
@@ -344,17 +365,27 @@ describe('History', () => {
         branchContinuesVertically: Boolean(branchContinuesVertically),
         baseStartsDiagonally: Boolean(baseStartsDiagonally),
         refRows: new Set(refs.map((ref) => Math.round(ref.getBoundingClientRect().top))).size,
+        visibleRefRows: new Set(
+          visibleRefs.map((ref) => Math.round(ref.getBoundingClientRect().top)),
+        ).size,
+        hasClippedRefs: refList.scrollHeight > refList.clientHeight,
+        visibleRefsAreComplete: visibleRefs.every((ref) => ref.scrollWidth <= ref.clientWidth + 1),
       };
     });
 
-    expect(layout).toEqual({
-      cornerHeight: 8,
-      cornerPath: 'M 6 0 L 18 8',
-      cornerToVerticalGap: 0,
-      branchContinuesVertically: true,
-      baseStartsDiagonally: true,
-      refRows: 1,
-    });
+    expect(layout).toEqual(
+      expect.objectContaining({
+        cornerHeight: 8,
+        cornerPath: 'M 6 0 L 18 8',
+        cornerToVerticalGap: 0,
+        branchContinuesVertically: true,
+        baseStartsDiagonally: true,
+        visibleRefRows: 3,
+        hasClippedRefs: true,
+        visibleRefsAreComplete: true,
+      }),
+    );
+    expect(layout?.refRows).toBeGreaterThan(3);
   });
 
   it('shows several branch tips that have not been merged', async () => {
