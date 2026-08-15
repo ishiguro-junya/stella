@@ -3,25 +3,25 @@
 ## Git
 
 Stellaは、Git 2.55.0をGNU General Public License version 2に基づいて同梱しています。  
-license全文とbuild情報はApplication resourceの`toolchain/licenses/git-COPYING`および`toolchain/BUILD.md`に収録し、対応するsource archiveをStellaのGitHub Releaseへ併載します。  
-開発元projectは[Git](https://git-scm.com/)で公開されています。  
+ライセンス全文とビルド情報はアプリのリソースにある`toolchain/licenses/git-COPYING`および`toolchain/BUILD.md`に収録し、対応するソースアーカイブをStellaのGitHub Releaseへ併載します。  
+開発元プロジェクトは[Git](https://git-scm.com/)で公開されています。  
 
 ## Git LFS
 
 Stellaは、Git LFS 3.7.1をMIT Licenseに基づいて同梱しています。  
-license全文はApplication resourceの`toolchain/licenses/gitLfs-LICENSE`に収録しています。  
-開発元projectは[Git LFS](https://github.com/git-lfs/git-lfs)で公開されています。  
+ライセンス全文はアプリのリソースにある`toolchain/licenses/gitLfs-LICENSE`へ収録しています。  
+開発元プロジェクトは[Git LFS](https://github.com/git-lfs/git-lfs)で公開されています。  
 
 ## git-flow-next
 
 Stellaは、git-flow-next 1.2.0をBSD 2-Clause Licenseに基づいて同梱しています。  
-license全文はApplication resourceの`toolchain/licenses/gitFlow-LICENSE`に収録しています。  
-開発元projectは[git-flow-next](https://github.com/gittower/git-flow-next)で公開されています。  
+ライセンス全文はアプリのリソースにある`toolchain/licenses/gitFlow-LICENSE`へ収録しています。  
+開発元プロジェクトは[git-flow-next](https://github.com/gittower/git-flow-next)で公開されています。  
 
-## Tauri Dialog plugin
+## Tauri Dialogプラグイン
 
 Stellaは、`@tauri-apps/plugin-dialog`および`tauri-plugin-dialog` 2.7.2をMIT LicenseまたはApache License 2.0に基づいて同梱しています。  
-著作権者はTauri Programme in the Commons Conservancyおよびcontributorsです。  
+著作権者はTauri Programme in the Commons Conservancyおよびコントリビューターです。  
 
 ライセンス情報は、アプリケーションリソースの`licenses/tauri-plugin-dialog-LICENSE.spdx`に収録しています。  
 開発元プロジェクトは[Tauri Plugins Workspace](https://github.com/tauri-apps/plugins-workspace)で公開されています。  
@@ -50,10 +50,10 @@ Stellaは、`react-i18next` 17.0.11をMIT Licenseに基づいて同梱してい�
 ライセンスの全文は、アプリケーションリソースの`licenses/react-i18next-LICENSE`に収録しています。  
 開発元プロジェクトは[React i18next](https://react.i18next.com/)で公開されています。  
 
-## Tauri Updater plugin
+## Tauri Updaterプラグイン
 
 Stellaは、`tauri-plugin-updater` 2.10.1をMIT LicenseまたはApache License 2.0に基づいて同梱しています。  
-著作権者はTauri Programme in the Commons Conservancyおよびcontributorsです。  
+著作権者はTauri Programme in the Commons Conservancyおよびコントリビューターです。  
 
 ライセンス情報は、アプリケーションリソースの`licenses/tauri-plugin-updater-LICENSE.spdx`に収録しています。  
 開発元プロジェクトは[Tauri Plugins Workspace](https://github.com/tauri-apps/plugins-workspace)で公開されています。  
