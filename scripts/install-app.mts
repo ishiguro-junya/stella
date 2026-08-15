@@ -64,7 +64,7 @@ function run(command: string, args: string[], options: RunOptions = {}) {
   if (result.error) fail(`${command}を起動できませんでした: ${result.error.message}`);
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout ?? ''}${result.stderr ?? ''}` : '';
-    fail(`${command}が終了code ${String(result.status)}で失敗しました。${detail}`);
+    fail(`${command}が終了コード${String(result.status)}で失敗しました。${detail}`);
   }
   return options.capture ? (result.stdout ?? '').trim() : '';
 }
@@ -72,7 +72,7 @@ function run(command: string, args: string[], options: RunOptions = {}) {
 function resetInstallDirectory() {
   const relativePath = relative(temporaryRoot, installDirectory);
   if (relativePath.startsWith('..') || relativePath === '') {
-    fail(`一時directoryのpathが不正です: ${installDirectory}`);
+    fail(`一時ディレクトリのパスが不正です: ${installDirectory}`);
   }
   rmSync(installDirectory, { recursive: true, force: true });
   mkdirSync(installDirectory, { recursive: true });
@@ -90,12 +90,12 @@ function bundleValue(application: string, key: string) {
 
 function inspectBundle(application: string): BundleInfo {
   if (!existsSync(application) || !statSync(application).isDirectory()) {
-    fail(`Application bundleがありません: ${application}`);
+    fail(`アプリのバンドルがありません: ${application}`);
   }
   const executable = bundleValue(application, 'CFBundleExecutable');
   const executablePath = join(application, 'Contents', 'MacOS', executable);
   if (!existsSync(executablePath) || !statSync(executablePath).isFile()) {
-    fail(`Applicationの実行fileがありません: ${executablePath}`);
+    fail(`アプリの実行ファイルがありません: ${executablePath}`);
   }
   return {
     identifier: bundleValue(application, 'CFBundleIdentifier'),
@@ -109,7 +109,7 @@ function assertExpectedBundle(bundle: BundleInfo, expected: BundleInfo, applicat
   const keys: (keyof BundleInfo)[] = ['identifier', 'version', 'executable', 'executableSha256'];
   for (const key of keys) {
     if (bundle[key] !== expected[key]) {
-      fail(`${application}の${key}がbuild成果物と一致しません。`);
+      fail(`${application}の${key}がビルド成果物と一致しません。`);
     }
   }
 }
@@ -136,7 +136,7 @@ function delay(milliseconds: number) {
 async function waitForInstalledApplicationToExit(deadline: number) {
   if (installedApplicationPids().length === 0) return;
   if (Date.now() >= deadline) {
-    fail('Stellaを10秒以内に終了できませんでした。Applicationは置き換えていません。');
+    fail('Stellaを10秒以内に終了できませんでした。アプリは置き換えていません。');
   }
   await delay(100);
   await waitForInstalledApplicationToExit(deadline);
@@ -170,21 +170,21 @@ function rollback(previousMoved: boolean, installedMoved: boolean) {
     try {
       renameSync(destinationApplication, failedApplication);
     } catch (error) {
-      errors.push(`新しいApplicationを退避できませんでした: ${errorMessage(error)}`);
+      errors.push(`新しいアプリを退避できませんでした: ${errorMessage(error)}`);
     }
   }
   if (previousMoved && existsSync(previousApplication) && !existsSync(destinationApplication)) {
     try {
       renameSync(previousApplication, destinationApplication);
     } catch (error) {
-      errors.push(`以前のApplicationを復元できませんでした: ${errorMessage(error)}`);
+      errors.push(`以前のアプリを復元できませんでした: ${errorMessage(error)}`);
     }
   }
   return errors;
 }
 
 async function install() {
-  if (platform() !== 'darwin') fail('ApplicationのinstallはmacOS専用です。');
+  if (platform() !== 'darwin') fail('アプリのインストールはmacOS専用です。');
   try {
     accessSync('/Applications', constants.W_OK);
   } catch {
@@ -196,7 +196,7 @@ async function install() {
 
   const sourceBundle = inspectBundle(sourceApplication);
   if (sourceBundle.identifier !== 'com.emuni.stella') {
-    fail(`Bundle IDがcom.emuni.stellaではありません: ${sourceBundle.identifier}`);
+    fail(`バンドルIDがcom.emuni.stellaではありません: ${sourceBundle.identifier}`);
   }
 
   run('/usr/bin/ditto', [sourceApplication, stagedApplication]);
@@ -220,7 +220,7 @@ async function install() {
   } catch (error) {
     const rollbackErrors = rollback(previousMoved, installedMoved);
     const rollbackDetail = rollbackErrors.length > 0 ? `\n${rollbackErrors.join('\n')}` : '';
-    fail(`Applicationの置き換えに失敗しました: ${errorMessage(error)}${rollbackDetail}`);
+    fail(`アプリの置き換えに失敗しました: ${errorMessage(error)}${rollbackDetail}`);
   }
 
   rmSync(installDirectory, { recursive: true, force: true });

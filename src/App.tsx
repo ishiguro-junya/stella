@@ -1467,7 +1467,7 @@ export function App({
     );
     for (const remote of remotesToFetch) {
       try {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- 共有busy状態を競合させずリモートごとに実行する。
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 共有の処理中状態を競合させずリモートごとに実行する。
         await execute({ repoId: manager.repoId, action: { kind: 'fetch', remote } });
       } catch {
         // URL変更は完了済みのため、フェッチ失敗は通常のエラー表示に残す。
@@ -1595,7 +1595,7 @@ export function App({
       ) {
         cancelWorkspaceViewTransition();
         setWorkspaceViewTransition(navigation.view);
-        // 非前面のWKWebViewでも遷移を完了できるtaskへ分け、旧画面の内容を先に破棄します。
+        // 非前面のWKWebViewでも遷移を完了できるタスクへ分け、旧画面の内容を先に破棄する。
         workspaceViewTransitionTimerRef.current = window.setTimeout(() => {
           workspaceViewTransitionTimerRef.current = undefined;
           performNavigation(navigation);

@@ -671,7 +671,7 @@ function redactArg(argument: string): string {
       return url.toString();
     }
   } catch {
-    // argvの各要素は通常URLではない。
+    // `argv`の各要素は通常URLではない。
   }
   return argument;
 }

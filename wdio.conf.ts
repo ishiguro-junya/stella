@@ -1,6 +1,6 @@
 const visualQaDirectory = process.env.STELLA_VISUAL_QA_DIR;
 if (visualQaDirectory) {
-  // capture先はtest workerだけへ渡し、native Appの起動環境からは分離します。
+  // 保存先はテスト用ワーカーだけへ渡し、ネイティブアプリの起動環境から分離する。
   delete process.env.STELLA_VISUAL_QA_DIR;
 }
 

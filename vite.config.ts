@@ -27,9 +27,9 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist',
-    // Lefthook runs Vite and Cargo in parallel. Keeping existing hashed assets prevents
-    // generate_context! from observing files disappear mid-compile. Tauri's own build
-    // is serialized after beforeBuildCommand, so release builds can safely start clean.
+    // LefthookはViteとCargoを並列で実行する。
+    // ハッシュ付きの既存ファイルを残し、`generate_context!`の処理中にファイルが消えないようにする。
+    // Tauriのビルドは`beforeBuildCommand`の後に直列で実行されるため、配布用ビルドでは出力先を空にできる。
     emptyOutDir: isTauriBuild,
     sourcemap: false,
   },

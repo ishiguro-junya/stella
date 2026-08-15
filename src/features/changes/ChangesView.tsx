@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログのフォーカス履歴を保ったまま非破壊操作をダイアログとして公開する。 */
 import {
   useCallback,
   useDeferredValue,
@@ -572,7 +572,7 @@ export function ChangesView({
         )
           setConflict(result.document);
       } catch {
-        // 通常のquery処理でerrorを報告するため、background refreshでは通知しない。
+        // 通常の問い合わせ処理でエラーを報告するため、バックグラウンド更新では通知しない。
       }
     };
     const interval = window.setInterval(() => {

@@ -5,13 +5,13 @@ import { dirname, join, resolve } from 'node:path';
 const mode = process.argv[2];
 const source = process.argv[3];
 if ((mode !== 'dev' && mode !== 'test-link') || !source) {
-  throw new Error('使い方: mode-app.mts <dev|test-link> <executable> [...args]');
+  throw new Error('使い方: mode-app.mts <dev|test-link> <実行ファイル> [...引数]');
 }
 
 const name = mode === 'dev' ? 'Stella (DEV)' : 'Stella (TEST)';
 const executable = resolve(source);
 const namedExecutable = join(dirname(executable), name);
-// macOSのDock名には実行ファイル名が使われるため、起動種別ごとの名前でハードリンクを作ります。
+// macOSのDock名には実行ファイル名が使われるため、起動種別ごとの名前でハードリンクを作る。
 await rm(namedExecutable, { force: true });
 await link(executable, namedExecutable);
 

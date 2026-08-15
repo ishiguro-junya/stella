@@ -199,8 +199,8 @@ impl ResolvedToolchain {
                 ("filter.lfs.required", "true"),
             ]
         } else {
-            // LFS filterが未設定だとGitはpointerを通常fileとしてcheckoutできてしまう。
-            // required filterを失敗させ、attach時の診断をすり抜けたBranch切替も安全に止める。
+            // Git LFSのフィルターが未設定だと、Gitはポインターを通常ファイルとしてチェックアウトできてしまう。
+            // 必須フィルターを失敗させ、接続時の診断をすり抜けたブランチ切り替えも安全に止める。
             [
                 ("filter.lfs.clean", "/usr/bin/false"),
                 ("filter.lfs.smudge", "/usr/bin/false"),
@@ -354,7 +354,7 @@ impl ToolchainManager {
         if !candidate.git.available {
             return Err(WorkspaceError::new(
                 ErrorCode::InvalidRequest,
-                "選択したtoolchainに利用可能なGitがありません。",
+                "選択したツールチェーンに利用可能なGitがありません。",
             )
             .detail("mode", format!("{mode:?}"))
             .detail(
@@ -430,12 +430,12 @@ fn validate_bundled_root(root: &Path) -> Result<(), String> {
     let marker_path = root.join(".stella-toolchain.json");
     let marker: BundledMarker = serde_json::from_slice(
         &fs::read(&marker_path)
-            .map_err(|error| format!("内蔵toolchain markerを読めません: {error}"))?,
+            .map_err(|error| format!("内蔵ツールチェーンのマーカーを読めません: {error}"))?,
     )
-    .map_err(|error| format!("内蔵toolchain markerが不正です: {error}"))?;
+    .map_err(|error| format!("内蔵ツールチェーンのマーカーが不正です: {error}"))?;
     let expected_manifest = sha256_hex(include_bytes!("../../toolchain.lock.json"));
     if marker.manifest_sha256 != expected_manifest {
-        return Err("内蔵toolchainのlock manifestがApplicationと一致しません。".into());
+        return Err("内蔵ツールチェーンのロックマニフェストがアプリと一致しません。".into());
     }
     let required_files = [
         "bin/git",
@@ -450,13 +450,15 @@ fn validate_bundled_root(root: &Path) -> Result<(), String> {
         .chain(["share/git-core/templates"])
     {
         if !root.join(required).exists() {
-            return Err(format!("内蔵toolchain componentがありません: {required}"));
+            return Err(format!(
+                "内蔵ツールチェーンの構成要素がありません: {required}"
+            ));
         }
     }
     for required in required_files {
         if !marker.files.contains_key(required) {
             return Err(format!(
-                "内蔵toolchain checksumが記録されていません: {required}"
+                "内蔵ツールチェーンのチェックサムが記録されていません: {required}"
             ));
         }
     }
@@ -468,7 +470,7 @@ fn validate_bundled_root(root: &Path) -> Result<(), String> {
         );
         if &actual != expected {
             return Err(format!(
-                "内蔵toolchain checksumが一致しません: {relative_path}"
+                "内蔵ツールチェーンのチェックサムが一致しません: {relative_path}"
             ));
         }
     }
@@ -505,7 +507,7 @@ fn find_component(name: &str, args: &[&str]) -> ToolchainComponentStatus {
     }
     ToolchainComponentStatus::missing(
         None,
-        format!("{name}は標準の実行ファイルpathに見つかりません。"),
+        format!("{name}の実行ファイルが標準の検索先に見つかりません。"),
     )
 }
 
@@ -674,7 +676,10 @@ fn read_settings(path: &Path) -> PersistedSettings {
 
 fn write_settings(path: &Path, settings: &PersistedSettings) -> WorkspaceResult<()> {
     let parent = path.parent().ok_or_else(|| {
-        WorkspaceError::new(ErrorCode::Internal, "toolchain設定pathを解決できません。")
+        WorkspaceError::new(
+            ErrorCode::Internal,
+            "ツールチェーン設定の保存先を解決できません。",
+        )
     })?;
     fs::create_dir_all(parent).map_err(settings_io_error)?;
     let temporary = path.with_extension("json.tmp");
@@ -770,7 +775,7 @@ fn write_effective_ignore_file(
 fn settings_io_error(error: std::io::Error) -> WorkspaceError {
     WorkspaceError::new(
         ErrorCode::Io,
-        format!("toolchain設定を保存できませんでした: {error}"),
+        format!("ツールチェーン設定を保存できませんでした: {error}"),
     )
 }
 

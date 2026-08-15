@@ -5,7 +5,7 @@
     "docs: セットアップ手順を更新する",
     "stella: ローカル設定を保存する",
     "refactor!: Workspace契約を変更する",
-    "feat(history)!: 履歴取得形式を変更する\n\nBREAKING CHANGE: graphの形式を変更した"
+    "feat(history)!: 履歴取得形式を変更する\n\nBREAKING CHANGE: グラフの形式を変更した"
   ],
   "invalid": [
     "リポジトリを開けるようにする",

@@ -293,7 +293,7 @@ export function writePreferences(preferences: StellaPreferences): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
   } catch {
-    // localStorageが満杯または利用不能でもGit操作は妨げない。
+    // `localStorage`が満杯または利用不能でもGit操作は妨げない。
   }
 }
 

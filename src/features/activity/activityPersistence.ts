@@ -110,7 +110,7 @@ export function readPersistedActivities(
     try {
       (storage ?? window.localStorage).removeItem(ACTIVITY_STORAGE_KEY);
     } catch {
-      // 利用不能なstorageでworkspace操作を妨げない。
+      // 保存領域を利用できなくてもGit操作を妨げない。
     }
     return [];
   }
@@ -135,7 +135,7 @@ export function persistTerminalActivities(
     if (normalized.length) target.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify(normalized));
     else target.removeItem(ACTIVITY_STORAGE_KEY);
   } catch {
-    // 利用不能または満杯のstorageでworkspace操作を妨げない。
+    // 保存領域を利用できなくてもGit操作を妨げない。
   }
 }
 

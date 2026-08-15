@@ -7,7 +7,7 @@ export const pickDirectory: DirectoryPicker = async (title) => {
     import.meta.env.VITE_E2E === 'true' &&
     Object.hasOwn(window, 'stellaE2eDirectoryPickerResult')
   ) {
-    // Native WebDriverからFinderを操作できないため、E2Eビルドだけで一回分の選択結果を受け取ります。
+    // ネイティブWebDriverからFinderを操作できないため、E2Eビルドだけで1回分の選択結果を受け取る。
     const selected = window.stellaE2eDirectoryPickerResult;
     delete window.stellaE2eDirectoryPickerResult;
     return selected ?? null;

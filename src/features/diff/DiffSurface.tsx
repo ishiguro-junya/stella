@@ -23,7 +23,7 @@ import type {
   SelectedLineRange,
 } from '@pierre/diffs';
 import { CodeView, FileDiff, PatchDiff, WorkerPoolContextProvider } from '@pierre/diffs/react';
-// oxlint-disable-next-line import/default -- Viteの?worker queryがdefaultのWorker constructorを生成する。
+// oxlint-disable-next-line import/default -- Viteの`?worker`クエリーが既定エクスポートとしてWorkerコンストラクターを生成する。
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 
 import type { DiffStyle } from '../../domain/workspace';
@@ -38,7 +38,7 @@ import { FileStatusIcon, type FileStatus } from '../../ui/FileStatusIcon';
 
 const STELLA_DIFF_THEME = 'stella-semantic';
 const STELLA_DIFF_FILE_HEADER_HEIGHT = 32;
-// Diffのslot内では共通buttonのmin-heightが優先される場合があるため、正方形の寸法は要素へ直接固定する。
+// 差分のスロット内では共通ボタンの最小の高さが優先される場合があるため、正方形の寸法は要素へ直接固定する。
 const DIFF_FILE_COLLAPSE_TOGGLE_STYLE: CSSProperties = {
   alignSelf: 'center',
   aspectRatio: '1 / 1',
@@ -904,7 +904,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
     },
     [],
   );
-  // Shadow DOMの文言はReactの再描画対象外なので、言語変更とHMRの翻訳更新時に再注入する。
+  // Shadow DOMの文言はReactの再描画対象外なので、言語変更とHMRによる翻訳更新時に再注入する。
   useEffect(() => {
     for (const [node, fileDiff] of renderedHunkHostsRef.current) {
       enhanceHunkSeparators(node, { fileDiff }, 'update');
@@ -1100,7 +1100,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
         const itemCollapsed = collapsed === true || collapsedCodeViewItems.has(item.id);
         return {
           ...item,
-          // CodeViewはversionが同じitemの更新を無視するため、折りたたみ変更をrevisionへ含める。
+          // `CodeView`はバージョンが同じ項目の更新を無視するため、折りたたみ変更をリビジョンへ含める。
           version: itemCollapsed ? 2 : 1,
           collapsed: itemCollapsed,
         };

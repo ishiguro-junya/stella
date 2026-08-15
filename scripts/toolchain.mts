@@ -136,7 +136,7 @@ function run(command: string, args: string[], options: RunOptions = {}) {
   if (result.error) fail(`${command}を起動できませんでした: ${result.error.message}`);
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout ?? ''}${result.stderr ?? ''}` : '';
-    fail(`${command}が終了code ${String(result.status)}で失敗しました。${detail}`);
+    fail(`${command}が終了コード${String(result.status)}で失敗しました。${detail}`);
   }
   return options.capture ? (result.stdout ?? '').trim() : '';
 }
@@ -184,7 +184,7 @@ function manifestDigest() {
 
 function assertPlatform() {
   if (platform() !== 'darwin' || arch() !== 'arm64') {
-    fail(`内蔵toolchainはdarwin-arm64専用です。現在は${platform()}-${arch()}です。`);
+    fail(`内蔵ツールチェーンはdarwin-arm64専用です。現在は${platform()}-${arch()}です。`);
   }
 }
 
@@ -206,9 +206,7 @@ function download(component: DownloadSource) {
   const actual = sha256(partial);
   if (actual !== component.sha256) {
     rmSync(partial, { force: true });
-    fail(
-      `${component.archive}のSHA-256が一致しません。expected=${component.sha256} actual=${actual}`,
-    );
+    fail(`${component.archive}のSHA-256が一致しません。期待値=${component.sha256} 実際=${actual}`);
   }
   renameSync(partial, destination);
   return destination;
@@ -255,13 +253,13 @@ function copyExecutable(source: string, destination: string) {
 function buildGit(component: ToolchainComponent, archive: string) {
   const sourceRoot = join(sourcesDirectory, `git-${component.version}`);
   extractTar(archive, sourcesDirectory);
-  if (!existsSync(join(sourceRoot, 'configure'))) fail('Git sourceを展開できませんでした。');
-  // Repository配下の一時sourceをStella自身のCargo workspaceから分離する。
+  if (!existsSync(join(sourceRoot, 'configure'))) fail('Gitのソースを展開できませんでした。');
+  // リポジトリ配下の一時ソースをStella自身のCargoワークスペースから分離する。
   appendFileSync(join(sourceRoot, 'Cargo.toml'), '\n[workspace]\n');
   const stage = join(buildDirectory, 'git-stage');
   mkdirSync(stage, { recursive: true });
   const cargoDirectory = executableDirectory('cargo');
-  if (!cargoDirectory) fail('Git 2.55.0のbuildに必要なCargoが見つかりません。');
+  if (!cargoDirectory) fail('Git 2.55.0のビルドに必要なCargoが見つかりません。');
   const environment = {
     ...process.env,
     PATH: `${cargoDirectory}:${systemPath}`,
@@ -314,14 +312,14 @@ function installArchiveComponent(
 
 function writeBuildInformation(lock: ToolchainManifest, archives: Record<ComponentName, string>) {
   const lines = [
-    '# Stella内蔵Git toolchain build情報',
+    '# Stella内蔵Gitツールチェーンのビルド情報',
     '',
-    `- Platform: ${lock.platform}`,
-    '- Git build: `RUNTIME_PREFIX=YesPlease NO_GETTEXT=YesPlease NO_TCLTK=YesPlease NO_PERL=YesPlease`',
-    '- Git install prefix: `/usr/local`（Application resource内へstaging後、runtime prefixで再配置）',
-    '- Git source adjustment: Cargo packageをStellaのworkspaceから分離する`[workspace]`のみ追記',
+    `- プラットフォーム：${lock.platform}`,
+    '- Gitのビルド設定：`RUNTIME_PREFIX=YesPlease NO_GETTEXT=YesPlease NO_TCLTK=YesPlease NO_PERL=YesPlease`',
+    '- Gitのインストール先：`/usr/local`（アプリ内の実行位置に合わせて再配置）',
+    '- Gitソースの調整：CargoパッケージをStellaのワークスペースから分離する`[workspace]`だけを追記',
     '',
-    '## Sourceと配布asset',
+    '## ソースと配布成果物',
     '',
   ];
   const components: [ComponentName, ToolchainComponent][] = [
@@ -332,10 +330,10 @@ function writeBuildInformation(lock: ToolchainManifest, archives: Record<Compone
   for (const [name, component] of components) {
     lines.push(`- ${name} ${component.version}: ${component.url}`);
     lines.push(`  - SHA-256: \`${component.sha256}\``);
-    lines.push(`  - Local archive: \`${relative(repositoryRoot, archives[name])}\``);
+    lines.push(`  - ローカルアーカイブ：\`${relative(repositoryRoot, archives[name])}\``);
     if (component.licenseUrl) {
-      lines.push(`  - License: ${component.licenseUrl}`);
-      lines.push(`  - License SHA-256: \`${component.licenseSha256}\``);
+      lines.push(`  - ライセンス：${component.licenseUrl}`);
+      lines.push(`  - ライセンスのSHA-256：\`${component.licenseSha256}\``);
     }
   }
   lines.push('');
@@ -361,7 +359,7 @@ function prepare() {
   assertPlatform();
   const lock = manifest();
   if (lock.schemaVersion !== 1 || lock.platform !== 'darwin-arm64') {
-    fail('toolchain.lock.jsonのschemaまたはplatformが不正です。');
+    fail('toolchain.lock.jsonのスキーマまたは対象環境が不正です。');
   }
   safeReset(sourcesDirectory);
   safeReset(buildDirectory);
@@ -390,7 +388,7 @@ function prepare() {
     `${JSON.stringify({ manifestSha256: manifestDigest(), files }, null, 2)}\n`,
   );
   verify();
-  process.stdout.write('内蔵Git toolchainを準備しました。\n');
+  process.stdout.write('内蔵Gitツールチェーンを準備しました。\n');
 }
 
 function verifyBundle(root: string, missingHint: string) {
@@ -408,15 +406,15 @@ function verifyBundle(root: string, missingHint: string) {
     files,
   };
   if (marker.manifestSha256 !== manifestDigest()) {
-    fail('内蔵Git toolchainのlock manifestが一致しません。');
+    fail('内蔵Gitツールチェーンのロックマニフェストが一致しません。');
   }
   for (const path of requiredBundleFiles()) {
     const absolute = join(root, path);
     if (!existsSync(absolute)) fail(`${path}がありません。`);
     if (statSync(absolute).isFile()) {
-      if (!marker.files[path]) fail(`${path}のchecksumが記録されていません。`);
+      if (!marker.files[path]) fail(`${path}のチェックサムが記録されていません。`);
       if (marker.files[path] !== sha256(absolute)) {
-        fail(`${path}のchecksumが一致しません。`);
+        fail(`${path}のチェックサムが一致しません。`);
       }
     }
   }
@@ -425,7 +423,7 @@ function verifyBundle(root: string, missingHint: string) {
 function verify() {
   verifyBundle(
     bundleDirectory,
-    '内蔵Git toolchainがありません。`mise run setup`を実行してください。',
+    '内蔵Gitツールチェーンがありません。`mise run setup`を実行してください。',
   );
 }
 
@@ -472,7 +470,7 @@ function runReleaseSmoke(root: string) {
   const lfsPayload = Buffer.from('Stella bundled Git LFS release gate\n'.repeat(4096));
   writeFileSync(join(source, 'payload.bin'), lfsPayload);
   run(git, ['-C', source, 'add', '.gitattributes', 'payload.bin'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: 内蔵toolchainを検証'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 内蔵ツールチェーンを検証'], options);
   run(git, ['-C', source, 'remote', 'add', 'origin', `file://${remote}`], options);
   run(gitLfs, ['push', 'origin', 'refs/heads/main'], { cwd: source, env: environment });
   run(git, ['-C', source, 'push', '-u', 'origin', 'main'], options);
@@ -504,22 +502,22 @@ function runReleaseSmoke(root: string) {
     ...options,
     capture: true,
   });
-  if (currentBranch !== 'develop') fail('Git Flow finish後のBranchがdevelopではありません。');
+  if (currentBranch !== 'develop') fail('Git Flowの終了後のブランチがdevelopではありません。');
 
   writeFileSync(join(source, 'conflict.txt'), 'base\n');
   run(git, ['-C', source, 'add', 'conflict.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: 競合fixtureを追加'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 競合フィクスチャを追加'], options);
   run(gitFlow, ['feature', 'start', 'conflict', '--no-fetch'], {
     cwd: source,
     env: environment,
   });
   writeFileSync(join(source, 'conflict.txt'), 'feature\n');
   run(git, ['-C', source, 'add', 'conflict.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Feature側を変更'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: feature側を変更'], options);
   run(git, ['-C', source, 'switch', 'develop'], options);
   writeFileSync(join(source, 'conflict.txt'), 'develop\n');
   run(git, ['-C', source, 'add', 'conflict.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Develop側を変更'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: develop側を変更'], options);
   run(git, ['-C', source, 'switch', 'feature/conflict'], options);
   runExpectFailure(
     gitFlow,
@@ -529,29 +527,29 @@ function runReleaseSmoke(root: string) {
   const statePath = join(source, '.git', 'gitflow', 'state', 'merge.json');
   const stateValue: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
   const state = jsonObject(stateValue, statePath);
-  if (state.action !== 'finish') fail('Git Flow finishの復旧stateが保存されていません。');
+  if (state.action !== 'finish') fail('Git Flowの終了操作を示す復旧状態が保存されていません。');
   writeFileSync(join(source, 'conflict.txt'), 'resolved\n');
   run(git, ['-C', source, 'add', 'conflict.txt'], options);
   run(gitFlow, ['feature', 'finish', '--continue', 'conflict'], {
     cwd: source,
     env: environment,
   });
-  if (existsSync(statePath)) fail('Git Flow continue後も復旧stateが残っています。');
+  if (existsSync(statePath)) fail('Git Flowの続行後も復旧状態が残っています。');
 
   writeFileSync(join(source, 'abort.txt'), 'base\n');
   run(git, ['-C', source, 'add', 'abort.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Abort fixtureを追加'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 中止用フィクスチャを追加'], options);
   run(gitFlow, ['feature', 'start', 'abort-case', '--no-fetch'], {
     cwd: source,
     env: environment,
   });
   writeFileSync(join(source, 'abort.txt'), 'feature\n');
   run(git, ['-C', source, 'add', 'abort.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Abort Feature側を変更'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 中止用のfeature側を変更'], options);
   run(git, ['-C', source, 'switch', 'develop'], options);
   writeFileSync(join(source, 'abort.txt'), 'develop\n');
   run(git, ['-C', source, 'add', 'abort.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Abort Develop側を変更'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 中止用のdevelop側を変更'], options);
   run(git, ['-C', source, 'switch', 'feature/abort-case'], options);
   runExpectFailure(
     gitFlow,
@@ -562,7 +560,7 @@ function runReleaseSmoke(root: string) {
     cwd: source,
     env: environment,
   });
-  if (existsSync(statePath)) fail('Git Flow abort後も復旧stateが残っています。');
+  if (existsSync(statePath)) fail('Git Flowの中止後も復旧状態が残っています。');
 
   run(git, ['-C', source, 'switch', 'develop'], options);
   run(gitFlow, ['feature', 'start', 'command-family', '--no-fetch'], {
@@ -574,7 +572,8 @@ function runReleaseSmoke(root: string) {
     env: environment,
     capture: true,
   });
-  if (!listed.includes('command-family')) fail('Git Flow listで作成したBranchを取得できません。');
+  if (!listed.includes('command-family'))
+    fail('Git Flowの一覧から作成したブランチを取得できません。');
   run(git, ['-C', source, 'switch', 'develop'], options);
   run(gitFlow, ['feature', 'checkout', 'command-family'], {
     cwd: source,
@@ -586,11 +585,11 @@ function runReleaseSmoke(root: string) {
   });
   writeFileSync(join(source, 'command-family.txt'), 'topic\n');
   run(git, ['-C', source, 'add', 'command-family.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Git Flow command familyを検証'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: Git Flowのコマンド群を検証'], options);
   run(git, ['-C', source, 'switch', 'develop'], options);
   writeFileSync(join(source, 'parent-update.txt'), 'parent\n');
   run(git, ['-C', source, 'add', 'parent-update.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Update元を進める'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: 更新元を進める'], options);
   run(gitFlow, ['feature', 'checkout', 'command-family-renamed'], {
     cwd: source,
     env: environment,
@@ -692,7 +691,7 @@ function runReleaseSmoke(root: string) {
   run(git, ['-C', source, 'switch', 'staging'], options);
   writeFileSync(join(source, 'integrate.txt'), 'integrate\n');
   run(git, ['-C', source, 'add', 'integrate.txt'], options);
-  run(git, ['-C', source, 'commit', '-m', 'test: Integrateを検証'], options);
+  run(git, ['-C', source, 'commit', '-m', 'test: integrateを検証'], options);
   run(gitFlow, ['integrate', 'staging', '--no-fetch', '--notag', '--no-sign', '--no-rebase'], {
     cwd: source,
     env: environment,
@@ -717,12 +716,12 @@ function releaseGate(applicationPath: string) {
   for (const [name, args, version] of commands) {
     const executable = join(root, 'bin', name);
     const fileOutput = run('/usr/bin/file', [executable], { capture: true });
-    if (!fileOutput.includes('arm64')) fail(`${name}がarm64 binaryではありません。`);
+    if (!fileOutput.includes('arm64')) fail(`${name}がarm64バイナリではありません。`);
     const versionOutput = run(executable, args, { capture: true });
-    if (!versionOutput.includes(version)) fail(`${name}のversionが${version}ではありません。`);
+    if (!versionOutput.includes(version)) fail(`${name}のバージョンが${version}ではありません。`);
     const links = run('/usr/bin/otool', ['-L', executable], { capture: true });
     if (/(?:\.tmp|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
-      fail(`${name}の動的link先にbuild環境pathが残っています。\n${links}`);
+      fail(`${name}の動的リンク先にビルド環境のパスが残っています。\n${links}`);
     }
   }
   for (const helper of [
@@ -731,15 +730,15 @@ function releaseGate(applicationPath: string) {
   ]) {
     const executable = join(root, helper);
     const fileOutput = run('/usr/bin/file', [executable], { capture: true });
-    if (!fileOutput.includes('arm64')) fail(`${helper}がarm64 binaryではありません。`);
+    if (!fileOutput.includes('arm64')) fail(`${helper}がarm64バイナリではありません。`);
     const links = run('/usr/bin/otool', ['-L', executable], { capture: true });
     if (/(?:\.tmp|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
-      fail(`${helper}の動的link先にbuild環境pathが残っています。\n${links}`);
+      fail(`${helper}の動的リンク先にビルド環境のパスが残っています。\n${links}`);
     }
   }
-  verifyBundle(root, 'Applicationに内蔵Git toolchainがありません。');
+  verifyBundle(root, 'アプリに内蔵Gitツールチェーンがありません。');
   runReleaseSmoke(root);
-  process.stdout.write('内蔵Git toolchainのrelease gateを通過しました。\n');
+  process.stdout.write('内蔵Gitツールチェーンのリリース検査を通過しました。\n');
 }
 
 const [mode, ...arguments_] = process.argv.slice(2);

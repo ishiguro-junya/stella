@@ -325,7 +325,7 @@ export function TextEditor({
       ? Math.min(Math.max(Math.trunc(requestedScrollLine), 1), baseState.doc.lines)
       : 1;
     const scrollPosition = baseState.doc.line(scrollLine).from;
-    // Flex layoutの初回計測でEditor自身が0pxでも、初回描画前の位置決めを維持する。
+    // フレックス配置の初回計測でエディタ自身が0pxでも、初回描画前の位置決めを維持する。
     const scrollTopMargin = resolveInitialScrollViewportHeight(host) * INITIAL_SCROLL_TOP_RATIO;
     const state = scrollRequested
       ? baseState.update({

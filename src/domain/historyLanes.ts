@@ -18,15 +18,15 @@ export interface HistoryParentEdge {
 
 export interface HistoryGraphTopology {
   lane: number;
-  /** この行の上端で使用中のlane。 */
+  /** この行の上端で使用中のレーン。 */
   activeLanes: readonly number[];
-  /** この行の下端で使用中のlane。 */
+  /** この行の下端で使用中のレーン。 */
   nextActiveLanes: readonly number[];
-  /** 予測したCommit laneからこの行のnodeへの接続。 */
+  /** 予測したコミットレーンからこの行のノードへの接続。 */
   incomingEdges: readonly HistoryIncomingEdge[];
-  /** この行のnodeから宣言済みの各parentへの接続。 */
+  /** この行のノードから宣言済みの各親への接続。 */
   parentEdges: readonly HistoryParentEdge[];
-  /** edgeを切らずにこの行を描画するために必要な幅。 */
+  /** 接続線を切らずにこの行を描画するために必要な幅。 */
   laneCount: number;
 }
 
@@ -37,8 +37,8 @@ function occupiedLanes(active: readonly (string | undefined)[]): number[] {
 }
 
 /**
- * Git logの出力を新しい順に辿りながら、安定したgraph layoutを構築する。
- * 各行は上にある行だけに依存するため、次のpageを追加しても描画済みのlaneやedgeは変わらない。
+ * Gitログの出力を新しい順にたどりながら、安定したグラフ配置を構築する。
+ * 各行は上にある行だけに依存するため、次のページを追加しても描画済みのレーンや接続線は変わらない。
  */
 export function assignHistoryLanes<Node extends HistoryLaneNode>(
   commits: readonly Node[],
@@ -70,7 +70,7 @@ export function assignHistoryLanes<Node extends HistoryLaneNode>(
     if (!firstParent) {
       active[lane] = undefined;
     } else {
-      // 共通の親でもこのlaneを親行まで保ち、分岐元から斜め線を開始する。
+      // 共通の親でもこのレーンを親行まで保ち、分岐元から斜め線を開始する。
       active[lane] = firstParent;
       parentEdges.push({ parentOid: firstParent, fromLane: lane, toLane: lane });
     }

@@ -34,7 +34,7 @@ pub(crate) fn overview(
             .to_ascii_lowercase()
             .contains("unknown flag")
     {
-        // git-flow-next 1.2.0はJSON flag導入前のため、同じoverviewをplain textで取得する。
+        // git-flow-next 1.2.0にはJSON出力用のフラグがないため、同じ概要をプレーンテキストで取得する。
         output = git.run_flow(root, strings(["overview"]), None, true)?;
     }
     let text = output.stdout_text().trim().to_owned();

@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- change listのfieldsetでCommand-Aによる全file選択を処理する。 */
+/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- 変更一覧のフィールドセットでCommand-Aによる全ファイル選択を処理する。 */
 import {
   useEffect,
   useRef,

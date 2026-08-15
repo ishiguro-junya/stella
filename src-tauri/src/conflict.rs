@@ -22,8 +22,8 @@ use uuid::Uuid;
 const EDIT_BYTES: usize = 1024 * 1024;
 const EDIT_LINES: usize = 20_000;
 const REVISION_HISTORY_LIMIT: usize = 100;
-// このメモリ計算規約をconflictSession.tsと一致させる。
-// UTF-16 code unitあたり4 byteなら、JSとRustの文字列を保守的に見積もれる。
+// このメモリ計算規則を`conflictSession.ts`と一致させる。
+// UTF-16のコード単位あたり4バイトなら、JavaScriptとRustの文字列を多めに見積もれる。
 const REVISION_HISTORY_BYTE_BUDGET: usize = 96 * 1024 * 1024;
 const REVISION_SNAPSHOT_OVERHEAD_BYTES: usize = 128;
 const REVISION_BLOCK_OVERHEAD_BYTES: usize = 256;
@@ -1119,7 +1119,7 @@ pub(crate) fn materialize(
                 ConflictChoice::Both => {
                     let mut both = current.ok_or_else(missing_side)?.bytes;
                     both.extend(incoming.ok_or_else(missing_side)?.bytes);
-                    // BothはCurrent、Incomingの順で連結するため、実行権限もCurrent側を継承する。
+                    // `Both`は`Current`、`Incoming`の順で連結するため、実行権限も`Current`側を継承する。
                     (both, current_mode.ok_or_else(missing_side)?)
                 }
                 ConflictChoice::Delete => unreachable!(),
@@ -1137,7 +1137,7 @@ pub(crate) fn open_external(
     let path = checked_worktree_path(root, &session.path)?;
     let mut command = Command::new("/usr/bin/open");
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-        // 任意の外部targetをeditorが辿らないよう、link自体をFinderに表示する。
+        // エディタが任意の外部参照先をたどらないよう、リンク自体をFinderに表示する。
         command.arg("-R");
     } else {
         match editor.kind {

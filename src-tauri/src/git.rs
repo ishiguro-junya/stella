@@ -852,9 +852,9 @@ impl GitCommand {
                 args
             }
         };
-        // Gitは`--`より後のpath引数もpathspec式として解釈する。
-        // 現在と将来の全commandで`*`、`[name]`、`:(glob)*`などの正当なfile名を安全に扱うため、
-        // process全体の既定値をliteral matchにする。
+        // Gitは`--`より後のパス引数もパス指定式として解釈する。
+        // 現在と将来の全コマンドで`*`、`[name]`、`:(glob)*`などの正当なファイル名を安全に扱うため、
+        // プロセス全体の既定値を完全一致にする。
         if !matches!(self, Self::AttributeFiles) {
             args.insert(0, "--literal-pathspecs".into());
         }
@@ -1126,8 +1126,8 @@ impl GitExecutor {
             .env("GIT_MERGE_AUTOEDIT", "no")
             .env("GIT_OPTIONAL_LOCKS", "0")
             .envs(self.environment.iter().cloned());
-        // userがキャンセルした後にhelperを残さないよう、Git、hook、credential helperと
-        // その子processを1つのprocess groupにまとめる。
+        // 利用者がキャンセルした後にヘルパーを残さないよう、Git、フック、資格情報ヘルパーと
+        // その子プロセスを1つのプロセスグループにまとめる。
         process.process_group(0);
         if let Some(trace) = &hook_trace {
             process.env("GIT_TRACE2_EVENT", &trace.path);
@@ -1305,7 +1305,7 @@ fn terminate_process_group(child: &mut std::process::Child) -> Option<i32> {
             Err(_) => break,
         }
     }
-    // Git親processが終了済みでも、hookが出力pipeを保持している場合に備えてgroupを終了する。
+    // Gitの親プロセスが終了済みでも、フックが出力パイプを保持している場合に備えてグループを終了する。
     let _ = Command::new("/bin/kill")
         .args(["-KILL", group.as_str()])
         .stdin(Stdio::null())
