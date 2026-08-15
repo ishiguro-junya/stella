@@ -1,6 +1,6 @@
 [package]
 name = "stella"
-version = "1.0.0-alpha.5"
+version = "1.0.0-alpha.6"
 description = "Stella Git client backend"
 license = "SUL-1.0"
 edition.workspace = true
