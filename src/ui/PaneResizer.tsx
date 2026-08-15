@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 調整可能なARIA separatorにはpointerとkeyboard操作が必要。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 調整可能なARIAセパレーターにはポインターとキーボード操作が必要。 */
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
 
 export interface PaneResizerProps {

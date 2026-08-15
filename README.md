@@ -18,27 +18,27 @@
 
 ### 変更
 
-ファイル、ハンク、行の単位で差分を確認・編集することができます。
+ファイル、ハンク、行単位でファイルの変更を確認し、編集できます。  
 
-![差分の確認画面](docs/assets/changes.png)
+![ファイル変更の画面](docs/assets/changes.png)
 
-![編集の画面](docs/assets/editor.png)
+![ファイル編集の画面](docs/assets/editor.png)
 
 ### 履歴
 
-コミット、ブランチ、タグを確認・検索することができます。
+コミット、ブランチ、タグを確認し、検索できます。  
 
 ![履歴の画面](docs/assets/history.png)
 
 ### 活動
 
-コミット数、コントリビューター数、ブランチ数の推移を閲覧できます。
+コミット数、コントリビューター数、ブランチ数の推移を閲覧できます。  
 
 ![活動の画面](docs/assets/activity.png)
 
 ### 設定
 
-言語や外観、文字サイズ、画面用・コード用フォント、差分、ステージの表示などを好みに合わせて設定できます。
+言語や外観、文字サイズ、画面用・コード用フォント、差分、ステージの表示などを好みに合わせて設定できます。  
 
 ![設定の画面](docs/assets/settings.png)
 
@@ -48,7 +48,7 @@
 brew install --cask ishiguro-junya/tap/stella
 ```
 
-## 🌱 はじめる
+## 🌱 開発を始める
 
 ```sh
 mise install
@@ -56,8 +56,8 @@ mise run setup
 mise run dev
 ```
 
-開発用リポジトリの`origin`にはローカルのbareリポジトリを使用し、GitHubやネットワークへは接続しません。
-`mise run reset`を実行すると、作業内容とローカルremoteをまとめて初期状態へ戻します。
+開発用リポジトリの`origin`にはローカルのベアリポジトリを使用し、GitHubやネットワークへは接続しません。  
+`mise run reset`を実行すると、作業内容とローカルリモートをまとめて初期状態へ戻します。  
 
 ## 🧰 コマンド
 
@@ -69,17 +69,18 @@ mise run dev
 | `mise run install` | アプリをインストールする。 |
 | `mise run lint` | コードをリントチェックする。 |
 | `mise run format` | コードをフォーマットする。 |
-| `mise run typecheck` | コードの型チェックを実行する。 |
-| `mise run test` | ユニットテストを実行する。 |
+| `mise run test` | 全てのテストを実行する。 |
+| `mise run test:unit` | 単体テストを実行する。 |
+| `mise run test:integration` | 統合テストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
-| `mise run screenshot` | スクリーンショットを生成する。 |
 | `mise run reset` | 開発用リポジトリを初期状態へ戻す。 |
+| `mise run screenshot` | スクリーンショットを生成する。 |
 
 ## 📁 ディレクトリ構成
 
 ```text
 .
-├── src/                    # 画面と操作を実装するReact / TypeScriptコード
+├── src/                    # 画面と操作を実装するReactとTypeScriptのコード
 │   ├── adapters/           # Tauriとの通信
 │   ├── domain/             # Gitの型とルール
 │   ├── features/           # 機能ごとの画面と操作
@@ -87,7 +88,7 @@ mise run dev
 │   ├── persistence/        # アプリ設定の保存
 │   ├── test/               # ユニットテスト
 │   ├── theme/              # 外観テーマの制御
-│   └── ui/                 # 共通UIコンポーネント
+│   └── ui/                 # 共通の画面部品
 ├── src-tauri/              # Git操作とTauriの設定
 ├── tests/                  # E2Eテストのコード
 ├── scripts/                # スクリプト
@@ -97,13 +98,16 @@ mise run dev
 ## 📚 ドキュメント
 
 - [AGENTS.md](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
-- [仕様](docs/specification.md)
-- [アーキテクチャ](docs/architecture.md)
+- [貢献ガイド](CONTRIBUTING.md)
 - [デザイン](DESIGN.md)
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
+- [仕様](docs/specification.md)
+- [アーキテクチャ](docs/architecture.md)
+- [テスト](docs/testing.md)
+- [ドキュメントの書き方](docs/writing.md)
 - [リリース手順](docs/release.md)
 
-## 🧩 Agent Skills
+## 🧩 エージェントスキル
 
 - [mattpocock/skills](https://www.skills.sh/mattpocock/skills)
 - [ponytail](https://www.skills.sh/dietrichgebert/ponytail/ponytail)
@@ -117,6 +121,8 @@ mise run dev
 - [Tauri](https://github.com/tauri-apps/tauri)
 - [Oxc](https://oxc.rs/)
 - [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
+- [textlint](https://github.com/textlint/textlint)
+- [@textlint-ja/textlint-rule-preset-ai-writing](https://github.com/textlint-ja/textlint-rule-preset-ai-writing)
 - [Lychee](https://github.com/lycheeverse/lychee)
 - [Lefthook](https://lefthook.dev/)
 - [Homebrew](https://brew.sh/ja/)

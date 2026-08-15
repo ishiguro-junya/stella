@@ -30,8 +30,8 @@ export interface ChoiceRequestStamp {
 }
 
 const MAX_HISTORY_ENTRIES = 100;
-// このメモリ計算規約をconflict.rsと一致させる。
-// UTF-16 code unitあたり4 byteなら、JSとRustの文字列をruntime間で保守的に見積もれる。
+// このメモリ計算規則を`conflict.rs`と一致させる。
+// UTF-16のコード単位あたり4バイトなら、JavaScriptとRustの文字列を実行環境間で多めに見積もれる。
 export const CONFLICT_HISTORY_BYTE_BUDGET = 96 * 1024 * 1024;
 const SNAPSHOT_OVERHEAD_BYTES = 128;
 const BLOCK_SNAPSHOT_OVERHEAD_BYTES = 256;

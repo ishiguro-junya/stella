@@ -1,22 +1,22 @@
 # リリース手順
 
-この文書では、Stellaのバージョン更新、GitHub Release、自動更新用ファイル、Homebrew Caskを手動で公開する手順を定義します。  
+このドキュメントでは、StellaのGitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
 StellaはApple Silicon向けに配布します。  
 Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
 
 ## 前提
 
-次の権限とcommandを使用できる状態にします。  
+次の権限とコマンドを使用できる状態にします。  
 
-- `ishiguro-junya/stella`の`main` BranchとReleaseへの書込権限
-- `ishiguro-junya/homebrew-tap`の`main` Branchへの書込権限
+- `ishiguro-junya/stella`の`main`ブランチとGitHub Releaseへの書き込み権限
+- `ishiguro-junya/homebrew-tap`の`main`ブランチへの書き込み権限
 - GitHub CLIの認証
 - Homebrew
 - mise
-- `/Users/ishiguro/.tauri/stella-updater.key`にある自動更新用の秘密鍵
+- 自動更新用の秘密鍵と、そのパスを示す`STELLA_UPDATER_KEY`環境変数
 - macOSのキーチェーンに保存した`com.emuni.stella.updater`のパスワード
 
-すべてのcommandはStella Repositoryのrootから同じshellで実行します。  
+すべてのコマンドはStellaリポジトリのルートから同じシェルで実行します。  
 
 ```sh
 mise install
@@ -26,7 +26,9 @@ mise run setup
 秘密鍵を紛失すると、既存のStellaへ新しい更新を配布できなくなります。  
 秘密鍵とキーチェーンのパスワードは、リポジトリ外の安全な場所へバックアップします。  
 
-自動更新用の固定Releaseは初回だけ作成します。  
+### 初回だけ行う設定
+
+プレリリース用と安定版用の固定GitHub Releaseは初回だけ作成します。  
 どちらも配布一覧上はプレリリースとして扱い、`latest.json`だけを更新します。  
 
 ```sh
@@ -42,9 +44,9 @@ gh release create updater-stable \
   --prerelease
 ```
 
-## 1. Release versionを決める
+## 1. リリースバージョンを決める
 
-先頭の`v`を含まないversionと、Release Tagを環境変数へ設定します。  
+先頭の`v`を含まないバージョンと、リリースタグを環境変数へ設定します。  
 
 ```sh
 STELLA_VERSION="1.0.0-alpha.5"
@@ -62,7 +64,7 @@ else
 fi
 ```
 
-既存のReleaseと重複していないことを確認します。  
+既存のGitHub Releaseと重複していないことを確認します。  
 
 ```sh
 git fetch origin --tags
@@ -70,68 +72,41 @@ git tag --list "$STELLA_TAG"
 gh release view "$STELLA_TAG" --repo ishiguro-junya/stella
 ```
 
-TagまたはReleaseが見つかった場合は、公開済みversionを上書きせず、新しいversionを決めます。  
+タグまたはGitHub Releaseが見つかった場合は、公開済みバージョンを上書きせず、新しいバージョンを決めます。  
 
-## 2. Versionを更新する
+## 2. リリース対象を確定する
 
-最新の`main`からRelease作業用Branchを作成します。  
+最新の`main`を取得します。  
 
 ```sh
 git switch main
 git pull --ff-only origin main
 git status --short
-git switch -c "chore/release-${STELLA_TAG}"
 ```
 
 `git status --short`に何も表示されないことを確認してから進めます。  
-次の4ファイルを同じversionへ更新します。  
 
-- `package.json`の`version`
-- `src-tauri/Cargo.toml`の`version`
-- `src-tauri/tauri.conf.json`の`version`
-- `Cargo.lock`にある`stella` Packageの`version`
+## 3. 検証してビルドする
 
-更新後、4ファイルのversionが一致していることを確認します。  
+確定した`main`を検証し、`STELLA_VERSION`を配布アプリへ設定してビルドします。  
 
 ```sh
-rg -nF "$STELLA_VERSION" \
-  package.json \
-  src-tauri/Cargo.toml \
-  src-tauri/tauri.conf.json \
-  Cargo.lock
-```
-
-Version更新だけをCommitし、`main`へMergeします。  
-
-```sh
-git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json Cargo.lock
-git commit -m "chore(release): ${STELLA_TAG}へ更新"
-git push -u origin "chore/release-${STELLA_TAG}"
-```
-
-## 3. 検証してbuildする
-
-Version更新を`main`へMergeした後、最新の`main`を取得して検証します。  
-
-```sh
-git switch main
-git pull --ff-only origin main
-git status --short
 mise run lint
 mise run typecheck
 mise run test
-mise run test:e2e
-export TAURI_SIGNING_PRIVATE_KEY="/Users/ishiguro/.tauri/stella-updater.key"
+: "${STELLA_UPDATER_KEY:?自動更新用の秘密鍵のパスを設定してください}"
+export TAURI_SIGNING_PRIVATE_KEY="$STELLA_UPDATER_KEY"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password \
   -a ishiguro \
   -s com.emuni.stella.updater \
-  -w \
-  /Users/ishiguro/Library/Keychains/login.keychain-db)"
-pnpm exec tauri build --config src-tauri/tauri.updater.conf.json
+  -w)"
+pnpm exec tauri build \
+  --config src-tauri/tauri.updater.conf.json \
+  --config "{\"version\":\"${STELLA_VERSION}\"}"
 unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
-生成したApplicationのversion、Bundle ID、architectureを確認します。  
+生成したアプリのバージョン、バンドルID、アーキテクチャを確認します。  
 
 ```sh
 /usr/libexec/PlistBuddy \
@@ -146,11 +121,11 @@ node --import tsx scripts/toolchain.mts release-gate \
 ```
 
 出力がそれぞれ`$STELLA_VERSION`、`com.emuni.stella`、`arm64`であることを確認します。  
-toolchainのrelease gateでは、Git 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0のversionとarm64 architecture、checksum、helper／template、動的link先を検証します。  
+ツールチェーンのリリース検査では、Git 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0のバージョン、arm64アーキテクチャ、チェックサム、ヘルパー、テンプレート、動的リンク先を検証します。  
 
-## 4. Release assetを作成する
+## 4. リリース成果物を作成する
 
-Release用の一時ファイルは`.tmp/`配下へ作成します。  
+リリース用の一時ファイルは`.tmp/`配下へ作成します。  
 
 ```sh
 mkdir -p "$STELLA_RELEASE_DIR"
@@ -167,10 +142,10 @@ shasum -a 256 "$STELLA_ARCHIVE"
 shasum -a 256 "$STELLA_GIT_SOURCE"
 ```
 
-`$STELLA_RELEASE_DIR/release-notes.md`へ、利用者向けのRelease noteを日本語で作成します。  
+`$STELLA_RELEASE_DIR/release-notes.md`へ、利用者向けのリリースノートを日本語で作成します。  
 次の項目を含めます。  
 
-- Releaseの概要
+- リリースの概要
 - 変更内容
 - 動作環境
 - プレリリースの場合は、アルファ版、ベータ版、またはリリース候補版であること
@@ -189,16 +164,16 @@ node --import tsx scripts/create-updater-manifest.mts \
 
 `latest.json`の`version`、`darwin-aarch64`のURL、署名が対象ファイルと一致することを確認します。  
 
-## 5. TagとGitHub Releaseを公開する
+## 5. タグとGitHub Releaseを公開する
 
-Release対象のCommitが`origin/main`と一致することを確認します。  
+リリース対象のコミットが`origin/main`と一致することを確認します。  
 
 ```sh
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 git status --short
 ```
 
-注釈付きTagを作成してPushします。  
+注釈付きタグを作成してプッシュします。  
 
 ```sh
 git tag -a "$STELLA_TAG" -m "Stella ${STELLA_VERSION}"
@@ -220,7 +195,7 @@ gh release create "$STELLA_TAG" \
   --verify-tag
 ```
 
-Releaseとassetを確認します。  
+GitHub Releaseと成果物を確認します。  
 
 ```sh
 gh release view "$STELLA_TAG" \
@@ -249,14 +224,14 @@ fi
 
 ## 6. Homebrew Caskを更新する
 
-Homebrew Tapを初回だけ`.tmp/homebrew-tap`へCloneします。  
-すでにClone済みの場合は、このcommandを省略します。  
+Homebrew Tapを初回だけ`.tmp/homebrew-tap`へクローンします。  
+すでにクローン済みの場合は、このコマンドを省略します。  
 
 ```sh
 git clone git@github.com:ishiguro-junya/homebrew-tap.git .tmp/homebrew-tap
 ```
 
-Tapの`main`を最新化し、Release assetのversionとSHA-256をCaskへ反映します。  
+Tapの`main`を最新の状態に更新し、リリース成果物のバージョンとSHA-256をCaskへ反映します。  
 
 ```sh
 git -C .tmp/homebrew-tap switch main
@@ -270,7 +245,7 @@ git -C .tmp/homebrew-tap diff --check
 git -C .tmp/homebrew-tap diff -- Casks/stella.rb
 ```
 
-Caskの`version`と`sha256`だけが変更されていることを確認してCommitします。  
+Caskの`version`と`sha256`だけが変更されていることを確認してコミットします。  
 
 ```sh
 git -C .tmp/homebrew-tap add Casks/stella.rb
@@ -302,13 +277,13 @@ brew update
 brew info --cask ishiguro-junya/tap/stella
 ```
 
-新規環境では次のcommandでインストールできます。  
+新規環境では次のコマンドでインストールできます。  
 
 ```sh
 brew install --cask ishiguro-junya/tap/stella
 ```
 
-インストール済みの環境では次のcommandで更新できます。  
+インストール済みの環境では次のコマンドで更新できます。  
 
 ```sh
 brew upgrade --cask ishiguro-junya/tap/stella

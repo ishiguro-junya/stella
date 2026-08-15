@@ -27,7 +27,7 @@ const CONTRIBUTORS = {
   yamamoto: ['山本由伸', 'yoshinobu.yamamoto@example.invalid'],
 } as const satisfies Record<string, Contributor>;
 const ACTIVITY_CONTRIBUTOR = ['MLBデータ', 'mlb.data@example.invalid'] as const;
-// 日本語UIでMLB公式記録の日付のまま表示するため、表示用日時は日本時間で保持する。
+// 日本語画面でMLB公式記録の日付のまま表示するため、表示用日時は日本時間で保持する。
 const ACHIEVEMENTS = [
   ['2001-04-02T19:05:00+09:00', 'feat: MLBデビュー戦で初安打を記録', CONTRIBUTORS.ichiro],
   ['2004-10-01T19:05:00+09:00', 'feat: シーズン最多安打記録を更新', CONTRIBUTORS.ichiro],
@@ -314,7 +314,7 @@ async function commitActivity(repositoryPath: string): Promise<void> {
     for (let index = 0; index < commitCount; index += 1) {
       const committedAt = new Date(month);
       committedAt.setHours(9 + Math.floor(index / 60), index % 60, 0, 0);
-      // Commitは親子関係を保つため、月ごとに順番に作成します。
+      // コミットは親子関係を保つため、月ごとに順番に作成する。
       // eslint-disable-next-line no-await-in-loop
       await runDatedGit(
         repositoryPath,
@@ -368,7 +368,7 @@ async function requireFixtureBase(): Promise<void> {
   try {
     await access(join(fixtureBaseRepository, '.git'));
   } catch (cause) {
-    throw new Error('基底fixtureがありません。先に `mise run setup` を実行してください。', {
+    throw new Error('基底フィクスチャがありません。先に`mise run setup`を実行してください。', {
       cause,
     });
   }

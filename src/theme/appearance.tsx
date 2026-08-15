@@ -21,7 +21,7 @@ export async function applyNativeAppearance(appearance: Appearance): Promise<voi
   try {
     await setTheme(appearance === 'system' ? null : appearance);
   } catch {
-    // native window themeの反映失敗でWebViewやGit操作を妨げない。
+    // ネイティブウィンドウのテーマ反映に失敗しても、WebViewやGit操作を妨げない。
   }
 }
 

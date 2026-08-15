@@ -55,7 +55,7 @@ describe('HistoryActionDialog', () => {
     const { onAction } = renderDialog({ kind: 'createTag', target });
     const dialog = screen.getByRole('dialog', { name: 'Create Tag' });
     expect(
-      within(dialog).getByText('Creates a lightweight Tag locally. It is not pushed to a remote.'),
+      within(dialog).getByText('Creates a lightweight tag locally. It is not pushed to a remote.'),
     ).toBeVisible();
 
     const input = within(dialog).getByRole('textbox', { name: 'Tag name' });

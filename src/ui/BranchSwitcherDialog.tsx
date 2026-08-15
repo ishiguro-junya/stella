@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus管理を維持したままブランチ作成をdialogとして公開する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログのフォーカス管理を維持したままブランチ作成をダイアログとして公開する。 */
 import { GitBranch, GitBranchPlus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 

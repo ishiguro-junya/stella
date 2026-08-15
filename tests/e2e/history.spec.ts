@@ -142,6 +142,25 @@ describe('History', () => {
     await expect($('.history-view .diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  it('scrolls the commit details in the right pane', async () => {
+    await $('button=履歴').click();
+    await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
+
+    expect(
+      await browser.execute(() => {
+        const detailPane = document.querySelector<HTMLElement>('.commit-detail-pane');
+        const diffSurface = detailPane?.querySelector<HTMLElement>('.diff-surface');
+        if (!detailPane || !diffSurface) throw new Error('The History right pane was not found.');
+        detailPane.scrollTop = detailPane.scrollHeight;
+        return {
+          detailOverflowY: getComputedStyle(detailPane).overflowY,
+          detailScrolls: detailPane.scrollTop > 0,
+          diffOverflowY: getComputedStyle(diffSurface).overflowY,
+        };
+      }),
+    ).toEqual({ detailOverflowY: 'auto', detailScrolls: true, diffOverflowY: 'visible' });
+  });
+
   it('shows a tooltip when focusing a single-file diff toggle', async () => {
     await writeRepositoryFile(repositoryPath, 'single-tooltip.txt', 'single file\n');
     await runGit(repositoryPath, ['add', 'single-tooltip.txt']);
@@ -180,7 +199,7 @@ describe('History', () => {
   it('keeps the Commit lane continuous and distinct from the working tree in Light and Dark appearances', async () => {
     await writeRepositoryFile(repositoryPath, 'SECOND.md', 'Second commit\n');
     await runGit(repositoryPath, ['add', 'SECOND.md']);
-    await runGit(repositoryPath, ['commit', '-m', 'test: History配色を確認する']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 履歴の配色を確認する']);
     const paletteCommitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
     await writeRepositoryFile(repositoryPath, 'UNCOMMITTED.md', 'Uncommitted change\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
@@ -929,6 +948,20 @@ describe('History', () => {
     await historyActionsMenu.$('button=タグを作成').click();
     const historyActionsDialog = $('[role="dialog"][aria-labelledby="history-createTag-title"]');
     await expect(historyActionsDialog).toBeDisplayed();
+    await setLogicalWindowSize(860, 560);
+    const createTagHelp = historyActionsDialog.$('#create-tag-help');
+    await expect(createTagHelp).toHaveText(
+      '軽量タグをローカルに作成します。\nリモートへはプッシュしません。',
+    );
+    expect((await createTagHelp.getCSSProperty('white-space')).value).toBe('pre-line');
+    expect(
+      await browser.execute(() => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="history-createTag-title"]',
+        );
+        return dialog ? dialog.scrollWidth <= dialog.clientWidth : false;
+      }),
+    ).toBe(true);
     expect(
       await browser.execute(
         () =>
@@ -944,6 +977,7 @@ describe('History', () => {
     await expect(historyActionsDialog).not.toExist();
     await tagConfirmation.$('button=作成').click();
     await expect(tagConfirmation).not.toExist();
+    await setLogicalWindowSize(1180, 760);
     await expect($(`.ref-chip.tag[aria-label="タグ ${tagName}"]`)).toHaveText(tagName);
     expect(await runGit(repositoryPath, ['rev-parse', `refs/tags/${tagName}`])).toMatch(
       /^[0-9a-f]{40}\n$/u,

@@ -12,7 +12,7 @@ import { useI18n } from '../../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { SelectControl } from '../../ui/SelectControl';
 
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogがformへmodal roleを渡してfocusを管理します。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログがフォームへ`role="dialog"`を渡してフォーカスを管理する。 */
 
 const COMMANDS: readonly GitFlowCommand[] = [
   'init',

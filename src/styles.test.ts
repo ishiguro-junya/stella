@@ -125,6 +125,14 @@ describe('common dialog layout', () => {
   });
 });
 
+describe('translated sentence layout', () => {
+  it('preserves sentence breaks in explanatory copy and notices', () => {
+    expect(styles).toMatch(
+      /\.settings-row-copy p,[^}]*\.dialog-header p,[^}]*\.global-notice,[^}]*#create-tag-help\s*\{[^}]*white-space:\s*pre-line;/u,
+    );
+  });
+});
+
 describe('repository switcher icons', () => {
   it('gives the fallback repository icon the same box as a custom logo', () => {
     expect(styles).toMatch(

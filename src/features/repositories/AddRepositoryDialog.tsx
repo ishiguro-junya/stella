@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogがformへmodal roleを渡してfocusを管理する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログがフォームへ`role="dialog"`を渡してフォーカスを管理する。 */
 import { Button } from '../../ui/Button';
 import { DirectoryInput } from '../../ui/DirectoryInput';
 import { Input } from '../../ui/Input';

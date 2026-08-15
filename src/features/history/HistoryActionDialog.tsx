@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus管理を維持したまま非破壊操作をdialogとして公開する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログのフォーカス管理を維持したまま非破壊操作をダイアログとして公開する。 */
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { Button } from '../../ui/Button';
@@ -96,7 +96,7 @@ export function HistoryActionDialog({
       await onAction(action);
       onDismiss();
     } catch {
-      // 共有エラーDialogがpreview失敗を示すため、再試行用に入力内容を保持する。
+      // 共有エラーダイアログがプレビューの失敗を示すため、再試行用に入力内容を保持する。
       setSubmitting(false);
     }
   };

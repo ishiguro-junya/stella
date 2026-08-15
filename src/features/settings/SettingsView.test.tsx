@@ -223,7 +223,7 @@ describe('SettingsView', () => {
     expect(handlers.onIgnorePatternsChange).toHaveBeenLastCalledWith('');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Git Toolchain' }), 'system');
     expect(handlers.onToolchainModeChange).toHaveBeenCalledWith('system');
-    expect(screen.getByText('Current session')).toBeVisible();
+    expect(screen.getByText('In use')).toBeVisible();
     expect(screen.getByText('Next launch')).toBeVisible();
     const gitPath = screen.getByText('/app/git', { selector: 'code' });
     expect(gitPath).toHaveAttribute('tabindex', '0');

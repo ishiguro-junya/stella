@@ -546,7 +546,7 @@ describe('Repository and Branch navigation', () => {
     await confirmation.waitForDisplayed({ timeout: 10_000 });
     await expect(confirmation).toHaveText(expect.stringContaining(oldPath));
     await expect(confirmation).toHaveText(expect.stringContaining(relocatedPath));
-    await confirmation.$('button=場所を付け替える').click();
+    await confirmation.$('button=登録を変更').click();
 
     await $(`.repository-toggle[data-repository-path="${relocatedPath}"]`).waitForDisplayed({
       timeout: 10_000,

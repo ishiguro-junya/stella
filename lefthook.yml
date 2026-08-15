@@ -4,7 +4,7 @@ glob_matcher: doublestar
 commit-msg:
   commands:
     conventional-commit:
-      run: mise run lint:commit-message -- "{1}"
+      run: cog verify --file "{1}"
 
 pre-push:
   jobs:
@@ -14,10 +14,5 @@ pre-push:
         jobs:
           - name: lint
             run: mise run lint
-          - name: application
-            group:
-              jobs:
-                - name: test
-                  run: mise run test
-                - name: test-e2e
-                  run: mise run test:e2e
+          - name: test
+            run: mise run test

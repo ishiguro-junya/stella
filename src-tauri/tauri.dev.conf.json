@@ -1,6 +1,21 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stella (DEV)",
   "identifier": "com.emuni.stella.dev",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Stella (DEV)",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "width": 1180,
+        "height": 760,
+        "minWidth": 860,
+        "minHeight": 560
+      }
+    ]
+  },
   "bundle": {
     "icon": ["icons/icon.png"]
   }

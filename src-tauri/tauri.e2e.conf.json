@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stella (TEST)",
   "identifier": "com.emuni.stella.e2e",
   "bundle": {
     "icon": ["icons/icon.png"]
@@ -22,7 +23,7 @@
       "capabilities": [
         {
           "identifier": "e2e",
-          "description": "Permissions enabled only by the E2E config overlay",
+          "description": "E2Eテスト用の追加設定でのみ有効にする権限",
           "windows": ["main"],
           "permissions": [
             "core:default",

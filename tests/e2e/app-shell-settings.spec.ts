@@ -1,7 +1,12 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
 import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js';
+
+const execFileAsync = promisify(execFile);
 
 type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'changes' | 'editor' | 'git';
 
@@ -20,6 +25,11 @@ describe('App shell and Settings', () => {
   it('launches the native app', async () => {
     await expect(browser).toHaveTitle('Stella');
     await expect($('[data-testid="app-shell"]')).toBeDisplayed();
+    const { stdout: launchServices } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
+    const app = launchServices
+      .split('\n---')
+      .find((entry) => entry.includes('/target/release/Stella (TEST)'));
+    expect(app).toContain('"LSDisplayName"="Stella (TEST)"');
     const headerButtonLabels = await browser.tauri.execute(() =>
       [...document.querySelectorAll<HTMLButtonElement>('.app-header button')].map(
         (button) => button.ariaLabel,
@@ -338,7 +348,7 @@ describe('App shell and Settings', () => {
         toolchainLayout.componentTop !== undefined &&
         toolchainLayout.modeBottom <= toolchainLayout.componentTop,
     ).toBe(true);
-    expect(toolchainLayout.text).toContain('Current session');
+    expect(toolchainLayout.text).toContain('In use');
     expect(toolchainLayout.text).toContain('Next launch');
 
     const toolchainControl = toolchain.$('.settings-toolchain-control');
@@ -391,10 +401,13 @@ describe('App shell and Settings', () => {
       async () => (await browser.execute(() => document.documentElement.lang)) === 'ja',
       { timeoutMsg: 'The document language did not change to Japanese.' },
     );
+    await setLogicalWindowSize(860, 560);
     await openSettingsCategory('git');
-    await expect($('#toolchain-description')).toHaveText(
-      'Gitツールチェーンを内蔵のまたはこの端末にインストールされたもののどちらを使用するか選択します。選択は再起動で反映されます。',
+    const toolchainDescription = $('#toolchain-description');
+    await expect(toolchainDescription).toHaveText(
+      '内蔵のGitツールチェーンと、このMacにインストール済みのGitツールチェーンから選択します。\n変更は再起動後に反映されます。',
     );
+    expect((await toolchainDescription.getCSSProperty('white-space')).value).toBe('pre-line');
     await browser.waitUntil(
       async () =>
         (await browser.execute(
@@ -410,6 +423,17 @@ describe('App shell and Settings', () => {
       async () => (await browser.execute(() => document.documentElement.lang)) === 'en',
       { timeoutMsg: 'The document language did not change to English.' },
     );
+    await openSettingsCategory('git');
+    await expect($('#toolchain-description')).toHaveText(
+      'Choose the bundled Git toolchain or one installed on this Mac.\nChanges take effect after restart.',
+    );
+    expect(
+      await browser.execute(() => {
+        const detail = document.querySelector<HTMLElement>('.settings-detail');
+        return detail ? detail.scrollWidth <= detail.clientWidth : false;
+      }),
+    ).toBe(true);
+    await openSettingsCategory('general');
     await selectSetting('language', 'ja');
     await expect($('h1=設定')).toBeDisplayed();
     await browser.waitUntil(

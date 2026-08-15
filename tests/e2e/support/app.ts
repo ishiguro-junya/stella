@@ -312,7 +312,7 @@ export async function commitCurrentChange(description: string): Promise<void> {
 }
 
 export async function dispatchDoubleClick(selector: string): Promise<void> {
-  // embedded Tauri WebDriverはdetail=0のclickを2回送るため、dblclickを補います。
+  // 内蔵のTauri WebDriverは`detail=0`のクリックを2回送るため、ダブルクリックを補う。
   const dispatched = await browser.execute((targetSelector) => {
     const target = document.querySelector<HTMLElement>(targetSelector);
     if (!target) return false;

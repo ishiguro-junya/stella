@@ -108,7 +108,7 @@ fn build_for_language<R: Runtime>(
     )
     .build(app)?;
 
-    let app_submenu = SubmenuBuilder::new(app, "Stella")
+    let app_submenu = SubmenuBuilder::new(app, package.name.as_str())
         .about_with_text(text.native_menu_about.as_str(), Some(about))
         .item(&check_updates)
         .separator()

@@ -1,29 +1,12 @@
 {
   "$schema": "./node_modules/markdownlint-cli2/markdownlint-cli2-config-schema.json",
   "customRules": [
-    "./.markdownlint-rules/japanese-sentence-per-line.mjs",
-    "./.markdownlint-rules/paragraph-line-end-spaces.mjs",
+    "./.markdownlint-rules/sentence-per-line.mts",
+    "./.markdownlint-rules/paragraph-line-end-spaces.mts",
   ],
   "globs": ["**/*.md"],
   "gitignore": true,
   "ignores": ["coverage/**", "dist/**", "node_modules/**", "src-tauri/target/**", "target/**"],
-  "overrides": [
-    {
-      "filter": ["CONTRIBUTING.md"],
-      "config": {
-        "MD041": false,
-        "paragraph-line-end-spaces": false,
-      },
-      "combine": "merge",
-    },
-    {
-      "filter": ["README.md"],
-      "config": {
-        "paragraph-line-end-spaces": false,
-      },
-      "combine": "merge",
-    },
-  ],
   "config": {
     "default": true,
     "MD009": {
@@ -33,7 +16,7 @@
     "MD033": {
       "allowed_elements": ["details", "summary", "kbd", "h1", "p", "img", "br"],
     },
-    "japanese-sentence-per-line": true,
+    "sentence-per-line": true,
     "paragraph-line-end-spaces": true,
   },
 }

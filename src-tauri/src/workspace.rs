@@ -401,7 +401,7 @@ impl Workspace {
             if uses_lfs {
                 return Err(WorkspaceError::new(
                     ErrorCode::UnsupportedRepository,
-                    "このRepositoryはGit LFSを使用していますが、選択中のSystem toolchainにGit LFSがありません。",
+                    "このリポジトリはGit LFSを使用していますが、選択中のシステムツールチェーンにGit LFSがありません。",
                 )
                 .detail("path", relative_path)
                 .detail("requiredComponent", "git-lfs"));
@@ -559,7 +559,7 @@ impl Workspace {
             return Ok(None);
         };
 
-        // 通常のquery errorの優先順位を維持しつつ、Tauri commandがworkerをscheduleする前に登録する。
+        // 通常の問い合わせエラーの優先順位を維持しつつ、Tauriコマンドがワーカーを予約する前に登録する。
         self.repo(&request.repo_id)?;
         if operation_id.trim().is_empty() {
             return Err(WorkspaceError::new(
@@ -1862,8 +1862,8 @@ impl Workspace {
             .collect())
     }
 
-    /// 表示中のuntracked衝突を固定し、通常のstatus snapshotでは内容を証明できないworktree障害を拒否する。
-    /// preview発行時と、変更直前にpreviewを使用するときの両方で意図的に実行する。
+    /// 表示中の未追跡ファイルの衝突を固定し、通常の状態スナップショットでは内容を証明できない作業ツリー障害を拒否する。
+    /// プレビューの発行時と、変更直前にプレビューを使用するときの両方で意図的に実行する。
     fn bind_worktree_writes(
         &self,
         repo: &RepoContext,
@@ -2247,11 +2247,11 @@ impl Workspace {
         Ok(hex_bytes(&digest.finalize()))
     }
 
-    /// 通常fileの内容を開かずにpolling用fingerprintを構築する。
+    /// 通常ファイルの内容を開かずに定期確認用の指紋を構築する。
     ///
-    /// Porcelain statusは論理的なGit構造を表す。
-    /// Index entryはその構造をStaged blobのOIDとmodeに結び付け、worktree metadataは通常の同一size書き換えを検出する。
-    /// 正確な内容hashは、破壊的なpreviewとexecuteの境界にある`repository_state_digest`が担う。
+    /// Porcelain形式の状態は論理的なGit構造を表す。
+    /// 索引項目はその構造をステージ済みブロブのOIDとモードに結び付け、作業ツリーのメタデータは通常の同一サイズ書き換えを検出する。
+    /// 正確な内容ハッシュは、破壊的なプレビューと実行の境界にある`repository_state_digest`が担う。
     fn repository_generation_fingerprint(
         &self,
         repo: &RepoContext,
@@ -2328,7 +2328,7 @@ impl Workspace {
                 )
                 .and_then(GitOutput::ensure_success)
             else {
-                // 行数は補助情報なので、読めないfileがあってもstatusの表示は止めない。
+                // 行数は補助情報なので、読めないファイルがあっても状態の表示は止めない。
                 total = None;
                 break;
             };
@@ -2702,7 +2702,7 @@ impl Workspace {
                         "Whole-file choices are only available for add/add or modify/delete conflicts",
                     ));
                 }
-                // document読込後に変更された結果は上書きしない。
+                // 競合結果の読み込み後に変更された内容は上書きしない。
                 conflict::verify_saved_result(
                     &repo.root,
                     &session,
@@ -2795,7 +2795,7 @@ impl Workspace {
         before: &RepoSnapshot,
         error: WorkspaceError,
     ) -> WorkspaceError {
-        // hook、filter、失敗したsequencer commandもGit stateを変更する可能性がある。
+        // フック、フィルター、失敗したシーケンサーコマンドもGitの状態を変更する可能性がある。
         let refreshed = self.snapshot(repo).ok();
         let generation = refreshed
             .as_ref()
@@ -3170,7 +3170,7 @@ impl Workspace {
                     repo,
                     GitCommand::DeleteBranch {
                         name: name.clone(),
-                        // 対象先端と失われるCommitはpreview bindingで再検証済みなので、追跡先のmerge判定には委ねない。
+                        // 対象先端と失われるコミットはプレビューの紐付けで再検証済みなので、追跡先のマージ判定には委ねない。
                         force: true,
                     },
                     None,
@@ -3854,7 +3854,7 @@ impl Workspace {
         if fields.len() >= 3 && fields[1] == b"filter" && fields[2] == b"lfs" {
             return Err(WorkspaceError::new(
                 ErrorCode::InvalidRequest,
-                "Git LFS対象fileは行単位でStageまたはUnstageできません。file全体を選択してください。",
+                "Git LFS対象ファイルは行単位でステージまたはステージ解除できません。ファイル全体を選択してください。",
             )
             .detail("path", path)
             .detail("filter", "lfs"));
@@ -10400,7 +10400,8 @@ mod tests {
                     session_id: refreshed.session_id,
                     conflict_generation: refreshed.conflict_generation,
                     content_hash: refreshed.content_hash,
-                    // 意図的に誤った旧形式のhint。Rustは実際のworktree stateを使用する必要がある。
+                    // 意図的に誤った旧形式のヒント。
+                    // Rustは実際の作業ツリーの状態を使用する必要がある。
                     result_kind: ConflictResultKind::File,
                 },
                 confirmation_token: None,
@@ -10558,8 +10559,8 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
 
-        // ConflictOpenExternalがeditorを正常に起動した後のstate遷移だけを再現し、
-        // test processからGUIを起動することは避ける。
+        // `ConflictOpenExternal`がエディタを正常に起動した後の状態遷移だけを再現し、
+        // テスト用プロセスから画面を起動することは避ける。
         let repo = workspace.repo(&attached.repo_id).unwrap();
         workspace
             .record_external_conflict_baseline(&repo, &document.session_id, document.content_hash)
@@ -12883,7 +12884,7 @@ mod tests {
         let fixture = GitFixture::new();
         fixture.write("f.txt", "base\n");
         fixture.git(&["add", "--", "f.txt"]);
-        fixture.git(&["commit", "-m", "test: 初期Commit"]);
+        fixture.git(&["commit", "-m", "test: 初期コミット"]);
         let workspace = fixture.workspace();
         let attached = workspace
             .attach(

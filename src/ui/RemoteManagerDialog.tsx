@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 設定画面は共通Dialogのfocus trapを使い、警告Dialogとはroleを分ける。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 設定画面は共通ダイアログのフォーカストラップを使い、警告ダイアログとは役割を分ける。 */
 import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from './Button';

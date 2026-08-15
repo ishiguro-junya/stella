@@ -8,7 +8,7 @@ rust = { version = "1.96.0", components = "clippy,rustfmt" }
 taplo = "0.10.0"
 
 [tasks.setup]
-description = "依存package、Git hooks、fixtureの基底を準備する"
+description = "依存パッケージ、Gitフック、開発用データを準備する"
 run = [
   "pnpm install --frozen-lockfile",
   "lefthook install",
@@ -17,77 +17,64 @@ run = [
 ]
 
 [tasks.dev]
-description = "Tauri applicationを開発modeで起動する"
-run = "pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
+description = "Tauriアプリを開発モードで起動する"
+run = "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER='node --import tsx ../scripts/mode-app.mts dev' pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
 
 [tasks.reset]
-description = "開発用fixtureを基底状態へ戻す"
+description = "開発用データを初期状態へ戻す"
 run = "node --import tsx scripts/showcase-fixture.mts reset"
 
 [tasks.build]
-description = "通常のTauri application bundleをbuildする"
+description = "配布用のTauriアプリをビルドする"
 run = "pnpm exec tauri build"
 
 [tasks."install"]
-description = "ApplicationをbuildしてApplications folderへinstallする"
+description = "アプリをビルドして`/Applications`へインストールする"
 depends = [ "build" ]
 run = "node --import tsx scripts/install-app.mts"
 
 [tasks.lint]
-description = "Frontend、Rust、設定、文書、Commit履歴をlintする"
-depends = [ "lint:frontend", "lint:rust", "lint:config", "lint:docs" ]
-run = "node --import tsx scripts/check-commits.mts"
-
-[tasks."lint:frontend"]
-description = "Frontendをformat検査してlintする"
+description = "コード、設定、ドキュメントを検査する"
 run = [
   "pnpm exec oxfmt --check .",
   "pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives .",
-]
-
-[tasks."lint:rust"]
-description = "Rustをformat検査してlintする"
-run = [
   "cargo fmt --all --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+  "taplo fmt --check",
+  "taplo check",
+  "pnpm exec markdownlint-cli2",
+  "pnpm exec textlint README.md CONTRIBUTING.md DESIGN.md THIRD_PARTY_NOTICES.md 'docs/**/*.md'",
+  "lychee --files-from .lycheeinputs",
 ]
 
-[tasks."lint:config"]
-description = "TOMLをformat検査してlintする"
-run = [ "taplo fmt --check", "taplo check" ]
-
-[tasks."lint:docs"]
-description = "Markdownとlinkをlintする"
-run = [ "pnpm exec markdownlint-cli2", "lychee --files-from .lycheeinputs" ]
-
-[tasks."lint:commit-message"]
-description = "Commit messageをConventional Commitsとしてlintする"
-run = "node --import tsx scripts/verify-commit-message.mts"
-
 [tasks.format]
-description = "Frontend、Rust、TOML、Markdownを整形する"
+description = "フロントエンド、Rust、TOML、Markdownを整形する"
 run = [ "pnpm exec oxfmt .", "cargo fmt --all", "taplo fmt", "pnpm exec markdownlint-cli2 --fix" ]
 
 [tasks.typecheck]
-description = "TypeScriptをtypecheckする"
+description = "TypeScriptの型を検査する"
 run = "pnpm exec tsc -b"
 
 [tasks.test]
-description = "FrontendとRustのtestを実行する"
-depends = [ "test:frontend", "test:rust" ]
+description = "全てのテストを実行する"
+run = [ "mise run test:unit", "mise run test:integration", "mise run test:e2e" ]
 
-[tasks."test:frontend"]
-description = "FrontendのUnit testを実行する"
-run = "pnpm exec vitest run"
+[tasks."test:unit"]
+description = "単体テストを実行する"
+run = [
+  "pnpm exec vitest run",
+  "cargo test --workspace --all-targets --all-features -- --skip workspace::tests",
+]
 
-[tasks."test:rust"]
-description = "RustのUnit testと統合testを実行する"
-run = "cargo test --workspace --all-targets --all-features"
+[tasks."test:integration"]
+description = "統合テストを実行する"
+run = "cargo test --workspace --all-targets --all-features workspace::tests"
 
 [tasks."test:e2e"]
-description = "Native applicationのE2E testを実行する"
+description = "E2Eテストを実行する"
 run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   "pnpm exec wdio run wdio.conf.ts",
 ]
 
@@ -95,5 +82,6 @@ run = [
 description = "README用のスクリーンショットを生成する"
 run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   "STELLA_VISUAL_QA_DIR=docs/assets pnpm exec wdio run wdio.conf.ts --spec tests/e2e/readme-screenshots.spec.ts",
 ]

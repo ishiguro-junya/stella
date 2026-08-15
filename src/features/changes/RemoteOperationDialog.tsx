@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通Dialogのfocus stackを保ったまま非破壊操作をdialogとして公開する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログのフォーカス履歴を保ったまま非破壊操作をダイアログとして公開する。 */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { RefreshCw } from 'lucide-react';
 

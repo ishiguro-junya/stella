@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 検索可能なswitcherは共通modalのfocus trap内でARIA combobox/listbox patternを使用する。 */
+/* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログ内でフォーカスを管理し、ARIAの`combobox`と`listbox`の操作規則を実装する。 */
 import { Check, Search } from 'lucide-react';
 import {
   useId,
