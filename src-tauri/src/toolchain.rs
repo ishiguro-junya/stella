@@ -1313,6 +1313,8 @@ mod tests {
     }
 
     #[test]
+    // フレーキー: 全テスト実行時の負荷で、子プロセスがPIDファイルを作る前に
+    // 2秒のタイムアウトへ達することがある。起動完了を同期してから終了を検証する。
     fn shell_path_timeout_terminates_its_process_group() {
         let directory = TempDir::new().unwrap();
         let child_pid = directory.path().join("child.pid");

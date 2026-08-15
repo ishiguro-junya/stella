@@ -48,6 +48,9 @@ async function readEditorPosition(): Promise<EditorPosition> {
   });
 }
 
+// フレーキー: 全E2E実行時にCodeMirrorのレイアウト確定が遅れ、
+// activeLineとfocusが正しくてもscrollTopが0のままになることがある。
+// 要素の寸法確定を待ってからスクロール位置を検証する。
 async function waitForEditorPosition(expectedLine: string): Promise<EditorPosition> {
   let position = await readEditorPosition();
   try {
@@ -117,6 +120,8 @@ describe('Changes', () => {
     repositoryPath = '';
   });
 
+  // フレーキー: フォーカス移動直後の描画が間に合わず、ツールチップが表示されないことがある。
+  // フォーカス状態と描画完了を同期してから表示を検証する。
   it('shows the shared rich tooltip for pointer and keyboard use in both themes', async () => {
     const groupToggle = $('.change-group-collapse-toggle');
     await groupToggle.waitForDisplayed();
@@ -372,6 +377,8 @@ describe('Changes', () => {
     await expect($('.diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
+  // フレーキー: 設定保存後のスナップショット更新が遅れ、対象ファイルが10秒以内に消えないことがある。
+  // 保存完了とスナップショット更新を待ってから表示を検証する。
   it('applies the global ignore list without changing plain Git behavior', async () => {
     const ignoredPath = 'stella-e2e-only.ignore';
     await writeRepositoryFile(repositoryPath, ignoredPath, 'ignored by Stella\n');
