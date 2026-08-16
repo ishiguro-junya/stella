@@ -46,7 +46,7 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     registeredRepoPaths: options.registeredRepoPaths ?? [],
     repositoryNames: {},
     openRepoPaths: [],
-    view: 'changes',
+    view: 'diff',
     paneWidths: { left: 360, right: 336 },
     commitDrafts: {},
   };
@@ -238,14 +238,14 @@ export async function expectHistoryCommitLayout(width: number, height: number): 
   expect(layout.overlaps).toEqual([]);
 }
 
-export async function waitForChangesOrThrow(): Promise<void> {
+export async function waitForDiffOrThrow(): Promise<void> {
   const runtimeErrorSelector = '[role="alertdialog"][aria-labelledby="runtime-error-title"]';
   await browser.waitUntil(
     async () =>
-      (await $('.changes-view').isExisting()) || (await $(runtimeErrorSelector).isExisting()),
+      (await $('.diff-view').isExisting()) || (await $(runtimeErrorSelector).isExisting()),
     {
       timeout: 10_000,
-      timeoutMsg: 'Neither the Changes view nor an error dialog appeared.',
+      timeoutMsg: 'Neither the Diff view nor an error dialog appeared.',
     },
   );
 
@@ -271,7 +271,7 @@ export async function openRepository(
   }
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
-  await waitForChangesOrThrow();
+  await waitForDiffOrThrow();
 }
 
 export async function openRepositoryFromSwitcher(path: string, language: Language): Promise<void> {
@@ -293,7 +293,7 @@ export async function commitCurrentChange(description: string): Promise<void> {
   await stage.waitForClickable({ timeout: 20_000 });
   await stage.click();
   await $('input[aria-label^="ステージ解除 "]').waitForDisplayed({ timeout: 10_000 });
-  const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+  const trigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
   await trigger.waitForClickable();
   await trigger.click();
   const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');

@@ -253,21 +253,21 @@ describe('Activity', () => {
     );
 
     await browser.keys(['Escape']);
-    const changes = $('button[aria-label="変更"]');
-    await changes.click();
-    await expect($('.changes-view')).toBeDisplayed();
+    const diff = $('button[aria-label="差分"]');
+    await diff.click();
+    await expect($('.diff-view')).toBeDisplayed();
     await expect(activity).not.toHaveAttribute('aria-current');
     expect(
       await browser.execute(
         (selector) => document.activeElement === document.querySelector(selector),
-        'button[aria-label="変更"]',
+        'button[aria-label="差分"]',
       ),
     ).toBe(true);
-    const changesResizer = $('[role="separator"][aria-label="変更一覧の幅"]');
-    await expect(changesResizer).toHaveAttribute('aria-valuenow', '368');
-    await changesResizer.click();
+    const diffResizer = $('[role="separator"][aria-label="差分一覧の幅"]');
+    await expect(diffResizer).toHaveAttribute('aria-valuenow', '368');
+    await diffResizer.click();
     await browser.keys(['ArrowRight']);
-    await expect(changesResizer).toHaveAttribute('aria-valuenow', '376');
+    await expect(diffResizer).toHaveAttribute('aria-valuenow', '376');
 
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();

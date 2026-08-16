@@ -106,6 +106,7 @@ unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
 生成したアプリのバージョン、バンドルID、アーキテクチャを確認します。  
+「Stellaについて」には`Ver. $STELLA_VERSION (2bd8ecf)`のようにビルド対象の短縮コミットIDが自動で付与され、その下にビルド日が表示されます。  
 
 ```sh
 /usr/libexec/PlistBuddy \

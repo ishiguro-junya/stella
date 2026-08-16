@@ -33,7 +33,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={loading || props['aria-busy']}
     >
       {loading ? (
-        <LoaderCircle className="button-loading-icon" aria-hidden="true" focusable="false" />
+        <LoaderCircle
+          className="button-loading-icon delayed-loading-icon"
+          aria-hidden="true"
+          focusable="false"
+        />
       ) : null}
       {children}
     </button>

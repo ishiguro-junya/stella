@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  diffFileSections,
   editorLineForDiffSelection,
   imageDiffCandidates,
+  imagePreviewToggleAvailable,
   patchContainsMultipleFiles,
   profileDiffPatch,
 } from './diffProfile';
@@ -36,6 +38,15 @@ abc
         format: 'binary',
       },
     ]);
+    expect(
+      diffFileSections(patch, 'mixed').map(({ path, imageCandidate }) => ({
+        path,
+        format: imageCandidate?.format,
+      })),
+    ).toEqual([
+      { path: 'app.ts', format: undefined },
+      { path: 'image.png', format: 'binary' },
+    ]);
   });
 
   it('finds SVG renames separately from binary images', () => {
@@ -53,6 +64,16 @@ rename to new.SVG
         format: 'svg',
       },
     ]);
+  });
+
+  it.each([
+    ['image.svg', true],
+    ['image.SVG', true],
+    ['image.png', false],
+    ['image.webp', false],
+    [undefined, false],
+  ])('shows the image preview toggle only for SVG paths', (path, expected) => {
+    expect(imagePreviewToggleAvailable(path)).toBe(expected);
   });
 
   it('probes a pure raster rename whose patch has no binary marker', () => {

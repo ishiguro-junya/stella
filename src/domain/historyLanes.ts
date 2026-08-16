@@ -14,6 +14,8 @@ export interface HistoryParentEdge {
   parentOid: string;
   fromLane: number;
   toLane: number;
+  /** 親の経路がこの行の上端まで既に到達している。 */
+  connectsFromAbove: boolean;
 }
 
 export interface HistoryGraphTopology {
@@ -72,16 +74,27 @@ export function assignHistoryLanes<Node extends HistoryLaneNode>(
     } else {
       // 共通の親でもこのレーンを親行まで保ち、分岐元から斜め線を開始する。
       active[lane] = firstParent;
-      parentEdges.push({ parentOid: firstParent, fromLane: lane, toLane: lane });
+      parentEdges.push({
+        parentOid: firstParent,
+        fromLane: lane,
+        toLane: lane,
+        connectsFromAbove: false,
+      });
     }
 
     for (const parentOid of mergeParents) {
       let parentLane = active.indexOf(parentOid);
+      const connectsFromAbove = parentLane >= 0;
       if (parentLane < 0) {
         parentLane = availableLane(lane);
         active[parentLane] = parentOid;
       }
-      parentEdges.push({ parentOid, fromLane: lane, toLane: parentLane });
+      parentEdges.push({
+        parentOid,
+        fromLane: lane,
+        toLane: parentLane,
+        connectsFromAbove,
+      });
     }
 
     while (active.length > 0 && active.at(-1) === undefined) active.pop();

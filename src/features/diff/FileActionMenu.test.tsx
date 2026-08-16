@@ -47,16 +47,16 @@ describe('FileActionMenu', () => {
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('menu', { name: 'src/app.ts actions' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
 
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
     await user.keyboard('{End}');
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete File' })).toHaveFocus();
     await user.keyboard('{Home}');
-    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete File' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
@@ -64,10 +64,10 @@ describe('FileActionMenu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     await user.keyboard('{Enter}');
-    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
     await user.keyboard('{Escape}');
     await user.keyboard(' ');
-    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
   });
 
   it('opens at the last enabled item with ArrowUp and closes on Tab or outside click', async () => {
@@ -77,7 +77,7 @@ describe('FileActionMenu', () => {
     trigger.focus();
 
     await user.keyboard('{ArrowUp}');
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Delete File' })).toHaveFocus();
     await user.tab();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Outside' })).toHaveFocus();
@@ -104,7 +104,7 @@ describe('FileActionMenu', () => {
     trigger.focus();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete File' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveFocus();
 
     await user.click(screen.getByRole('menuitem', { name: 'Copy Path' }));
@@ -129,11 +129,26 @@ describe('FileActionMenu', () => {
     render(<Harness imagePreview={{ pressed: true, onPressedChange }} />);
 
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
     expect(imagePreview).toHaveAttribute('aria-checked', 'true');
-    expect(imagePreview).toHaveFocus();
 
     await user.click(imagePreview);
     expect(onPressedChange).toHaveBeenCalledWith(false);
+  });
+
+  it('keeps image preview visible but disabled while editing', async () => {
+    const user = userEvent.setup();
+    const onPressedChange = vi.fn<(pressed: boolean) => void>();
+    render(
+      <Harness editDisabled imagePreview={{ pressed: true, disabled: true, onPressedChange }} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
+    expect(imagePreview).toBeDisabled();
+
+    await user.click(imagePreview);
+    expect(onPressedChange).not.toHaveBeenCalled();
   });
 });

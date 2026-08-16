@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 use std::process::Command;
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 use tauri::image::Image;
@@ -15,6 +16,8 @@ const MENU_EVENT_TARGET: &str = "main";
 const OPEN_SETTINGS_EVENT: &str = "stella://open-settings";
 const CHECK_UPDATES_EVENT: &str = "stella://check-updates";
 const LICENSE_NAME: &str = "Sustainable Use License 1.0";
+const COPYRIGHT_NOTICE: &str = "© Junya Ishiguro";
+const DEVELOPMENT_VERSION: &str = "0.0.0-dev";
 const FILES_AND_FOLDERS_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const PRIVACY_SETTINGS_URL: &str = "x-apple.systempreferences:com.apple.preference.security";
@@ -70,17 +73,51 @@ fn labels(language: AppLanguage) -> MenuLabels {
 fn about_metadata(
     name: &str,
     version: &str,
+    commit: Option<&str>,
+    release_date: Option<&str>,
     copyright: Option<&str>,
     icon: Option<Image<'static>>,
 ) -> AboutMetadata<'static> {
+    let version = match commit {
+        Some(commit) if version != DEVELOPMENT_VERSION => format!("{version} ({commit})"),
+        _ => version.to_owned(),
+    };
+    let copyright = copyright.unwrap_or(COPYRIGHT_NOTICE);
+    let copyright = if cfg!(target_os = "macos") {
+        Some(format!(
+            "Ver. {version}\n{}{}\n{LICENSE_NAME}",
+            release_date.map_or(String::new(), |date| format!("{date}\n")),
+            copyright
+        ))
+    } else {
+        Some(copyright.to_owned())
+    };
     AboutMetadata {
         name: Some(name.to_owned()),
-        short_version: Some(version.to_owned()),
-        copyright: copyright.map(str::to_owned),
-        credits: Some(LICENSE_NAME.to_owned()),
+        copyright,
+        license: Some(LICENSE_NAME.to_owned()),
         icon,
         ..Default::default()
     }
+}
+
+fn startup_date() -> Option<&'static str> {
+    static STARTUP_DATE: OnceLock<Option<String>> = OnceLock::new();
+    STARTUP_DATE
+        .get_or_init(|| {
+            #[cfg(target_os = "macos")]
+            {
+                Command::new("/bin/date")
+                    .arg("+%Y/%m/%d")
+                    .output()
+                    .ok()
+                    .filter(|output| output.status.success())
+                    .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+            }
+            #[cfg(not(target_os = "macos"))]
+            None
+        })
+        .as_deref()
 }
 
 pub(crate) fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -93,9 +130,17 @@ fn build_for_language<R: Runtime>(
 ) -> tauri::Result<Menu<R>> {
     let text = labels(language);
     let package = app.package_info();
+    let version = package.version.to_string();
+    let release_date = if version == DEVELOPMENT_VERSION {
+        startup_date()
+    } else {
+        option_env!("STELLA_BUILD_DATE")
+    };
     let about = about_metadata(
         &package.name,
-        &package.version.to_string(),
+        &version,
+        option_env!("STELLA_COMMIT"),
+        release_date,
         app.config().bundle.copyright.as_deref(),
         Some(ABOUT_ICON.clone()),
     );
@@ -313,20 +358,51 @@ mod tests {
     }
 
     #[test]
-    fn about_metadata_includes_the_app_name_version_and_license() {
+    fn about_metadata_includes_the_app_name_version_and_visible_license() {
         let metadata = about_metadata(
             "Stella",
             "1.2.3-alpha.4",
+            Some("2bd8ecf"),
+            Some("2026/08/16"),
             Some("© Junya Ishiguro"),
             Some(Image::new_owned(vec![0, 0, 0, 0], 1, 1)),
         );
 
         assert_eq!(metadata.name.as_deref(), Some("Stella"));
         assert_eq!(metadata.version, None);
-        assert_eq!(metadata.short_version.as_deref(), Some("1.2.3-alpha.4"));
+        assert_eq!(metadata.short_version, None);
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            metadata.copyright.as_deref(),
+            Some(
+                "Ver. 1.2.3-alpha.4 (2bd8ecf)\n2026/08/16\n© Junya Ishiguro\nSustainable Use License 1.0"
+            )
+        );
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(metadata.copyright.as_deref(), Some("© Junya Ishiguro"));
-        assert_eq!(metadata.credits.as_deref(), Some(LICENSE_NAME));
+        assert_eq!(metadata.license.as_deref(), Some(LICENSE_NAME));
+        assert_eq!(metadata.credits, None);
         assert_eq!(metadata.icon.as_ref().map(Image::width), Some(1));
         assert_eq!(metadata.icon.as_ref().map(Image::height), Some(1));
+
+        for name in ["Stella (DEV)", "Stella (TEST)"] {
+            let mode_metadata = about_metadata(
+                name,
+                DEVELOPMENT_VERSION,
+                Some("2bd8ecf"),
+                Some("2026/08/17"),
+                None,
+                None,
+            );
+            assert_eq!(mode_metadata.name.as_deref(), Some(name));
+            assert_eq!(mode_metadata.version, None);
+            assert_eq!(mode_metadata.short_version, None);
+            #[cfg(target_os = "macos")]
+            assert_eq!(
+                mode_metadata.copyright.as_deref(),
+                Some("Ver. 0.0.0-dev\n2026/08/17\n© Junya Ishiguro\nSustainable Use License 1.0")
+            );
+            assert_eq!(mode_metadata.license.as_deref(), Some(LICENSE_NAME));
+        }
     }
 }

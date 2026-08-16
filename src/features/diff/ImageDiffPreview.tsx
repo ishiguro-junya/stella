@@ -1,30 +1,40 @@
-import { Image as ImageIcon, LoaderCircle } from 'lucide-react';
+import { Image as ImageIcon, ImageOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import type { ImageBytesTarget, ImageChangeKind, ImageDiffCandidate } from '../../domain/workspace';
+import type {
+  DiffStyle,
+  ImageBytesTarget,
+  ImageChangeKind,
+  ImageDiffCandidate,
+} from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { Button } from '../../ui/Button';
+import { ToggleButton } from '../../ui/ToggleButton';
 
 interface ImagePreviewToggleProps {
   pressed: boolean;
+  disabled?: boolean | undefined;
   onPressedChange: (pressed: boolean) => void;
 }
 
-export function ImagePreviewToggle({ pressed, onPressedChange }: ImagePreviewToggleProps) {
+export function ImagePreviewToggle({
+  pressed,
+  disabled = false,
+  onPressedChange,
+}: ImagePreviewToggleProps) {
   const { t } = useI18n();
   return (
-    <Button
-      type="button"
-      variant="quiet"
+    <ToggleButton
       className="image-preview-toggle"
       aria-label={t('imagePreview')}
-      tooltip={t('imagePreview')}
-      aria-pressed={pressed}
-      onClick={() => onPressedChange(!pressed)}
-    >
-      <ImageIcon aria-hidden="true" focusable="false" size={14} />
-    </Button>
+      tooltip={t('imagePreviewToggle')}
+      pressed={pressed}
+      disabled={disabled}
+      offIcon={ImageOff}
+      onIcon={ImageIcon}
+      reverseIcons
+      onPressedChange={onPressedChange}
+    />
   );
 }
 
@@ -35,11 +45,18 @@ interface ImageDiffPreviewProps {
   candidate: ImageDiffCandidate;
   binaryFallback?: string;
   hidden?: boolean;
+  layout?: DiffStyle;
   onProbeResult?: (previewable: boolean) => void;
 }
 
 type ImageSide = 'before' | 'after';
-type SideState = { status: 'loading' } | { status: 'loaded'; url: string } | { status: 'error' };
+type ImagePreviewBackground = 'light' | 'dark';
+type SideState =
+  | { status: 'loading' }
+  | { status: 'loaded'; url: string; background?: ImagePreviewBackground }
+  | { status: 'error' };
+
+const IMAGE_SAMPLE_EDGE = 32;
 
 function hasSide(changeKind: ImageChangeKind, side: ImageSide): boolean {
   return side === 'before' ? changeKind !== 'added' : changeKind !== 'deleted';
@@ -53,6 +70,54 @@ function imageMimeType(path: string): string {
   return path.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : '';
 }
 
+function linearColorChannel(value: number): number {
+  const channel = value / 255;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+export function imagePreviewBackgroundForPixels(
+  pixels: Uint8ClampedArray,
+): ImagePreviewBackground | undefined {
+  let luminanceTotal = 0;
+  let alphaTotal = 0;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    const alpha = (pixels[index + 3] ?? 0) / 255;
+    if (alpha === 0) continue;
+    const luminance =
+      0.2126 * linearColorChannel(pixels[index] ?? 0) +
+      0.7152 * linearColorChannel(pixels[index + 1] ?? 0) +
+      0.0722 * linearColorChannel(pixels[index + 2] ?? 0);
+    luminanceTotal += luminance * alpha;
+    alphaTotal += alpha;
+  }
+
+  if (alphaTotal === 0) return undefined;
+  return luminanceTotal / alphaTotal < 0.5 ? 'light' : 'dark';
+}
+
+function imagePreviewBackground(image: HTMLImageElement): ImagePreviewBackground | undefined {
+  const naturalWidth = image.naturalWidth;
+  const naturalHeight = image.naturalHeight;
+  if (!naturalWidth || !naturalHeight) return undefined;
+
+  try {
+    const scale = Math.min(1, IMAGE_SAMPLE_EDGE / naturalWidth, IMAGE_SAMPLE_EDGE / naturalHeight);
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return undefined;
+    context.drawImage(image, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    return imagePreviewBackgroundForPixels(pixels);
+  } catch {
+    return undefined;
+  }
+}
+
 export function ImageDiffPreview({
   adapter,
   repoId,
@@ -60,6 +125,7 @@ export function ImageDiffPreview({
   candidate,
   binaryFallback,
   hidden = false,
+  layout = 'split',
   onProbeResult,
 }: ImageDiffPreviewProps) {
   const { t } = useI18n();
@@ -119,7 +185,15 @@ export function ImageDiffPreview({
         image.src = objectUrl;
         await image.decode();
         if (cancelled) return;
-        setSides((current) => ({ ...current, [side]: { status: 'loaded', url: objectUrl! } }));
+        const background = imagePreviewBackground(image);
+        setSides((current) => ({
+          ...current,
+          [side]: {
+            status: 'loaded',
+            url: objectUrl!,
+            ...(background ? { background } : {}),
+          },
+        }));
       } catch {
         if (objectUrl && objectUrls.delete(objectUrl)) URL.revokeObjectURL(objectUrl);
         if (cancelled) return;
@@ -156,13 +230,13 @@ export function ImageDiffPreview({
     availableStates.length > 0 &&
     availableStates.every((state) => state && state.status !== 'loading');
   const probePreviewable = availableStates.some((state) => state?.status === 'loaded');
+  const singleSide = availableStates.length === 1;
 
   useEffect(() => {
-    if (candidate.format === 'probe' && onProbeResult && probeComplete)
-      onProbeResult(probePreviewable);
-  }, [afterStatus, beforeStatus, candidate.format, onProbeResult, probeComplete, probePreviewable]);
+    if (onProbeResult && probeComplete) onProbeResult(probePreviewable);
+  }, [afterStatus, beforeStatus, onProbeResult, probeComplete, probePreviewable]);
 
-  if (hidden) return null;
+  if (hidden || !probeComplete) return null;
   if (
     (candidate.format === 'binary' || candidate.format === 'probe') &&
     availableStates.length > 0 &&
@@ -173,32 +247,42 @@ export function ImageDiffPreview({
   }
 
   return (
-    <div className="image-diff-preview" aria-label={t('imagePreview')}>
+    <div
+      className="image-diff-preview"
+      data-layout={layout}
+      data-single-side={singleSide || undefined}
+      aria-label={t('imagePreview')}
+    >
       {(['before', 'after'] as const).map((side) => {
         const state = sides[side];
-        if (!state) return null;
+        if (!state || state.status === 'loading') return null;
         const path = sidePath(candidate.path, candidate.previousPath, side);
         const label = t(side === 'before' ? 'imageBefore' : 'imageAfter');
         return (
-          <figure key={side} className="image-diff-side">
-            <figcaption>
-              <span>{label}</span>
-              {candidate.previousPath ? <code>{path}</code> : null}
-            </figcaption>
-            <div className="image-diff-canvas">
-              {state.status === 'loading' ? (
-                <output className="image-preview-status">
-                  <LoaderCircle className="spin" aria-hidden="true" />
-                  {t('imagePreviewLoading')}
-                </output>
-              ) : state.status === 'error' ? (
+          <figure key={side} className="image-diff-side" data-side={side}>
+            {!singleSide ? (
+              <figcaption>
+                <span>{label}</span>
+                {candidate.previousPath ? <code>{path}</code> : null}
+              </figcaption>
+            ) : null}
+            <div
+              className="image-diff-canvas"
+              data-image-background={state.status === 'loaded' ? state.background : undefined}
+            >
+              {state.status === 'error' ? (
                 <p className="image-preview-status">{t('imagePreviewUnavailable')}</p>
               ) : (
-                <img
-                  src={state.url}
-                  alt={t('imagePreviewAlt', { label, path })}
-                  draggable={false}
-                />
+                <span className="image-diff-image-surface">
+                  <img
+                    src={state.url}
+                    alt={t(singleSide ? 'imageSinglePreviewAlt' : 'imagePreviewAlt', {
+                      label,
+                      path,
+                    })}
+                    draggable={false}
+                  />
+                </span>
               )}
             </div>
           </figure>

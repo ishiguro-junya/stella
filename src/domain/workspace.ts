@@ -3,7 +3,7 @@ import type { LocalizedMessage } from '../i18n/i18n';
 export type RepoId = string;
 export type Generation = number;
 
-export type WorkspaceView = 'changes' | 'history';
+export type WorkspaceView = 'diff' | 'history';
 export type ActivityRange = '7d' | '30d' | '90d' | '180d' | '1y';
 export type ChangeArea = 'conflicted' | 'staged' | 'unstaged' | 'untracked';
 export type DiffStyle = 'unified' | 'split';

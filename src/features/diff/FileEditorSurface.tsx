@@ -8,7 +8,7 @@ import { Dialog, DialogFooter, DialogHeader } from '../../ui/Dialog';
 import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { TextEditor } from '../../ui/TextEditor';
 import { describeWorkspaceError, WorkspaceErrorDetails } from '../../ui/WorkspaceErrorDetails';
-import { FileViewModeTabs } from './FileViewModeTabs';
+import { FileViewModeToggle } from './FileViewModeToggle';
 
 export interface FileEditorSaveInput {
   path: string;
@@ -24,6 +24,7 @@ export interface FileEditorSurfaceProps {
   lineWrapping?: boolean | undefined;
   wrapColumn?: number | undefined;
   initialScrollLine?: number | undefined;
+  leadingHeaderActions?: ReactNode | undefined;
   headerActions?: ReactNode | undefined;
   onDisplay: () => void;
   onSave: (input: FileEditorSaveInput) => Promise<FileDocument | undefined>;
@@ -46,6 +47,7 @@ export function FileEditorSurface({
   lineWrapping = false,
   wrapColumn,
   initialScrollLine,
+  leadingHeaderActions,
   headerActions,
   onDisplay,
   onSave,
@@ -195,10 +197,7 @@ export function FileEditorSurface({
   };
 
   return (
-    <main
-      className="pane changes-content-pane file-editor-pane"
-      aria-labelledby="file-editor-title"
-    >
+    <main className="pane diff-content-pane file-editor-pane" aria-labelledby="file-editor-title">
       <div className="pane-toolbar file-editor-toolbar">
         <div className="selected-file-heading">
           <FileStatusIcon status={entry.status} />
@@ -208,7 +207,8 @@ export function FileEditorSurface({
           {dirty ? <output className="unsaved-file-dot" aria-label={t('unsaved')} /> : null}
         </div>
         <div className="diff-file-actions">
-          <FileViewModeTabs
+          {leadingHeaderActions}
+          <FileViewModeToggle
             mode="edit"
             displayDisabled={busy || saving}
             onDisplay={requestDisplay}

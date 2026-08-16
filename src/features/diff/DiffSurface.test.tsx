@@ -223,6 +223,9 @@ describe('DiffSurface line selection', () => {
       '--diffs-scrollbar-gutter-override: 0px;',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '--diffs-bg-separator-override: var(--diff-file-header-surface);',
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '--diffs-font-family: var(--font-mono);',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
@@ -379,7 +382,7 @@ describe('DiffSurface line selection', () => {
     );
   });
 
-  it('deemphasizes the parent path in file headers', () => {
+  it('renders the full path with one text style in file headers', () => {
     render(
       <DiffSurface
         source={{
@@ -396,7 +399,7 @@ describe('DiffSurface line selection', () => {
     const { container } = render(
       renderCustomHeader?.({ name: 'src/features/example.txt', type: 'change', hunks: [] }),
     );
-    expect(container.querySelector('.file-path-prefix')).toHaveTextContent('src/features/');
+    expect(container.querySelector('.file-path-prefix')).not.toBeInTheDocument();
     expect(
       container.querySelector('.diff-file-custom-header-title > span:last-child'),
     ).toHaveTextContent('src/features/example.txt');

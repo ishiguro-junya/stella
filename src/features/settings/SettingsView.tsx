@@ -1,7 +1,7 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- 省略され得るパスをキーボード操作でも確認できるようにする。 */
 import {
   Code2,
-  Files,
+  FileDiff,
   GitBranch,
   Palette,
   Settings as SettingsIcon,
@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../../ui/Button';
 import { DirectoryInput } from '../../ui/DirectoryInput';
 import { Input } from '../../ui/Input';
+import { LoadingIndicator } from '../../ui/LoadingIndicator';
 import type { ToolchainMode, ToolchainStatus } from '../../adapters/toolchainAdapter';
 import { isAbsoluteLocalPath } from '../../domain/repositoryLocation';
 import type { DiffStyle } from '../../domain/workspace';
@@ -20,7 +21,7 @@ import {
   EDITOR_WRAP_COLUMN_MAX,
   EDITOR_WRAP_COLUMN_MIN,
   normalizeEditorWrapColumn,
-  type ChangeListDisplay,
+  type DiffFileListDisplay,
 } from '../../persistence/preferences';
 import { APPEARANCE_OPTIONS, type Appearance } from '../../theme/appearance';
 import {
@@ -45,8 +46,9 @@ export interface SettingsViewProps {
   codeFont: CodeFont;
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
+  imagePreviewLayout: DiffStyle;
   splitStageView: boolean;
-  changeListDisplay: ChangeListDisplay;
+  diffFileListDisplay: DiffFileListDisplay;
   repositoryBasePath: string;
   repositoryAccessNeedsAttention: boolean;
   useConventionalCommits: boolean;
@@ -62,8 +64,9 @@ export interface SettingsViewProps {
   onCodeFontChange: (font: CodeFont) => void;
   onAutomaticUpdateChecksChange: (enabled: boolean) => void;
   onDiffStyleChange: (style: DiffStyle) => void;
+  onImagePreviewLayoutChange: (style: DiffStyle) => void;
   onSplitStageViewChange: (split: boolean) => void;
-  onChangeListDisplayChange: (display: ChangeListDisplay) => void;
+  onDiffFileListDisplayChange: (display: DiffFileListDisplay) => void;
   onRepositoryBasePathChange: (path: string) => void;
   onChooseRepositoryBasePath: () => void;
   onOpenFilesAndFoldersSettings: () => void;
@@ -75,7 +78,7 @@ export interface SettingsViewProps {
   onToolchainModeChange: (mode: ToolchainMode) => void;
 }
 
-type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'changes' | 'editor' | 'git';
+type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'diff' | 'editor' | 'git';
 
 function isLanguage(value: string): value is Language {
   return value === 'ja' || value === 'en';
@@ -89,7 +92,7 @@ function isDiffStyle(value: string): value is DiffStyle {
   return value === 'unified' || value === 'split';
 }
 
-function isChangeListDisplay(value: string): value is ChangeListDisplay {
+function isDiffFileListDisplay(value: string): value is DiffFileListDisplay {
   return value === 'nameAndPath' || value === 'fullPath' || value === 'tree';
 }
 
@@ -105,8 +108,9 @@ export function SettingsView({
   codeFont,
   automaticUpdateChecks,
   diffStyle,
+  imagePreviewLayout,
   splitStageView,
-  changeListDisplay,
+  diffFileListDisplay,
   repositoryBasePath,
   repositoryAccessNeedsAttention,
   useConventionalCommits,
@@ -122,8 +126,9 @@ export function SettingsView({
   onCodeFontChange,
   onAutomaticUpdateChecksChange,
   onDiffStyleChange,
+  onImagePreviewLayoutChange,
   onSplitStageViewChange,
-  onChangeListDisplayChange,
+  onDiffFileListDisplayChange,
   onRepositoryBasePathChange,
   onChooseRepositoryBasePath,
   onOpenFilesAndFoldersSettings,
@@ -146,7 +151,7 @@ export function SettingsView({
     { id: 'general', label: t('settingsCategoryGeneral'), Icon: SettingsIcon },
     { id: 'permissions', label: t('settingsCategoryPermissions'), Icon: ShieldCheck },
     { id: 'appearance', label: t('settingsCategoryAppearance'), Icon: Palette },
-    { id: 'changes', label: t('settingsCategoryChanges'), Icon: Files },
+    { id: 'diff', label: t('settingsCategoryDiff'), Icon: FileDiff },
     { id: 'editor', label: t('settingsCategoryEditor'), Icon: Code2 },
     { id: 'git', label: t('settingsCategoryGit'), Icon: GitBranch },
   ] as const;
@@ -463,13 +468,13 @@ export function SettingsView({
           </section>
 
           <section
-            id="settings-category-changes"
+            id="settings-category-diff"
             className="settings-category-panel"
-            aria-labelledby="settings-category-changes-title"
-            hidden={category !== 'changes'}
+            aria-labelledby="settings-category-diff-title"
+            hidden={category !== 'diff'}
           >
-            <h2 id="settings-category-changes-title" className="settings-category-heading">
-              {t('settingsCategoryChanges')}
+            <h2 id="settings-category-diff-title" className="settings-category-heading">
+              {t('settingsCategoryDiff')}
             </h2>
             <div className="settings-panel">
               <section className="settings-row" aria-labelledby="stage-display-title">
@@ -493,30 +498,32 @@ export function SettingsView({
                 </SelectControl>
               </section>
 
-              <section className="settings-row" aria-labelledby="change-list-display-title">
+              <section className="settings-row" aria-labelledby="diff-file-list-display-title">
                 <div className="settings-row-copy">
-                  <h3 id="change-list-display-title">{t('changeListDisplayTitle')}</h3>
-                  <p id="change-list-display-description">{t('changeListDisplayDescription')}</p>
+                  <h3 id="diff-file-list-display-title">{t('diffFileListDisplayTitle')}</h3>
+                  <p id="diff-file-list-display-description">
+                    {t('diffFileListDisplayDescription')}
+                  </p>
                 </div>
                 <SelectControl
                   className="settings-select"
-                  name="change-list-display"
-                  value={changeListDisplay}
-                  aria-labelledby="change-list-display-title"
-                  aria-describedby="change-list-display-description"
+                  name="diff-file-list-display"
+                  value={diffFileListDisplay}
+                  aria-labelledby="diff-file-list-display-title"
+                  aria-describedby="diff-file-list-display-description"
                   onChange={(event) => {
                     const value = event.currentTarget.value;
-                    if (isChangeListDisplay(value)) onChangeListDisplayChange(value);
+                    if (isDiffFileListDisplay(value)) onDiffFileListDisplayChange(value);
                   }}
                 >
-                  {(['fullPath', 'tree', 'nameAndPath'] as const).map((option) => (
+                  {(['nameAndPath', 'fullPath', 'tree'] as const).map((option) => (
                     <option key={option} value={option}>
                       {t(
                         option === 'nameAndPath'
-                          ? 'changeListDisplayNameAndPath'
+                          ? 'diffFileListDisplayNameAndPath'
                           : option === 'fullPath'
-                            ? 'changeListDisplayFullPath'
-                            : 'changeListDisplayTree',
+                            ? 'diffFileListDisplayFullPath'
+                            : 'diffFileListDisplayTree',
                       )}
                     </option>
                   ))}
@@ -572,6 +579,30 @@ export function SettingsView({
                   onChange={(event) => {
                     const value = event.currentTarget.value;
                     if (isDiffStyle(value)) onDiffStyleChange(value);
+                  }}
+                >
+                  {(['unified', 'split'] as const).map((option) => (
+                    <option key={option} value={option}>
+                      {t(option)}
+                    </option>
+                  ))}
+                </SelectControl>
+              </section>
+
+              <section className="settings-row" aria-labelledby="image-preview-layout-title">
+                <div className="settings-row-copy">
+                  <h3 id="image-preview-layout-title">{t('imagePreviewLayout')}</h3>
+                  <p id="image-preview-layout-description">{t('imagePreviewLayoutDescription')}</p>
+                </div>
+                <SelectControl
+                  className="settings-select"
+                  name="image-preview-layout"
+                  value={imagePreviewLayout}
+                  aria-labelledby="image-preview-layout-title"
+                  aria-describedby="image-preview-layout-description"
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (isDiffStyle(value)) onImagePreviewLayoutChange(value);
                   }}
                 >
                   {(['unified', 'split'] as const).map((option) => (
@@ -776,39 +807,7 @@ export function SettingsView({
                     </dl>
                   </>
                 ) : (
-                  <>
-                    <dl
-                      className="settings-toolchain-modes settings-toolchain-loading"
-                      aria-hidden="true"
-                    >
-                      {[0, 1].map((index) => (
-                        <div key={index}>
-                          <dt>
-                            <span className="loading-pulse" />
-                          </dt>
-                          <dd>
-                            <span className="loading-pulse" />
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <dl
-                      className="settings-toolchain-components settings-toolchain-loading"
-                      aria-hidden="true"
-                    >
-                      {[0, 1, 2].map((index) => (
-                        <div key={index}>
-                          <dt>
-                            <span className="loading-pulse" />
-                          </dt>
-                          <dd>
-                            <span className="loading-pulse" />
-                            <span className="loading-pulse settings-toolchain-path-loading" />
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </>
+                  <LoadingIndicator className="settings-toolchain-loading" />
                 )}
               </section>
             </div>

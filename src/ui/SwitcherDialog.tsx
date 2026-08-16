@@ -12,6 +12,7 @@ import {
 
 import { Button } from './Button';
 import { Input } from './Input';
+import { LoadingIndicator } from './LoadingIndicator';
 import { useI18n } from '../i18n/i18n';
 import { Dialog } from './Dialog';
 import { RowActionMenu, type RowActionMenuItem, type RowActionMenuPoint } from './RowActionMenu';
@@ -305,12 +306,7 @@ export function SwitcherDialog({
         ) : loading ? null : (
           <p className="switcher-empty">{emptyMessage}</p>
         )}
-        {loading ? (
-          <output className="switcher-loading">
-            <span className="loading-pulse" aria-hidden="true" />
-            <span className="sr-only">{t('loading')}</span>
-          </output>
-        ) : null}
+        {loading ? <LoadingIndicator className="switcher-loading" /> : null}
       </div>
       {footer ? <div className="switcher-footer">{footer}</div> : null}
     </Dialog>

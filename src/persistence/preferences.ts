@@ -23,7 +23,7 @@ export const EDITOR_WRAP_COLUMN_MIN = 40;
 export const EDITOR_WRAP_COLUMN_MAX = 400;
 export const DEFAULT_EDITOR_WRAP_COLUMN = 120;
 
-export type ChangeListDisplay = 'nameAndPath' | 'fullPath' | 'tree';
+export type DiffFileListDisplay = 'nameAndPath' | 'fullPath' | 'tree';
 
 export interface PaneWidths {
   left: number;
@@ -46,8 +46,9 @@ export interface StellaPreferences {
   codeFont: CodeFont;
   automaticUpdateChecks: boolean;
   diffStyle: DiffStyle;
+  imagePreviewLayout: DiffStyle;
   splitStageView: boolean;
-  changeListDisplay: ChangeListDisplay;
+  diffFileListDisplay: DiffFileListDisplay;
   useConventionalCommits: boolean;
   stickyFileHeaders: boolean;
   editorLineWrapping: boolean;
@@ -71,8 +72,9 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   codeFont: 'sfMono',
   automaticUpdateChecks: true,
   diffStyle: 'unified',
+  imagePreviewLayout: 'split',
   splitStageView: false,
-  changeListDisplay: 'fullPath',
+  diffFileListDisplay: 'nameAndPath',
   useConventionalCommits: false,
   stickyFileHeaders: false,
   editorLineWrapping: false,
@@ -93,7 +95,7 @@ function isDiffStyle(value: unknown): value is DiffStyle {
   return value === 'unified' || value === 'split';
 }
 
-function isChangeListDisplay(value: unknown): value is ChangeListDisplay {
+function isDiffFileListDisplay(value: unknown): value is DiffFileListDisplay {
   return value === 'nameAndPath' || value === 'fullPath' || value === 'tree';
 }
 
@@ -226,6 +228,7 @@ export function readPreferences(): StellaPreferences {
       historyPaneWidths.left,
       activityPaneWidths.left,
     ].find((width) => typeof width === 'number' && Number.isFinite(width));
+    const diffFileListDisplay = value.diffFileListDisplay ?? value.changeListDisplay;
     return {
       version: STORAGE_VERSION,
       appearance: isAppearance(value.appearance)
@@ -240,13 +243,16 @@ export function readPreferences(): StellaPreferences {
           ? value.automaticUpdateChecks
           : DEFAULT_PREFERENCES.automaticUpdateChecks,
       diffStyle: isDiffStyle(value.diffStyle) ? value.diffStyle : DEFAULT_PREFERENCES.diffStyle,
+      imagePreviewLayout: isDiffStyle(value.imagePreviewLayout)
+        ? value.imagePreviewLayout
+        : DEFAULT_PREFERENCES.imagePreviewLayout,
       splitStageView:
         typeof value.splitStageView === 'boolean'
           ? value.splitStageView
           : DEFAULT_PREFERENCES.splitStageView,
-      changeListDisplay: isChangeListDisplay(value.changeListDisplay)
-        ? value.changeListDisplay
-        : DEFAULT_PREFERENCES.changeListDisplay,
+      diffFileListDisplay: isDiffFileListDisplay(diffFileListDisplay)
+        ? diffFileListDisplay
+        : DEFAULT_PREFERENCES.diffFileListDisplay,
       useConventionalCommits:
         typeof value.useConventionalCommits === 'boolean'
           ? value.useConventionalCommits

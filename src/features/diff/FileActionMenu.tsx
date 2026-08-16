@@ -34,7 +34,13 @@ export interface FileActionMenuProps {
   openDisabled: boolean;
   discardDisabled: boolean;
   deleteDisabled: boolean;
-  imagePreview?: { pressed: boolean; onPressedChange: (pressed: boolean) => void } | undefined;
+  imagePreview?:
+    | {
+        pressed: boolean;
+        disabled?: boolean | undefined;
+        onPressedChange: (pressed: boolean) => void;
+      }
+    | undefined;
   persistentTrigger?: boolean | undefined;
   contextPoint?: FileActionMenuPoint | undefined;
   onOpenChange: (open: boolean) => void;
@@ -60,22 +66,23 @@ export function FileActionMenu({
 }: FileActionMenuProps) {
   const { t } = useI18n();
   const items: RowActionMenuItem<FileActionKind | 'imagePreview'>[] = [
+    {
+      action: 'editFile',
+      label: t('actionEditFile'),
+      icon: <Pencil aria-hidden="true" focusable="false" size={15} />,
+      disabled: editDisabled,
+    },
     ...(imagePreview
       ? [
           {
             action: 'imagePreview' as const,
-            label: t('imagePreview'),
+            label: t('actionPreviewImage'),
             icon: <ImageIcon aria-hidden="true" focusable="false" size={15} />,
             checked: imagePreview.pressed,
+            disabled: imagePreview.disabled,
           },
         ]
       : []),
-    {
-      action: 'editFile',
-      label: t('editFile'),
-      icon: <Pencil aria-hidden="true" focusable="false" size={15} />,
-      disabled: editDisabled,
-    },
     {
       action: 'openInDefaultApp',
       label: t('openInDefaultApp'),
@@ -95,7 +102,7 @@ export function FileActionMenu({
     },
     {
       action: 'discardChanges',
-      label: t('discard'),
+      label: t('actionDiscardChanges'),
       icon: <Undo2 aria-hidden="true" focusable="false" size={15} />,
       disabled: discardDisabled,
       danger: true,
@@ -103,7 +110,7 @@ export function FileActionMenu({
     },
     {
       action: 'moveToTrash',
-      label: t('delete'),
+      label: t('actionDeleteFile'),
       icon: <Trash2 aria-hidden="true" focusable="false" size={15} />,
       disabled: deleteDisabled,
       danger: true,

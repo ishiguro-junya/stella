@@ -13,6 +13,7 @@ import { Ban, CircleCheck, CircleX, LoaderCircle, RotateCw } from 'lucide-react'
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { Button } from '../../ui/Button';
+import { LoadingIndicator } from '../../ui/LoadingIndicator';
 import type {
   ActivityEntry,
   ActivityRange,
@@ -473,7 +474,9 @@ function AnalyticsPanel({
             {t('activityOpenRepository')}
           </ActivityState>
         ) : analytics.kind === 'loading' ? (
-          <output className="activity-state" aria-busy="true" />
+          <div className="activity-state" aria-busy="true">
+            <LoadingIndicator />
+          </div>
         ) : analytics.kind === 'error' ? (
           <ActivityState title={t('activityUnavailable')}>
             {t('activityLoadFailed')}
@@ -548,7 +551,13 @@ function CommitAnalyticsReady({
         <figcaption id="activity-chart-caption" className="sr-only">
           {t('activityChartDescription')}
         </figcaption>
-        <Suspense fallback={<output className="activity-chart-loading" aria-busy="true" />}>
+        <Suspense
+          fallback={
+            <div className="activity-chart-loading" aria-busy="true">
+              <LoadingIndicator />
+            </div>
+          }
+        >
           <CommitActivityChart data={chartData} metricLabel={activityMetricLabel(metric, t)} />
         </Suspense>
       </figure>

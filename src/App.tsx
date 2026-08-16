@@ -11,7 +11,7 @@ import {
 import {
   ChartNoAxesCombined,
   ChevronDown,
-  Files,
+  FileDiff,
   FolderGit2,
   GitBranch,
   History as HistoryIcon,
@@ -24,6 +24,7 @@ import { documentDir } from '@tauri-apps/api/path';
 
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import { LoadingIndicator } from './ui/LoadingIndicator';
 import { pickDirectory, type DirectoryPicker } from './ui/directoryPicker';
 import {
   isPullDivergenceError,
@@ -60,7 +61,7 @@ import {
   repositoryNameFromPath,
   repositoryNameFromRemoteUrl,
 } from './domain/repositoryLocation';
-import { ChangesView } from './features/changes/ChangesView';
+import { DiffView } from './features/diff/DiffView';
 import type { UnsavedChangesHandle, UnsavedRelocationDraft } from './domain/unsavedChanges';
 import { mergeActivityEntries } from './features/activity/activityPersistence';
 import { HistoryView } from './features/history/HistoryView';
@@ -110,7 +111,7 @@ import {
   rememberRepositoryPath,
   replaceRepositoryPath,
   updatePreferences,
-  type ChangeListDisplay,
+  type DiffFileListDisplay,
   type PaneWidthPreferences,
 } from './persistence/preferences';
 import {
@@ -357,7 +358,7 @@ export function App({
   const toolchainAdapter = providedToolchainAdapter ?? defaultToolchainAdapterRef.current;
   const initialPreferences = useMemo(readPreferences, []);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(EMPTY_WORKSPACE);
-  const [view, setView] = useState<WorkspaceView>('changes');
+  const [view, setView] = useState<WorkspaceView>('diff');
   const [appearance, setAppearance] = useState<Appearance>(initialPreferences.appearance);
   const [language, setLanguage] = useState<Language>(initialPreferences.language);
   const [fontSize, setFontSize] = useState<FontSize>(initialPreferences.fontSize);
@@ -367,9 +368,12 @@ export function App({
     initialPreferences.automaticUpdateChecks,
   );
   const [diffStyle, setDiffStyle] = useState<DiffStyle>(initialPreferences.diffStyle);
+  const [imagePreviewLayout, setImagePreviewLayout] = useState<DiffStyle>(
+    initialPreferences.imagePreviewLayout,
+  );
   const [splitStageView, setSplitStageView] = useState(initialPreferences.splitStageView);
-  const [changeListDisplay, setChangeListDisplay] = useState<ChangeListDisplay>(
-    initialPreferences.changeListDisplay,
+  const [diffFileListDisplay, setDiffFileListDisplay] = useState<DiffFileListDisplay>(
+    initialPreferences.diffFileListDisplay,
   );
   const [useConventionalCommits, setUseConventionalCommits] = useState(
     initialPreferences.useConventionalCommits,
@@ -416,10 +420,10 @@ export function App({
   const [pendingUnsavedAction, setPendingUnsavedAction] = useState<WorkspaceAction>();
   const [pendingWindowClose, setPendingWindowClose] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo>();
+  const [manualUpdateChecking, setManualUpdateChecking] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [pendingUpdateInstall, setPendingUpdateInstall] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState({ downloaded: 0, total: 0 });
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
   const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView>();
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
@@ -447,6 +451,7 @@ export function App({
   const branchRequestIdRef = useRef(0);
   const workspaceViewTransitionTimerRef = useRef<number | undefined>(undefined);
   const updateCheckInFlightRef = useRef(false);
+  const manualUpdateCheckRequestedRef = useRef(false);
   const lastAutomaticUpdateCheckRef = useRef(0);
   const promptedUpdateVersionRef = useRef<string | undefined>(undefined);
   const repo = selectedRepo(workspace);
@@ -497,28 +502,38 @@ export function App({
 
   const checkAppUpdate = useCallback(
     async (manual = false): Promise<void> => {
+      if (manual) {
+        manualUpdateCheckRequestedRef.current = true;
+        setManualUpdateChecking(true);
+        setNotice(undefined);
+      }
       if (updateCheckInFlightRef.current) return;
       updateCheckInFlightRef.current = true;
-      if (manual) setNotice({ level: 'info', message: { id: 'checkingForUpdates' } });
       try {
         const update = await checkForAppUpdate();
         if (!update) {
-          if (manual) setNotice({ level: 'info', message: { id: 'appIsUpToDate' } });
+          if (manualUpdateCheckRequestedRef.current)
+            setNotice({ level: 'info', message: { id: 'appIsUpToDate' } });
           return;
         }
         setAvailableUpdate(update);
-        if (manual || promptedUpdateVersionRef.current !== update.version) {
+        if (
+          manualUpdateCheckRequestedRef.current ||
+          promptedUpdateVersionRef.current !== update.version
+        ) {
           promptedUpdateVersionRef.current = update.version;
           setNotice(undefined);
           setUpdateDialogOpen(true);
         }
       } catch (cause) {
-        if (manual) {
+        if (manualUpdateCheckRequestedRef.current) {
           setNotice(undefined);
           showError(t('updateCheckFailedTitle'), cause, t('updateCheckFailed'));
         }
       } finally {
         updateCheckInFlightRef.current = false;
+        manualUpdateCheckRequestedRef.current = false;
+        setManualUpdateChecking(false);
       }
     },
     [showError, t],
@@ -712,8 +727,9 @@ export function App({
       codeFont,
       automaticUpdateChecks,
       diffStyle,
+      imagePreviewLayout,
       splitStageView,
-      changeListDisplay,
+      diffFileListDisplay,
       useConventionalCommits,
       stickyFileHeaders,
       editorLineWrapping,
@@ -726,9 +742,10 @@ export function App({
   }, [
     appearance,
     automaticUpdateChecks,
-    changeListDisplay,
+    diffFileListDisplay,
     codeFont,
     diffStyle,
+    imagePreviewLayout,
     editorLineWrapping,
     editorWrapColumn,
     fontSize,
@@ -970,7 +987,7 @@ export function App({
         if (attachedRepoId) {
           requestNavigationRef.current({
             repoId: attachedRepoId,
-            ...(request.kind === 'clone' ? {} : { page: 'workspace', view: 'changes' }),
+            ...(request.kind === 'clone' ? {} : { page: 'workspace', view: 'diff' }),
           });
         }
         return attached.repos.find((candidate) => candidate.repoId === attachedRepoId);
@@ -1708,16 +1725,8 @@ export function App({
     setPendingUpdateInstall(false);
     setUpdateDialogOpen(true);
     setUpdateInstalling(true);
-    setUpdateProgress({ downloaded: 0, total: 0 });
     try {
-      await installAppUpdate((event) => {
-        if (event.event === 'progress') {
-          setUpdateProgress((current) => ({
-            downloaded: current.downloaded + event.chunkLength,
-            total: event.contentLength ?? current.total,
-          }));
-        }
-      });
+      await installAppUpdate(() => undefined);
     } catch (cause) {
       setUpdateInstalling(false);
       showError(t('updateInstallFailedTitle'), cause, t('updateInstallFailed'));
@@ -1784,6 +1793,9 @@ export function App({
         <AppearanceProvider appearance={appearance}>
           <div className="app-shell" data-testid="app-shell" aria-busy="true" style={appShellStyle}>
             <header className="app-header" data-tauri-drag-region="deep" />
+            <main className="app-restoring-workspace">
+              <LoadingIndicator />
+            </main>
           </div>
         </AppearanceProvider>
       </I18nProvider>
@@ -1799,10 +1811,12 @@ export function App({
           style={appShellStyle}
         >
           <header className="app-header" data-tauri-drag-region="deep">
-            {sidebarAvailable || availableUpdate ? (
+            {sidebarAvailable || availableUpdate || manualUpdateChecking ? (
               <div className="titlebar-left-actions">
                 {sidebarAvailable ? sidebarControl : null}
-                {availableUpdate ? (
+                {manualUpdateChecking ? (
+                  <LoadingIndicator className="titlebar-update-loading" />
+                ) : availableUpdate ? (
                   <Button
                     type="button"
                     className="icon-button titlebar-update-button"
@@ -1872,19 +1886,17 @@ export function App({
                     <Button
                       type="button"
                       className="titlebar-menu-button"
-                      aria-label={t('changes')}
+                      aria-label={t('diff')}
                       aria-current={
-                        page === 'workspace' && activeWorkspaceView === 'changes'
-                          ? 'page'
-                          : undefined
+                        page === 'workspace' && activeWorkspaceView === 'diff' ? 'page' : undefined
                       }
                       onClick={() => {
-                        if (page !== 'workspace' || activeWorkspaceView !== 'changes')
-                          requestNavigation({ page: 'workspace', view: 'changes' });
+                        if (page !== 'workspace' || activeWorkspaceView !== 'diff')
+                          requestNavigation({ page: 'workspace', view: 'diff' });
                       }}
                     >
-                      <Files aria-hidden="true" focusable="false" />
-                      <span>{t('changes')}</span>
+                      <FileDiff aria-hidden="true" focusable="false" />
+                      <span>{t('diff')}</span>
                     </Button>
                     <Button
                       type="button"
@@ -1966,8 +1978,9 @@ export function App({
               codeFont={codeFont}
               automaticUpdateChecks={automaticUpdateChecks}
               diffStyle={diffStyle}
+              imagePreviewLayout={imagePreviewLayout}
               splitStageView={splitStageView}
-              changeListDisplay={changeListDisplay}
+              diffFileListDisplay={diffFileListDisplay}
               repositoryBasePath={repositoryBasePath}
               repositoryAccessNeedsAttention={repositoryAccessNeedsAttention}
               useConventionalCommits={useConventionalCommits}
@@ -1983,8 +1996,9 @@ export function App({
               onCodeFontChange={setCodeFont}
               onAutomaticUpdateChecksChange={setAutomaticUpdateChecks}
               onDiffStyleChange={setDiffStyle}
+              onImagePreviewLayoutChange={setImagePreviewLayout}
               onSplitStageViewChange={setSplitStageView}
-              onChangeListDisplayChange={setChangeListDisplay}
+              onDiffFileListDisplayChange={setDiffFileListDisplay}
               onRepositoryBasePathChange={setRepositoryBasePath}
               onChooseRepositoryBasePath={() => settleUiAction(chooseRepositoryBasePath())}
               onOpenFilesAndFoldersSettings={openFilesAndFoldersSettings}
@@ -2008,7 +2022,7 @@ export function App({
                   <h1 id="activity-title" className="sr-only">
                     {t('appActivity')}
                   </h1>
-                  <span className="loading-pulse" aria-hidden="true" />
+                  <LoadingIndicator />
                 </main>
               }
             >
@@ -2080,9 +2094,10 @@ export function App({
                       <div className="workspace-view-transition-pane" />
                       <div className="workspace-view-transition-divider" />
                       <div className="workspace-view-transition-pane" />
+                      <LoadingIndicator />
                     </div>
-                  ) : view === 'changes' ? (
-                    <ChangesView
+                  ) : view === 'diff' ? (
+                    <DiffView
                       key={`changes:${repo.repoId}:${workspaceViewRevision}`}
                       repo={repo}
                       adapter={adapter}
@@ -2096,8 +2111,9 @@ export function App({
                       }}
                       paneWidths={paneWidths}
                       diffStyle={diffStyle}
+                      imagePreviewLayout={imagePreviewLayout}
                       splitStageView={splitStageView}
-                      changeListDisplay={changeListDisplay}
+                      diffFileListDisplay={diffFileListDisplay}
                       useConventionalCommits={useConventionalCommits}
                       stickyFileHeaders={stickyFileHeaders}
                       editorLineWrapping={editorLineWrapping}
@@ -2111,11 +2127,10 @@ export function App({
                       adapter={adapter}
                       busy={busy || repositoryUnavailable}
                       onError={showError}
-                      onShowChanges={() =>
-                        requestNavigation({ page: 'workspace', view: 'changes' })
-                      }
+                      onShowDiff={() => requestNavigation({ page: 'workspace', view: 'diff' })}
                       onAction={runAction}
                       diffStyle={diffStyle}
+                      imagePreviewLayout={imagePreviewLayout}
                       lineWrapping={editorLineWrapping}
                       wrapColumn={editorWrapColumn}
                       stickyFileHeaders={stickyFileHeaders}
@@ -2164,15 +2179,7 @@ export function App({
                 {availableUpdate.notes ? (
                   <p className="app-update-notes">{availableUpdate.notes}</p>
                 ) : null}
-                {updateInstalling ? (
-                  <div className="app-update-progress" aria-live="polite">
-                    <span>{t('downloadingUpdate')}</span>
-                    <progress
-                      value={updateProgress.downloaded}
-                      {...(updateProgress.total ? { max: updateProgress.total } : {})}
-                    />
-                  </div>
-                ) : null}
+                {updateInstalling ? <LoadingIndicator className="app-update-loading" /> : null}
                 {updateBlocked ? (
                   <p className="field-error">{t('finishWorkBeforeUpdate')}</p>
                 ) : null}

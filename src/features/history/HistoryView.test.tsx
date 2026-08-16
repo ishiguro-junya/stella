@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,8 +14,10 @@ import type {
 import { repoSnapshot } from '../../test/fixtures';
 import { HistoryView } from './HistoryView';
 
-const { diffSurfaceMock } = vi.hoisted(() => ({
+const { diffSurfaceMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(() => ({
   diffSurfaceMock: vi.fn<(props: unknown) => void>(),
+  imagePreviewToggleMock: vi.fn<(pressed: boolean, disabled: boolean | undefined) => void>(),
+  imageProbeState: { previewable: true },
 }));
 
 let intersectionObserverCallback: IntersectionObserverCallback | undefined;
@@ -64,34 +66,71 @@ vi.mock('../diff/DiffSurface', () => ({
     diffSurfaceMock(props);
     return <div>Diff</div>;
   },
+  DiffFileHeader: ({
+    path,
+    status,
+    collapsed,
+    onToggle,
+    trailing,
+  }: {
+    path: string;
+    status: string;
+    collapsed: boolean;
+    onToggle: () => void;
+    trailing?: ReactNode;
+  }) => (
+    <div className="diff-file-custom-header" data-testid="diff-file-header">
+      <div className="diff-file-custom-header-title">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${path} diff`}
+          onClick={onToggle}
+        >
+          Toggle
+        </button>
+        <span className={`file-status ${status}`} />
+        <span>{path}</span>
+      </div>
+      {trailing}
+    </div>
+  ),
 }));
 vi.mock('../diff/ImageDiffPreview', () => ({
   ImageDiffPreview: ({
+    candidate,
     hidden,
     onProbeResult,
   }: {
+    candidate: { path: string };
     hidden?: boolean;
     onProbeResult?: (previewable: boolean) => void;
   }) => {
-    useEffect(() => onProbeResult?.(true), [onProbeResult]);
-    return hidden ? null : <div>Image preview content</div>;
+    useEffect(() => onProbeResult?.(imageProbeState.previewable), [onProbeResult]);
+    return hidden ? null : <div>Image preview content: {candidate.path}</div>;
   },
   ImagePreviewToggle: ({
     pressed,
+    disabled,
     onPressedChange,
   }: {
     pressed: boolean;
+    disabled?: boolean;
     onPressedChange: (pressed: boolean) => void;
-  }) => (
-    <button
-      type="button"
-      aria-label="Image preview"
-      aria-pressed={pressed}
-      onClick={() => onPressedChange(!pressed)}
-    >
-      Image
-    </button>
-  ),
+  }) => {
+    imagePreviewToggleMock(pressed, disabled);
+    return (
+      <button
+        type="button"
+        aria-label="Image preview"
+        aria-pressed={pressed}
+        disabled={disabled}
+        onClick={() => onPressedChange(!pressed)}
+      >
+        Image
+      </button>
+    );
+  },
 }));
 
 function adapterWithQuery(query: WorkspaceAdapter['query']): WorkspaceAdapter {
@@ -149,6 +188,8 @@ function linearHistory(prefix: string, count: number): CommitSummary[] {
 
 beforeEach(() => {
   diffSurfaceMock.mockClear();
+  imagePreviewToggleMock.mockClear();
+  imageProbeState.previewable = true;
   intersectionObserverCallback = undefined;
   observeIntersection.mockClear();
   disconnectIntersection.mockClear();
@@ -201,6 +242,44 @@ async function openCommitAction(
 }
 
 describe('HistoryView', () => {
+  it('does not show the image preview toggle for a raster image', async () => {
+    const rasterDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'raster-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/image.png b/image.png
+GIT binary patch
+literal 1
+abc
+`,
+      binary: true,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(rasterDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByText('Image preview content: image.png')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Image preview' })).not.toBeInTheDocument();
+  });
+
   it('toggles only the image section and keeps a mixed commit diff visible', async () => {
     const user = userEvent.setup();
     const mixedDiff: NonNullable<CommitDetails['diff']> = {
@@ -215,11 +294,12 @@ describe('HistoryView', () => {
 @@ -1 +1 @@
 -old
 +new
-diff --git a/image.png b/image.png
-index 1111111..2222222 100644
-GIT binary patch
-literal 1
-abc
+diff --git a/image.svg b/image.svg
+--- a/image.svg
++++ b/image.svg
+@@ -1 +1 @@
+-<svg />
++<svg id="updated" />
 `,
       binary: false,
       tooLarge: false,
@@ -236,7 +316,7 @@ abc
       <HistoryView
         repo={repoSnapshot({ history: [commitDetails(undefined)] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -244,17 +324,18 @@ abc
     );
 
     const toggle = await screen.findByRole('button', { name: 'Image preview' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Image preview content')).toBeVisible();
-    expect(screen.getByText('Diff')).toBeVisible();
+    expect(imagePreviewToggleMock.mock.calls[0]).toEqual([true, false]);
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByText('Image preview content: image.svg')).toBeVisible();
+    expect(screen.getAllByText('Diff')).toHaveLength(1);
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByText('Image preview content')).not.toBeInTheDocument();
-    expect(screen.getByText('Diff')).toBeVisible();
+    expect(screen.queryByText('Image preview content: image.svg')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Diff')).toHaveLength(2);
   });
 
-  it('shows the History image button after a pure raster rename passes the probe', async () => {
+  it('shows a pure raster rename without an image preview toggle after the probe', async () => {
     const renameDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'rename-revision',
       repoId: 'repo-1',
@@ -281,19 +362,133 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [commitDetails(undefined)] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Image preview' })).toHaveAttribute(
-      'aria-pressed',
+    await waitFor(() => expect(screen.getByText('Image preview content: new.png')).toBeVisible());
+    expect(screen.queryByRole('button', { name: 'Image preview' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Diff')).not.toBeInTheDocument();
+  });
+
+  it('falls back to a normal file diff when a pure rename is not an image', async () => {
+    imageProbeState.previewable = false;
+    const renameDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'text-rename-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/old.txt b/new.txt
+similarity index 100%
+rename from old.txt
+rename to new.txt
+`,
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(renameDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByText('Diff')).toBeVisible();
+    expect(screen.queryByText('Image preview content: new.txt')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Image preview' })).not.toBeInTheDocument();
+    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ kind: 'patch', path: 'new.txt' }),
+        showFileHeaders: true,
+      }),
+    );
+  });
+
+  it('uses the shared file header with independent controls for each History image', async () => {
+    const user = userEvent.setup();
+    const imageDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'two-images-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/first.svg b/first.svg
+--- a/first.svg
++++ b/first.svg
+@@ -1 +1 @@
+-<svg />
++<svg id="first" />
+diff --git a/second.svg b/second.svg
+--- a/second.svg
++++ b/second.svg
+@@ -1 +1 @@
+-<svg />
++<svg id="second" />
+`,
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(imageDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    const { container } = render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const toggles = await screen.findAllByRole('button', { name: 'Image preview' });
+    expect(toggles).toHaveLength(2);
+    expect(screen.getAllByTestId('diff-file-header')).toHaveLength(2);
+    expect(container.querySelector('.commit-detail-actions .image-preview-toggle')).toBeNull();
+    expect(toggles[0]?.closest('.history-image-file-header')).toHaveTextContent('first.svg');
+    expect(toggles[1]?.closest('.history-image-file-header')).toHaveTextContent('second.svg');
+    expect(
+      toggles[0]?.closest('.history-image-file-header')?.querySelector('.file-status.modified'),
+    ).toBeInTheDocument();
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Collapse first.svg diff' })).toBeVisible(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Collapse first.svg diff' }));
+    expect(screen.queryByText('Image preview content: first.svg')).not.toBeInTheDocument();
+    expect(screen.getByText('Image preview content: second.svg')).toBeVisible();
+    expect(toggles[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(toggles[0]!);
+    expect(screen.getByText('Image preview content: first.svg')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Collapse first.svg diff' })).toHaveAttribute(
+      'aria-expanded',
       'true',
     );
-    expect(screen.getByText('Image preview content')).toBeVisible();
-    expect(screen.getByText('Diff')).toBeVisible();
   });
 
   it('focuses the selected commit when opened and moves it with the arrow keys', async () => {
@@ -317,7 +512,7 @@ rename to new.png
           history: [commitSummary('first'), commitSummary('second')],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -372,7 +567,7 @@ rename to new.png
           ],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -392,9 +587,9 @@ rename to new.png
     expect(onAction).toHaveBeenCalledWith({ kind: 'checkoutBranch', name: 'topic-b' });
   });
 
-  it('shows uncommitted changes before the commit list and opens Changes when selected', async () => {
+  it('shows uncommitted changes before the commit list and opens Diff when selected', async () => {
     const user = userEvent.setup();
-    const onShowChanges = vi.fn<() => void>();
+    const onShowDiff = vi.fn<() => void>();
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) => {
         if (request.kind === 'commitDetails') {
@@ -416,7 +611,7 @@ rename to new.png
       <HistoryView
         repo={dirtyRepo}
         adapter={adapter}
-        onShowChanges={onShowChanges}
+        onShowDiff={onShowDiff}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -441,13 +636,13 @@ rename to new.png
         .querySelector('[data-edge-kind="working-tree"]'),
     ).toBeInTheDocument();
     await user.click(workingTreeButton);
-    expect(onShowChanges).toHaveBeenCalledOnce();
+    expect(onShowDiff).toHaveBeenCalledOnce();
 
     rerender(
       <HistoryView
         repo={{ ...dirtyRepo, changes: [] }}
         adapter={adapter}
-        onShowChanges={onShowChanges}
+        onShowDiff={onShowDiff}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -490,7 +685,7 @@ rename to new.png
           history: [commitSummary('local-head')],
         })}
         adapter={adapterWithQuery(query)}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -537,7 +732,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [commitSummary('head')] })}
         adapter={adapterWithQuery(query)}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -564,7 +759,7 @@ rename to new.png
           }),
         )}
         onError={onError}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -596,7 +791,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [commitDetails(undefined)] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -653,7 +848,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [commitDetails(undefined)] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -685,7 +880,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [commitSummary('first'), commitSummary('second')] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -722,7 +917,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [currentCommit] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -793,7 +988,7 @@ rename to new.png
       <HistoryView
         repo={repo}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -842,7 +1037,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [details] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -881,7 +1076,7 @@ rename to new.png
       <HistoryView
         repo={repoSnapshot({ history: [details] })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -891,7 +1086,7 @@ rename to new.png
     expect(await screen.findByText(details.body)).toHaveClass('commit-detail-body');
   });
 
-  it('shows Tag and shortened branch decorations in the list and commit details', async () => {
+  it('shows Tag and shortened branch decorations without tooltips', async () => {
     const refs = ['refs/remotes/origin/main', 'tag: refs/tags/v1.2.3', 'HEAD -> refs/heads/main'];
     const details = { ...commitDetails(undefined), refs };
     const adapter = adapterWithQuery(
@@ -911,7 +1106,7 @@ rename to new.png
           history: [{ ...details, refs }],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -928,9 +1123,9 @@ rename to new.png
     fireEvent.focus(branchChips[0]!);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(tags.every((tag) => !tag.hasAttribute('title'))).toBe(true);
-    expect(tags[0]).toHaveAttribute('tabindex', '0');
+    expect(tags.every((tag) => !tag.hasAttribute('tabindex'))).toBe(true);
     fireEvent.focus(tags[0]!);
-    expect(screen.getByRole('tooltip')).toHaveTextContent('tag: refs/tags/v1.2.3');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
   it('lays out lanes from every ref immediately', () => {
@@ -954,7 +1149,7 @@ rename to new.png
           ],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -981,7 +1176,7 @@ rename to new.png
     ).toBe('var(--history-lane-1)');
   });
 
-  it('joins three converging lanes with parallel diagonal segments', () => {
+  it('connects an already active merge-parent lane above the branch point', () => {
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) =>
         request.kind === 'branches'
@@ -1001,12 +1196,26 @@ rename to new.png
           ],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
       />,
     );
+
+    const branchGraph = screen.getByTestId('history-graph-original');
+    expect(
+      branchGraph
+        .querySelector(
+          '.history-graph-incoming-corner [data-edge-kind="parent"][data-from-lane="2"][data-to-lane="1"]',
+        )
+        ?.getAttribute('d'),
+    ).toBe('M 18 0 L 30 8');
+    expect(
+      branchGraph.querySelector(
+        '.history-graph-outgoing-corner [data-edge-kind="parent"][data-from-lane="2"][data-to-lane="1"]',
+      ),
+    ).not.toBeInTheDocument();
 
     const graph = screen.getByTestId('history-graph-base');
     expect(
@@ -1015,6 +1224,49 @@ rename to new.png
     expect(
       graph.querySelector('[data-edge-kind="incoming"][data-from-lane="2"]')?.getAttribute('d'),
     ).toBe('M 30 0 L 18 4');
+  });
+
+  it('starts a newly allocated merge-parent lane below the merge point', () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'branches'
+          ? { kind: 'branches' as const, branches: [] }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: { name: 'main', oid: 'top', detached: false, ahead: 0, behind: 0 },
+          history: [
+            commitSummary('top', ['merge', 'first-side']),
+            commitSummary('first-side', ['merge']),
+            commitSummary('merge', ['base', 'second-side']),
+            commitSummary('second-side', ['base']),
+            commitSummary('base'),
+          ],
+        })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const graph = screen.getByTestId('history-graph-merge');
+    expect(
+      graph
+        .querySelector(
+          '.history-graph-outgoing-corner [data-edge-kind="parent"][data-from-lane="0"][data-to-lane="1"]',
+        )
+        ?.getAttribute('d'),
+    ).toBe('M 6 0 L 18 8');
+    expect(
+      graph.querySelector(
+        '.history-graph-incoming-corner [data-edge-kind="parent"][data-from-lane="0"][data-to-lane="1"]',
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it('renders merge connectors as decorative SVG while exposing parent ids in the row', () => {
@@ -1037,7 +1289,7 @@ rename to new.png
           ],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1087,7 +1339,7 @@ rename to new.png
           history: initial,
         })}
         adapter={adapterWithQuery(query)}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1133,7 +1385,7 @@ rename to new.png
           history: initial,
         })}
         adapter={adapterWithQuery(query)}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1164,7 +1416,7 @@ rename to new.png
     });
     const props = {
       adapter: adapterWithQuery(query),
-      onShowChanges: () => undefined,
+      onShowDiff: () => undefined,
       onAction: async () => undefined,
       paneWidths: { left: 240, right: 330 },
       onPaneWidthsChange: () => undefined,
@@ -1219,7 +1471,7 @@ rename to new.png
           history: [mergeCommit],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1283,7 +1535,7 @@ rename to new.png
           history: [octopus, twoParent],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1338,7 +1590,7 @@ rename to new.png
           history: [first, second],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={onAction}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1392,7 +1644,7 @@ rename to new.png
           history: [first, second],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1425,7 +1677,7 @@ rename to new.png
         repo={repoSnapshot({ history: [currentCommit] })}
         adapter={adapter}
         busy={busy}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1471,7 +1723,7 @@ rename to new.png
           history: [currentCommit],
         })}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1517,7 +1769,7 @@ rename to new.png
       <HistoryView
         repo={repo}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1558,7 +1810,7 @@ rename to new.png
       <HistoryView
         repo={repo}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         diffStyle="split"
         lineWrapping
@@ -1607,7 +1859,7 @@ rename to new.png
       <HistoryView
         repo={repo}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         paneWidths={{ left: 240, right: 330 }}
         onPaneWidthsChange={() => undefined}
@@ -1620,7 +1872,7 @@ rename to new.png
     );
   });
 
-  it('uses CodeView with file headers and simple separators for a multi-file commit', async () => {
+  it('renders multi-file commits in file order with shared headers and simple separators', async () => {
     const multiFileDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'multi-revision',
       repoId: 'repo-1',
@@ -1647,7 +1899,7 @@ rename to new.png
       <HistoryView
         repo={repo}
         adapter={adapter}
-        onShowChanges={() => undefined}
+        onShowDiff={() => undefined}
         onAction={async () => undefined}
         stickyFileHeaders
         paneWidths={{ left: 240, right: 330 }}
@@ -1655,14 +1907,21 @@ rename to new.png
       />,
     );
 
-    await screen.findByText('Diff');
-    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
+    expect(await screen.findAllByText('Diff')).toHaveLength(2);
+    expect(diffSurfaceMock).toHaveBeenCalledTimes(2);
+    expect(diffSurfaceMock.mock.calls.map(([props]) => props)).toEqual([
       expect.objectContaining({
-        source: expect.objectContaining({ kind: 'codeView' }),
+        source: expect.objectContaining({ kind: 'patch', path: 'a' }),
         showFileHeaders: true,
         stickyFileHeaders: true,
         hunkSeparators: 'simple',
       }),
-    );
+      expect.objectContaining({
+        source: expect.objectContaining({ kind: 'patch', path: 'b' }),
+        showFileHeaders: true,
+        stickyFileHeaders: true,
+        hunkSeparators: 'simple',
+      }),
+    ]);
   });
 });

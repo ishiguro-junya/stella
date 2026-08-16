@@ -69,7 +69,7 @@ describe('Visual QA', () => {
       await dispatchDoubleClick('[data-switcher-item-label="stella-visual-qa"]');
       repositoryToggle = $(`.repository-toggle[data-repository-path="${currentPath}"]`);
       await repositoryToggle.waitForDisplayed({ timeout: 10_000 });
-      await expect($('.changes-view')).toBeDisplayed();
+      await expect($('.diff-view')).toBeDisplayed();
 
       await setLogicalWindowSize(1180, 760);
       const settings = $('.titlebar-actions button:last-child');
@@ -108,10 +108,10 @@ describe('Visual QA', () => {
       await settings.click();
       await expect($('.settings-view')).toBeDisplayed();
       await expect($('select[name="diff-layout"]')).toHaveValue('unified');
-      await $('button=Changes').click();
-      await expect($('.changes-view')).toBeDisplayed();
+      await $('button=Diff').click();
+      await expect($('.diff-view')).toBeDisplayed();
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'segmented-changes-unified-1180x760.png'),
+        join(visualQaDirectory, 'segmented-diff-unified-1180x760.png'),
         1180,
         760,
       );
@@ -119,13 +119,13 @@ describe('Visual QA', () => {
       await expect($('.settings-view')).toBeDisplayed();
       await selectSetting('diff-layout', 'split');
       await expect($('select[name="diff-layout"]')).toHaveValue('split');
-      await $('button=Changes').click();
-      await expect($('.changes-view')).toBeDisplayed();
+      await $('button=Diff').click();
+      await expect($('.diff-view')).toBeDisplayed();
       await browser.execute(() => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       });
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'segmented-changes-split-1180x760.png'),
+        join(visualQaDirectory, 'segmented-diff-split-1180x760.png'),
         1180,
         760,
       );
@@ -147,8 +147,8 @@ describe('Visual QA', () => {
         560,
       );
       await setLogicalWindowSize(1180, 760);
-      await $('button=Changes').click();
-      await expect($('.changes-view')).toBeDisplayed();
+      await $('button=Diff').click();
+      await expect($('.diff-view')).toBeDisplayed();
 
       await repositoryToggle.click();
       switcher = $('[role="dialog"]');
@@ -197,7 +197,7 @@ describe('Visual QA', () => {
           () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
         ),
       ).toBe(true);
-      await $('button[aria-label="Changes"]').click();
+      await $('button[aria-label="Diff"]').click();
       await captureTooltip('tooltip-en-light-1180x760.png', {
         background: 'rgb(29, 30, 34)',
         foreground: 'rgb(255, 255, 255)',
@@ -221,9 +221,9 @@ describe('Visual QA', () => {
         ),
       ).toBe(true);
       await setLogicalWindowSize(1180, 760);
-      await $('button[aria-label="変更"]').click();
-      await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-1180x760.png'), 1180, 760);
-      await saveLogicalScreenshot(join(visualQaDirectory, 'changes-ja-860x560.png'), 860, 560);
+      await $('button[aria-label="差分"]').click();
+      await saveLogicalScreenshot(join(visualQaDirectory, 'diff-ja-1180x760.png'), 1180, 760);
+      await saveLogicalScreenshot(join(visualQaDirectory, 'diff-ja-860x560.png'), 860, 560);
       await settings.click();
       await selectSetting('language', 'en');
       await selectSetting('appearance', 'dark');
@@ -237,7 +237,7 @@ describe('Visual QA', () => {
         860,
         560,
       );
-      await $('button[aria-label="Changes"]').click();
+      await $('button[aria-label="Diff"]').click();
       await captureTooltip('tooltip-en-dark-1180x760.png', {
         background: 'rgb(248, 248, 250)',
         foreground: 'rgb(28, 28, 30)',
@@ -276,7 +276,7 @@ describe('Visual QA', () => {
         ),
       ).toBe(true);
       await setLogicalWindowSize(1180, 760);
-      await $('button[aria-label="Changes"]').click();
+      await $('button[aria-label="Diff"]').click();
 
       await browser.tauri.execute(() => {
         const preferences = JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}');

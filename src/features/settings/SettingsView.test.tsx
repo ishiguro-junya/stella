@@ -16,8 +16,9 @@ describe('SettingsView', () => {
       onCodeFontChange: vi.fn<SettingsViewProps['onCodeFontChange']>(),
       onAutomaticUpdateChecksChange: vi.fn<SettingsViewProps['onAutomaticUpdateChecksChange']>(),
       onDiffStyleChange: vi.fn<SettingsViewProps['onDiffStyleChange']>(),
+      onImagePreviewLayoutChange: vi.fn<SettingsViewProps['onImagePreviewLayoutChange']>(),
       onSplitStageViewChange: vi.fn<SettingsViewProps['onSplitStageViewChange']>(),
-      onChangeListDisplayChange: vi.fn<SettingsViewProps['onChangeListDisplayChange']>(),
+      onDiffFileListDisplayChange: vi.fn<SettingsViewProps['onDiffFileListDisplayChange']>(),
       onUseConventionalCommitsChange: vi.fn<SettingsViewProps['onUseConventionalCommitsChange']>(),
       onStickyFileHeadersChange: vi.fn<SettingsViewProps['onStickyFileHeadersChange']>(),
       onEditorLineWrappingChange: vi.fn<SettingsViewProps['onEditorLineWrappingChange']>(),
@@ -36,8 +37,9 @@ describe('SettingsView', () => {
       codeFont: 'sfMono',
       automaticUpdateChecks: true,
       diffStyle: 'unified',
+      imagePreviewLayout: 'split',
       splitStageView: true,
-      changeListDisplay: 'nameAndPath',
+      diffFileListDisplay: 'nameAndPath',
       useConventionalCommits: false,
       stickyFileHeaders: false,
       editorLineWrapping: false,
@@ -60,7 +62,7 @@ describe('SettingsView', () => {
     const generalButton = screen.getByRole('button', { name: 'General' });
     const permissionsButton = screen.getByRole('button', { name: 'Permissions' });
     const appearanceButton = screen.getByRole('button', { name: 'Appearance' });
-    const changesButton = screen.getByRole('button', { name: 'Changes' });
+    const diffButton = screen.getByRole('button', { name: 'Diff' });
     const editorButton = screen.getByRole('button', { name: 'Editor' });
     const gitButton = screen.getByRole('button', { name: 'Git' });
 
@@ -70,12 +72,15 @@ describe('SettingsView', () => {
     for (const button of [
       permissionsButton,
       appearanceButton,
-      changesButton,
+      diffButton,
       editorButton,
       gitButton,
     ]) {
       expect(button).not.toHaveAttribute('aria-current');
     }
+    expect(diffButton).toHaveAttribute('data-settings-category', 'diff');
+    expect(diffButton).toHaveAttribute('aria-controls', 'settings-category-diff');
+    expect(diffButton.querySelector('.lucide-file-diff')).toBeInTheDocument();
 
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
@@ -139,12 +144,12 @@ describe('SettingsView', () => {
     expect(handlers.onUiFontChange).toHaveBeenCalledWith('avenirNext');
     expect(handlers.onCodeFontChange).toHaveBeenCalledWith('menlo');
 
-    await user.click(changesButton);
+    await user.click(diffButton);
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
     ).toEqual(['Stage Display', 'File Display Format', 'Conventional Commits']);
     const stageDisplaySelect = screen.getByRole('combobox', { name: 'Stage Display' });
-    const changeListDisplaySelect = screen.getByRole('combobox', {
+    const diffFileListDisplaySelect = screen.getByRole('combobox', {
       name: 'File Display Format',
     });
     expect(
@@ -153,31 +158,42 @@ describe('SettingsView', () => {
         .map((item) => item.textContent),
     ).toEqual(['Show', 'Hide']);
     expect(
-      within(changeListDisplaySelect)
+      within(diffFileListDisplaySelect)
         .getAllByRole('option')
         .map((item) => item.textContent),
-    ).toEqual(['Full Path', 'Tree', 'File Name and Path']);
+    ).toEqual(['File Name and Path', 'Full Path', 'Tree']);
     await user.selectOptions(stageDisplaySelect, 'hide');
-    await user.selectOptions(changeListDisplaySelect, 'tree');
+    await user.selectOptions(diffFileListDisplaySelect, 'tree');
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Conventional Commits' }),
       'enabled',
     );
     expect(handlers.onSplitStageViewChange).toHaveBeenCalledWith(false);
-    expect(handlers.onChangeListDisplayChange).toHaveBeenCalledWith('tree');
+    expect(handlers.onDiffFileListDisplayChange).toHaveBeenCalledWith('tree');
     expect(handlers.onUseConventionalCommitsChange).toHaveBeenCalledWith(true);
 
     await user.click(editorButton);
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
-    ).toEqual(['Diff layout', 'Sticky File Headers', 'Line Wrapping', 'Wrap Length']);
+    ).toEqual([
+      'Diff layout',
+      'Image Preview Layout',
+      'Sticky File Headers',
+      'Line Wrapping',
+      'Wrap Length',
+    ]);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Image Preview Layout' }),
+      'unified',
+    );
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Sticky File Headers' }),
       'enabled',
     );
     await user.selectOptions(screen.getByRole('combobox', { name: 'Line Wrapping' }), 'enabled');
     expect(handlers.onDiffStyleChange).toHaveBeenCalledWith('split');
+    expect(handlers.onImagePreviewLayoutChange).toHaveBeenCalledWith('unified');
     expect(handlers.onStickyFileHeadersChange).toHaveBeenCalledWith(true);
     expect(handlers.onEditorLineWrappingChange).toHaveBeenCalledWith(true);
     expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toBeDisabled();
@@ -240,7 +256,8 @@ describe('SettingsView', () => {
     expect(screen.getByRole('textbox', { name: 'Global Ignore List' })).toBeDisabled();
     const toolchain = screen.getByRole('region', { name: 'Git Toolchain' });
     expect(toolchain).toHaveAttribute('aria-busy', 'true');
-    expect(toolchain.querySelectorAll('.settings-toolchain-modes > div')).toHaveLength(2);
-    expect(toolchain.querySelectorAll('.settings-toolchain-components > div')).toHaveLength(3);
+    expect(within(toolchain).getByRole('status', { name: 'Loading…' })).toHaveClass(
+      'settings-toolchain-loading',
+    );
   });
 });

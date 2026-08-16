@@ -90,7 +90,7 @@ beforeEach(() => {
 });
 
 describe('ActivityView', () => {
-  it('keeps the fixed activity state free of a line-shaped pulse while activity is pending', () => {
+  it('keeps the fixed activity state free of loading copy and uses the shared icon', () => {
     const adapter = adapterWithSeries();
     vi.mocked(adapter.query).mockImplementation(async () => await new Promise<never>(() => {}));
     const { container } = render(
@@ -106,7 +106,7 @@ describe('ActivityView', () => {
     );
 
     const loadingState = container.querySelector('.activity-state[aria-busy="true"]');
-    expect(loadingState).not.toContainElement(container.querySelector('.loading-pulse'));
+    expect(loadingState?.querySelector('.loading-indicator > svg')).toBeInTheDocument();
     expect(loadingState).not.toHaveTextContent(/Loading|読み込み/u);
   });
 

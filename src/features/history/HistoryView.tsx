@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -8,12 +9,13 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { GitBranch, GitCommitHorizontal, LoaderCircle, Search, Tag } from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, Search, Tag } from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { imageDiffCandidates, patchContainsMultipleFiles } from '../../domain/diffProfile';
+import { diffFileSections, imagePreviewToggleAvailable } from '../../domain/diffProfile';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
+import { LoadingIndicator } from '../../ui/LoadingIndicator';
 import {
   assignHistoryLanes,
   HISTORY_PAGE_SIZE,
@@ -29,7 +31,7 @@ import type {
   WorkspaceAction,
 } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
-import { DiffSurface } from '../diff/DiffSurface';
+import { DiffFileHeader, DiffSurface } from '../diff/DiffSurface';
 import { ImageDiffPreview, ImagePreviewToggle } from '../diff/ImageDiffPreview';
 import {
   DEFAULT_EDITOR_WRAP_COLUMN,
@@ -57,9 +59,10 @@ export interface HistoryViewProps {
   adapter: WorkspaceAdapter;
   busy?: boolean;
   onError?: ShowWorkspaceError | undefined;
-  onShowChanges: () => void;
+  onShowDiff: () => void;
   onAction: (action: WorkspaceAction) => Promise<void>;
   diffStyle?: DiffStyle | undefined;
+  imagePreviewLayout?: DiffStyle | undefined;
   lineWrapping?: boolean | undefined;
   wrapColumn?: number | undefined;
   stickyFileHeaders?: boolean | undefined;
@@ -194,12 +197,11 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
   return (
     <span className="ref-list">
       {labels.map((ref) => {
-        const isBranch = ref.kind === 'branch' || ref.kind === 'remote';
+        const hasTooltip = ref.kind === 'head' || ref.kind === 'other';
         const chip = (
           <span
             key={ref.raw}
             className={`ref-chip ${ref.kind}`}
-            tabIndex={isBranch ? undefined : 0}
             data-local-branch={ref.kind === 'branch' ? ref.label : undefined}
             aria-label={ref.kind === 'tag' ? t('tagRefLabel', { name: ref.label }) : undefined}
           >
@@ -213,12 +215,12 @@ function HistoryRefs({ refs }: { refs: readonly string[] }) {
             <span>{ref.label}</span>
           </span>
         );
-        return isBranch ? (
-          chip
-        ) : (
+        return hasTooltip ? (
           <Tooltip key={ref.raw} content={ref.raw}>
             {chip}
           </Tooltip>
+        ) : (
+          chip
         );
       })}
     </span>
@@ -237,6 +239,8 @@ function HistoryGraph({
   const width = graphWidth(laneCount);
   const incomingLanes = new Set(commit.incomingEdges.map((edge) => edge.fromLane));
   const throughLanes = commit.activeLanes.filter((lane) => !incomingLanes.has(lane));
+  const upperParentEdges = commit.parentEdges.filter((edge) => edge.connectsFromAbove);
+  const lowerParentEdges = commit.parentEdges.filter((edge) => !upperParentEdges.includes(edge));
   const graphStyle: CSSProperties & {
     '--history-lane-color': string;
     '--history-node-x': string;
@@ -315,6 +319,17 @@ function HistoryGraph({
             d={graphConvergingCornerPath(edge, commit.incomingEdges)}
           />
         ))}
+        {upperParentEdges.map((edge) => (
+          <path
+            key={`parent:${edge.parentOid}:${edge.toLane}`}
+            className="history-graph-edge parent"
+            data-edge-kind="parent"
+            data-from-lane={edge.fromLane}
+            data-to-lane={edge.toLane}
+            style={historyLaneStyle(edge.toLane)}
+            d={graphCornerPath(edge.toLane, edge.fromLane)}
+          />
+        ))}
       </svg>
       <svg
         className="history-graph-outgoing-corner"
@@ -322,27 +337,27 @@ function HistoryGraph({
         height={GRAPH_CORNER_HEIGHT}
         focusable="false"
       >
-        {commit.parentEdges.map((edge, index) => (
+        {lowerParentEdges.map((edge) => (
           <path
             key={`parent:${edge.parentOid}:${edge.toLane}`}
             className="history-graph-edge parent"
             data-edge-kind="parent"
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
-            style={historyLaneStyle(index === 0 ? edge.fromLane : edge.toLane)}
+            style={historyLaneStyle(edge.toLane)}
             d={graphCornerPath(edge.fromLane, edge.toLane)}
           />
         ))}
       </svg>
       <svg className="history-graph-outgoing-vertical" width={width} focusable="false">
-        {commit.parentEdges.map((edge, index) => (
+        {lowerParentEdges.map((edge) => (
           <path
             key={`parent-vertical:${edge.parentOid}:${edge.toLane}`}
             className="history-graph-edge parent-vertical"
             data-edge-kind="parent-vertical"
             data-from-lane={edge.fromLane}
             data-to-lane={edge.toLane}
-            style={historyLaneStyle(index === 0 ? edge.fromLane : edge.toLane)}
+            style={historyLaneStyle(edge.toLane)}
             d={graphVerticalPath(edge.toLane)}
           />
         ))}
@@ -452,9 +467,10 @@ export function HistoryView({
   adapter,
   busy = false,
   onError,
-  onShowChanges,
+  onShowDiff,
   onAction,
   diffStyle = 'unified',
+  imagePreviewLayout = 'split',
   lineWrapping = false,
   wrapColumn = DEFAULT_EDITOR_WRAP_COLUMN,
   stickyFileHeaders = false,
@@ -465,7 +481,9 @@ export function HistoryView({
   const [selectedOid, setSelectedOid] = useState(repo.selectedCommitOid ?? repo.history[0]?.oid);
   const deferredSelectedOid = useDeferredValue(selectedOid);
   const [details, setDetails] = useState<CommitDetails>();
-  const [imagePreviewEnabled, setImagePreviewEnabled] = useState(true);
+  const [imagePreviewEnabled, setImagePreviewEnabled] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
   const [imageProbeResults, setImageProbeResults] = useState<Map<string, boolean>>(() => new Map());
   const [error, setError] = useState<WorkspaceErrorContent>();
   const [openMenu, setOpenMenu] = useState<{ oid: string; source: HistoryMenuSource }>();
@@ -491,13 +509,9 @@ export function HistoryView({
     () => assignHistoryLanes(historyPage.commits),
     [historyPage.commits],
   );
-  const imageCandidates = useMemo(
-    () => (details?.diff ? imageDiffCandidates(details.diff.patch, details.diff.diffId) : []),
+  const diffFiles = useMemo(
+    () => (details?.diff ? diffFileSections(details.diff.patch, details.diff.diffId) : []),
     [details],
-  );
-  const previewableImageCandidates = imageCandidates.filter(
-    (candidate) =>
-      candidate.format !== 'probe' || imageProbeResults.get(imageCandidateKey(candidate)) === true,
   );
   const imageDiffId = details?.diff?.diffId;
   const moveCommitSelection = useCallback(
@@ -536,7 +550,7 @@ export function HistoryView({
   );
 
   useEffect(() => {
-    setImagePreviewEnabled(true);
+    setImagePreviewEnabled(new Map());
     setImageProbeResults(new Map());
   }, [repo.repoId, selectedOid]);
 
@@ -545,6 +559,15 @@ export function HistoryView({
       if (current.get(key) === previewable) return current;
       const next = new Map(current);
       next.set(key, previewable);
+      return next;
+    });
+  };
+
+  const setImagePreview = (key: string, enabled: boolean): void => {
+    setImagePreviewEnabled((current) => {
+      if ((current.get(key) ?? true) === enabled) return current;
+      const next = new Map(current);
+      next.set(key, enabled);
       return next;
     });
   };
@@ -875,12 +898,7 @@ export function HistoryView({
         placeholder={t('searchHistory')}
         onChange={(event) => setHistorySearch(event.currentTarget.value)}
       />
-      {searchingHistory ? (
-        <>
-          <LoaderCircle className="history-search-loading" aria-hidden="true" focusable="false" />
-          <output className="sr-only">{t('loading')}</output>
-        </>
-      ) : null}
+      {searchingHistory ? <LoadingIndicator className="history-search-loading" /> : null}
     </label>
   );
 
@@ -902,7 +920,7 @@ export function HistoryView({
                 aria-label={`${t('uncommittedChanges')}, ${t('uncommittedFileCount', {
                   count: changedFileCount,
                 })}`}
-                onClick={onShowChanges}
+                onClick={onShowDiff}
               >
                 <WorkingTreeGraph
                   laneCount={graphLaneCount}
@@ -987,12 +1005,7 @@ export function HistoryView({
               className={`history-load-sentinel ${loadingMore ? 'loading' : ''}`}
               data-testid="history-load-sentinel"
             >
-              {loadingMore ? (
-                <>
-                  <LoaderCircle aria-hidden="true" focusable="false" />
-                  <output className="sr-only">{t('loading')}</output>
-                </>
-              ) : null}
+              {loadingMore ? <LoadingIndicator /> : null}
             </li>
           ) : null}
         </ol>
@@ -1021,12 +1034,6 @@ export function HistoryView({
                   <HistoryRefs refs={details.refs} />
                 </div>
                 <div className="commit-detail-actions">
-                  {previewableImageCandidates.length ? (
-                    <ImagePreviewToggle
-                      pressed={imagePreviewEnabled}
-                      onPressedChange={setImagePreviewEnabled}
-                    />
-                  ) : null}
                   <HistoryActionMenu
                     target={actionTargetFor(details)}
                     open={openMenu?.source === 'detail' && openMenu.oid === details.oid}
@@ -1072,24 +1079,41 @@ export function HistoryView({
             {details.diff?.truncated ? (
               <output className="inline-alert warning">{t('diffBeginningOnly')}</output>
             ) : null}
-            {details.diff && imageDiffId && imageCandidates.length ? (
-              <div
-                className="history-image-previews"
-                hidden={!imagePreviewEnabled || previewableImageCandidates.length === 0}
-              >
-                {imageCandidates.map((candidate) => {
-                  const candidateKey = imageCandidateKey(candidate);
-                  const probeResult = imageProbeResults.get(candidateKey);
-                  const probePending = candidate.format === 'probe' && probeResult === undefined;
-                  const previewable = candidate.format !== 'probe' || probeResult === true;
-                  if (!probePending && (!imagePreviewEnabled || !previewable)) return null;
-                  return (
-                    <section
-                      key={candidateKey}
-                      className="history-image-preview-item"
-                      hidden={probePending}
-                    >
-                      <h3>{candidate.path}</h3>
+            {details.diff && imageDiffId ? (
+              diffFiles.length ? (
+                <div className="history-diff-files">
+                  {diffFiles.map((file, index) => {
+                    const candidate = file.imageCandidate;
+                    const surface = (showFileHeaders: boolean) => (
+                      <DiffSurface
+                        source={{
+                          kind: 'patch',
+                          patch: file.patch,
+                          path: file.path,
+                          cacheKey: `${details.diff!.diffId}:file:${index}`,
+                        }}
+                        diffStyle={diffStyle}
+                        lineWrapping={lineWrapping}
+                        wrapColumn={wrapColumn}
+                        performanceMode={Boolean(details.diff?.tooLarge)}
+                        showFileHeaders={showFileHeaders}
+                        stickyFileHeaders={stickyFileHeaders}
+                        hunkSeparators="simple"
+                        ariaLabel={t('fileDiffAria', { path: file.path })}
+                      />
+                    );
+                    if (!candidate) return <Fragment key={file.path}>{surface(true)}</Fragment>;
+
+                    const candidateKey = imageCandidateKey(candidate);
+                    const probeResult = imageProbeResults.get(candidateKey);
+                    const probePending = candidate.format === 'probe' && probeResult === undefined;
+                    const probeFailed = probeResult === false;
+                    const previewToggleAvailable = imagePreviewToggleAvailable(candidate.path);
+                    const previewEnabled =
+                      !probeFailed && (imagePreviewEnabled.get(candidateKey) ?? true);
+                    const showBinaryFallback = candidate.format === 'binary' && probeFailed;
+                    const expanded = previewEnabled || showBinaryFallback;
+                    const preview = (
                       <ImageDiffPreview
                         adapter={adapter}
                         repoId={repo.repoId}
@@ -1104,39 +1128,63 @@ export function HistoryView({
                         }}
                         candidate={candidate}
                         binaryFallback={t('binaryDiffUnavailable')}
-                        hidden={probePending}
-                        {...(candidate.format === 'probe'
-                          ? {
-                              onProbeResult: (canPreview: boolean) =>
-                                setImageProbeResult(candidateKey, canPreview),
-                            }
-                          : {})}
+                        layout={imagePreviewLayout}
+                        hidden={!expanded}
+                        onProbeResult={(canPreview) =>
+                          setImageProbeResult(candidateKey, canPreview)
+                        }
                       />
-                    </section>
-                  );
-                })}
-              </div>
-            ) : null}
-            {details.diff?.binary &&
-            (!imagePreviewEnabled || !previewableImageCandidates.length) ? (
-              <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>
-            ) : details.diff ? (
-              !details.diff.binary ? (
+                    );
+
+                    if (probePending || (candidate.format === 'probe' && probeFailed)) {
+                      return (
+                        <Fragment key={candidateKey}>
+                          {preview}
+                          {probeFailed ? surface(true) : null}
+                        </Fragment>
+                      );
+                    }
+
+                    return (
+                      <section key={candidateKey} className="history-image-preview-item">
+                        <header
+                          className={`diff-file-standalone-header history-image-file-header${stickyFileHeaders ? ' is-sticky' : ''}`}
+                        >
+                          <DiffFileHeader
+                            path={candidate.path}
+                            status={candidate.changeKind}
+                            collapsed={!expanded}
+                            toggleDisabled={probeFailed}
+                            onToggle={() => setImagePreview(candidateKey, !previewEnabled)}
+                            trailing={
+                              previewToggleAvailable ? (
+                                <ImagePreviewToggle
+                                  pressed={previewEnabled}
+                                  disabled={probeFailed}
+                                  onPressedChange={(pressed) =>
+                                    setImagePreview(candidateKey, pressed)
+                                  }
+                                />
+                              ) : undefined
+                            }
+                          />
+                        </header>
+                        {preview}
+                        {candidate.format === 'svg' && !previewEnabled ? surface(false) : null}
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : details.diff.binary ? (
+                <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>
+              ) : (
                 <DiffSurface
-                  source={
-                    details.diff.tooLarge || patchContainsMultipleFiles(details.diff.patch)
-                      ? {
-                          kind: 'codeView',
-                          patch: details.diff.patch,
-                          cacheKey: details.diff.diffId,
-                        }
-                      : {
-                          kind: 'patch',
-                          patch: details.diff.patch,
-                          path: details.diff.path,
-                          cacheKey: details.diff.diffId,
-                        }
-                  }
+                  source={{
+                    kind: 'patch',
+                    patch: details.diff.patch,
+                    path: details.diff.path,
+                    cacheKey: details.diff.diffId,
+                  }}
                   diffStyle={diffStyle}
                   lineWrapping={lineWrapping}
                   wrapColumn={wrapColumn}
@@ -1146,7 +1194,7 @@ export function HistoryView({
                   hunkSeparators="simple"
                   ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
                 />
-              ) : null
+              )
             ) : (
               <p className="empty-state-small">{t('noCommitChanges')}</p>
             )}

@@ -22,7 +22,6 @@ describe('appearance preferences', () => {
         version: 1,
         recentRepoPaths: [],
         openRepoPaths: [],
-        view: 'changes',
         paneWidths: { left: 244, right: 336 },
         commitDrafts: {},
       }),
@@ -35,8 +34,9 @@ describe('appearance preferences', () => {
       codeFont: 'sfMono',
       automaticUpdateChecks: true,
       diffStyle: 'unified',
+      imagePreviewLayout: 'split',
       splitStageView: false,
-      changeListDisplay: 'fullPath',
+      diffFileListDisplay: 'nameAndPath',
       useConventionalCommits: false,
       stickyFileHeaders: false,
       editorLineWrapping: false,
@@ -73,7 +73,7 @@ describe('appearance preferences', () => {
     expect(preferences).not.toHaveProperty('view');
   });
 
-  it('round-trips one pane position shared by Changes, History, and Activity', () => {
+  it('round-trips one pane position shared by Diff, History, and Activity', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       paneWidths: { left: 408, right: 408 },
@@ -82,7 +82,7 @@ describe('appearance preferences', () => {
     expect(readPreferences().paneWidths).toEqual({ left: 408, right: 408 });
   });
 
-  it('migrates screen-specific pane widths using the Changes position', () => {
+  it('migrates screen-specific pane widths using the legacy Changes position', () => {
     localStorage.setItem(
       'stella.preferences.v1',
       JSON.stringify({
@@ -150,16 +150,26 @@ describe('appearance preferences', () => {
     expect(readPreferences().splitStageView).toBe(true);
   });
 
-  it('defaults the file list to full paths and round-trips the selected display', () => {
-    expect(DEFAULT_PREFERENCES.changeListDisplay).toBe('fullPath');
-    writePreferences({ ...DEFAULT_PREFERENCES, changeListDisplay: 'tree' });
-    expect(readPreferences().changeListDisplay).toBe('tree');
+  it('defaults the file list to names and paths and round-trips the selected display', () => {
+    expect(DEFAULT_PREFERENCES.diffFileListDisplay).toBe('nameAndPath');
+    writePreferences({ ...DEFAULT_PREFERENCES, diffFileListDisplay: 'tree' });
+    expect(readPreferences().diffFileListDisplay).toBe('tree');
 
     localStorage.setItem(
       'stella.preferences.v1',
-      JSON.stringify({ ...DEFAULT_PREFERENCES, changeListDisplay: 'invalid' }),
+      JSON.stringify({ ...DEFAULT_PREFERENCES, diffFileListDisplay: 'invalid' }),
     );
-    expect(readPreferences().changeListDisplay).toBe('fullPath');
+    expect(readPreferences().diffFileListDisplay).toBe('nameAndPath');
+
+    localStorage.setItem(
+      'stella.preferences.v1',
+      JSON.stringify({
+        ...DEFAULT_PREFERENCES,
+        diffFileListDisplay: undefined,
+        changeListDisplay: 'fullPath',
+      }),
+    );
+    expect(readPreferences().diffFileListDisplay).toBe('fullPath');
   });
 
   it('defaults Conventional Commits to off and round-trips the enabled preference', () => {
@@ -244,6 +254,12 @@ describe('appearance preferences', () => {
   it('round-trips the selected Diff layout', () => {
     writePreferences({ ...DEFAULT_PREFERENCES, diffStyle: 'split' });
     expect(readPreferences().diffStyle).toBe('split');
+  });
+
+  it('defaults image previews to split and round-trips the inline layout', () => {
+    expect(DEFAULT_PREFERENCES.imagePreviewLayout).toBe('split');
+    writePreferences({ ...DEFAULT_PREFERENCES, imagePreviewLayout: 'unified' });
+    expect(readPreferences().imagePreviewLayout).toBe('unified');
   });
 
   it('migrates the existing recent repository list without classifying its entries', () => {

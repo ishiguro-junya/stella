@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChangeEntry } from '../../domain/workspace';
-import { ChangeList, type ChangeListProps, type StageTransitionRequest } from './ChangeList';
+import { DiffFileList, type DiffFileListProps, type StageTransitionRequest } from './DiffFileList';
 import type { FileActionKind } from './FileActionMenu';
 
 const changes: ChangeEntry[] = [
@@ -14,7 +14,7 @@ const changes: ChangeEntry[] = [
   { path: 'src/conflict.ts', area: 'conflicted', status: 'conflicted' },
 ];
 
-function renderList(overrides: Partial<ChangeListProps> = {}) {
+function renderList(overrides: Partial<DiffFileListProps> = {}) {
   const onSelect = vi.fn<(key: string) => void>();
   const onSelectedKeysChange = vi.fn<(keys: string[]) => void>();
   const onStageTransition = vi.fn<(request: StageTransitionRequest) => Promise<void>>(
@@ -24,7 +24,7 @@ function renderList(overrides: Partial<ChangeListProps> = {}) {
     async () => undefined,
   );
   const result = render(
-    <ChangeList
+    <DiffFileList
       repoId="repo-1"
       generation={1}
       entries={changes}
@@ -60,7 +60,7 @@ function changeRow(name: RegExp, container?: HTMLElement): HTMLButtonElement {
 function BusyAfterFileActionHarness() {
   const [busy, setBusy] = useState(false);
   return (
-    <ChangeList
+    <DiffFileList
       repoId="repo-1"
       generation={1}
       entries={[{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }]}
@@ -76,7 +76,7 @@ function BusyAfterFileActionHarness() {
   );
 }
 
-describe('ChangeList staging controls', () => {
+describe('DiffFileList staging controls', () => {
   it('focuses the selected file when opened so arrow navigation works immediately', async () => {
     const user = userEvent.setup();
     const { onSelect } = renderList({
@@ -188,7 +188,6 @@ describe('ChangeList staging controls', () => {
     ];
     const twoLine = renderList({
       entries,
-      display: 'nameAndPath',
       selectedKey: 'unstaged:src/features/app.ts',
     });
     const twoLineRow = changeRow(/Modified src\/features\/app\.ts/u);
@@ -198,16 +197,14 @@ describe('ChangeList staging controls', () => {
 
     const fullPath = renderList({
       entries,
+      display: 'fullPath',
       selectedKey: 'unstaged:src/features/app.ts',
     });
     const fullPathRow = changeRow(/Modified src\/features\/app\.ts/u);
     const fullPathLabel = fullPathRow.querySelector<HTMLElement>('.file-path strong');
     if (!fullPathLabel) throw new Error('The full-path label was not found.');
     expect(fullPathLabel).toHaveTextContent('src/features/app.ts');
-    expect(within(fullPathLabel).getByText('src/features/')).toHaveClass('file-path-prefix');
-    expect(
-      changeRow(/Modified README\.md/u).querySelector('.file-path-prefix'),
-    ).not.toBeInTheDocument();
+    expect(fullPathLabel.querySelector('.file-path-prefix')).not.toBeInTheDocument();
     expect(fullPathRow).toHaveClass('is-single-line', 'is-full-path');
     fullPath.unmount();
 
@@ -248,7 +245,7 @@ describe('ChangeList staging controls', () => {
     expect(screen.queryByRole('region', { name: 'Conflicted' })).not.toBeInTheDocument();
   });
 
-  it('collapses and expands Staged and Unstaged independently from right-edge toggles', async () => {
+  it('collapses and expands Staged and Unstaged from toggles between the checkbox and label', async () => {
     const user = userEvent.setup();
     renderList();
 
@@ -272,6 +269,14 @@ describe('ChangeList staging controls', () => {
     expect(collapseStaged).toHaveAttribute('aria-expanded', 'true');
     expect(collapseUnstaged).toHaveAttribute('aria-expanded', 'true');
     expect(collapseStaged).toHaveClass('change-group-collapse-toggle');
+    const stagedGroupCheckbox = screen.getByRole('checkbox', { name: 'Unstage all 1 staged file' });
+    expect(
+      stagedGroupCheckbox.compareDocumentPosition(collapseStaged) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    expect(
+      collapseStaged.compareDocumentPosition(stagedHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
 
     await user.click(collapseStaged);
     expect(screen.getByRole('button', { name: 'Expand Staged' })).toHaveAttribute(
@@ -280,14 +285,14 @@ describe('ChangeList staging controls', () => {
     );
     expect(screen.queryByRole('checkbox', { name: 'Unstage src/app.ts' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Stage src/new.ts' })).toBeVisible();
-    expect(screen.getByRole('group', { name: 'Changes' })).toHaveClass('is-staged-collapsed');
+    expect(screen.getByRole('group', { name: 'Diff' })).toHaveClass('is-staged-collapsed');
 
     await user.click(collapseUnstaged);
     expect(screen.getByRole('button', { name: 'Expand Unstaged' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
-    expect(screen.getByRole('group', { name: 'Changes' })).toHaveClass(
+    expect(screen.getByRole('group', { name: 'Diff' })).toHaveClass(
       'is-staged-collapsed',
       'is-worktree-collapsed',
     );
@@ -430,7 +435,7 @@ describe('ChangeList staging controls', () => {
       onFileAction: async () => undefined,
     } as const;
     const { rerender } = render(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={1}
         entries={[{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }]}
@@ -439,7 +444,7 @@ describe('ChangeList staging controls', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Stage src/app.ts' }));
 
     rerender(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={2}
         entries={[{ path: 'src/app.ts', area: 'staged', status: 'modified' }]}
@@ -451,18 +456,19 @@ describe('ChangeList staging controls', () => {
   });
 });
 
-describe('ChangeList file actions', () => {
+describe('DiffFileList file actions', () => {
   it('shows the selected image preview state in the row menu', async () => {
     const user = userEvent.setup();
     const onPressedChange = vi.fn<(pressed: boolean) => void>();
     renderList({
       entries: [{ path: 'image.png', area: 'unstaged', status: 'binary' }],
       selectedKey: 'unstaged:image.png',
-      imagePreview: { key: 'unstaged:image.png', pressed: true, onPressedChange },
+      imagePreview: (entry) =>
+        entry.path === 'image.png' ? { pressed: true, onPressedChange } : undefined,
     });
 
     await user.click(screen.getByRole('button', { name: 'More actions for image.png' }));
-    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Image preview' });
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
     expect(imagePreview).toHaveAttribute('aria-checked', 'true');
 
     await user.click(imagePreview);
@@ -498,7 +504,7 @@ describe('ChangeList file actions', () => {
     fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
     expect(screen.getByRole('menu', { name: 'Actions for 3 selected files' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    await user.click(screen.getByRole('menuitem', { name: 'Discard' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Discard Changes' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'discardChanges');
   });
 
@@ -522,8 +528,8 @@ describe('ChangeList file actions', () => {
 
     fireEvent.contextMenu(first, { clientX: 80, clientY: 100 });
     expect(screen.getByRole('menu', { name: 'Actions for 2 selected files' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    expect(screen.getByRole('menuitem', { name: 'Discard Changes' })).toBeDisabled();
+    await user.click(screen.getByRole('menuitem', { name: 'Delete File' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'moveToTrash');
   });
 
@@ -585,7 +591,7 @@ describe('ChangeList file actions', () => {
     expect(screen.getByRole('menu')).toBeVisible();
 
     rerender(
-      <ChangeList
+      <DiffFileList
         repoId="repo-1"
         generation={1}
         entries={[{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }]}
@@ -638,8 +644,8 @@ describe('ChangeList file actions', () => {
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
     expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Changes' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Delete File' })).toBeDisabled();
   });
 
   it('closes the open menu when repository generation or identity changes', async () => {
@@ -656,16 +662,16 @@ describe('ChangeList file actions', () => {
       onStageTransition: async () => undefined,
       onFileAction: async () => undefined,
     } as const;
-    const { rerender } = render(<ChangeList {...props} generation={1} />);
+    const { rerender } = render(<DiffFileList {...props} generation={1} />);
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
     expect(screen.getByRole('menu')).toBeVisible();
 
-    rerender(<ChangeList {...props} generation={2} />);
+    rerender(<DiffFileList {...props} generation={2} />);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
     expect(screen.getByRole('menu')).toBeVisible();
-    rerender(<ChangeList {...props} repoId="repo-2" generation={2} />);
+    rerender(<DiffFileList {...props} repoId="repo-2" generation={2} />);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
@@ -686,7 +692,7 @@ describe('ChangeList file actions', () => {
       onFileAction,
     } as const;
     const { rerender } = render(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={1}
         entries={[
@@ -696,10 +702,10 @@ describe('ChangeList file actions', () => {
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/first.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete File' }));
 
     rerender(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={2}
         entries={[{ path: 'src/second.ts', area: 'untracked', status: 'added' }]}
@@ -722,18 +728,18 @@ describe('ChangeList file actions', () => {
       onFileAction: async () => undefined,
     } as const;
     const { rerender } = render(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={1}
         entries={[{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }]}
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete File' }));
     expect(changeRow(/app\.ts/u)).toHaveFocus();
 
     rerender(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={2}
         entries={[{ path: 'src/app.ts', area: 'staged', status: 'deleted' }]}
@@ -756,24 +762,24 @@ describe('ChangeList file actions', () => {
       onFileAction: async () => undefined,
     } as const;
     const { rerender } = render(
-      <ChangeList
+      <DiffFileList
         {...props}
         generation={1}
         entries={[{ path: 'src/only.ts', area: 'untracked', status: 'added' }]}
       />,
     );
     await user.click(screen.getByRole('button', { name: 'More actions for src/only.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete File' }));
 
-    rerender(<ChangeList {...props} generation={2} entries={[]} />);
+    rerender(<DiffFileList {...props} generation={2} entries={[]} />);
     expect(screen.getByRole('region', { name: 'Staged' })).toBeVisible();
     expect(screen.getByRole('region', { name: 'Unstaged' })).toBeVisible();
     await waitFor(() => expect(screen.getByText('Unstaged')).toHaveFocus());
   });
 });
 
-describe('ChangeList Stage display', () => {
-  it('shows one Changes group without staging controls when Stage display is hidden', () => {
+describe('DiffFileList Stage display', () => {
+  it('shows one Diff group without staging controls when Stage display is hidden', () => {
     const entries: ChangeEntry[] = [
       { path: 'src/staged.ts', area: 'staged', status: 'modified' },
       { path: 'src/unstaged.ts', area: 'unstaged', status: 'modified' },
@@ -786,7 +792,7 @@ describe('ChangeList Stage display', () => {
 
     expect(screen.queryByRole('region', { name: 'Staged' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Unstaged' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Changes' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Diff' })).toBeVisible();
     expect(
       document.querySelector('.change-group-combined .change-group-header'),
     ).not.toBeInTheDocument();

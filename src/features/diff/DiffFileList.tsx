@@ -1,4 +1,4 @@
-/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- 変更一覧のフィールドセットでCommand-Aによる全ファイル選択を処理する。 */
+/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- 差分一覧のフィールドセットでCommand-Aによる全ファイル選択を処理する。 */
 import {
   useEffect,
   useRef,
@@ -12,7 +12,7 @@ import { Input } from '../../ui/Input';
 import type { ChangeArea, ChangeEntry, RepoId } from '../../domain/workspace';
 import { useI18n } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
-import type { ChangeListDisplay } from '../../persistence/preferences';
+import type { DiffFileListDisplay } from '../../persistence/preferences';
 import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 
@@ -49,7 +49,7 @@ interface ChangeTreeDirectory {
   entries: ChangeEntry[];
 }
 
-type ChangeListRow =
+type DiffFileListRow =
   | { kind: 'directory'; name: string; path: string; depth: number }
   | { kind: 'file'; entry: ChangeEntry; depth: number };
 
@@ -72,12 +72,12 @@ interface PendingTrashFocus {
   orderedKeys: string[];
 }
 
-export interface ChangeListProps {
+export interface DiffFileListProps {
   repoId: RepoId;
   generation: number;
   entries: ChangeEntry[];
   splitStageView?: boolean | undefined;
-  display?: ChangeListDisplay | undefined;
+  display?: DiffFileListDisplay | undefined;
   selectedKey: string;
   selectionKeys?: readonly string[] | undefined;
   unsavedFileKey?: string | undefined;
@@ -88,11 +88,13 @@ export interface ChangeListProps {
   fileOpenDisabled: boolean;
   fileTrashDisabled: boolean;
   imagePreview?:
-    | {
-        key: string;
-        pressed: boolean;
-        onPressedChange: (pressed: boolean) => void;
-      }
+    | ((entry: ChangeEntry) =>
+        | {
+            pressed: boolean;
+            disabled?: boolean | undefined;
+            onPressedChange: (pressed: boolean) => void;
+          }
+        | undefined)
     | undefined;
   onSelect: (key: string) => void;
   onSelectedKeysChange?: ((keys: string[]) => void) | undefined;
@@ -137,9 +139,9 @@ function directoryKey(group: DisplayGroup, path: string): string {
 function changeListRows(
   entries: ChangeEntry[],
   group: DisplayGroup,
-  display: ChangeListDisplay,
+  display: DiffFileListDisplay,
   collapsedDirectories: ReadonlySet<string>,
-): ChangeListRow[] {
+): DiffFileListRow[] {
   if (display !== 'tree') return entries.map((entry) => ({ kind: 'file', entry, depth: 0 }));
 
   const root: ChangeTreeDirectory = {
@@ -164,7 +166,7 @@ function changeListRows(
     directory.entries.push(entry);
   }
 
-  const rows: ChangeListRow[] = [];
+  const rows: DiffFileListRow[] = [];
   const append = (directory: ChangeTreeDirectory, depth: number): void => {
     for (const child of directory.directories.values()) {
       rows.push({ kind: 'directory', name: child.name, path: child.path, depth });
@@ -176,12 +178,12 @@ function changeListRows(
   return rows;
 }
 
-export function ChangeList({
+export function DiffFileList({
   repoId,
   generation,
   entries,
   splitStageView = true,
-  display = 'fullPath',
+  display = 'nameAndPath',
   selectedKey,
   selectionKeys,
   unsavedFileKey,
@@ -196,7 +198,7 @@ export function ChangeList({
   onSelectedKeysChange,
   onStageTransition,
   onFileAction,
-}: ChangeListProps) {
+}: DiffFileListProps) {
   const { t } = useI18n();
   const [transferPending, setTransferPending] = useState(false);
   const [openMenuKey, setOpenMenuKey] = useState<string>();
@@ -255,7 +257,7 @@ export function ChangeList({
         conflictGroup,
         {
           id: 'combined',
-          label: t('changes'),
+          label: t('diff'),
           entries: entries.filter((entry) => entry.area !== 'conflicted'),
         },
       ];
@@ -549,7 +551,7 @@ export function ChangeList({
       className={`change-groups${splitStageView ? '' : ' is-stage-hidden'}${splitStageView && collapsedGroups.has('staged') ? ' is-staged-collapsed' : ''}${splitStageView && collapsedGroups.has('worktree') ? ' is-worktree-collapsed' : ''}`}
       onKeyDown={selectAllFiles}
     >
-      <legend className="sr-only">{t('changes')}</legend>
+      <legend className="sr-only">{t('diff')}</legend>
       {groups.map(({ id, label, entries: groupEntries }) => {
         const stageGroup = id === 'conflicted' ? undefined : id;
         if (id === 'conflicted' && !groupEntries.length) return null;
@@ -632,21 +634,6 @@ export function ChangeList({
                 ) : splitStageView ? (
                   <span className="change-group-header-spacer" aria-hidden="true" />
                 ) : null}
-                <h3 id={titleId}>
-                  <span
-                    ref={(element) => {
-                      if (element) groupFocusRefs.current.set(id, element);
-                      else groupFocusRefs.current.delete(id);
-                    }}
-                    className="change-group-title"
-                    tabIndex={-1}
-                  >
-                    {label}
-                  </span>
-                  <span className="change-count" aria-hidden="true">
-                    {groupEntries.length}
-                  </span>
-                </h3>
                 {collapsibleGroup ? (
                   <Button
                     className="change-group-collapse-toggle"
@@ -675,6 +662,21 @@ export function ChangeList({
                     )}
                   </Button>
                 ) : null}
+                <h3 id={titleId}>
+                  <span
+                    ref={(element) => {
+                      if (element) groupFocusRefs.current.set(id, element);
+                      else groupFocusRefs.current.delete(id);
+                    }}
+                    className="change-group-title"
+                    tabIndex={-1}
+                  >
+                    {label}
+                  </span>
+                  <span className="change-count" aria-hidden="true">
+                    {groupEntries.length}
+                  </span>
+                </h3>
               </div>
             )}
             <div id={contentId} className="change-group-content" hidden={groupCollapsed}>
@@ -811,11 +813,7 @@ export function ChangeList({
                           >
                             <span className="file-name">
                               <strong>
-                                {display === 'fullPath' ? (
-                                  <InlineFilePath path={entry.path} />
-                                ) : (
-                                  fileName(entry.path)
-                                )}
+                                {display === 'fullPath' ? entry.path : fileName(entry.path)}
                               </strong>
                               {unsavedFileKey === key ? (
                                 <output className="unsaved-file-dot" aria-label={t('unsaved')} />
@@ -843,7 +841,7 @@ export function ChangeList({
                           }
                           discardDisabled={discardDisabled}
                           deleteDisabled={fileTrashDisabled || invalidFileActionEntry}
-                          imagePreview={imagePreview?.key === key ? imagePreview : undefined}
+                          imagePreview={imagePreview?.(entry)}
                           contextPoint={contextMenu?.key === key ? contextMenu.point : undefined}
                           onOpenChange={(open) => {
                             setOpenMenuKey(open ? key : undefined);
@@ -884,14 +882,4 @@ function fileName(path: string): string {
 function parentPath(path: string): string {
   const parts = path.split('/');
   return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
-}
-
-function InlineFilePath({ path }: { path: string }) {
-  const parent = parentPath(path);
-  return (
-    <>
-      {parent ? <span className="file-path-prefix">{parent}/</span> : null}
-      {fileName(path)}
-    </>
-  );
 }

@@ -79,7 +79,7 @@ async function waitForEditorPosition(expectedLine: string): Promise<EditorPositi
   return position;
 }
 
-async function selectAndExpectImagePreview(path: string): Promise<void> {
+async function selectAndExpectImagePreview(path: string, toggleExpected = true): Promise<void> {
   await browser.execute((selectedPath) => {
     const item = [...document.querySelectorAll<HTMLElement>('.change-item')].find((row) =>
       row.querySelector('.file-path strong')?.textContent?.includes(selectedPath),
@@ -87,8 +87,12 @@ async function selectAndExpectImagePreview(path: string): Promise<void> {
     item?.querySelector<HTMLButtonElement>('button.change-row')?.click();
   }, path);
   const toggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
-  await toggle.waitForDisplayed({ timeout: 20_000 });
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  if (toggleExpected) {
+    await toggle.waitForDisplayed({ timeout: 20_000 });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  } else {
+    await expect(toggle).not.toExist();
+  }
   await browser.waitUntil(
     async () =>
       browser.execute(() => {
@@ -97,15 +101,14 @@ async function selectAndExpectImagePreview(path: string): Promise<void> {
       }),
     { timeout: 20_000, timeoutMsg: `${path} was not decoded by WebKit.` },
   );
-  await expect($('.image-diff-side figcaption')).toHaveText(expect.stringContaining('変更後'));
 }
 
-describe('Changes', () => {
+describe('Diff', () => {
   let fixturePath = '';
   let repositoryPath = '';
 
   beforeEach(async () => {
-    fixturePath = await createFixtureDirectory('changes');
+    fixturePath = await createFixtureDirectory('diff');
     repositoryPath = await copyE2EShowcaseRepository(fixturePath);
     await resetApp({ language: 'ja', splitStageView: true });
     await openRepository(repositoryPath);
@@ -195,7 +198,7 @@ describe('Changes', () => {
     await browser.keys(['Escape']);
 
     await $('input[aria-label="ステージ README.md"]').click();
-    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    const commitTrigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await commitTrigger.waitForClickable({ timeout: 10_000 });
     await commitTrigger.click();
     const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
@@ -228,24 +231,27 @@ describe('Changes', () => {
     await $('input[aria-label="ステージ preview.png"]').waitForExist({ timeout: 20_000 });
     await $('input[aria-label="ステージ preview.svg"]').waitForExist({ timeout: 20_000 });
 
-    await selectAndExpectImagePreview('preview.png');
+    await selectAndExpectImagePreview('preview.png', false);
     await selectAndExpectImagePreview('preview.svg');
 
     const svgToggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
-    const displayTab = $('.diff-file-toolbar [role="tab"][aria-label="表示"]');
-    expect((await svgToggle.getLocation('x')) < (await displayTab.getLocation('x'))).toBe(true);
+    const fileModeToggle = $('.diff-file-toolbar button[aria-label="編集"]');
+    expect((await svgToggle.getLocation('x')) < (await fileModeToggle.getLocation('x'))).toBe(true);
     await $('.diff-file-toolbar .file-action-trigger').click();
-    await $('button=画像プレビュー').click();
+    await $('button=画像をプレビュー').click();
     await expect(svgToggle).toHaveAttribute('aria-pressed', 'false');
     await expect($('.diff-surface')).toBeDisplayed();
     await svgToggle.click();
     await expect(svgToggle).toHaveAttribute('aria-pressed', 'true');
-    await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
-    await expect(svgToggle).not.toExist();
+    await $('.diff-file-toolbar button[aria-label="編集"]').click();
     await expect($('.file-editor')).toBeDisplayed();
+    const editorImageToggle = $('.file-editor-toolbar button[aria-label="画像プレビュー"]');
+    await expect(editorImageToggle).toBeDisabled();
+    await $('.file-editor-toolbar .file-action-trigger').click();
+    await expect($('button=画像をプレビュー')).toBeDisabled();
   });
 
-  it('defaults to full paths and keeps keyboard file navigation responsive', async () => {
+  it('defaults to file names with parent paths and keeps keyboard navigation responsive', async () => {
     await writeRepositoryFile(
       repositoryPath,
       'src/keyboard-navigation.md',
@@ -260,41 +266,26 @@ describe('Changes', () => {
             document.activeElement ===
             document.querySelector('.change-item.is-current .change-row'),
         ),
-      { timeoutMsg: 'The selected Changes file did not receive initial focus.' },
+      { timeoutMsg: 'The selected Diff file did not receive initial focus.' },
     );
 
     const initial = await browser.execute(() => {
       const rows = [...document.querySelectorAll<HTMLElement>('.change-item')];
       const selectedIndex = rows.findIndex((row) => row.classList.contains('is-current'));
-      const fullPath = rows.find((row) =>
+      const fileItem = rows.find((row) =>
         row.querySelector('.file-path strong')?.textContent?.includes('keyboard-navigation.md'),
       );
       const actionTriggers = rows.map((row) =>
         row.querySelector<HTMLElement>('.row-action-trigger'),
       );
-      const fullPathRow = fullPath?.querySelector<HTMLElement>('.change-row');
-      const fullPathRowStyle = fullPathRow ? getComputedStyle(fullPathRow) : undefined;
-      const fullPathLabel = fullPath?.querySelector<HTMLElement>('.file-path strong');
-      const pathPrefix = fullPath?.querySelector<HTMLElement>('.file-path-prefix');
-      const tertiaryProbe = document.createElement('span');
-      tertiaryProbe.style.color = 'var(--text-tertiary)';
-      document.body.append(tertiaryProbe);
-      const prefixUsesTertiaryColor =
-        pathPrefix !== undefined &&
-        pathPrefix !== null &&
-        getComputedStyle(pathPrefix).color === getComputedStyle(tertiaryProbe).color;
-      tertiaryProbe.remove();
+      const fileRow = fileItem?.querySelector<HTMLElement>('.change-row');
       return {
         selectedIndex,
         rowCount: rows.length,
-        fullPath: fullPathLabel?.textContent,
-        pathPrefix: pathPrefix?.textContent,
-        prefixUsesTertiaryColor,
-        hasSecondaryPath: Boolean(fullPath?.querySelector('.file-path small')),
-        fullPathRowHeight: fullPathRow?.getBoundingClientRect().height,
-        fullPathRowPaddingBlock: fullPathRowStyle
-          ? [fullPathRowStyle.paddingTop, fullPathRowStyle.paddingBottom]
-          : undefined,
+        fileName: fileItem?.querySelector('.file-path strong')?.textContent,
+        parentPath: fileItem?.querySelector('.file-path small')?.textContent,
+        hasPathPrefix: Boolean(fileItem?.querySelector('.file-path-prefix')),
+        isSingleLine: fileRow?.classList.contains('is-single-line'),
         allActionsVisible: actionTriggers.every((trigger) => {
           if (!trigger) return false;
           const style = getComputedStyle(trigger);
@@ -305,12 +296,10 @@ describe('Changes', () => {
     expect(initial).toEqual({
       selectedIndex: expect.any(Number),
       rowCount: 2,
-      fullPath: 'src/keyboard-navigation.md',
-      pathPrefix: 'src/',
-      prefixUsesTertiaryColor: true,
-      hasSecondaryPath: false,
-      fullPathRowHeight: 38,
-      fullPathRowPaddingBlock: ['6px', '6px'],
+      fileName: 'keyboard-navigation.md',
+      parentPath: 'src',
+      hasPathPrefix: false,
+      isSingleLine: false,
       allActionsVisible: true,
     });
     expect(initial.selectedIndex).toBeGreaterThanOrEqual(0);
@@ -375,7 +364,7 @@ describe('Changes', () => {
     await selectSetting('editor-line-wrapping', 'enabled');
     const wrapColumn = $('input[name="editor-wrap-column"]');
     await wrapColumn.setValue('80');
-    await $('button=変更').click();
+    await $('button=差分').click();
 
     await browser.waitUntil(
       async () =>
@@ -416,7 +405,7 @@ describe('Changes', () => {
       await ignorePatterns.setValue(testPatterns);
       await browser.keys(['Tab']);
       await ignorePatterns.waitForEnabled();
-      await $('button=変更').click();
+      await $('button=差分').click();
       await $(stageIgnoredFile).waitForExist({ reverse: true, timeout: 10_000 });
       expect(await runGit(repositoryPath, ['status', '--short'])).toContain(ignoredPath);
     } finally {
@@ -427,7 +416,7 @@ describe('Changes', () => {
       await restorePatterns.setValue(originalPatterns);
       await browser.keys(['Tab']);
       await restorePatterns.waitForEnabled();
-      await $('button=変更').click();
+      await $('button=差分').click();
       await $(stageIgnoredFile).waitForExist({ timeout: 10_000 });
     }
   });
@@ -435,10 +424,10 @@ describe('Changes', () => {
   it('commits every change when Stage display is hidden', async () => {
     await $('button=設定').click();
     await selectSetting('stage-display', 'hide');
-    await $('button=変更').click();
+    await $('button=差分').click();
     await expect($('input[aria-label^="ステージ "]')).not.toExist();
 
-    const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    const trigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await trigger.click();
     const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
     await dialog.$('[data-commit-field="description"]').setValue('全変更をコミットする');
@@ -489,9 +478,7 @@ describe('Changes', () => {
         observer.disconnect();
       });
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-      document
-        .querySelector<HTMLButtonElement>('.changes-action-button[aria-label="プル"]')
-        ?.click();
+      document.querySelector<HTMLButtonElement>('.diff-action-button[aria-label="プル"]')?.click();
     });
 
     await browser.waitUntil(
@@ -603,7 +590,7 @@ describe('Changes', () => {
     await runGit(peerPath, ['push', 'origin', 'main']);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
-    await $('.changes-action-button[aria-label="プル"]').click();
+    await $('.diff-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
     await expect(pullDialog.$('select')).toHaveValue('origin/main');
     const refreshBranches = pullDialog.$('button[aria-label="ブランチを更新"]');
@@ -627,7 +614,7 @@ describe('Changes', () => {
     await ensureLocalBareRemote(repositoryPath, remotePath);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
-    await $('.changes-action-button[aria-label="プル"]').click();
+    await $('.diff-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
     await expect(pullDialog).toBeDisplayed();
     await browser.waitUntil(
@@ -653,7 +640,7 @@ describe('Changes', () => {
     await expect(pullDialog.$('select')).toHaveValue('origin/main');
     await pullDialog.$('button=キャンセル').click();
 
-    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    await $('.diff-action-button[aria-label="プッシュ"]').click();
     let pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
     await browser.waitUntil(
@@ -710,7 +697,7 @@ describe('Changes', () => {
     await pushDialog.$('button=キャンセル').click();
     await setLogicalWindowSize(1180, 760);
 
-    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    await $('.diff-action-button[aria-label="プッシュ"]').click();
     pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
     await browser.waitUntil(
@@ -730,7 +717,7 @@ describe('Changes', () => {
     await runGit(repositoryPath, ['tag', 'e2e-local-tag']);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
-    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    await $('.diff-action-button[aria-label="プッシュ"]').click();
     const pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
     await pushDialog.$('label=すべてのローカルタグをプッシュ').$('input').click();
@@ -759,7 +746,7 @@ describe('Changes', () => {
     const peerHead = (await runGit(peerPath, ['rev-parse', 'HEAD'])).trim();
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
-    await $('.changes-action-button[aria-label="プッシュ"]').click();
+    await $('.diff-action-button[aria-label="プッシュ"]').click();
     const pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
     await pushDialog.$('label=安全に強制プッシュ（--force-with-lease）').$('input').click();
@@ -772,9 +759,9 @@ describe('Changes', () => {
   });
 
   it('shows, stages, and commits a working tree change', async () => {
-    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    const commitTrigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');
-    const actionButtons = $$('.changes-action-bar .changes-action-button');
+    const actionButtons = $$('.diff-action-bar .diff-action-button');
     expect(await actionButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
       'コミット',
       'プル',
@@ -800,7 +787,7 @@ describe('Changes', () => {
       expect.stringContaining('--history-lane-color: var(--history-working-tree)'),
     );
     await uncommittedChanges.click();
-    await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('button[aria-label="差分"]')).toHaveAttribute('aria-current', 'page');
     expect(
       await browser.execute(
         () =>
@@ -835,13 +822,13 @@ describe('Changes', () => {
     const stage = $('input[aria-label="ステージ README.md"]');
     await stage.waitForClickable();
     const changesPaneLayout = await browser.execute(() => {
-      const sidebar = document.querySelector<HTMLElement>('.changes-sidebar-pane')!;
-      const footer = sidebar.querySelector<HTMLElement>('.changes-list-footer')!;
-      const actionBar = footer.querySelector<HTMLElement>('.changes-action-bar')!;
+      const sidebar = document.querySelector<HTMLElement>('.diff-sidebar-pane')!;
+      const footer = sidebar.querySelector<HTMLElement>('.diff-list-footer')!;
+      const actionBar = footer.querySelector<HTMLElement>('.diff-action-bar')!;
       const actionButtonElements = [
-        ...actionBar.querySelectorAll<HTMLElement>('.changes-action-button'),
+        ...actionBar.querySelectorAll<HTMLElement>('.diff-action-button'),
       ];
-      const filesRegion = sidebar.querySelector<HTMLElement>('.changes-files-scroll-region')!;
+      const filesRegion = sidebar.querySelector<HTMLElement>('.diff-files-scroll-region')!;
       const staged = sidebar.querySelector<HTMLElement>('.change-group-staged')!;
       const unstaged = sidebar.querySelector<HTMLElement>('.change-group-worktree')!;
       const stagedContent = staged.querySelector<HTMLElement>('.change-group-content')!;
@@ -974,9 +961,7 @@ describe('Changes', () => {
     await expect($('input[aria-label="ステージ解除 README.md"]')).toBeDisplayed();
     expect(await runGit(repositoryPath, ['diff', '--cached', '--name-only'])).toBe('README.md\n');
 
-    const activeCommitTrigger = $(
-      '.changes-action-bar .changes-action-button[aria-label="コミット"]',
-    );
+    const activeCommitTrigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await activeCommitTrigger.waitForClickable();
     await activeCommitTrigger.click();
     await expect(activeCommitTrigger).toHaveAttribute('aria-expanded', 'true');
@@ -993,9 +978,9 @@ describe('Changes', () => {
     await $('button=設定').click();
     await selectSetting('conventional-commits', 'enabled');
     await expect($('select[name="conventional-commits"]')).toHaveValue('enabled');
-    await $('button=変更').click();
+    await $('button=差分').click();
     const conventionalCommitTrigger = $(
-      '.changes-action-bar .changes-action-button[aria-label="コミット"]',
+      '.diff-action-bar .diff-action-button[aria-label="コミット"]',
     );
     await conventionalCommitTrigger.waitForClickable();
     await conventionalCommitTrigger.click();
@@ -1073,7 +1058,7 @@ describe('Changes', () => {
     );
     await $('input[aria-label="ステージ README.md"]').click();
     await $('input[aria-label="ステージ解除 README.md"]').waitForDisplayed({ timeout: 10_000 });
-    const commitTrigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+    const commitTrigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await commitTrigger.waitForClickable({ timeout: 10_000 });
     await commitTrigger.click();
     const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
@@ -1160,12 +1145,10 @@ describe('Changes', () => {
   it('opens a changed file in the editor and returns to its Diff', async () => {
     await $('button.change-row').click();
     await expect($('.selected-file-toggle')).not.toExist();
-    const displayTab = $('.diff-file-toolbar [role="tab"][aria-label="表示"]');
-    const editTab = $('.diff-file-toolbar [role="tab"][aria-label="編集"]');
-    await expect(displayTab).toHaveAttribute('aria-selected', 'true');
-    await expectAttachedTabs('.diff-file-toolbar .file-view-mode-tabs');
+    const editToggle = $('.diff-file-toolbar button[aria-label="編集"]');
+    await expect(editToggle).toHaveAttribute('aria-pressed', 'false');
     await expectInteractiveSelectedColors(
-      '.diff-file-toolbar [role="tab"][aria-label="表示"][aria-selected="true"]',
+      '.diff-file-toolbar button[aria-label="編集"] .toggle-button-thumb',
       { palette: 'neutral' },
     );
     await browser.waitUntil(
@@ -1208,26 +1191,23 @@ describe('Changes', () => {
     });
     expect(diffLineMetrics.indicator).toMatch(/[+-]/u);
     expect(diffLineMetrics.lineHeight).toBe('20px');
-    await editTab.waitForClickable({ timeout: 10_000 });
-    await expect(editTab).not.toHaveAttribute('title');
+    await editToggle.waitForClickable({ timeout: 10_000 });
+    await expect(editToggle).not.toHaveAttribute('title');
     await browser.execute(() => {
       document
-        .querySelector<HTMLElement>('.diff-file-toolbar [role="tab"][aria-label="編集"]')!
+        .querySelector<HTMLElement>('.diff-file-toolbar button[aria-label="編集"]')!
         .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
-    await expect($('.app-tooltip')).toHaveText('編集');
-    await expect(editTab).toHaveText('');
-    await editTab.click();
+    await expect($('.app-tooltip')).toHaveText('ファイル編集切り替え');
+    await expect(editToggle).toHaveText('');
+    await editToggle.click();
 
     const editor = $('.file-editor-pane');
     await editor.waitForDisplayed({ timeout: 10_000 });
     await expect(editor.$('h2')).toHaveText('README.md');
-    await expect(editor.$('[role="tab"][aria-label="編集"]')).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(editor.$('button[aria-label="表示"]')).toHaveAttribute('aria-pressed', 'true');
     await expectInteractiveSelectedColors(
-      '.file-editor-pane [role="tab"][aria-label="編集"][aria-selected="true"]',
+      '.file-editor-pane button[aria-label="表示"] .toggle-button-thumb',
       { palette: 'neutral' },
     );
     await expect(editor.$('button=保存する')).not.toExist();
@@ -1296,7 +1276,7 @@ describe('Changes', () => {
       { timeout: 10_000, timeoutMsg: 'The unsaved dots did not appear in both panes.' },
     );
 
-    await editor.$('[role="tab"][aria-label="表示"]').click();
+    await editor.$('button[aria-label="表示"]').click();
     const displayDialog = $('[role="alertdialog"]');
     await displayDialog.waitForDisplayed({ timeout: 10_000 });
     await expect(displayDialog.$('h2')).toHaveText('未保存の変更');
@@ -1341,7 +1321,7 @@ describe('Changes', () => {
     expect(diffTypography.fontSize).toBeCloseTo(15.6);
     expect(diffTypography.lineHeight).toBeCloseTo(24);
 
-    await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
+    await $('.diff-file-toolbar button[aria-label="編集"]').click();
     const textbox = $('.file-editor-pane [role="textbox"]');
     await textbox.waitForDisplayed({ timeout: 10_000 });
     const editorTypography = await browser.execute(() => {
@@ -1428,7 +1408,7 @@ describe('Changes', () => {
     expect(hunkEditorPosition.viewportRatio).toBeGreaterThan(0.2);
     expect(hunkEditorPosition.viewportRatio).toBeLessThan(0.3);
 
-    await editor.$('[role="tab"][aria-label="表示"]').click();
+    await editor.$('button[aria-label="表示"]').click();
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -1481,14 +1461,14 @@ describe('Changes', () => {
       '選択した行をコピー',
     ]);
     await browser.keys(['Escape']);
-    await $('.diff-file-actions [role="tab"][aria-label="編集"]').click();
+    await $('.diff-file-actions button[aria-label="編集"]').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
     const contextEditorPosition = await waitForEditorPosition(contextLineText);
     expect(contextEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(contextEditorPosition.activeLine).toBe(contextLineText);
     expect(contextEditorPosition.focused).toBe(true);
 
-    await $('.file-editor-pane [role="tab"][aria-label="表示"]').click();
+    await $('.file-editor-pane button[aria-label="表示"]').click();
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -1598,7 +1578,7 @@ describe('Changes', () => {
       );
       deletedLines[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
     });
-    await $('.diff-file-actions [role="tab"][aria-label="編集"]').click();
+    await $('.diff-file-actions button[aria-label="編集"]').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
 
     const editorPosition = await waitForEditorPosition('line-42');
@@ -1679,7 +1659,7 @@ describe('Changes', () => {
       const controlsRect = controls.getBoundingClientRect();
       const contentRect = content.getBoundingClientRect();
       const paneRect = document
-        .querySelector<HTMLElement>('.changes-content-pane')!
+        .querySelector<HTMLElement>('.diff-content-pane')!
         .getBoundingClientRect();
       const actionButtons = [...controls.querySelectorAll<HTMLButtonElement>('button')];
       const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];

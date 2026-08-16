@@ -14,7 +14,7 @@ describe('global scroll behavior', () => {
 
 describe('changes file selection', () => {
   it('prevents native text selection from spanning the Diff and file list panes', () => {
-    expect(styles).toMatch(/\.changes-files-scroll-region\s*\{[^}]*user-select:\s*none;/u);
+    expect(styles).toMatch(/\.diff-files-scroll-region\s*\{[^}]*user-select:\s*none;/u);
     expect(styles).toMatch(
       /\.diff-pane\s*\{[^}]*-webkit-user-select:\s*none;[^}]*user-select:\s*none;/u,
     );
@@ -40,16 +40,66 @@ describe('changes file selection', () => {
       /\.activity-list tbody tr:focus-visible > \*\s*\{[^}]*inset 0 1px 0 var\(--focus\),[^}]*inset 0 -1px 0 var\(--focus\);/u,
     );
     expect(styles).toMatch(
-      /\.file-view-mode-tabs button\[aria-selected='true'\]\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*color:\s*var\(--text-primary\);/u,
+      /button\.toggle-button\s*\{[^}]*grid-template-columns:\s*repeat\(2, 29px\);[^}]*width:\s*64px;[^}]*height:\s*34px;[^}]*border-radius:\s*999px;[^}]*background:\s*var\(--surface-sunken\);/u,
     );
     expect(styles).toMatch(
-      /\.file-view-mode-tabs button\[aria-selected='true'\]:focus-visible\s*\{[^}]*outline-color:\s*var\(--focus\);/u,
+      /\.toggle-button-thumb\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*box-shadow:\s*var\(--shadow-control\);[^}]*transition:\s*transform 160ms ease;/u,
     );
     expect(styles).toMatch(
-      /\.image-preview-toggle\[aria-pressed='true'\]\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*box-shadow:\s*none;[^}]*color:\s*var\(--text-primary\);/u,
+      /button\.toggle-button\[aria-pressed='true'\] \.toggle-button-thumb\s*\{[^}]*transform:\s*translateX\(29px\);/u,
     );
     expect(styles).toMatch(
-      /\.image-preview-toggle\[aria-pressed='true'\]:focus-visible\s*\{[^}]*outline-color:\s*var\(--focus\);/u,
+      /button\.toggle-button\[data-reverse-icons\]\[aria-pressed='true'\] \.toggle-button-thumb\s*\{[^}]*transform:\s*none;/u,
+    );
+    expect(styles).toMatch(
+      /button\.toggle-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--surface-sunken\);/u,
+    );
+  });
+
+  it('uses the same surface and dimensions for regular and image file headers', () => {
+    expect(styles).toMatch(/--diff-file-header-surface:\s*light-dark\(/u);
+    expect(styles).toMatch(
+      /\.diff-file-standalone-header\s*\{[^}]*min-height:\s*32px;[^}]*padding-inline:\s*8px 16px;[^}]*background-color:\s*var\(--diff-file-header-surface\);/u,
+    );
+  });
+
+  it('places the stage group collapse toggle between the checkbox and label', () => {
+    expect(styles).toMatch(
+      /\.change-group-header\.is-collapsible\s*\{[^}]*grid-template-columns:\s*28px 24px minmax\(0, 1fr\);/u,
+    );
+  });
+
+  it('lays out split image previews side by side', () => {
+    expect(styles).toMatch(
+      /\.image-diff-preview\[data-layout='split'\]\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-preview\[data-single-side='true'\]\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-preview\[data-single-side='true'\] \.image-diff-side\[data-side\]\s*\{[^}]*grid-column:\s*1;/u,
+    );
+  });
+
+  it('uses semantic black and white surfaces for adaptive image contrast', () => {
+    expect(styles).toMatch(/--image-preview-light-surface:\s*#ffffff;/u);
+    expect(styles).toMatch(/--image-preview-dark-surface:\s*#000000;/u);
+    expect(styles).toMatch(/--image-preview-light-checker:\s*#d9d9d9;/u);
+    expect(styles).toMatch(/--image-preview-dark-checker:\s*#303030;/u);
+    expect(styles).toMatch(
+      /\.image-diff-canvas\s*\{[^}]*padding:\s*16px;[^}]*background-color:\s*var\(--image-preview-checker-base\);[^}]*background-image:\s*[^}]*linear-gradient/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-canvas\[data-image-background='light'\]\s*\{[^}]*--image-preview-checker-base:\s*var\(--image-preview-light-surface\);/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-canvas\[data-image-background='dark'\]\s*\{[^}]*--image-preview-checker-base:\s*var\(--image-preview-dark-surface\);/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-image-surface\s*\{[^}]*place-self:\s*center;[^}]*place-items:\s*center;/u,
+    );
+    expect(styles).toMatch(
+      /\.image-diff-canvas img\s*\{[^}]*margin:\s*auto;[^}]*object-position:\s*center center;/u,
     );
   });
 });
@@ -59,7 +109,7 @@ describe('history action placement', () => {
     expect(styles).toMatch(/--history-lane-0:\s*var\(--accent\);/u);
   });
 
-  it('keeps Changes and History row actions visible', () => {
+  it('keeps Diff and History row actions visible', () => {
     expect(styles).toMatch(
       /\.change-item \.row-action-trigger,\s*\.history-commit-item \.row-action-trigger,\s*\.row-action-trigger\.is-persistent/u,
     );
@@ -74,7 +124,7 @@ describe('history action placement', () => {
     );
   });
 
-  it('adds trailing space in the list and top-aligns the detail action', () => {
+  it('adds trailing space in the list and sizes the detail action like a toggle', () => {
     expect(styles).toMatch(
       /\.commit-list \.history-commit-item\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 34px;/u,
     );
@@ -82,7 +132,7 @@ describe('history action placement', () => {
       /\.history-commit-item \.history-action-trigger\s*\{[^}]*margin-right:\s*8px;/u,
     );
     expect(styles).toMatch(
-      /\.commit-detail-actions > \.history-action-trigger\s*\{[^}]*align-self:\s*flex-start;/u,
+      /\.commit-detail-actions > \.history-action-trigger\s*\{[^}]*width:\s*34px;[^}]*height:\s*34px;[^}]*align-self:\s*flex-start;/u,
     );
   });
 });
@@ -177,18 +227,15 @@ describe('switcher layout', () => {
 });
 
 describe('loading layout stability', () => {
-  it('uses fixed pulse geometry inside fixed loading regions', () => {
+  it('shows only the shared spinner after a one-second delay in fixed loading regions', () => {
     expect(styles).toMatch(
-      /\.loading-pulse\s*\{[^}]*width:\s*72px;[^}]*height:\s*8px;[^}]*animation:\s*loading-pulse/u,
+      /\.delayed-loading-icon,\s*\.loading-indicator\s*>\s*svg\s*\{[^}]*opacity:\s*0;[^}]*animation:\s*delayed-loading-spin 1s linear 1s infinite forwards;/u,
     );
+    expect(styles).not.toMatch(/\.loading-pulse/u);
     expect(styles).toMatch(/\.activity-state\s*\{[^}]*min-height:\s*150px;/u);
     expect(styles).toMatch(/\.activity-chart\s*\{[^}]*height:\s*240px;/u);
-    expect(styles).toMatch(/\.settings-toolchain-components dd\s*\{[^}]*min-height:\s*36px;/u);
-    expect(styles).toMatch(/\.settings-toolchain-modes\s*\{[^}]*min-height:\s*35px;/u);
-    expect(styles).toMatch(/\.settings-toolchain-components\s*\{[^}]*min-height:\s*120px;/u);
-    expect(styles).toMatch(
-      /\.button-loading-icon\s*\{[^}]*animation:\s*activity-status-spin 1s linear infinite;/u,
-    );
+    expect(styles).toMatch(/\.settings-toolchain-loading\s*\{[^}]*min-height:\s*167px;/u);
+    expect(styles).toMatch(/\.git-flow-overview-loading\s*\{[^}]*min-height:\s*88px;/u);
   });
 });
 

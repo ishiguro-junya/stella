@@ -81,8 +81,8 @@ async function runHistoryAction(
 }
 
 async function commitPendingHistoryAction(description: string): Promise<void> {
-  await $('button=変更').click();
-  const trigger = $('.changes-action-bar .changes-action-button[aria-label="コミット"]');
+  await $('button=差分').click();
+  const trigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
   await trigger.waitForEnabled({ timeout: 20_000 });
   await trigger.click();
   const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
@@ -161,6 +161,67 @@ describe('History', () => {
     ).toEqual({ detailOverflowY: 'auto', detailScrolls: true, diffOverflowY: 'visible' });
   });
 
+  it('uses the regular file header for History image previews', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-image.svg',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#f00"/></svg>\n',
+    );
+    await writeRepositoryFile(repositoryPath, 'history-image.txt', 'before\n');
+    await runGit(repositoryPath, ['add', 'history-image.svg', 'history-image.txt']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 履歴画像の基準を作成する']);
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-image.svg',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#00f"/></svg>\n',
+    );
+    await writeRepositoryFile(repositoryPath, 'history-image.txt', 'after\n');
+    await runGit(repositoryPath, ['add', 'history-image.svg', 'history-image.txt']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 履歴画像のヘッダーを確認する']);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+    await $('.history-image-file-header').waitForDisplayed({ timeout: 10_000 });
+
+    expect(
+      await browser.execute(() => {
+        const imageHeader = document.querySelector<HTMLElement>('.history-image-file-header');
+        const normalHost = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+        const normalHeader =
+          normalHost?.shadowRoot?.querySelector<HTMLElement>('[data-diffs-header]');
+        if (!imageHeader || !normalHeader || !normalHost) {
+          throw new Error('The regular or image History file header was not found.');
+        }
+        const imageStyle = getComputedStyle(imageHeader);
+        const normalStyle = getComputedStyle(normalHeader);
+        return {
+          backgroundMatches: imageStyle.backgroundColor === normalStyle.backgroundColor,
+          heightMatches:
+            imageHeader.getBoundingClientRect().height ===
+            normalHeader.getBoundingClientRect().height,
+          paddingMatches:
+            imageStyle.paddingLeft === normalStyle.paddingLeft &&
+            imageStyle.paddingRight === normalStyle.paddingRight,
+          hasCollapseToggle: Boolean(
+            imageHeader.querySelector('.diff-file-collapse-toggle') &&
+            normalHost.querySelector('.diff-file-collapse-toggle'),
+          ),
+          hasImageToggle: Boolean(imageHeader.querySelector('.image-preview-toggle')),
+        };
+      }),
+    ).toEqual({
+      backgroundMatches: true,
+      heightMatches: true,
+      paddingMatches: true,
+      hasCollapseToggle: true,
+      hasImageToggle: true,
+    });
+  });
+
   it('separates a commit body from the subject as secondary text', async () => {
     await writeRepositoryFile(repositoryPath, 'src/commit-body.md', 'Commit body spacing\n');
     await runGit(repositoryPath, ['add', 'src/commit-body.md']);
@@ -190,34 +251,27 @@ describe('History', () => {
         const path = document.querySelector<HTMLElement>(
           '.diff-file-custom-header-title > span:last-child',
         );
-        const pathPrefix = path?.querySelector<HTMLElement>('.file-path-prefix');
-        if (!heading || !body || !path || !pathPrefix) {
+        if (!heading || !body || !path) {
           throw new Error('The commit body or nested file path was not found.');
         }
         const secondaryProbe = document.createElement('span');
         secondaryProbe.style.color = 'var(--text-secondary)';
-        const tertiaryProbe = document.createElement('span');
-        tertiaryProbe.style.color = 'var(--text-tertiary)';
-        document.body.append(secondaryProbe, tertiaryProbe);
+        document.body.append(secondaryProbe);
         const result = {
           gapAbove: body.getBoundingClientRect().top - heading.getBoundingClientRect().bottom,
           usesSecondaryColor:
             getComputedStyle(body).color === getComputedStyle(secondaryProbe).color,
           fullPath: path.textContent,
-          pathPrefix: pathPrefix.textContent,
-          prefixUsesTertiaryColor:
-            getComputedStyle(pathPrefix).color === getComputedStyle(tertiaryProbe).color,
+          hasPathPrefix: Boolean(path.querySelector('.file-path-prefix')),
         };
         secondaryProbe.remove();
-        tertiaryProbe.remove();
         return result;
       }),
     ).toEqual({
       gapAbove: 8,
       usesSecondaryColor: true,
       fullPath: 'src/commit-body.md',
-      pathPrefix: 'src/',
-      prefixUsesTertiaryColor: true,
+      hasPathPrefix: false,
     });
 
     if (visualQaDirectory) {
@@ -1096,7 +1150,7 @@ describe('History', () => {
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe('main\n');
 
-    await $('button=変更').click();
-    await expect($('.changes-view')).toBeDisplayed();
+    await $('button=差分').click();
+    await expect($('.diff-view')).toBeDisplayed();
   });
 });

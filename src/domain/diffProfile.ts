@@ -33,6 +33,12 @@ export interface DiffPatchProfile {
   maxLineBytes: number;
 }
 
+export interface DiffFileSection {
+  patch: string;
+  path: string;
+  imageCandidate?: ImageDiffCandidate;
+}
+
 function bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
@@ -63,7 +69,7 @@ export function patchContainsMultipleFiles(patch: string): boolean {
   return patch.split(/^diff --git /gmu).length > 2;
 }
 
-export function imageDiffCandidates(patch: string, cacheKey: string): ImageDiffCandidate[] {
+export function diffFileSections(patch: string, cacheKey: string): DiffFileSection[] {
   return patch
     .split(/(?=^diff --git )/gmu)
     .filter((filePatch) => filePatch.startsWith('diff --git '))
@@ -74,19 +80,40 @@ export function imageDiffCandidates(patch: string, cacheKey: string): ImageDiffC
         const binary = BINARY_PATCH_PATTERN.test(filePatch);
         const svg = isSvgPath(file.name) || isSvgPath(file.prevName);
         const pureRename = file.type === 'rename-pure' && Boolean(file.prevName);
-        if (!binary && !svg && !pureRename) return [];
         return [
           {
+            patch: filePatch,
             path: file.name,
-            ...(file.prevName ? { previousPath: file.prevName } : {}),
-            changeKind: imageChangeKind(file.type),
-            format: binary ? ('binary' as const) : svg ? ('svg' as const) : ('probe' as const),
+            ...(binary || svg || pureRename
+              ? {
+                  imageCandidate: {
+                    path: file.name,
+                    ...(file.prevName ? { previousPath: file.prevName } : {}),
+                    changeKind: imageChangeKind(file.type),
+                    format: binary
+                      ? ('binary' as const)
+                      : svg
+                        ? ('svg' as const)
+                        : ('probe' as const),
+                  },
+                }
+              : {}),
           },
         ];
       } catch {
         return [];
       }
     });
+}
+
+export function imageDiffCandidates(patch: string, cacheKey: string): ImageDiffCandidate[] {
+  return diffFileSections(patch, cacheKey).flatMap((section) =>
+    section.imageCandidate ? [section.imageCandidate] : [],
+  );
+}
+
+export function imagePreviewToggleAvailable(path: string | undefined): boolean {
+  return isSvgPath(path);
 }
 
 export function editorLineForDiffSelection(

@@ -340,7 +340,7 @@ export function CommitForm({
           aria-describedby={disabled && disabledReason ? 'commit-disabled-reason' : undefined}
           disabled={disabled || busy}
         >
-          {busy ? t('committing') : t('commit')}
+          {t('commit')}
         </Button>
       </DialogFooter>
     </form>

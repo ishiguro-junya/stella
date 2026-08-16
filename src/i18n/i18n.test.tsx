@@ -116,7 +116,7 @@ describe('Stella i18n', () => {
     expect(translate('en', 'actionCloneRepository')).toBe('Clone Repository');
     expect(translate('ja', 'appActivity')).toBe('活動');
     expect(translate('ja', 'appNavigation')).toBe('アプリのナビゲーション');
-    expect(translate('ja', 'changes')).toBe('変更');
+    expect(translate('ja', 'diff')).toBe('差分');
     expect(translate('ja', 'history')).toBe('履歴');
     expect(translate('ja', 'staged')).toBe('ステージ済み');
     expect(translate('ja', 'unstaged')).toBe('未ステージ');
@@ -135,8 +135,8 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'commitDescriptionRequired')).toBe('メッセージを入力してください。');
     expect(translate('ja', 'commitMessageSingleLine')).toBe('メッセージは1行で入力してください。');
     expect(translate('ja', 'conventionalCommitsTitle')).toBe('コミットメッセージの形式');
-    expect(translate('ja', 'changeListDisplayTitle')).toBe('ファイルの表示形式');
-    expect(translate('ja', 'changeListDisplayDescription')).toBe(
+    expect(translate('ja', 'diffFileListDisplayTitle')).toBe('ファイルの表示形式');
+    expect(translate('ja', 'diffFileListDisplayDescription')).toBe(
       '変更されたファイルの表示形式を選択します。',
     );
     expect(translate('ja', 'conventionalCommitsEnabled')).toBe('Conventional Commits形式');

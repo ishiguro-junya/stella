@@ -50,6 +50,9 @@ describe('RemoteManagerDialog', () => {
     expect(dialog.querySelector('.dialog-body')).toHaveAttribute('aria-busy', 'true');
     expect(within(dialog).getByRole('textbox')).toHaveValue('https://example.test/repo.git');
     expect(within(dialog).queryByText('Loading…')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('status', { name: 'Loading…' })).toHaveClass(
+      'remote-manager-loading',
+    );
   });
 
   it('shows every URL as an input and saves all changed URLs together', async () => {

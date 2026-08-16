@@ -71,19 +71,18 @@ describe('FileEditorSurface', () => {
     );
   });
 
-  it('shows icon-only mode tabs and saves through Command-S with the original hash', async () => {
+  it('shows one icon-only mode toggle and saves through Command-S with the original hash', async () => {
     const user = userEvent.setup();
     const { props, onSave } = renderEditor();
     const editor = screen.getByRole('textbox', { name: 'Edit src/app.ts' });
-    const displayTab = screen.getByRole('tab', { name: 'Display' });
-    const editTab = screen.getByRole('tab', { name: 'Edit' });
+    const displayToggle = screen.getByRole('button', { name: 'Toggle file editing' });
 
-    expect(displayTab).toHaveAttribute('aria-selected', 'false');
-    fireEvent.focus(displayTab);
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Display');
-    expect(displayTab).not.toHaveAttribute('title');
-    expect(editTab).toHaveAttribute('aria-selected', 'true');
-    expect(editTab).not.toHaveAttribute('title');
+    expect(displayToggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.focus(displayToggle);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Toggle file editing');
+    expect(displayToggle).not.toHaveAttribute('title');
+    expect(displayToggle.querySelectorAll('.toggle-button-option')).toHaveLength(2);
+    expect(displayToggle.querySelectorAll('.toggle-button-option')[1]).toHaveClass('is-selected');
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
     await user.clear(editor);
@@ -107,7 +106,7 @@ describe('FileEditorSurface', () => {
     const user = userEvent.setup();
     const { props, onSave } = renderEditor();
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
 
     expect(props.onDisplay).toHaveBeenCalledOnce();
     expect(onSave).not.toHaveBeenCalled();
@@ -120,13 +119,13 @@ describe('FileEditorSurface', () => {
     await user.clear(editor);
     await user.type(editor, 'draft');
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
     let dialog = screen.getByRole('alertdialog', { name: 'Unsaved changes' });
     expect(dialog).toHaveTextContent('Save or discard the edits before returning to the Diff.');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(props.onDisplay).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
     dialog = screen.getByRole('alertdialog', { name: 'Unsaved changes' });
     await user.click(within(dialog).getByRole('button', { name: 'Display Without Saving' }));
 
@@ -140,7 +139,7 @@ describe('FileEditorSurface', () => {
     const editor = screen.getByRole('textbox', { name: 'Edit src/app.ts' });
     fireEvent.change(editor, { target: { value: 'changed\n' } });
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
     await user.click(screen.getByRole('button', { name: 'Save and Display' }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
@@ -157,7 +156,7 @@ describe('FileEditorSurface', () => {
     const editor = screen.getByRole('textbox', { name: 'Edit src/app.ts' });
     fireEvent.change(editor, { target: { value: 'draft\n' } });
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
     await user.click(screen.getByRole('button', { name: 'Save and Display' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The file could not be saved.');
@@ -214,7 +213,7 @@ describe('FileEditorSurface', () => {
     expect(screen.getByRole('button', { name: 'Copy Draft' })).toHaveTextContent('Copy');
     expect(screen.getByRole('button', { name: 'Reload' })).toBeVisible();
 
-    await user.click(screen.getByRole('tab', { name: 'Display' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
     expect(screen.getByRole('button', { name: 'Save and Display' })).toBeDisabled();
   });
 });

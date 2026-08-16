@@ -19,7 +19,7 @@ const OVERVIEW = {
 } as const;
 
 describe('GitFlowSheet', () => {
-  it('reserves the overview grid with pulse placeholders while loading', () => {
+  it('reserves the overview and uses the shared loading icon without loading copy', () => {
     render(
       <GitFlowSheet
         loading
@@ -32,8 +32,9 @@ describe('GitFlowSheet', () => {
     const overview = screen.getByRole('region', { name: 'Repository overview' });
     expect(overview).toHaveAttribute('aria-busy', 'true');
     expect(overview).not.toHaveTextContent('Loading…');
-    expect(overview.querySelectorAll('.git-flow-overview-loading > div')).toHaveLength(4);
-    expect(overview.querySelectorAll('.loading-pulse')).toHaveLength(8);
+    expect(within(overview).getByRole('status', { name: 'Loading…' })).toHaveClass(
+      'git-flow-overview-loading',
+    );
   });
 
   it('shows overview fields and exposes every typed command family', () => {
@@ -65,10 +66,10 @@ describe('GitFlowSheet', () => {
       />,
     );
 
-    const run = screen.getByRole('button', { name: 'Running…' });
+    const run = screen.getByRole('button', { name: 'Run' });
     expect(run).toBeDisabled();
     expect(run).toHaveAttribute('aria-busy', 'true');
-    expect(run.firstElementChild).toHaveClass('button-loading-icon');
+    expect(run.firstElementChild).toHaveClass('button-loading-icon', 'delayed-loading-icon');
   });
 
   it('builds a safe finish request and disables signing without GPG', async () => {

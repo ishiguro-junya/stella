@@ -58,14 +58,62 @@ const STELLA_DIFF_THEMES = {
 } as const;
 
 function FilePathLabel({ path }: { path: string }) {
-  const fileNameStart = path.lastIndexOf('/') + 1;
+  return <span>{path}</span>;
+}
+
+export function DiffFileHeader({
+  path,
+  status,
+  collapsed,
+  onToggle,
+  toggleDisabled = false,
+  additions,
+  deletions,
+  trailing,
+}: {
+  path: string;
+  status: FileStatus;
+  collapsed: boolean;
+  onToggle: () => void;
+  toggleDisabled?: boolean;
+  additions?: number;
+  deletions?: number;
+  trailing?: ReactNode;
+}) {
+  const { t } = useI18n();
   return (
-    <span>
-      {fileNameStart > 0 ? (
-        <span className="file-path-prefix">{path.slice(0, fileNameStart)}</span>
-      ) : null}
-      {path.slice(fileNameStart)}
-    </span>
+    <div className="diff-file-custom-header">
+      <div className="diff-file-custom-header-title">
+        <Button
+          type="button"
+          className="diff-file-collapse-toggle"
+          style={DIFF_FILE_COLLAPSE_TOGGLE_STYLE}
+          aria-expanded={!collapsed}
+          disabled={toggleDisabled}
+          aria-label={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+          tooltip={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+        >
+          {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+        </Button>
+        <FileStatusIcon status={status} />
+        <FilePathLabel path={path} />
+      </div>
+      {trailing ??
+        (additions !== undefined && deletions !== undefined ? (
+          <div className="diff-file-custom-header-counts" aria-hidden="true">
+            {deletions > 0 || additions === 0 ? (
+              <span className="deletions">-{deletions}</span>
+            ) : null}
+            {additions > 0 || deletions === 0 ? (
+              <span className="additions">+{additions}</span>
+            ) : null}
+          </div>
+        ) : null)}
+    </div>
   );
 }
 
@@ -76,6 +124,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   --diffs-font-size: var(--code-font-size);
   --diffs-line-height: var(--code-line-height);
   --diffs-min-number-column-width: 10px;
+  --diffs-bg-separator-override: var(--diff-file-header-surface);
   --diffs-fg-number-override: var(--text-tertiary);
   --diffs-bg-context-gutter-override: var(--surface-raised);
   --diffs-gap-style: 1px solid var(--border-subtle);
@@ -785,43 +834,18 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
   const disableWorkerPool = !canUseWorkers || hasHunkAction;
   const effectiveSingleFileCollapsed =
     collapsed ?? (previousSourceKeyRef.current === source.cacheKey ? singleFileCollapsed : false);
-  const renderCollapseToggle = (path: string, isCollapsed: boolean, onToggle: () => void) => (
-    <Button
-      type="button"
-      className="diff-file-collapse-toggle"
-      style={DIFF_FILE_COLLAPSE_TOGGLE_STYLE}
-      aria-expanded={!isCollapsed}
-      aria-label={t(isCollapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
-      tooltip={t(isCollapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-    >
-      {isCollapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-    </Button>
-  );
   const renderFileHeader = (fileDiff: FileDiffMetadata) => {
     const additions = fileDiff.hunks.reduce((total, hunk) => total + hunk.additionLines, 0);
     const deletions = fileDiff.hunks.reduce((total, hunk) => total + hunk.deletionLines, 0);
     return (
-      <div className="diff-file-custom-header">
-        <div className="diff-file-custom-header-title">
-          {renderCollapseToggle(fileDiff.name, effectiveSingleFileCollapsed, () => {
-            setSingleFileCollapsed((current) => !current);
-          })}
-          <FileStatusIcon status={fileStatusForDiffType(fileDiff.type)} />
-          <FilePathLabel path={fileDiff.name} />
-        </div>
-        <div className="diff-file-custom-header-counts" aria-hidden="true">
-          {deletions > 0 || additions === 0 ? (
-            <span className="deletions">-{deletions}</span>
-          ) : null}
-          {additions > 0 || deletions === 0 ? (
-            <span className="additions">+{additions}</span>
-          ) : null}
-        </div>
-      </div>
+      <DiffFileHeader
+        path={fileDiff.name}
+        status={fileStatusForDiffType(fileDiff.type)}
+        collapsed={effectiveSingleFileCollapsed}
+        onToggle={() => setSingleFileCollapsed((current) => !current)}
+        additions={additions}
+        deletions={deletions}
+      />
     );
   };
   const renderCodeViewHeader = (item: CodeViewItem) => {
@@ -836,32 +860,20 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
         ? item.fileDiff.hunks.reduce((total, hunk) => total + hunk.deletionLines, 0)
         : undefined;
     return (
-      <div className="diff-file-custom-header">
-        <div className="diff-file-custom-header-title">
-          {renderCollapseToggle(path, isCollapsed, () => {
-            setCollapsedCodeViewItems((current) => {
-              const next = new Set(current);
-              if (next.has(item.id)) next.delete(item.id);
-              else next.add(item.id);
-              return next;
-            });
-          })}
-          <FileStatusIcon
-            status={item.type === 'diff' ? fileStatusForDiffType(item.fileDiff.type) : 'modified'}
-          />
-          <FilePathLabel path={path} />
-        </div>
-        {additions !== undefined && deletions !== undefined ? (
-          <div className="diff-file-custom-header-counts" aria-hidden="true">
-            {deletions > 0 || additions === 0 ? (
-              <span className="deletions">-{deletions}</span>
-            ) : null}
-            {additions > 0 || deletions === 0 ? (
-              <span className="additions">+{additions}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      <DiffFileHeader
+        path={path}
+        status={item.type === 'diff' ? fileStatusForDiffType(item.fileDiff.type) : 'modified'}
+        collapsed={isCollapsed}
+        onToggle={() => {
+          setCollapsedCodeViewItems((current) => {
+            const next = new Set(current);
+            if (next.has(item.id)) next.delete(item.id);
+            else next.add(item.id);
+            return next;
+          });
+        }}
+        {...(additions !== undefined && deletions !== undefined ? { additions, deletions } : {})}
+      />
     );
   };
   const enhanceHunkSeparators = useCallback(

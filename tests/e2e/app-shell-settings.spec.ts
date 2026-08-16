@@ -8,7 +8,7 @@ import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js'
 
 const execFileAsync = promisify(execFile);
 
-type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'changes' | 'editor' | 'git';
+type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'diff' | 'editor' | 'git';
 
 async function openSettingsCategory(category: SettingsCategory): Promise<void> {
   const button = $(`button[data-settings-category="${category}"]`);
@@ -196,13 +196,13 @@ describe('App shell and Settings', () => {
     ).toBe(2);
     await expect($('button[aria-label="Repositories"]')).toHaveText('Repositories');
 
-    await openSettingsCategory('changes');
-    const changeListDisplay = $('select[name="change-list-display"]');
-    await expect(changeListDisplay).toHaveValue('fullPath');
-    expect(await changeListDisplay.$$('option').map((option) => option.getText())).toEqual([
+    await openSettingsCategory('diff');
+    const diffFileListDisplay = $('select[name="diff-file-list-display"]');
+    await expect(diffFileListDisplay).toHaveValue('nameAndPath');
+    expect(await diffFileListDisplay.$$('option').map((option) => option.getText())).toEqual([
+      'File Name and Path',
       'Full Path',
       'Tree',
-      'File Name and Path',
     ]);
 
     await openSettingsCategory('appearance');
@@ -286,7 +286,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The editor line wrapping settings were not saved.' },
     );
 
-    await openSettingsCategory('changes');
+    await openSettingsCategory('diff');
     const conventionalCommits = $('select[name="conventional-commits"]');
     await expect(conventionalCommits).toHaveValue('disabled');
     const conventionalCommitOptions = conventionalCommits.$$('option');
@@ -441,7 +441,7 @@ describe('App shell and Settings', () => {
       { timeoutMsg: 'The document language did not return to Japanese.' },
     );
 
-    await openSettingsCategory('changes');
+    await openSettingsCategory('diff');
     const stageDisplay = $('select[name="stage-display"]');
     await expect(stageDisplay).toHaveValue('hide');
     expect(

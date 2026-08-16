@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Input';
+import { LoadingIndicator } from '../../ui/LoadingIndicator';
 import type {
   GitFlowCommand,
   GitFlowOverview,
@@ -286,18 +287,7 @@ export function GitFlowSheet({
             </Button>
           </div>
           {loading ? (
-            <dl className="git-flow-overview-loading" aria-hidden="true">
-              {[0, 1, 2, 3].map((index) => (
-                <div key={index}>
-                  <dt>
-                    <span className="loading-pulse" />
-                  </dt>
-                  <dd>
-                    <span className="loading-pulse" />
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <LoadingIndicator className="git-flow-overview-loading" />
           ) : overview?.available ? (
             <dl>
               <div>
@@ -600,7 +590,7 @@ export function GitFlowSheet({
           loading={busy}
           disabled={busy || !overview?.available}
         >
-          {busy ? t('running') : t('run')}
+          {t('run')}
         </Button>
       </DialogFooter>
     </Dialog>

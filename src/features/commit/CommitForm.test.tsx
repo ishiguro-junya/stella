@@ -244,10 +244,10 @@ describe('CommitForm validation', () => {
   it('shows a loading icon while committing', () => {
     render(<CommitForm busy onCommit={vi.fn<() => Promise<void>>(async () => undefined)} />);
 
-    const commit = screen.getByRole('button', { name: 'Committing…' });
+    const commit = screen.getByRole('button', { name: 'Commit' });
     expect(commit).toBeDisabled();
     expect(commit).toHaveAttribute('aria-busy', 'true');
-    expect(commit.firstElementChild).toHaveClass('button-loading-icon');
+    expect(commit.firstElementChild).toHaveClass('button-loading-icon', 'delayed-loading-icon');
   });
 
   it('renders Cancel without submitting and reports successful completion', async () => {

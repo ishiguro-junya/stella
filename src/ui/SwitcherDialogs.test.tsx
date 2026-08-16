@@ -444,8 +444,8 @@ describe('BranchSwitcherDialog', () => {
       'aria-busy',
       'true',
     );
-    expect(screen.getByText('Loading…')).toHaveClass('sr-only');
-    expect(document.querySelector('.switcher-loading .loading-pulse')).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Loading…' })).toHaveClass('switcher-loading');
+    expect(document.querySelector('.switcher-loading > svg')).toBeInTheDocument();
   });
 
   it('focuses search when detached HEAD has no current branch item', () => {

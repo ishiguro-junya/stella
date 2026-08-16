@@ -25,6 +25,7 @@ import { isPullDivergenceError, type WorkspaceAdapter } from '../../adapters/wor
 import {
   editorLineForDiffSelection,
   imageDiffCandidates,
+  imagePreviewToggleAvailable,
   patchContainsMultipleFiles,
 } from '../../domain/diffProfile';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
@@ -50,13 +51,13 @@ import {
   type SurfaceHunkEditSelection,
   type SurfaceHunkSelection,
   type SurfaceSelection,
-} from '../diff/DiffSurface';
-import { ImageDiffPreview, ImagePreviewToggle } from '../diff/ImageDiffPreview';
+} from './DiffSurface';
+import { ImageDiffPreview, ImagePreviewToggle } from './ImageDiffPreview';
 import {
   DEFAULT_EDITOR_WRAP_COLUMN,
   LEFT_PANE_MAX_WIDTH,
   LEFT_PANE_MIN_WIDTH,
-  type ChangeListDisplay,
+  type DiffFileListDisplay,
   type PaneWidths,
 } from '../../persistence/preferences';
 import { PaneResizer } from '../../ui/PaneResizer';
@@ -73,13 +74,13 @@ import {
   WorkspaceErrorDetails,
   type WorkspaceErrorContent,
 } from '../../ui/WorkspaceErrorDetails';
-import { ChangeList, type StageTransitionRequest } from './ChangeList';
+import { DiffFileList, type StageTransitionRequest } from './DiffFileList';
 import { FileActionMenu, type FileActionKind, type FileActionMenuPoint } from './FileActionMenu';
 import { FileEditorSurface, type FileEditorSaveInput } from './FileEditorSurface';
-import { FileViewModeTabs } from './FileViewModeTabs';
+import { FileViewModeToggle } from './FileViewModeToggle';
 import { RemoteOperationDialog } from './RemoteOperationDialog';
 
-export interface ChangesViewProps {
+export interface DiffViewProps {
   repo: RepoSnapshot;
   adapter: WorkspaceAdapter;
   externalConflict?: ConflictDocument | undefined;
@@ -90,8 +91,9 @@ export interface ChangesViewProps {
   onUnsavedLeaveHandleChange?: ((handle: UnsavedChangesHandle | null) => void) | undefined;
   paneWidths: PaneWidths;
   diffStyle?: DiffStyle | undefined;
+  imagePreviewLayout?: DiffStyle | undefined;
   splitStageView?: boolean | undefined;
-  changeListDisplay?: ChangeListDisplay | undefined;
+  diffFileListDisplay?: DiffFileListDisplay | undefined;
   useConventionalCommits?: boolean | undefined;
   stickyFileHeaders?: boolean | undefined;
   editorLineWrapping?: boolean | undefined;
@@ -158,7 +160,7 @@ function imageTarget(
   };
 }
 
-export function ChangesView({
+export function DiffView({
   repo,
   adapter,
   externalConflict,
@@ -169,14 +171,15 @@ export function ChangesView({
   onUnsavedLeaveHandleChange,
   paneWidths,
   diffStyle = 'unified',
+  imagePreviewLayout = 'split',
   splitStageView = true,
-  changeListDisplay = 'fullPath',
+  diffFileListDisplay = 'nameAndPath',
   useConventionalCommits = false,
   stickyFileHeaders = false,
   editorLineWrapping = false,
   editorWrapColumn = DEFAULT_EDITOR_WRAP_COLUMN,
   onPaneWidthsChange,
-}: ChangesViewProps) {
+}: DiffViewProps) {
   const { t, message, formatNumber } = useI18n();
   const initialSelectedEntry =
     repo.changes.find((entry) => entry.path === repo.selectedPath) ?? repo.changes[0];
@@ -337,9 +340,9 @@ export function ChangesView({
     (unsavedDirty ? t('stageUnavailableUnsavedChanges') : undefined);
   const stageActionsDisabled = busy || Boolean(stageActionDisabledReason);
   const stageActionDisabledReasonId = operationActionDisabledReason
-    ? 'changes-operation-action-reason'
+    ? 'diff-operation-action-reason'
     : unsavedDirty
-      ? 'changes-unsaved-stage-action-reason'
+      ? 'diff-unsaved-stage-action-reason'
       : undefined;
   const diffContainsMultipleFiles = visibleDiff
     ? patchContainsMultipleFiles(visibleDiff.patch)
@@ -404,17 +407,16 @@ export function ChangesView({
       : undefined;
   const visibleImageProbeResult = imageProbeResults.get(visibleImageProbeKey);
   const visibleImageProbePending = Boolean(
-    visibleImageTarget &&
-    visibleImageCandidate?.format === 'probe' &&
-    visibleImageProbeResult === undefined,
+    visibleImageTarget && visibleImageCandidate && visibleImageProbeResult === undefined,
   );
-  const visibleImageAvailable = Boolean(
+  const visibleImageUnavailable = visibleImageProbeResult === false;
+  const visibleImagePreviewShown = imagePreviewToggleAvailable(visibleDiff?.path);
+  const visibleImagePreviewEnabled = Boolean(
     visibleImageTarget &&
     visibleImageCandidate &&
-    (visibleImageCandidate.format !== 'probe' || visibleImageProbeResult === true),
+    visibleImageProbeResult !== false &&
+    (!visibleImagePreviewShown || !disabledImagePreviewKeys.has(visibleImageKey)),
   );
-  const visibleImagePreviewEnabled =
-    visibleImageAvailable && !disabledImagePreviewKeys.has(visibleImageKey);
 
   useEffect(() => {
     if (busy) {
@@ -1237,11 +1239,11 @@ export function ChangesView({
   };
 
   const repositoryActions = (
-    <fieldset className="changes-action-bar" aria-label={t('actions')}>
+    <fieldset className="diff-action-bar" aria-label={t('actions')}>
       <Button
         type="button"
         variant="quiet"
-        className="changes-action-button"
+        className="diff-action-button"
         aria-label={t('commit')}
         aria-haspopup="dialog"
         aria-expanded={commitDialogOpen}
@@ -1254,14 +1256,14 @@ export function ChangesView({
       <Button
         type="button"
         variant="quiet"
-        className="changes-action-button"
+        className="diff-action-button"
         aria-label={t('pull')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'pull'}
         tooltip={t('pull')}
         disabled={repositoryActionsDisabled || repo.branch.detached}
         aria-describedby={
-          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          operationActionDisabledReason ? 'diff-operation-action-reason' : undefined
         }
         onClick={() => setRemoteDialog('pull')}
       >
@@ -1270,14 +1272,14 @@ export function ChangesView({
       <Button
         type="button"
         variant="quiet"
-        className="changes-action-button"
+        className="diff-action-button"
         aria-label={t('push')}
         aria-haspopup="dialog"
         aria-expanded={remoteDialog === 'push'}
         tooltip={t('push')}
         disabled={repositoryActionsDisabled || repo.branch.detached}
         aria-describedby={
-          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          operationActionDisabledReason ? 'diff-operation-action-reason' : undefined
         }
         onClick={() => setRemoteDialog('push')}
       >
@@ -1286,12 +1288,12 @@ export function ChangesView({
       <Button
         type="button"
         variant="quiet"
-        className="changes-action-button"
+        className="diff-action-button"
         aria-label={t('fetch')}
         tooltip={t('fetch')}
         disabled={repositoryActionsDisabled}
         aria-describedby={
-          operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+          operationActionDisabledReason ? 'diff-operation-action-reason' : undefined
         }
         onClick={() => settleAction(onAction({ kind: 'fetch' }))}
       >
@@ -1313,7 +1315,7 @@ export function ChangesView({
           type="button"
           disabled={repositoryActionsDisabled}
           aria-describedby={
-            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+            operationActionDisabledReason ? 'diff-operation-action-reason' : undefined
           }
           onClick={() => settleAction(resolveDivergedPull('merge'))}
         >
@@ -1323,7 +1325,7 @@ export function ChangesView({
           type="button"
           disabled={repositoryActionsDisabled}
           aria-describedby={
-            operationActionDisabledReason ? 'changes-operation-action-reason' : undefined
+            operationActionDisabledReason ? 'diff-operation-action-reason' : undefined
           }
           onClick={() => settleAction(resolveDivergedPull('rebase'))}
         >
@@ -1351,7 +1353,9 @@ export function ChangesView({
     menuContextPoint: FileActionMenuPoint | undefined;
     titleId?: string;
     binary?: boolean;
-    imagePreview?: { pressed: boolean; onPressedChange: (pressed: boolean) => void } | undefined;
+    imagePreview?:
+      | { pressed: boolean; disabled?: boolean; onPressedChange: (pressed: boolean) => void }
+      | undefined;
     onToggle?: () => void;
     onMenuOpenChange: (open: boolean) => void;
     onMenuContextPointChange: (point: FileActionMenuPoint | undefined) => void;
@@ -1404,10 +1408,11 @@ export function ChangesView({
           {imagePreview ? (
             <ImagePreviewToggle
               pressed={imagePreview.pressed}
+              disabled={imagePreview.disabled}
               onPressedChange={imagePreview.onPressedChange}
             />
           ) : null}
-          <FileViewModeTabs
+          <FileViewModeToggle
             mode="display"
             editDisabled={busy || unsavedDirty || fileActionInvalid}
             onDisplay={() => undefined}
@@ -1446,10 +1451,10 @@ export function ChangesView({
 
   return (
     <>
-      <div className="three-pane changes-view changes-two-pane" style={paneStyle}>
-        <aside className="pane changes-list-pane changes-sidebar-pane" aria-label={t('changes')}>
+      <div className="three-pane diff-view diff-two-pane" style={paneStyle}>
+        <aside className="pane diff-list-pane diff-sidebar-pane" aria-label={t('diff')}>
           {pullResolution}
-          <section className="changes-files-scroll-region" aria-label={t('changedFiles')}>
+          <section className="diff-files-scroll-region" aria-label={t('changedFiles')}>
             {fileActionNotice ? (
               <p
                 className={`file-action-notice ${fileActionNotice.level}`}
@@ -1460,16 +1465,16 @@ export function ChangesView({
               </p>
             ) : null}
             {unsavedDirty && !operationActionDisabledReason ? (
-              <p id="changes-unsaved-stage-action-reason" className="sr-only">
+              <p id="diff-unsaved-stage-action-reason" className="sr-only">
                 {stageActionDisabledReason}
               </p>
             ) : null}
-            <ChangeList
+            <DiffFileList
               repoId={repo.repoId}
               generation={repo.generation}
               entries={repo.changes}
               splitStageView={splitStageView}
-              display={changeListDisplay}
+              display={diffFileListDisplay}
               selectedKey={selected ? `${selected.area}:${selected.path}` : ''}
               selectionKeys={selectedFileKeys}
               unsavedFileKey={
@@ -1483,24 +1488,33 @@ export function ChangesView({
               fileEditDisabled={unsavedDirty}
               fileOpenDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
               fileTrashDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
-              imagePreview={
-                !multipleFilesSelected && visibleImageAvailable
-                  ? {
-                      key: visibleImageKey,
-                      pressed: visibleImagePreviewEnabled,
-                      onPressedChange: (pressed) =>
-                        setImagePreviewEnabled(visibleImageKey, pressed),
-                    }
-                  : undefined
-              }
+              imagePreview={(entry) => {
+                if (!imagePreviewToggleAvailable(entry.path)) return undefined;
+                const key = `${entry.area}:${entry.path}`;
+                const document =
+                  multiDiffs.find(
+                    (candidate) => candidate.area === entry.area && candidate.path === entry.path,
+                  ) ??
+                  (visibleDiff?.area === entry.area && visibleDiff.path === entry.path
+                    ? visibleDiff
+                    : undefined);
+                const probeResult = document
+                  ? imageProbeResults.get(`${key}:${document.diffId}`)
+                  : undefined;
+                return {
+                  pressed: probeResult !== false && !disabledImagePreviewKeys.has(key),
+                  disabled: Boolean(editingTarget) || probeResult === false,
+                  onPressedChange: (pressed) => setImagePreviewEnabled(key, pressed),
+                };
+              }}
               onSelect={requestFileSelection}
               onSelectedKeysChange={requestSelectedFiles}
               onStageTransition={runStageTransition}
               onFileAction={runFileAction}
             />
           </section>
-          <footer className="changes-list-footer">
-            <div className="changes-list-summary" aria-live="polite">
+          <footer className="diff-list-footer">
+            <div className="diff-list-summary" aria-live="polite">
               {multipleFilesSelected ? (
                 t('selectedFilesSummary', { count: selectedFileCount })
               ) : (
@@ -1515,7 +1529,7 @@ export function ChangesView({
           </footer>
         </aside>
         <PaneResizer
-          label={t('changesListWidth')}
+          label={t('diffListWidth')}
           value={Math.max(LEFT_PANE_MIN_WIDTH, paneWidths.left)}
           direction="growRight"
           min={LEFT_PANE_MIN_WIDTH}
@@ -1533,6 +1547,15 @@ export function ChangesView({
             lineWrapping={editorLineWrapping}
             wrapColumn={editorWrapColumn}
             initialScrollLine={editingTarget.initialScrollLine}
+            leadingHeaderActions={
+              visibleImagePreviewShown ? (
+                <ImagePreviewToggle
+                  pressed={visibleImagePreviewEnabled}
+                  disabled
+                  onPressedChange={(pressed) => setImagePreviewEnabled(visibleImageKey, pressed)}
+                />
+              ) : null
+            }
             headerActions={
               <FileActionMenu
                 path={editingEntry.path}
@@ -1548,6 +1571,16 @@ export function ChangesView({
                   editingEntry.status === 'deleted'
                 }
                 deleteDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+                imagePreview={
+                  visibleImagePreviewShown
+                    ? {
+                        pressed: visibleImagePreviewEnabled,
+                        disabled: true,
+                        onPressedChange: (pressed) =>
+                          setImagePreviewEnabled(visibleImageKey, pressed),
+                      }
+                    : undefined
+                }
                 persistentTrigger
                 onOpenChange={(open) => {
                   setDetailFileMenuOpen(open);
@@ -1565,7 +1598,7 @@ export function ChangesView({
             onLeaveHandleChange={handleUnsavedLeaveHandleChange}
           />
         ) : effectiveConflict && !multipleFilesSelected ? (
-          <main className="pane conflict-pane-span changes-content-pane">
+          <main className="pane conflict-pane-span diff-content-pane">
             <ConflictSurface
               key={`${effectiveConflict.repoId}:${effectiveConflict.path}`}
               document={effectiveConflict}
@@ -1585,7 +1618,7 @@ export function ChangesView({
           </main>
         ) : (
           <main
-            className={`pane diff-pane changes-content-pane${stickyFileHeaders ? '' : ' has-static-file-headers'}`}
+            className={`pane diff-pane diff-content-pane${stickyFileHeaders ? '' : ' has-static-file-headers'}`}
             aria-label={multipleFilesSelected || !displayedSelected ? t('diff') : undefined}
             aria-labelledby={
               !multipleFilesSelected && displayedSelected ? 'selected-file-title' : undefined
@@ -1595,10 +1628,11 @@ export function ChangesView({
               ? renderDiffFileHeader({
                   entry: displayedSelected,
                   binary: Boolean(visibleDiff?.binary),
-                  ...(visibleImageAvailable
+                  ...(visibleImagePreviewShown
                     ? {
                         imagePreview: {
                           pressed: visibleImagePreviewEnabled,
+                          disabled: visibleImageUnavailable,
                           onPressedChange: (pressed: boolean) =>
                             setImagePreviewEnabled(visibleImageKey, pressed),
                         },
@@ -1612,7 +1646,7 @@ export function ChangesView({
                 })
               : null}
             {operationActionDisabledReason ? (
-              <p id="changes-operation-action-reason" className="sr-only">
+              <p id="diff-operation-action-reason" className="sr-only">
                 {operationActionDisabledReason}
               </p>
             ) : null}
@@ -1641,15 +1675,16 @@ export function ChangesView({
                   const target = imageCandidate ? imageTarget(document, imageCandidate) : undefined;
                   const imageProbeResult = imageProbeResults.get(imageProbeKey);
                   const imageProbePending = Boolean(
-                    target && imageCandidate?.format === 'probe' && imageProbeResult === undefined,
+                    target && imageCandidate && imageProbeResult === undefined,
                   );
-                  const imageAvailable = Boolean(
+                  const imageUnavailable = imageProbeResult === false;
+                  const imagePreviewShown = imagePreviewToggleAvailable(document.path);
+                  const imagePreviewEnabled = Boolean(
                     target &&
                     imageCandidate &&
-                    (imageCandidate.format !== 'probe' || imageProbeResult === true),
+                    imageProbeResult !== false &&
+                    (!imagePreviewShown || !disabledImagePreviewKeys.has(imageKey)),
                   );
-                  const imagePreviewEnabled =
-                    imageAvailable && !disabledImagePreviewKeys.has(imageKey);
                   const collapsed = collapsedMultiDiffKeys.has(itemKey);
                   const toggle = () => {
                     setCollapsedMultiDiffKeys((current) => {
@@ -1662,10 +1697,11 @@ export function ChangesView({
                   const header = renderDiffFileHeader({
                     entry,
                     binary: Boolean(document.binary),
-                    ...(imageAvailable
+                    ...(imagePreviewShown
                       ? {
                           imagePreview: {
                             pressed: imagePreviewEnabled,
+                            disabled: imageUnavailable,
                             onPressedChange: (pressed: boolean) =>
                               setImagePreviewEnabled(imageKey, pressed),
                           },
@@ -1702,17 +1738,15 @@ export function ChangesView({
                           repoId={repo.repoId}
                           target={target}
                           candidate={imageCandidate}
+                          layout={imagePreviewLayout}
                           hidden={imageProbePending}
-                          {...(imageCandidate.format === 'probe'
-                            ? {
-                                onProbeResult: (previewable: boolean) =>
-                                  setImageProbeResult(imageProbeKey, previewable),
-                              }
-                            : {})}
+                          onProbeResult={(previewable) =>
+                            setImageProbeResult(imageProbeKey, previewable)
+                          }
                         />
                       ) : null}
                       {document.binary ? (
-                        !imagePreviewEnabled && !collapsed ? (
+                        !imagePreviewEnabled && !imageProbePending && !collapsed ? (
                           <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
                         ) : null
                       ) : !imagePreviewEnabled ? (
@@ -1754,16 +1788,17 @@ export function ChangesView({
                 repoId={repo.repoId}
                 target={visibleImageTarget}
                 candidate={visibleImageCandidate}
+                layout={imagePreviewLayout}
                 hidden={visibleImageProbePending}
-                {...(visibleImageCandidate.format === 'probe'
-                  ? {
-                      onProbeResult: (previewable: boolean) =>
-                        setImageProbeResult(visibleImageProbeKey, previewable),
-                    }
-                  : {})}
+                onProbeResult={(previewable) =>
+                  setImageProbeResult(visibleImageProbeKey, previewable)
+                }
               />
             ) : null}
-            {!multipleFilesSelected && visibleDiff?.binary && !visibleImagePreviewEnabled ? (
+            {!multipleFilesSelected &&
+            visibleDiff?.binary &&
+            !visibleImagePreviewEnabled &&
+            !visibleImageProbePending ? (
               <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
             ) : null}
             {!multipleFilesSelected && visibleDiff?.truncated ? (

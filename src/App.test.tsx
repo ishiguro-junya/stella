@@ -31,7 +31,11 @@ const appUpdateMock = vi.hoisted(() => ({
   install: vi.fn<(onEvent: (event: AppUpdateInstallEvent) => void) => Promise<void>>(
     async () => undefined,
   ),
-  listen: vi.fn<(handler: () => void) => Promise<() => void>>(async () => () => undefined),
+  handler: undefined as (() => void) | undefined,
+  listen: vi.fn<(handler: () => void) => Promise<() => void>>(async (handler) => {
+    appUpdateMock.handler = handler;
+    return () => undefined;
+  }),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -183,6 +187,44 @@ describe('App repository attach', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Update to version 1.0.0-beta.1');
   });
 
+  it('shows the delayed loading indicator for a manual update check already in flight', async () => {
+    let resolveCheck!: (update: AppUpdateInfo | undefined) => void;
+    appUpdateMock.handler = undefined;
+    appUpdateMock.check.mockReturnValueOnce(
+      new Promise<AppUpdateInfo | undefined>((resolve) => {
+        resolveCheck = resolve;
+      }),
+    );
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({ kind: 'activity', entries: [] })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+
+    const { container } = render(<App adapter={adapter} />);
+    await waitFor(() => expect(appUpdateMock.check).toHaveBeenCalled());
+    await waitFor(() => expect(appUpdateMock.handler).toBeDefined());
+
+    act(() => appUpdateMock.handler?.());
+    expect(container.querySelector('.titlebar-update-loading')).toHaveAttribute(
+      'aria-label',
+      'Loading…',
+    );
+
+    await act(async () => resolveCheck(undefined));
+    await waitFor(() =>
+      expect(container.querySelector('.titlebar-update-loading')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText('The app is up to date.')).toBeVisible();
+  });
+
   it('keeps product branding out of the window content and names icon-only controls', () => {
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
@@ -227,7 +269,7 @@ describe('App repository attach', () => {
     expect(container).not.toHaveTextContent('Workspace Log');
   });
 
-  it('keeps Changes, History, Activity, and Settings as peer right-pane destinations', async () => {
+  it('keeps Diff, History, Activity, and Settings as peer right-pane destinations', async () => {
     const user = userEvent.setup();
     const repo = repoSnapshot();
     const adapter: WorkspaceAdapter = {
@@ -258,22 +300,23 @@ describe('App repository attach', () => {
     await enterRepositoryPath(user, repo.path);
     await user.click(addRepositorySubmitButton());
 
-    const changes = await screen.findByRole('button', { name: 'Changes' });
+    const diff = await screen.findByRole('button', { name: 'Diff' });
     const history = screen.getByRole('button', { name: 'History' });
     const activity = screen.getByRole('button', { name: 'Activity' });
     const settings = screen.getByRole('button', { name: 'Settings' });
-    expect(changes).toHaveAttribute('aria-current', 'page');
+    expect(diff).toHaveAttribute('aria-current', 'page');
+    expect(diff.querySelector('.lucide-file-diff')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close Sidebar' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Close Sidebar' }));
     expect(screen.getByTestId('app-shell')).toHaveClass('is-sidebar-closed');
     await user.click(screen.getByRole('button', { name: 'Open Sidebar' }));
     expect(screen.getByTestId('app-shell')).not.toHaveClass('is-sidebar-closed');
-    const changesResizer = screen.getByRole('separator', { name: 'Changes list width' });
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '360');
-    changesResizer.focus();
+    const diffResizer = screen.getByRole('separator', { name: 'Diff list width' });
+    expect(diffResizer).toHaveAttribute('aria-valuenow', '360');
+    diffResizer.focus();
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
-    expect(changesResizer).toHaveAttribute('aria-valuenow', '384');
+    expect(diffResizer).toHaveAttribute('aria-valuenow', '384');
 
     await user.click(activity);
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -299,11 +342,11 @@ describe('App repository attach', () => {
     expect(activity).toHaveAttribute('aria-current', 'page');
     expect(activity).toHaveFocus();
 
-    await user.click(changes);
-    expect(changes).toHaveAttribute('aria-current', 'page');
-    expect(changes).toHaveFocus();
+    await user.click(diff);
+    expect(diff).toHaveAttribute('aria-current', 'page');
+    expect(diff).toHaveFocus();
     expect(activity).not.toHaveAttribute('aria-current');
-    expect(screen.getByRole('separator', { name: 'Changes list width' })).toHaveAttribute(
+    expect(screen.getByRole('separator', { name: 'Diff list width' })).toHaveAttribute(
       'aria-valuenow',
       '360',
     );
@@ -344,7 +387,7 @@ describe('App repository attach', () => {
     expect(activity).toHaveFocus();
   });
 
-  it('clears the selected Changes detail before History rendering begins', async () => {
+  it('clears the selected Diff detail before History rendering begins', async () => {
     const user = userEvent.setup();
     const repo = repoSnapshot({
       changes: [{ path: 'src/app.ts', area: 'unstaged', status: 'modified' }],
@@ -566,9 +609,9 @@ describe('App repository attach', () => {
     );
     expect(screen.getByRole('button', { name: /Current repository stella/u })).toBeVisible();
     expect(screen.getByRole('button', { name: /Current branch main/u })).toBeVisible();
-    const changes = screen.getByRole('button', { name: 'Changes' });
+    const diff = screen.getByRole('button', { name: 'Diff' });
     const history = screen.getByRole('button', { name: 'History' });
-    expect(changes.closest('.window-header-content')).toBeInTheDocument();
+    expect(diff.closest('.window-header-content')).toBeInTheDocument();
     expect(history.closest('.window-header-content')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
 
@@ -577,9 +620,9 @@ describe('App repository attach', () => {
     expect(history).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('History')).toBeVisible();
 
-    await user.click(changes);
-    expect(changes).toHaveFocus();
-    expect(changes).toHaveAttribute('aria-current', 'page');
+    await user.click(diff);
+    expect(diff).toHaveFocus();
+    expect(diff).toHaveAttribute('aria-current', 'page');
   });
 
   it('opens a registered repository with OpenExisting instead of initializing it', async () => {
@@ -622,7 +665,7 @@ describe('App repository attach', () => {
     );
   });
 
-  it('restores the previously open repository on Changes despite a legacy History view', async () => {
+  it('restores the previously open repository on Diff despite a legacy History view', async () => {
     const repo = repoSnapshot({ path: '/tmp/restored-stella' });
     localStorage.setItem(
       'stella.preferences.v1',
@@ -664,7 +707,7 @@ describe('App repository attach', () => {
     expect(
       await screen.findByRole('button', { name: /Current repository restored-stella/u }),
     ).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Diff' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'History' })).not.toHaveAttribute('aria-current');
   });
 
@@ -1047,7 +1090,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect(await screen.findByText('1 commit')).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    await user.click(screen.getByRole('button', { name: 'Diff' }));
     await selectRepository(user, 'second');
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     expect(screen.getByRole('heading', { name: 'Activity' })).toBeVisible();
@@ -1640,7 +1683,7 @@ describe('App repository attach', () => {
     await enterRepositoryPath(user, repo.path);
     await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'More actions for src/app.ts' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete File' }));
 
     expect(preview).toHaveBeenCalledWith({
       repoId: repo.repoId,
@@ -1852,14 +1895,23 @@ describe('App repository attach', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Code Font' }), 'menlo');
     await user.click(screen.getByRole('button', { name: 'Editor' }));
     expect(screen.getByRole('combobox', { name: 'Diff layout' })).toHaveValue('unified');
+    expect(screen.getByRole('combobox', { name: 'Image Preview Layout' })).toHaveValue('split');
     expect(screen.getByRole('combobox', { name: 'Line Wrapping' })).toHaveValue('disabled');
     expect(screen.getByRole('spinbutton', { name: 'Wrap Length' })).toHaveValue(120);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Diff layout' }), 'split');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Image Preview Layout' }),
+      'unified',
+    );
     await user.selectOptions(screen.getByRole('combobox', { name: 'Line Wrapping' }), 'enabled');
     const wrapColumn = screen.getByRole('spinbutton', { name: 'Wrap Length' });
     await user.clear(wrapColumn);
     await user.type(wrapColumn, '100');
-    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Settings categories' })).getByRole('button', {
+        name: 'Diff',
+      }),
+    );
     expect(screen.getByRole('combobox', { name: 'Conventional Commits' })).toHaveValue('disabled');
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Conventional Commits' }),
@@ -1876,6 +1928,7 @@ describe('App repository attach', () => {
         uiFont: 'avenirNext',
         codeFont: 'menlo',
         diffStyle: 'split',
+        imagePreviewLayout: 'unified',
         useConventionalCommits: true,
         editorLineWrapping: true,
         editorWrapColumn: 100,
@@ -2140,7 +2193,7 @@ describe('App repository attach', () => {
 
     await user.click(screen.getByRole('button', { name: 'History' }));
     expect(await screen.findByRole('alertdialog', { name: 'Unsaved changes' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Diff' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await user.click(screen.getByRole('button', { name: 'Activity' }));
@@ -2151,7 +2204,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Activity' }));
     await user.click(screen.getByRole('button', { name: 'Leave Without Saving' }));
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Changes' }));
+    await user.click(screen.getByRole('button', { name: 'Diff' }));
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
@@ -2165,7 +2218,7 @@ describe('App repository attach', () => {
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await user.click(
       within(screen.getByRole('navigation', { name: 'App navigation' })).getByRole('button', {
-        name: 'Changes',
+        name: 'Diff',
       }),
     );
     await user.click(await screen.findByRole('button', { name: 'Edit Result' }));
@@ -2250,7 +2303,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
     await user.click(addRepositorySubmitButton());
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    await user.click(await screen.findByRole('button', { name: 'Toggle file editing' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
       target: { value: 'const value = 2;\n' },
     });
@@ -2341,7 +2394,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await enterRepositoryPath(user, repo.path);
     await user.click(addRepositorySubmitButton());
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    await user.click(await screen.findByRole('button', { name: 'Toggle file editing' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
       target: { value: 'draft\n' },
     });
@@ -2456,8 +2509,7 @@ describe('App repository attach', () => {
       await waitFor(() => {
         const expectedStateReached =
           invocation === 'execute'
-            ? screen.getByRole('button', { name: 'Changes' }).getAttribute('aria-current') ===
-              'page'
+            ? screen.getByRole('button', { name: 'Diff' }).getAttribute('aria-current') === 'page'
             : within(screen.getByRole('alertdialog', { name: 'Abort Operation' })).getByRole(
                 'button',
                 { name: 'Cancel' },
@@ -2734,7 +2786,7 @@ describe('App repository recovery', () => {
     };
     render(<App adapter={adapter} directoryPicker={async () => newPath} />);
 
-    await user.click(await screen.findByRole('tab', { name: 'Edit' }));
+    await user.click(await screen.findByRole('button', { name: 'Toggle file editing' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Edit src/app.ts' }), {
       target: { value: 'local draft\n' },
     });

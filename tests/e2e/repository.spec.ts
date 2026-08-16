@@ -154,10 +154,10 @@ describe('Repository and Branch navigation', () => {
 
   it('adds and initializes a repository and exposes the current Branch actions', async () => {
     await openRepository(repositoryPath, { language: 'ja', inspectDialog: true });
-    await expect($('.changes-view')).toBeDisplayed();
-    await expect($('.changes-list-footer .changes-action-bar')).toBeDisplayed();
+    await expect($('.diff-view')).toBeDisplayed();
+    await expect($('.diff-list-footer .diff-action-bar')).toBeDisplayed();
     await expect($('.repository-view-tabs')).not.toExist();
-    const footerActions = $$('.changes-list-footer .changes-action-button');
+    const footerActions = $$('.diff-list-footer .diff-action-button');
     const actionLabels = ['コミット', 'プル', 'プッシュ', 'フェッチ'];
     expect(await footerActions.map((button) => button.getAttribute('aria-label'))).toEqual(
       actionLabels,
@@ -181,18 +181,16 @@ describe('Repository and Branch navigation', () => {
       await browser.execute(() => {
         const header = document.querySelector<HTMLElement>('.app-header')!;
         const headerContent = header.querySelector<HTMLElement>('.window-header-content')!;
-        const sidebar = document.querySelector<HTMLElement>('.changes-sidebar-pane')!;
-        const footer = sidebar.querySelector<HTMLElement>('.changes-list-footer')!;
+        const sidebar = document.querySelector<HTMLElement>('.diff-sidebar-pane')!;
+        const footer = sidebar.querySelector<HTMLElement>('.diff-list-footer')!;
         const sidebarToggle = header.querySelector<HTMLElement>('.sidebar-toggle-button')!;
-        const actionBar = footer.querySelector<HTMLElement>('.changes-action-bar')!;
-        const actionButton = actionBar.querySelector<HTMLElement>('.changes-action-button')!;
-        const actionButtons = [
-          ...actionBar.querySelectorAll<HTMLElement>('.changes-action-button'),
-        ];
+        const actionBar = footer.querySelector<HTMLElement>('.diff-action-bar')!;
+        const actionButton = actionBar.querySelector<HTMLElement>('.diff-action-button')!;
+        const actionButtons = [...actionBar.querySelectorAll<HTMLElement>('.diff-action-button')];
         const menuButton = header.querySelector<HTMLElement>('.titlebar-menu-button')!;
         const repositoryToggle = header.querySelector<HTMLElement>('.repository-toggle')!;
         const paneResizer = document.querySelector<HTMLElement>('.pane-resizer')!;
-        const content = document.querySelector<HTMLElement>('.changes-content-pane')!;
+        const content = document.querySelector<HTMLElement>('.diff-content-pane')!;
         const headerRect = header.getBoundingClientRect();
         const footerRect = footer.getBoundingClientRect();
         const sidebarToggleRect = sidebarToggle.getBoundingClientRect();
@@ -286,12 +284,12 @@ describe('Repository and Branch navigation', () => {
       contentLeft: 361,
     });
     await $('button[aria-label="サイドバーを閉じる"]').click();
-    await expect($('.changes-sidebar-pane')).not.toBeDisplayed();
+    await expect($('.diff-sidebar-pane')).not.toBeDisplayed();
     await expect($('.window-header-content')).toBeDisplayed();
     await expect($('button[aria-label="サイドバーを開く"]')).not.toHaveAttribute('title');
     await $('button[aria-label="サイドバーを開く"]').click();
-    await expect($('.changes-sidebar-pane')).toBeDisplayed();
-    await expect($('button[aria-label="変更"]')).toHaveAttribute('aria-current', 'page');
+    await expect($('.diff-sidebar-pane')).toBeDisplayed();
+    await expect($('button[aria-label="差分"]')).toHaveAttribute('aria-current', 'page');
 
     const repositoryToggle = $(`.repository-toggle[data-repository-path="${repositoryPath}"]`);
     await expect(repositoryToggle).toBeDisplayed();
@@ -400,7 +398,7 @@ describe('Repository and Branch navigation', () => {
     await expect($('h1=Settings')).toBeDisplayed();
     await expect($('.repository-toggle')).not.toExist();
     await expect($('.branch-toggle')).not.toExist();
-    await $('button[aria-label="Changes"]').click();
+    await $('button[aria-label="Diff"]').click();
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher.$('button=Create')).toBeDisplayed();
@@ -551,7 +549,7 @@ describe('Repository and Branch navigation', () => {
     await $(`.repository-toggle[data-repository-path="${relocatedPath}"]`).waitForDisplayed({
       timeout: 10_000,
     });
-    await expect($('.changes-view')).toBeDisplayed();
+    await expect($('.diff-view')).toBeDisplayed();
     expect((await runGit(relocatedPath, ['status', '--short'])).trim()).toBe('');
     expect(
       await browser.execute((expectedPath) => {
@@ -586,7 +584,7 @@ describe('Repository and Branch navigation', () => {
     await runGit(repositoryPath, ['remote', 'add', 'origin', missingRemote]);
     await openRepository(repositoryPath, { language: 'ja' });
 
-    await $('.changes-action-bar .changes-action-button[aria-label="フェッチ"]').click();
+    await $('.diff-action-bar .diff-action-button[aria-label="フェッチ"]').click();
     const error = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
     await expect(error).toHaveText(expect.stringContaining('リモートリポジトリを利用できません'));
     await error.$('button=閉じる').click();

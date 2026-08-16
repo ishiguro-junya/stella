@@ -10559,7 +10559,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest);
 
-        // `ConflictOpenExternal`がエディタを正常に起動した後の状態遷移だけを再現し、
+        // `ConflictOpenExternal`がエディターを正常に起動した後の状態遷移だけを再現し、
         // テスト用プロセスから画面を起動することは避ける。
         let repo = workspace.repo(&attached.repo_id).unwrap();
         workspace

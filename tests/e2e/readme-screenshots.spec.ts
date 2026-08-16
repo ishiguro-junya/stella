@@ -58,8 +58,8 @@ describe('README用スクリーンショット', () => {
 
       await browser.execute(() => window.dispatchEvent(new Event('focus')));
       await $('.history-working-tree-entry').waitForDisplayed({ timeout: 20_000 });
-      await $('button=変更').click();
-      await expect($('.changes-view')).toBeDisplayed();
+      await $('button=差分').click();
+      await expect($('.diff-view')).toBeDisplayed();
 
       const recordsStage = $('input[aria-label="ステージ src/records.ts"]');
       await recordsStage.waitForClickable({ timeout: 10_000 });
@@ -71,10 +71,10 @@ describe('README用スクリーンショット', () => {
 
       await $('button[aria-label="設定"]').click();
       await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
-      await $('button[data-settings-category="changes"]').click();
+      await $('button[data-settings-category="diff"]').click();
       await selectSetting('stage-display', 'hide');
-      await $('button=変更').click();
-      await expect($('.changes-view')).toBeDisplayed();
+      await $('button=差分').click();
+      await expect($('.diff-view')).toBeDisplayed();
       await expect($('.change-groups')).toHaveElementClass('is-stage-hidden');
       await expect($('.stage-toggle')).not.toExist();
 
@@ -88,7 +88,7 @@ describe('README用スクリーンショット', () => {
       await blurActiveElement();
       await saveLogicalScreenshot(join(outputDirectory, 'changes.png'), 1180, 760);
 
-      await $('.diff-file-toolbar [role="tab"][aria-label="編集"]').click();
+      await $('.diff-file-toolbar button[aria-label="編集"]').click();
       const editor = $('.file-editor-pane');
       await editor.waitForDisplayed({ timeout: 10_000 });
       await expect(editor.$('[role="textbox"]')).toHaveAttribute(

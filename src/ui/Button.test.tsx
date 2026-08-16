@@ -29,11 +29,11 @@ describe('Button', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Save changes');
   });
 
-  it('places an animated loading icon before the label', () => {
+  it('places the delayed loading icon before the unchanged label', () => {
     render(<Button loading>Saving…</Button>);
 
     const button = screen.getByRole('button', { name: 'Saving…' });
     expect(button).toHaveAttribute('aria-busy', 'true');
-    expect(button.firstElementChild).toHaveClass('button-loading-icon');
+    expect(button.firstElementChild).toHaveClass('button-loading-icon', 'delayed-loading-icon');
   });
 });

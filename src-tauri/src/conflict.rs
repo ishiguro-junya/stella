@@ -1137,7 +1137,7 @@ pub(crate) fn open_external(
     let path = checked_worktree_path(root, &session.path)?;
     let mut command = Command::new("/usr/bin/open");
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-        // エディタが任意の外部参照先をたどらないよう、リンク自体をFinderに表示する。
+        // エディターが任意の外部参照先をたどらないよう、リンク自体をFinderに表示する。
         command.arg("-R");
     } else {
         match editor.kind {

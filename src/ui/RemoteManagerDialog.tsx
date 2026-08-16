@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from './Button';
 import { Input } from './Input';
+import { LoadingIndicator } from './LoadingIndicator';
 import type { RemoteDefinition } from '../domain/workspace';
 import { useI18n } from '../i18n/i18n';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
@@ -87,7 +88,8 @@ export function RemoteManagerDialog({
         descriptionId="remote-manager-description"
         description={t('manageRemotesDescription')}
       />
-      <DialogBody aria-busy={loading}>
+      <DialogBody className="remote-manager-body" aria-busy={loading}>
+        {loading ? <LoadingIndicator className="remote-manager-loading" /> : null}
         {error ? (
           <div className="remote-manager-error">
             <p>{error}</p>
