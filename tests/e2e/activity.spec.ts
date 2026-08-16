@@ -44,7 +44,7 @@ describe('Activity', () => {
         () => document.activeElement === document.querySelector('.activity-list tbody tr'),
       ),
     ).toBe(true);
-    await browser.keys(['ArrowDown']);
+    await secondOperation.click();
     await expect(secondOperation).toHaveAttribute('aria-selected', 'true');
     expect(
       await browser.execute(
@@ -54,6 +54,8 @@ describe('Activity', () => {
     ).toBe(true);
     await browser.keys(['ArrowUp']);
     await expect(firstOperation).toHaveAttribute('aria-selected', 'true');
+    await browser.keys(['ArrowDown']);
+    await expect(secondOperation).toHaveAttribute('aria-selected', 'true');
     await expect(activity).toHaveAttribute('aria-current', 'page');
     await $('.activity-analytics-body').waitForDisplayed();
     const analyticsBoundsBefore = await browser.execute(() => {
@@ -83,7 +85,7 @@ describe('Activity', () => {
     await expect($('#commit-activity-title')).toHaveElementClass('sr-only');
 
     const activityRange = $('select[aria-label="活動の期間"]');
-    await expect($('.activity-analytics-header select[aria-label="活動の期間"]')).toBeDisplayed();
+    await expect($('.activity-analytics-footer select[aria-label="活動の期間"]')).toBeDisplayed();
     expect(await activityRange.getValue()).toBe('30d');
     expect(
       await browser.execute(() =>
@@ -94,7 +96,7 @@ describe('Activity', () => {
       ),
     ).toEqual(['7日', '30日', '90日', '180日', '1年']);
     const activityMetric = $('select[aria-label="活動の指標"]');
-    await expect($('.activity-analytics-header select[aria-label="活動の指標"]')).toBeDisplayed();
+    await expect($('.activity-analytics-footer select[aria-label="活動の指標"]')).toBeDisplayed();
     expect(await activityMetric.getValue()).toBe('commits');
     expect(
       await browser.execute(() =>
@@ -115,6 +117,32 @@ describe('Activity', () => {
         );
       }),
     ).toBe(true);
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>('.activity-analytics-panel')!;
+        const footer = panel.querySelector<HTMLElement>('.activity-analytics-footer')!;
+        const controls = footer.querySelector<HTMLElement>('.activity-analytics-controls')!;
+        const selects = [...footer.querySelectorAll<HTMLElement>('select')];
+        return {
+          footerAtBottom:
+            Math.abs(
+              footer.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom,
+            ) <= 0.5,
+          controlsRightGap: Math.round(
+            footer.getBoundingClientRect().right - controls.getBoundingClientRect().right,
+          ),
+          footerHeight: Math.round(footer.getBoundingClientRect().height),
+          sidebarToggleCount: footer.querySelectorAll('.sidebar-toggle-button').length,
+          selectHeights: selects.map((select) => Math.round(select.getBoundingClientRect().height)),
+        };
+      }),
+    ).toEqual({
+      footerAtBottom: true,
+      controlsRightGap: 6,
+      footerHeight: 38,
+      sidebarToggleCount: 0,
+      selectHeights: [22, 22],
+    });
     expect(
       await browser.execute(() => {
         const panels = document.querySelector<HTMLElement>('.activity-page-panels');
@@ -164,6 +192,20 @@ describe('Activity', () => {
       'コントリビューター',
       'ブランチ',
     ]);
+    const activityTableLayout = await browser.execute(() => {
+      const container = document.querySelector<HTMLElement>('.activity-chart-data > div')!;
+      const headers = [...container.querySelectorAll<HTMLElement>('thead th')];
+      return {
+        horizontalOverflow: container.scrollWidth > container.clientWidth,
+        clippedHeaders: headers
+          .filter((header) => header.scrollWidth > header.clientWidth)
+          .map((header) => header.textContent),
+        contributorWidth: Math.round(headers[2]?.getBoundingClientRect().width ?? 0),
+      };
+    });
+    expect(activityTableLayout.horizontalOverflow).toBe(false);
+    expect(activityTableLayout.clippedHeaders).toEqual([]);
+    expect(activityTableLayout.contributorWidth).toBeLessThanOrEqual(100);
     expect(
       await browser.execute(() => {
         const cells = document.querySelectorAll<HTMLElement>('.activity-chart-data thead th');
@@ -177,10 +219,10 @@ describe('Activity', () => {
     ).toEqual({ firstPaddingLeft: 14, lastPaddingRight: 14 });
 
     const activityResizer = $('[role="separator"][aria-label="リポジトリ分析の幅"]');
-    await expect(activityResizer).toHaveAttribute('aria-valuenow', '360');
+    await expect(activityResizer).toHaveAttribute('aria-valuenow', '590');
     await activityResizer.click();
     await browser.keys(['ArrowRight']);
-    await expect(activityResizer).toHaveAttribute('aria-valuenow', '368');
+    await expect(activityResizer).toHaveAttribute('aria-valuenow', '598');
     expect(
       await browser.execute(() => {
         const container = document.querySelector<HTMLElement>('.activity-chart-data > div');
@@ -249,7 +291,7 @@ describe('Activity', () => {
     await expect(activity).toHaveAttribute('aria-current', 'page');
     await expect($('[role="separator"][aria-label="リポジトリ分析の幅"]')).toHaveAttribute(
       'aria-valuenow',
-      '368',
+      '598',
     );
 
     await browser.keys(['Escape']);
@@ -264,28 +306,28 @@ describe('Activity', () => {
       ),
     ).toBe(true);
     const diffResizer = $('[role="separator"][aria-label="差分一覧の幅"]');
-    await expect(diffResizer).toHaveAttribute('aria-valuenow', '368');
+    await expect(diffResizer).toHaveAttribute('aria-valuenow', '360');
     await diffResizer.click();
     await browser.keys(['ArrowRight']);
-    await expect(diffResizer).toHaveAttribute('aria-valuenow', '376');
+    await expect(diffResizer).toHaveAttribute('aria-valuenow', '368');
 
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     const historyResizer = $('[role="separator"][aria-label="履歴一覧の幅"]');
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '376');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '472');
     await historyResizer.click();
     await browser.keys(['ArrowLeft']);
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '368');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '464');
     await activity.click();
     await expect($('[role="separator"][aria-label="リポジトリ分析の幅"]')).toHaveAttribute(
       'aria-valuenow',
-      '368',
+      '598',
     );
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('[role="separator"][aria-label="履歴一覧の幅"]')).toHaveAttribute(
       'aria-valuenow',
-      '368',
+      '464',
     );
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('E2Eリポジトリを初期化する'),

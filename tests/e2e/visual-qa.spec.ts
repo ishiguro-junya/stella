@@ -12,6 +12,7 @@ import {
   setLogicalWindowSize,
 } from './support/app.js';
 import {
+  createEmptyRepository,
   createFixtureDirectory,
   removeFixture,
   runGit,
@@ -44,10 +45,18 @@ describe('Visual QA', () => {
     if (!visualQaDirectory) return;
 
     const visualRoot = await createFixtureDirectory('visual');
+    const extraRepositoryPaths: string[] = [];
     try {
       const currentPath = await copyE2EShowcaseRepository(visualRoot, 'stella-visual-qa');
       const conflictPath = await copyE2EShowcaseRepository(visualRoot, 'stella-conflict');
       const manualPath = await copyE2EShowcaseRepository(visualRoot, 'stella-manual');
+      extraRepositoryPaths.push(
+        ...(await Promise.all(
+          Array.from({ length: 9 }, (_, index) =>
+            createEmptyRepository(`stella-visual-list-${index + 1}`),
+          ),
+        )),
+      );
       await writeRepositoryFile(currentPath, 'README.md', '# Stella Visual QA\n');
       await writeRepositoryFile(conflictPath, 'README.md', '# Stella Conflict\n');
       await runGit(currentPath, ['branch', 'feature/search']);
@@ -287,8 +296,6 @@ describe('Visual QA', () => {
             appearance: 'light',
             language: 'en',
             registeredRepoPaths: [],
-            openRepoPaths: [],
-            selectedRepoPath: undefined,
           }),
         );
       });
@@ -326,15 +333,30 @@ describe('Visual QA', () => {
               ...preferences,
               appearance: 'dark',
               registeredRepoPaths,
-              openRepoPaths: [],
-              selectedRepoPath: undefined,
             }),
           );
         },
-        [manualPath, conflictPath, currentPath],
+        [manualPath, conflictPath, currentPath, ...extraRepositoryPaths],
       );
       await browser.refresh();
       await $('.registered-repositories').waitForDisplayed({ timeout: 10_000 });
+      expect(
+        await browser.execute(() => {
+          const list = document.querySelector<HTMLElement>('.registered-repositories');
+          return list ? list.scrollHeight > list.clientHeight : false;
+        }),
+      ).toBe(true);
+      const tenthRowMetrics = await browser.execute(() => {
+        const list = document.querySelector<HTMLElement>('.registered-repositories')!;
+        const tenthRow = list.children.item(9)!;
+        const listRect = list.getBoundingClientRect();
+        return {
+          contentBottom:
+            listRect.bottom - Number.parseFloat(getComputedStyle(list).borderBottomWidth),
+          rowBottom: tenthRow.getBoundingClientRect().bottom,
+        };
+      });
+      expect(tenthRowMetrics.rowBottom).toBeLessThanOrEqual(tenthRowMetrics.contentBottom);
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'repository-list-populated-dark-1180x760.png'),
         1180,
@@ -345,6 +367,28 @@ describe('Visual QA', () => {
         860,
         560,
       );
+      await setLogicalWindowSize(1180, 760);
+      await $('.registered-repositories .switcher-option').moveTo();
+      expect(
+        await browser.execute(() => {
+          const copy = document.querySelector<HTMLElement>(
+            '.registered-repositories .switcher-option-copy',
+          );
+          return copy ? copy.getBoundingClientRect().width > 200 : false;
+        }),
+      ).toBe(true);
+      await saveLogicalScreenshot(
+        join(visualQaDirectory, 'repository-list-hover-dark-1180x760.png'),
+        1180,
+        760,
+      );
+      await $('.registered-repositories .switcher-action-trigger').click();
+      await saveLogicalScreenshot(
+        join(visualQaDirectory, 'repository-list-selected-dark-1180x760.png'),
+        1180,
+        760,
+      );
+      await browser.keys(['Escape']);
       await $('button=Add').click();
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'add-repository-sheet-dark-1180x760.png'),
@@ -357,6 +401,7 @@ describe('Visual QA', () => {
         560,
       );
     } finally {
+      await Promise.all(extraRepositoryPaths.map(removeFixture));
       await removeFixture(visualRoot);
     }
   });

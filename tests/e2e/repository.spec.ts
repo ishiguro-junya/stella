@@ -6,7 +6,6 @@ import { createServer } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 
 import {
-  dispatchDoubleClick,
   expectInteractiveSelectedColors,
   openRepository,
   resetApp,
@@ -20,6 +19,55 @@ import {
   runGit,
   writeRepositoryFile,
 } from './support/fixtures.js';
+
+async function serveRepository(repositoryPath: string) {
+  const portProbe = createServer();
+  const port = await new Promise<number>((resolve, reject) => {
+    portProbe.once('error', reject);
+    portProbe.listen(0, '127.0.0.1', () => {
+      const address = portProbe.address();
+      if (typeof address === 'object' && address) resolve(address.port);
+      else reject(new Error('Could not reserve a local Git daemon port.'));
+    });
+  });
+  await new Promise<void>((resolve, reject) =>
+    portProbe.close((error) => (error ? reject(error) : resolve())),
+  );
+
+  const repositoriesRoot = dirname(repositoryPath);
+  const daemon = spawn(
+    '/usr/bin/git',
+    [
+      'daemon',
+      '--reuseaddr',
+      '--export-all',
+      `--base-path=${repositoriesRoot}`,
+      '--listen=127.0.0.1',
+      `--port=${port}`,
+      repositoriesRoot,
+    ],
+    { stdio: 'ignore' },
+  );
+  const url = `git://127.0.0.1:${port}/${basename(repositoryPath)}`;
+  await browser.waitUntil(
+    () =>
+      runGit(repositoryPath, ['ls-remote', url]).then(
+        () => true,
+        () => false,
+      ),
+    { timeoutMsg: 'The local Git daemon did not become ready.' },
+  );
+
+  return {
+    url,
+    stop: () =>
+      new Promise<void>((resolve) => {
+        if (daemon.exitCode !== null) return resolve();
+        daemon.once('exit', () => resolve());
+        daemon.kill();
+      }),
+  };
+}
 
 describe('Repository and Branch navigation', () => {
   let repositoryPath = '';
@@ -44,14 +92,17 @@ describe('Repository and Branch navigation', () => {
     cloneParentPath = '';
   });
 
-  it('separates local Add from URL Clone and aligns the Clone fields', async () => {
-    await $('button=クローン').click();
-    const dialog = $('[role="dialog"][aria-labelledby="clone-repository-title"]');
+  it('switches the shared Add sheet between Remote and Local fields', async () => {
+    const addRepository = $('button=追加');
+    await expect(addRepository).toHaveElementClass('primary');
+    await addRepository.click();
+    const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
     await expect(dialog).toBeDisplayed();
+    await expect(dialog.$('[role="tab"][aria-selected="true"]')).toHaveText('リモート');
     await expect(dialog.$('#repository-url')).toBeDisplayed();
     await expect(dialog.$('#repository-clone-parent')).toBeDisplayed();
     await expect(dialog.$('.directory-picker-button')).toExist();
-    await expect(dialog.$('[role="tab"]')).not.toExist();
+    await expect(dialog.$$('[role="tab"]')).toBeElementsArrayOfSize(2);
     expect(await dialog.$('#repository-clone-parent').getValue()).toMatch(/\/Documents\/?$/u);
     expect(
       await browser.execute(() => {
@@ -60,7 +111,7 @@ describe('Repository and Branch navigation', () => {
         const path = document.querySelector<HTMLElement>(
           '#repository-clone-parent',
         )!.parentElement!;
-        const name = document.querySelector<HTMLElement>('#repository-display-name')!;
+        const name = document.querySelector<HTMLElement>('#repository-remote-name')!;
         const formRect = form.getBoundingClientRect();
         const formStyle = getComputedStyle(form);
         const metrics = [url, path, name].map((input) => {
@@ -82,6 +133,12 @@ describe('Repository and Branch navigation', () => {
         };
       }),
     ).toEqual({ aligned: true, fillsContent: true });
+
+    await dialog.$('button=ローカル').click();
+    await expect(dialog.$('button=ローカル')).toBeFocused();
+    await expect(dialog.$('[role="tab"][aria-selected="true"]')).toHaveText('ローカル');
+    await expect(dialog.$('#repository-location')).toBeDisplayed();
+    await expect(dialog.$('#repository-url')).not.toExist();
   });
 
   it('clones a URL repository into the selected local path through the native adapter', async () => {
@@ -91,73 +148,47 @@ describe('Repository and Branch navigation', () => {
     await runGit(remotePath, ['commit', '-m', 'docs: クローン対象を追加']);
     cloneParentPath = await createFixtureDirectory('clone-parent');
 
-    const portProbe = createServer();
-    const port = await new Promise<number>((resolve, reject) => {
-      portProbe.once('error', reject);
-      portProbe.listen(0, '127.0.0.1', () => {
-        const address = portProbe.address();
-        if (typeof address === 'object' && address) resolve(address.port);
-        else reject(new Error('Could not reserve a local Git daemon port.'));
-      });
-    });
-    await new Promise<void>((resolve, reject) =>
-      portProbe.close((error) => (error ? reject(error) : resolve())),
-    );
-
-    const repositoriesRoot = dirname(remotePath);
-    const daemon = spawn(
-      '/usr/bin/git',
-      [
-        'daemon',
-        '--reuseaddr',
-        '--export-all',
-        `--base-path=${repositoriesRoot}`,
-        '--listen=127.0.0.1',
-        `--port=${port}`,
-        repositoriesRoot,
-      ],
-      { stdio: 'ignore' },
-    );
-    const remoteUrl = `git://127.0.0.1:${port}/${basename(remotePath)}`;
-    const clonedPath = join(cloneParentPath, basename(remotePath));
+    const remote = await serveRepository(remotePath);
+    const clonedRepositoryName = 'renamed-clone';
+    const clonedPath = join(cloneParentPath, clonedRepositoryName);
 
     try {
-      await browser.waitUntil(
-        () =>
-          runGit(remotePath, ['ls-remote', remoteUrl]).then(
-            () => true,
-            () => false,
-          ),
-        { timeoutMsg: 'The local Git daemon did not become ready.' },
-      );
-
-      await $('button=クローン').click();
-      const dialog = $('[role="dialog"][aria-labelledby="clone-repository-title"]');
-      await dialog.$('#repository-url').setValue(remoteUrl);
+      await $('button=追加').click();
+      const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
+      await dialog.$('#repository-url').setValue(remote.url);
+      await expect(dialog.$('#repository-remote-name')).toHaveValue(basename(remotePath));
+      await dialog.$('#repository-remote-name').setValue(clonedRepositoryName);
       await dialog.$('#repository-clone-parent').setValue(cloneParentPath);
-      await dialog.$('button=クローン').click();
+      await dialog.$('button=追加').click();
 
       await $(`.repository-toggle[data-repository-path="${clonedPath}"]`).waitForDisplayed({
         timeout: 20_000,
       });
       expect((await runGit(clonedPath, ['branch', '--show-current'])).trim()).toBe('main');
       expect((await runGit(clonedPath, ['show', 'HEAD:README.md'])).trim()).toBe('# Clone target');
-      expect((await runGit(clonedPath, ['remote', 'get-url', 'origin'])).trim()).toBe(remoteUrl);
+      expect((await runGit(clonedPath, ['remote', 'get-url', 'origin'])).trim()).toBe(remote.url);
     } finally {
-      await new Promise<void>((resolve) => {
-        if (daemon.exitCode !== null) return resolve();
-        daemon.once('exit', () => resolve());
-        daemon.kill();
-      });
+      await remote.stop();
     }
   });
 
   it('adds and initializes a repository and exposes the current Branch actions', async () => {
     await openRepository(repositoryPath, { language: 'ja', inspectDialog: true });
     await expect($('.diff-view')).toBeDisplayed();
+    await $('button[aria-label="一覧"]').click();
+    const currentLandingRepository = $(
+      '.registered-repositories [role="option"][aria-current="true"]',
+    );
+    await expect(currentLandingRepository).toBeFocused();
+    await expect(currentLandingRepository.$('.switcher-check svg')).toBeDisplayed();
+    await $('.repository-landing-search input').click();
+    await currentLandingRepository.click();
+    await expect(currentLandingRepository).toBeFocused();
+    await $('button[aria-label="差分"]').click();
+    await expect($('.diff-view')).toBeDisplayed();
     await expect($('.diff-list-footer .diff-action-bar')).toBeDisplayed();
     await expect($('.repository-view-tabs')).not.toExist();
-    const footerActions = $$('.diff-list-footer .diff-action-button');
+    const footerActions = $$('.diff-list-footer .diff-action-bar .diff-action-button');
     const actionLabels = ['コミット', 'プル', 'プッシュ', 'フェッチ'];
     expect(await footerActions.map((button) => button.getAttribute('aria-label'))).toEqual(
       actionLabels,
@@ -171,7 +202,7 @@ describe('Repository and Branch navigation', () => {
     ]);
     expect(
       await $$('.titlebar-actions .titlebar-menu-button').map((button) => button.getText()),
-    ).toEqual(['差分', '履歴', '活動', '設定']);
+    ).toEqual(['差分', '履歴', '活動', '一覧', '設定']);
     expect(
       await browser.tauri.execute(() =>
         document.querySelector('.app-header')?.getAttribute('data-tauri-drag-region'),
@@ -181,9 +212,10 @@ describe('Repository and Branch navigation', () => {
       await browser.execute(() => {
         const header = document.querySelector<HTMLElement>('.app-header')!;
         const headerContent = header.querySelector<HTMLElement>('.window-header-content')!;
+        const headerLeading = header.querySelector<HTMLElement>('.window-header-leading')!;
         const sidebar = document.querySelector<HTMLElement>('.diff-sidebar-pane')!;
         const footer = sidebar.querySelector<HTMLElement>('.diff-list-footer')!;
-        const sidebarToggle = header.querySelector<HTMLElement>('.sidebar-toggle-button')!;
+        const sidebarToggle = headerLeading.querySelector<HTMLElement>('.sidebar-toggle-button')!;
         const actionBar = footer.querySelector<HTMLElement>('.diff-action-bar')!;
         const actionButton = actionBar.querySelector<HTMLElement>('.diff-action-button')!;
         const actionButtons = [...actionBar.querySelectorAll<HTMLElement>('.diff-action-button')];
@@ -206,12 +238,15 @@ describe('Repository and Branch navigation', () => {
             actionBarRect.top >= footerRect.top &&
             actionBarRect.bottom <= footerRect.bottom &&
             actionBar.parentElement === footer,
-          repositoryLeft: repositoryToggle.getBoundingClientRect().left,
           repositoryBeforePaneSplit:
             repositoryToggle.getBoundingClientRect().left < sidebar.getBoundingClientRect().right,
-          sidebarToggleBorder: getComputedStyle(sidebarToggle).borderTopWidth,
-          sidebarToggleBottom: headerRect.bottom - sidebarToggleRect.bottom,
+          sidebarToggleInHeader: sidebarToggle.parentElement === headerLeading,
           sidebarToggleLeft: sidebarToggleRect.left,
+          sidebarToggleBeforeRepository:
+            sidebarToggleRect.right < repositoryToggle.getBoundingClientRect().left,
+          sidebarRepositoryGap:
+            repositoryToggle.getBoundingClientRect().left - sidebarToggleRect.right,
+          sidebarToggleBorder: getComputedStyle(sidebarToggle).borderTopWidth,
           sidebarToggleHeight: sidebarToggleRect.height,
           sidebarToggleWidth: sidebarToggleRect.width,
           footerHeight: footerRect.height,
@@ -253,13 +288,14 @@ describe('Repository and Branch navigation', () => {
     ).toEqual({
       unifiedHeader: true,
       actionsInFooter: true,
-      repositoryLeft: 76,
       repositoryBeforePaneSplit: true,
-      sidebarToggleBorder: '0px',
-      sidebarToggleBottom: 11,
-      sidebarToggleLeft: 3,
-      sidebarToggleHeight: 24,
-      sidebarToggleWidth: 24,
+      sidebarToggleInHeader: true,
+      sidebarToggleLeft: 84,
+      sidebarToggleBeforeRepository: true,
+      sidebarRepositoryGap: 12,
+      sidebarToggleBorder: '1px',
+      sidebarToggleHeight: 28,
+      sidebarToggleWidth: 28,
       footerHeight: 38,
       footerRight: 360,
       footerAtSidebarBottom: true,
@@ -348,16 +384,30 @@ describe('Repository and Branch navigation', () => {
         .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
     await expect($('.app-tooltip')).toHaveText('その他の操作');
+    const currentRepositoryOption = switcher.$('[role="option"][aria-current="true"]');
+    const repositorySwitchButton = switcher.$('button=切り替え');
+    await expect(currentRepositoryOption).toHaveAttribute('aria-selected', 'true');
+    await expect(repositorySwitchButton).toHaveElementClass('primary');
+    await expect(repositorySwitchButton).toBeEnabled();
+    await switcher.$('input[placeholder="リポジトリを検索"]').click();
     await expectInteractiveSelectedColors('[role="dialog"] .switcher-option-row.is-selected', {
       foreground: ['.switcher-check', '.switcher-option-icon'],
       mutedForeground: ['.switcher-option-copy small'],
       palette: 'neutral',
     });
+    expect(
+      await browser.execute(
+        () =>
+          getComputedStyle(document.querySelector<HTMLElement>('.switcher-option-row.is-selected')!)
+            .boxShadow,
+      ),
+    ).toBe('none');
+    await browser.keys(['ArrowDown']);
+    await expect(currentRepositoryOption).toBeFocused();
     expect(await switcher.getText()).not.toMatch(/Open repositories|Recent|[⌘⇧]/u);
     await expect(switcher.$('button=追加')).toBeDisplayed();
-    await expect(switcher.$('button=クローン')).not.toHaveElementClass('primary');
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
-    await $('button=削除').click();
+    await $('button=リポジトリを削除').click();
     const deleteConfirmation = $('[role="alertdialog"][aria-labelledby="forget-repository-title"]');
     await expect(deleteConfirmation.$('button=登録だけ解除')).toBeDisplayed();
     await expect(deleteConfirmation.$('button=ゴミ箱に移動')).toBeDisplayed();
@@ -378,6 +428,8 @@ describe('Repository and Branch navigation', () => {
     ).toBe(true);
     await expect(switcher.$('button=作成')).not.toHaveElementClass('primary');
     await expect(switcher.$('button=作成')).toBeDisabled();
+    await expect(switcher.$('button=切り替え')).toHaveElementClass('primary');
+    await expect(switcher.$('button=切り替え')).toBeEnabled();
     await expect(switcher.$('button=Git Flow')).not.toExist();
     await browser.keys(['Escape']);
     expect(
@@ -396,9 +448,13 @@ describe('Repository and Branch navigation', () => {
     await $('button[aria-label="設定"]').click();
     await selectSetting('language', 'en');
     await expect($('h1=Settings')).toBeDisplayed();
+    await expect($('.window-header-leading .sidebar-toggle-button')).not.toExist();
     await expect($('.repository-toggle')).not.toExist();
     await expect($('.branch-toggle')).not.toExist();
     await $('button[aria-label="Diff"]').click();
+    await expect($('.window-header-leading .sidebar-toggle-button')).toBeDisplayed();
+    await expect($('.repository-toggle')).toBeDisplayed();
+    await expect($('.branch-toggle')).toBeDisplayed();
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher.$('button=Create')).toBeDisplayed();
@@ -410,9 +466,10 @@ describe('Repository and Branch navigation', () => {
     await $('.repository-toggle').click();
     const switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
-    await $('button=削除').click();
+    await $('button=リポジトリを削除').click();
     const confirmation = $('[role="alertdialog"][aria-labelledby="forget-repository-title"]');
     await confirmation.$('button=登録だけ解除').click();
+    await confirmation.waitForDisplayed({ reverse: true });
 
     await expect($('button=追加')).toBeDisplayed();
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe('');
@@ -468,12 +525,17 @@ describe('Repository and Branch navigation', () => {
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
     const targetOption = switcher.$('[data-switcher-item-label="target"]');
+    const switchButton = switcher.$('button=切り替え');
     await expect(targetOption).toBeEnabled();
     await expect(switcher.$('button=作成')).toBeEnabled();
+    await expect(switchButton).toBeEnabled();
     await targetOption.click();
     await expect(switcher).toBeDisplayed();
+    await expect(targetOption).toHaveAttribute('aria-selected', 'true');
+    await expect(switcher.$('button=作成')).toBeEnabled();
+    await expect(switchButton).toBeEnabled();
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
-    await dispatchDoubleClick('[data-switcher-item-label="target"]');
+    await browser.keys(['Enter']);
     await switcher.waitForDisplayed({ reverse: true });
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('target'));
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
@@ -481,6 +543,7 @@ describe('Repository and Branch navigation', () => {
     await $('.branch-toggle').click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.waitForDisplayed();
+    await switcher.$('[data-switcher-item-label="target"]').click();
     const createBranchButton = switcher.$('button=作成');
     await expect(createBranchButton).toBeEnabled();
     await createBranchButton.click();
@@ -511,7 +574,7 @@ describe('Repository and Branch navigation', () => {
     const switcher = $('[role="dialog"][aria-labelledby]');
     await switcher.waitForDisplayed();
     await switcher.$('[data-switcher-item-label="delete-me"] + .switcher-action-trigger').click();
-    await $('button=削除').click();
+    await $('button=ブランチを削除').click();
 
     const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
     await expect(confirmation).toHaveText(expect.stringContaining('delete-me'));
@@ -537,9 +600,10 @@ describe('Repository and Branch navigation', () => {
     await rename(oldPath, relocatedPath);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
 
-    const chooseLocation = $('button=場所を選び直す');
-    await chooseLocation.waitForDisplayed({ timeout: 10_000 });
-    await chooseLocation.click();
+    const missingRepository = $('.registered-repositories [role="option"]');
+    await expect(missingRepository).toHaveText(expect.stringContaining('場所を確認'));
+    await $('.registered-repositories .switcher-action-trigger').click();
+    await $('button=リポジトリを切り替え').click();
     const confirmation = $('[role="alertdialog"][aria-labelledby="repository-relocation-title"]');
     await confirmation.waitForDisplayed({ timeout: 10_000 });
     await expect(confirmation).toHaveText(expect.stringContaining(oldPath));
@@ -561,22 +625,61 @@ describe('Repository and Branch navigation', () => {
           preferences,
           'registeredRepoPaths',
         )?.value;
-        const open: unknown = Object.getOwnPropertyDescriptor(preferences, 'openRepoPaths')?.value;
-        const selected: unknown = Object.getOwnPropertyDescriptor(
-          preferences,
-          'selectedRepoPath',
-        )?.value;
         return (
-          Array.isArray(registered) &&
-          registered.length === 1 &&
-          registered[0] === expectedPath &&
-          Array.isArray(open) &&
-          open.length === 1 &&
-          open[0] === expectedPath &&
-          selected === expectedPath
+          Array.isArray(registered) && registered.length === 1 && registered[0] === expectedPath
         );
       }, relocatedPath),
     ).toBe(true);
+  });
+
+  it('adds origin to a local repository and fetches its branches', async () => {
+    await configureRepository(remotePath);
+    await writeRepositoryFile(remotePath, 'README.md', '# Remote repository\n');
+    await runGit(remotePath, ['add', '--', 'README.md']);
+    await runGit(remotePath, ['commit', '-m', 'docs: リモート対象を追加']);
+    const remote = await serveRepository(remotePath);
+
+    try {
+      await openRepository(repositoryPath, { language: 'ja' });
+      await $('.repository-toggle').click();
+      const switcher = $('[role="dialog"]');
+      await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
+      await $('button=リポジトリ情報を変更').click();
+      const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
+      await expect(manager.$('[role="tab"][aria-selected="true"]')).toHaveText('リモート');
+      await manager.$('button=ローカル').click();
+      expect(
+        await browser.execute(() => {
+          const name = document.querySelector<HTMLElement>('#repository-information-name')!;
+          const path = document.querySelector<HTMLElement>('#repository-information-path')!;
+          return {
+            name: getComputedStyle(name).fontSize,
+            path: getComputedStyle(path).fontSize,
+          };
+        }),
+      ).toEqual({ name: '14px', path: '14px' });
+      await manager.$('button=リモート').click();
+      await manager.$('#repository-origin-url').setValue(remote.url);
+      await manager.$('button=保存').click();
+
+      await browser.waitUntil(
+        () =>
+          runGit(repositoryPath, ['remote', 'get-url', 'origin']).then(
+            (url) => url.trim() === remote.url,
+            () => false,
+          ),
+        { timeoutMsg: 'origin was not added to the local repository.' },
+      );
+      await browser.waitUntil(
+        async () =>
+          (
+            await runGit(repositoryPath, ['branch', '--remotes', '--list', 'origin/main'])
+          ).trim() === 'origin/main',
+        { timeoutMsg: 'The new origin was not fetched.' },
+      );
+    } finally {
+      await remote.stop();
+    }
   });
 
   it('repairs a failed Fetch by changing its URL and fetching the selected remote', async () => {
@@ -593,9 +696,9 @@ describe('Repository and Branch navigation', () => {
     const switcher = $('[role="dialog"]');
     await expect(switcher).toHaveText(expect.stringContaining('リモートを確認'));
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
-    await $('button=リモートURLを変更').click();
+    await $('button=リポジトリ情報を変更').click();
     const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
-    const firstUrlInput = manager.$$('input')[0];
+    const firstUrlInput = manager.$('.remote-url-group input');
     if (!firstUrlInput) throw new Error('The remote URL input was not displayed.');
     await expect(firstUrlInput).toHaveValue(missingRemote);
     await firstUrlInput.setValue(remotePath);

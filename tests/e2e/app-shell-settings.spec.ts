@@ -4,7 +4,12 @@ import { promisify } from 'node:util';
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
-import { resetApp, selectSetting, setLogicalWindowSize } from './support/app.js';
+import {
+  expectInteractiveSelectedColors,
+  resetApp,
+  selectSetting,
+  setLogicalWindowSize,
+} from './support/app.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -13,6 +18,7 @@ type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'diff' | 'edi
 async function openSettingsCategory(category: SettingsCategory): Promise<void> {
   const button = $(`button[data-settings-category="${category}"]`);
   await button.click();
+  await expect(button).toBeFocused();
   await expect(button).toHaveAttribute('aria-current', 'page');
   await expect($(`#settings-category-${category}`)).toBeDisplayed();
 }
@@ -31,17 +37,52 @@ describe('App shell and Settings', () => {
       .find((entry) => entry.includes('/target/release/Stella (TEST)'));
     expect(app).toContain('"LSDisplayName"="Stella (TEST)"');
     const headerButtonLabels = await browser.tauri.execute(() =>
-      [...document.querySelectorAll<HTMLButtonElement>('.app-header button')].map(
+      [...document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button')].map(
         (button) => button.ariaLabel,
       ),
     );
-    expect(headerButtonLabels).toHaveLength(1);
-    expect(['Settings', '設定']).toContain(headerButtonLabels[0]);
+    expect(headerButtonLabels).toHaveLength(5);
+    expect(['Diff', '差分']).toContain(headerButtonLabels[0]);
+    expect(['History', '履歴']).toContain(headerButtonLabels[1]);
+    expect(['Activity', '活動']).toContain(headerButtonLabels[2]);
+    expect(['Repository', '一覧']).toContain(headerButtonLabels[3]);
+    expect(['Settings', '設定']).toContain(headerButtonLabels[4]);
+    expect(
+      await browser.tauri.execute(() =>
+        [...document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button')]
+          .filter((button) => button.ariaCurrent === 'page')
+          .map((button) => button.ariaLabel),
+      ),
+    ).toEqual([headerButtonLabels[3]]);
+    expect(
+      await browser.tauri.execute(() =>
+        [...document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button')]
+          .slice(0, 3)
+          .every((button) => button.disabled),
+      ),
+    ).toBe(true);
     await expect($('.app-header')).toHaveAttribute('data-tauri-drag-region', 'deep');
   });
 
   it('exposes the Tauri execute API in the E2E-only build', async () => {
     expect(await browser.tauri.execute(() => document.title)).toBe('Stella');
+  });
+
+  it('suppresses Settings hover while moving categories with arrow keys', async () => {
+    await $('.titlebar-actions button:last-child').click();
+    const navigation = $('.settings-category-navigation');
+    const permissions = $('button[data-settings-category="permissions"]');
+
+    await browser.keys(['ArrowDown']);
+    await expect(navigation).toHaveElementClass('is-keyboard-navigating');
+    await expect(permissions).toBeFocused();
+
+    await browser.tauri.execute(() => {
+      document
+        .querySelector<HTMLElement>('.settings-category-navigation')
+        ?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+    });
+    await expect(navigation).not.toHaveElementClass('is-keyboard-navigating');
   });
 
   it('applies and persists the selected text size and fonts', async () => {
@@ -121,9 +162,7 @@ describe('App shell and Settings', () => {
     const settings = $('.titlebar-actions button:last-child');
     await settings.waitForClickable();
     await settings.click();
-    expect(['Settings', '設定']).toContain(
-      await browser.execute(() => document.activeElement?.getAttribute('aria-label')),
-    );
+    await expect($('button[data-settings-category="general"]')).toBeFocused();
     await selectSetting('language', 'en');
     await expect($('h1=Settings')).toBeDisplayed();
     await expect($('button[data-settings-category="general"]')).toHaveAttribute(
@@ -171,30 +210,34 @@ describe('App shell and Settings', () => {
     ).toBe('/tmp/stella-repositories');
     await expect($('.titlebar-actions')).toHaveAttribute('aria-label', 'App navigation');
     await expect(settings).toHaveAttribute('aria-current', 'page');
-    const selectedNavigationColors = await browser.execute(() => {
-      const navigation = document.querySelector<HTMLElement>(
-        '.titlebar-menu-button[aria-current="page"]',
-      );
-      const primary = document.createElement('button');
-      primary.className = 'primary';
-      primary.hidden = true;
-      document.body.append(primary);
-      const colors = {
-        navigation: navigation ? getComputedStyle(navigation).backgroundColor : '',
-        primary: getComputedStyle(primary).backgroundColor,
-      };
-      primary.remove();
-      return colors;
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = 'light';
     });
-    expect(selectedNavigationColors.navigation).not.toBe('rgba(0, 0, 0, 0)');
-    expect(selectedNavigationColors.navigation).not.toBe(selectedNavigationColors.primary);
+    await expectInteractiveSelectedColors('.titlebar-menu-button[aria-current="page"]', {
+      palette: 'accent',
+    });
     await expect(settings).toHaveText('Settings');
     expect(
-      await browser.execute(
-        () => document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button').length,
+      await browser.execute(() =>
+        [...document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button')].map(
+          (button) => button.innerText.trim(),
+        ),
       ),
-    ).toBe(2);
-    await expect($('button[aria-label="Repositories"]')).toHaveText('Repositories');
+    ).toEqual(['Diff', 'History', 'Activity', 'Repository', 'Settings']);
+    await expect($('button[aria-label="Repository"]')).toBeDisplayed();
+    await expect($('.titlebar-actions button[aria-label="Diff"]')).toBeDisabled();
+    await expect($('.titlebar-actions button[aria-label="History"]')).toBeDisabled();
+    await expect($('.titlebar-actions button[aria-label="Activity"]')).toBeDisabled();
+    await expect($('.window-header-leading .sidebar-toggle-button')).not.toExist();
+    await expect($('.repository-toggle')).not.toExist();
+    await expect($('.branch-toggle')).not.toExist();
+    await expect($('.settings-content > .pane-resizer')).not.toExist();
+    expect(
+      await browser.execute(() => {
+        const style = getComputedStyle(document.querySelector<HTMLElement>('.settings-sidebar')!);
+        return { width: style.borderRightWidth, style: style.borderRightStyle };
+      }),
+    ).toEqual({ width: '1px', style: 'solid' });
 
     await openSettingsCategory('diff');
     const diffFileListDisplay = $('select[name="diff-file-list-display"]');
@@ -206,6 +249,7 @@ describe('App shell and Settings', () => {
     ]);
 
     await openSettingsCategory('appearance');
+    await $('button=Reset').click();
     await selectSetting('appearance', 'dark');
     expect(
       await browser.tauri.execute(() => ({
@@ -485,8 +529,7 @@ describe('App shell and Settings', () => {
         )) === false,
       { timeoutMsg: 'The non-sticky file header preference was not saved.' },
     );
-    await $('button[aria-label="リポジトリ"]').click();
-    await expect($('[data-testid="app-shell"]')).toBeDisplayed();
-    expect(await browser.execute(() => document.activeElement?.id)).toBe('repositories-title');
+    await expect($('button[aria-label="リポジトリ"]')).not.toExist();
+    await expect($('h1=設定')).toBeDisplayed();
   });
 });

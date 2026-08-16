@@ -233,12 +233,19 @@ describe('Diff', () => {
 
     await selectAndExpectImagePreview('preview.png', false);
     await selectAndExpectImagePreview('preview.svg');
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = 'light';
+    });
 
     const svgToggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
     const fileModeToggle = $('.diff-file-toolbar .file-view-mode-toggle');
+    await expectInteractiveSelectedColors(
+      '.diff-file-toolbar .image-preview-toggle .toggle-button-thumb',
+      { palette: 'accent' },
+    );
     expect((await svgToggle.getLocation('x')) < (await fileModeToggle.getLocation('x'))).toBe(true);
     await $('.diff-file-toolbar .file-action-trigger').click();
-    await $('button=画像をプレビュー').click();
+    await $('button=画像のプレビューを終了').click();
     await expect(svgToggle).toHaveAttribute('aria-pressed', 'false');
     await expect($('.diff-surface')).toBeDisplayed();
     await svgToggle.click();
@@ -248,7 +255,11 @@ describe('Diff', () => {
     const editorImageToggle = $('.file-editor-toolbar button[aria-label="画像プレビュー"]');
     await expect(editorImageToggle).toBeDisabled();
     await $('.file-editor-toolbar .file-action-trigger').click();
-    await expect($('button=画像をプレビュー')).toBeDisabled();
+    await $('button=画像のプレビューを終了').click();
+    await expect(editorImageToggle).toHaveAttribute('aria-pressed', 'false');
+    await $('.file-editor-toolbar .file-action-trigger').click();
+    await $('button=ファイルの編集を終了').click();
+    await expect($('.diff-surface')).toBeDisplayed();
   });
 
   it('defaults to file names with parent paths and keeps keyboard navigation responsive', async () => {
@@ -267,6 +278,17 @@ describe('Diff', () => {
             document.querySelector('.change-item.is-current .change-row'),
         ),
       { timeoutMsg: 'The selected Diff file did not receive initial focus.' },
+    );
+
+    await $('.change-item:not(.is-current) .change-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement ===
+            document.querySelector('.change-item.is-current .change-row'),
+        ),
+      { timeoutMsg: 'A clicked Diff file did not keep focus.' },
     );
 
     const initial = await browser.execute(() => {
@@ -1138,8 +1160,50 @@ describe('Diff', () => {
     if (!multiFileToggleLabel)
       throw new Error('The multi-file diff toggle has no accessible label.');
     await expect($('.app-tooltip')).toHaveText(multiFileToggleLabel);
+    const headerButtonSizes = await browser.execute(() => {
+      const header = document.querySelector<HTMLElement>('.multi-diff-list .diff-file-toolbar');
+      const toggle = header?.querySelector<HTMLElement>('.selected-file-toggle');
+      const menu = header?.querySelector<HTMLElement>('.file-action-trigger');
+      const toggleBounds = toggle?.getBoundingClientRect();
+      const menuBounds = menu?.getBoundingClientRect();
+      return {
+        toggle: toggleBounds
+          ? { width: toggleBounds.width, height: toggleBounds.height }
+          : undefined,
+        menu: menuBounds ? { width: menuBounds.width, height: menuBounds.height } : undefined,
+      };
+    });
+    expect(headerButtonSizes).toEqual({
+      toggle: { width: 24, height: 24 },
+      menu: { width: 24, height: 24 },
+    });
     await multiFileToggle.click();
     await expect(multiFileToggle).toHaveAttribute('aria-expanded', 'false');
+    const collapsedBoundary = await browser.execute(() => {
+      const headers = [
+        ...document.querySelectorAll<HTMLElement>('.multi-diff-list .diff-file-toolbar'),
+      ];
+      const first = headers[0];
+      const second = headers[1];
+      const secondStyle = second ? getComputedStyle(second) : undefined;
+      return {
+        firstTopBorder: first ? getComputedStyle(first).borderTopWidth : '',
+        firstBottomBorder: first ? getComputedStyle(first).borderBottomWidth : '',
+        secondTopBorder: secondStyle?.borderTopWidth ?? '',
+        secondBorderColorsMatch: secondStyle?.borderTopColor === secondStyle?.borderBottomColor,
+        gap:
+          first && second
+            ? second.getBoundingClientRect().top - first.getBoundingClientRect().bottom
+            : undefined,
+      };
+    });
+    expect(collapsedBoundary).toEqual({
+      firstTopBorder: '0px',
+      firstBottomBorder: '0px',
+      secondTopBorder: '1px',
+      secondBorderColorsMatch: true,
+      gap: 0,
+    });
   });
 
   it('opens a changed file in the editor and returns to its Diff', async () => {
@@ -1148,9 +1212,12 @@ describe('Diff', () => {
     const editToggle = $('.diff-file-toolbar .file-view-mode-toggle');
     await expect(editToggle).toHaveAttribute('aria-pressed', 'false');
     await expect(editToggle).toHaveAttribute('aria-label', 'ファイル編集切り替え');
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = 'light';
+    });
     await expectInteractiveSelectedColors(
       '.diff-file-toolbar .file-view-mode-toggle .toggle-button-thumb',
-      { palette: 'neutral' },
+      { palette: 'accent' },
     );
     await browser.waitUntil(
       async () =>
@@ -1174,11 +1241,15 @@ describe('Diff', () => {
       const changedLine = root.querySelector<HTMLElement>(
         "[data-content] [data-line-type='change-addition'], [data-content] [data-line-type='change-deletion']",
       )!;
+      const changedLineNumber = root.querySelector<HTMLElement>(
+        "[data-gutter] [data-column-number][data-line-type='change-addition'], [data-gutter] [data-column-number][data-line-type='change-deletion']",
+      )!;
       const lineNumber = root.querySelector<HTMLElement>('[data-column-number]')!;
       const lineStyle = getComputedStyle(line);
       const lineNumberStyle = getComputedStyle(lineNumber);
       return {
-        indicator: getComputedStyle(changedLine, '::before').content,
+        indicator: getComputedStyle(changedLineNumber, '::before').content,
+        lineIndicator: getComputedStyle(changedLine, '::before').content,
         lineHeight: lineStyle.lineHeight,
         lineNumberFontFamily: lineNumberStyle.fontFamily,
         lineNumberWidth: lineNumber.getBoundingClientRect().width,
@@ -1191,6 +1262,9 @@ describe('Diff', () => {
       };
     });
     expect(diffLineMetrics.indicator).toMatch(/[+-]/u);
+    expect(diffLineMetrics.lineIndicator).toBe('none');
+    expect(diffLineMetrics.lineNumberPaddingLeft).toBe('5px');
+    expect(diffLineMetrics.lineNumberPaddingRight).toBe('22px');
     expect(diffLineMetrics.lineHeight).toBe('20px');
     await editToggle.waitForClickable({ timeout: 10_000 });
     await expect(editToggle).not.toHaveAttribute('title');
@@ -1209,7 +1283,7 @@ describe('Diff', () => {
     await expect(editor.$('.file-view-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
     await expectInteractiveSelectedColors(
       '.file-editor-pane .file-view-mode-toggle .toggle-button-thumb',
-      { palette: 'neutral' },
+      { palette: 'accent' },
     );
     await expect(editor.$('button=保存する')).not.toExist();
     await expect(editor.$('button=キャンセル')).not.toExist();
@@ -1233,6 +1307,9 @@ describe('Diff', () => {
       const firstLine = document.querySelector<HTMLElement>('.file-editor .cm-line');
       const lineStyle = firstLine ? getComputedStyle(firstLine) : undefined;
       const lineNumberStyle = lineNumber ? getComputedStyle(lineNumber) : undefined;
+      editorRoot?.classList.add('cm-focused');
+      const editorOutlineStyle = editorRoot ? getComputedStyle(editorRoot).outlineStyle : '';
+      editorRoot?.classList.remove('cm-focused');
       return {
         firstLineTopGap:
           firstLine && scroller
@@ -1245,6 +1322,7 @@ describe('Diff', () => {
         lineNumberPaddingRight: lineNumber ? getComputedStyle(lineNumber).paddingRight : '',
         foldGutterWidth: foldGutter ? getComputedStyle(foldGutter).width : '',
         foldMarkerPoints: foldMarkerChevron?.getAttribute('points') ?? '',
+        editorOutlineStyle,
         textLeft:
           firstLine && editorRoot && lineStyle
             ? firstLine.getBoundingClientRect().left -
@@ -1257,15 +1335,15 @@ describe('Diff', () => {
       firstLineTopGap: 0,
       lineHeight: diffLineMetrics.lineHeight,
       lineNumberFontFamily: diffLineMetrics.lineNumberFontFamily,
-      lineNumberWidth: diffLineMetrics.lineNumberWidth,
-      lineNumberPaddingLeft: diffLineMetrics.lineNumberPaddingLeft,
-      lineNumberPaddingRight: '4px',
+      lineNumberWidth: diffLineMetrics.lineNumberWidth - 18,
+      lineNumberPaddingLeft: '5px',
+      lineNumberPaddingRight: '5px',
       foldGutterWidth: '18px',
       foldMarkerPoints: '4 2 8 6 4 10',
+      editorOutlineStyle: 'none',
       textLeft: diffLineMetrics.textLeft,
     });
 
-    await textbox.click();
     await textbox.addValue('x');
     await browser.waitUntil(
       async () =>

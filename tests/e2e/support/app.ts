@@ -45,9 +45,11 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     editorWrapColumn: options.editorWrapColumn ?? 120,
     registeredRepoPaths: options.registeredRepoPaths ?? [],
     repositoryNames: {},
-    openRepoPaths: [],
-    view: 'diff',
-    paneWidths: { left: 360, right: 336 },
+    paneWidths: {
+      changes: { left: 360, right: 336 },
+      history: { left: 472 },
+      activity: { left: 590 },
+    },
     commitDrafts: {},
   };
 
@@ -261,13 +263,16 @@ export async function openRepository(
 ): Promise<void> {
   const language = options.language ?? 'ja';
   await $(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
-  const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
+  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
+  await dialog.$(`button=${language === 'ja' ? 'ローカル' : 'Local'}`).click();
   if (options.inspectDialog) {
-    await expect(dialog.$('[role="tab"]')).not.toExist();
+    await expect(dialog.$('[role="tab"][aria-selected="true"]')).toHaveText(
+      language === 'ja' ? 'ローカル' : 'Local',
+    );
     await expect(dialog.$('#repository-location')).toExist();
     await expect(dialog.$('.directory-picker-button')).toExist();
-    await expect(dialog.$('#repository-display-name')).toExist();
+    await expect(dialog.$('#repository-local-name')).toExist();
   }
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
@@ -279,8 +284,9 @@ export async function openRepositoryFromSwitcher(path: string, language: Languag
   const switcher = $('[role="dialog"]');
   await expect(switcher).toBeDisplayed();
   await switcher.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
-  const dialog = $('[role="dialog"][aria-labelledby="add-local-repository-title"]');
+  const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
+  await dialog.$(`button=${language === 'ja' ? 'ローカル' : 'Local'}`).click();
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   await $(`.repository-toggle[data-repository-path="${path}"]`).waitForDisplayed({
@@ -336,6 +342,16 @@ export async function saveLogicalScreenshot(
 ): Promise<void> {
   await mkdir(path.slice(0, path.lastIndexOf('/')), { recursive: true });
   const scaleFactor = await setLogicalWindowSize(width, height);
+  await browser.execute(() => {
+    const header = document.querySelector<HTMLElement>('.app-header');
+    if (!header) return;
+    header.style.backgroundImage = [
+      'radial-gradient(circle at 16px 32px, #ff5f57 0 7px, transparent 7.5px)',
+      'radial-gradient(circle at 39px 32px, #febc2e 0 7px, transparent 7.5px)',
+      'radial-gradient(circle at 62px 32px, #28c840 0 7px, transparent 7.5px)',
+    ].join(', ');
+  });
+  await browser.pause(50);
   await browser.saveScreenshot(path);
   if (scaleFactor !== 1) {
     const { execFile } = await import('node:child_process');

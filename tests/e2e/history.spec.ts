@@ -116,6 +116,255 @@ describe('History', () => {
     repositoryPath = '';
   });
 
+  it('loads History incrementally and keeps every visible graph painted while scrolling', async () => {
+    const expectedCommitCount = Number(
+      (await runGit(repositoryPath, ['rev-list', '--all', '--count'])).trim(),
+    );
+    await $('button=履歴').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const list = document.querySelector<HTMLElement>('.commit-list');
+          return (
+            document.querySelectorAll('.history-commit-item').length > 0 &&
+            list?.getAttribute('aria-busy') === 'false'
+          );
+        }),
+      { timeout: 20_000, timeoutMsg: 'The initial History page was not painted.' },
+    );
+    const initialCommitCount = await browser.execute(
+      () => document.querySelectorAll('.history-commit-item').length,
+    );
+    expect(initialCommitCount).toBeLessThan(expectedCommitCount);
+
+    await browser.waitUntil(
+      async () =>
+        browser.execute((count) => {
+          const list = document.querySelector<HTMLOListElement>('.commit-list');
+          const loaded = document.querySelectorAll('.history-commit-item').length;
+          const idle = list?.getAttribute('aria-busy') === 'false';
+          if (list && loaded < count && idle) list.scrollTop = list.scrollHeight;
+          return loaded === count && idle;
+        }, expectedCommitCount),
+      {
+        timeout: 30_000,
+        timeoutMsg: 'History did not finish loading after scrolling to each page end.',
+      },
+    );
+
+    const graphAfterScroll = await browser.executeAsync<
+      {
+        busy: string | null;
+        invalidVisibleEdgeGeometry: number;
+        maxFrameDuration: number;
+        maxSvgPerGraph: number;
+        missingVisibleGraphs: number;
+        visibleRowCount: number;
+        willChange: string;
+      },
+      []
+    >((done) => {
+      const list = document.querySelector<HTMLOListElement>('.commit-list');
+      if (!list) throw new Error('The History list was not found.');
+      const positions = [0.9, 0.1, 0.8, 0.2, 0.7, 0.3, 0.95, 0.05, 0.75, 0.25];
+      let index = 0;
+      let invalidVisibleEdgeGeometry = 0;
+      let lastFrame = performance.now();
+      let maxFrameDuration = 0;
+      let missingVisibleGraphs = 0;
+      let visibleRowCount = 0;
+      const inspect = (now: number): void => {
+        if (index > 0) maxFrameDuration = Math.max(maxFrameDuration, now - lastFrame);
+        const listBounds = list.getBoundingClientRect();
+        const visibleRows = [
+          ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
+        ].filter((row) => {
+          const bounds = row.getBoundingClientRect();
+          return bounds.bottom > listBounds.top && bounds.top < listBounds.bottom;
+        });
+        visibleRowCount = visibleRows.length;
+        missingVisibleGraphs = Math.max(
+          missingVisibleGraphs,
+          visibleRows.filter(
+            (row) =>
+              !row.querySelector('.history-graph-node') ||
+              row.querySelectorAll('.history-graph-canvas').length !== 1,
+          ).length,
+        );
+        invalidVisibleEdgeGeometry = Math.max(
+          invalidVisibleEdgeGeometry,
+          visibleRows
+            .flatMap((row) => Array.from(row.querySelectorAll<SVGLineElement>('line')))
+            .filter((line) => line.getBBox().height <= 0).length,
+        );
+        if (index === positions.length) {
+          const graphs = [...document.querySelectorAll<HTMLElement>('.history-graph')];
+          done({
+            busy: list.getAttribute('aria-busy'),
+            invalidVisibleEdgeGeometry,
+            maxFrameDuration,
+            maxSvgPerGraph: Math.max(
+              ...graphs.map((graph) => graph.querySelectorAll('svg').length),
+            ),
+            missingVisibleGraphs,
+            visibleRowCount,
+            willChange: getComputedStyle(list).willChange,
+          });
+          return;
+        }
+        list.scrollTop = Math.round((list.scrollHeight - list.clientHeight) * positions[index]!);
+        index += 1;
+        lastFrame = now;
+        requestAnimationFrame(inspect);
+      };
+      requestAnimationFrame(inspect);
+    });
+    expect(graphAfterScroll).toMatchObject({
+      busy: 'false',
+      invalidVisibleEdgeGeometry: 0,
+      maxSvgPerGraph: 1,
+      missingVisibleGraphs: 0,
+      visibleRowCount: expect.any(Number),
+      willChange: 'scroll-position',
+    });
+    expect(graphAfterScroll.visibleRowCount).toBeGreaterThan(0);
+    expect(graphAfterScroll.maxFrameDuration).toBeLessThan(100);
+  });
+
+  it('moves exactly once for every rapid History arrow-key event', async () => {
+    await $('button=履歴').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const list = document.querySelector<HTMLElement>('.commit-list');
+          return (
+            document.querySelectorAll('.history-commit-item').length >= 4 &&
+            list?.getAttribute('aria-busy') === 'false'
+          );
+        }),
+      { timeout: 20_000, timeoutMsg: 'History was not ready for keyboard navigation.' },
+    );
+
+    const movement = await browser.executeAsync<
+      { focusedIndex: number; initialIndex: number; selectedIndex: number },
+      []
+    >((done) => {
+      const rows = [...document.querySelectorAll<HTMLButtonElement>('[data-history-commit-oid]')];
+      const initialIndex = rows.findIndex((row) => row.getAttribute('aria-current') === 'true');
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      for (let index = 0; index < 3; index += 1) {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+        );
+      }
+      requestAnimationFrame(() => {
+        done({
+          focusedIndex: rows.findIndex((row) => row === document.activeElement),
+          initialIndex,
+          selectedIndex: rows.findIndex((row) => row.getAttribute('aria-current') === 'true'),
+        });
+      });
+    });
+
+    expect(movement.initialIndex).toBeGreaterThanOrEqual(0);
+    expect(movement.focusedIndex).toBe(movement.initialIndex + 3);
+    expect(movement.selectedIndex).toBe(movement.initialIndex + 3);
+  });
+
+  it('keeps keyboard selection and scrolling frame-stable while commit details update', async () => {
+    await $('button=履歴').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const list = document.querySelector<HTMLElement>('.commit-list');
+          return (
+            document.querySelectorAll('.history-commit-item').length >= 13 &&
+            list?.getAttribute('aria-busy') === 'false'
+          );
+        }),
+      { timeout: 20_000, timeoutMsg: 'History was not ready for measured keyboard navigation.' },
+    );
+    await $('.commit-detail-heading .history-action-trigger').waitForEnabled({ timeout: 20_000 });
+
+    const movement = await browser.executeAsync<
+      {
+        maxDispatchDuration: number;
+        maxRowHeight: number;
+        maxScrollDelta: number;
+        samples: Array<{
+          expectedIndex: number;
+          focused: boolean;
+          selectedIndex: number;
+          visible: boolean;
+        }>;
+      },
+      []
+    >((done) => {
+      const list = document.querySelector<HTMLOListElement>('.commit-list');
+      const rows = [...document.querySelectorAll<HTMLButtonElement>('[data-history-commit-oid]')];
+      if (!list) throw new Error('The History list was not found.');
+      rows[0]?.click();
+      rows[0]?.focus({ preventScroll: true });
+      list.scrollTop = 0;
+      const initialIndex = 0;
+      const stepCount = Math.min(12, rows.length - initialIndex - 1);
+      const samples: Array<{
+        expectedIndex: number;
+        focused: boolean;
+        selectedIndex: number;
+        visible: boolean;
+      }> = [];
+      let maxDispatchDuration = 0;
+      let maxRowHeight = 0;
+      let maxScrollDelta = 0;
+      let step = 0;
+
+      const move = (): void => {
+        if (step === stepCount) {
+          done({ maxDispatchDuration, maxRowHeight, maxScrollDelta, samples });
+          return;
+        }
+        const previousScrollTop = list.scrollTop;
+        const startedAt = performance.now();
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+        );
+        maxDispatchDuration = Math.max(maxDispatchDuration, performance.now() - startedAt);
+        step += 1;
+        requestAnimationFrame(() => {
+          const selectedIndex = rows.findIndex(
+            (row) => row.getAttribute('aria-current') === 'true',
+          );
+          const selected = rows[selectedIndex];
+          const listBounds = list.getBoundingClientRect();
+          const selectedBounds = selected?.getBoundingClientRect();
+          maxRowHeight = Math.max(maxRowHeight, selectedBounds?.height ?? 0);
+          maxScrollDelta = Math.max(maxScrollDelta, Math.abs(list.scrollTop - previousScrollTop));
+          samples.push({
+            expectedIndex: initialIndex + step,
+            focused: selected === document.activeElement,
+            selectedIndex,
+            visible: Boolean(
+              selectedBounds &&
+              selectedBounds.top >= listBounds.top - 1 &&
+              selectedBounds.bottom <= listBounds.bottom + 1,
+            ),
+          });
+          requestAnimationFrame(move);
+        });
+      };
+      requestAnimationFrame(move);
+    });
+
+    expect(movement.samples).toHaveLength(12);
+    expect(movement.samples.every((sample) => sample.selectedIndex === sample.expectedIndex)).toBe(
+      true,
+    );
+    expect(movement.samples.every((sample) => sample.focused && sample.visible)).toBe(true);
+    expect(movement.maxScrollDelta).toBeLessThanOrEqual(movement.maxRowHeight + 1);
+    expect(movement.maxDispatchDuration).toBeLessThan(16);
+  });
+
   it('applies the shared line wrapping settings to the right pane Diff', async () => {
     await $('button=設定').click();
     await selectSetting('editor-line-wrapping', 'enabled');
@@ -468,7 +717,6 @@ describe('History', () => {
         }, overflowBranchNames),
       { timeout: 10_000, timeoutMsg: 'The overflow refs were not shown in History.' },
     );
-
     const layout = await browser.execute(() => {
       const firstCommit = document.querySelector<HTMLElement>('.history-commit-item');
       const corner = firstCommit?.querySelector<SVGPathElement>(
@@ -491,10 +739,9 @@ describe('History', () => {
       );
       const refs = [...(firstCommit?.querySelectorAll<HTMLElement>('.ref-chip') ?? [])];
       const refList = firstCommit?.querySelector<HTMLElement>('.ref-list');
-      if (!corner?.ownerSVGElement || !vertical?.ownerSVGElement || !refList || refs.length === 0)
-        return null;
-      const cornerRect = corner.ownerSVGElement.getBoundingClientRect();
-      const verticalRect = vertical.ownerSVGElement.getBoundingClientRect();
+      if (!corner || !vertical || !refList || refs.length === 0) return null;
+      const cornerRect = corner.getBoundingClientRect();
+      const verticalRect = vertical.getBoundingClientRect();
       const refListRect = refList.getBoundingClientRect();
       const visibleRefs = refs.filter(
         (ref) => ref.getBoundingClientRect().bottom <= refListRect.bottom + 1,
@@ -530,7 +777,7 @@ describe('History', () => {
   });
 
   it('shows several branch tips that have not been merged', async () => {
-    const branchNames = ['darvish-mlb-debut', 'ohtani-mlb-debut', 'senga-mlb-debut'];
+    const branchNames = ['darvish-mlb-debut', 'family-news', 'ohtani-mlb-debut', 'senga-mlb-debut'];
     const unmergedBranches = (
       await runGit(repositoryPath, [
         'branch',
@@ -553,9 +800,8 @@ describe('History', () => {
       { timeout: 10_000, timeoutMsg: 'Unmerged branch tips were not shown in History.' },
     );
     await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
-      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
+      expect.stringContaining('feat: ドジャースがワールドシリーズ2連覇'),
     );
-
     const branchTips = await browser.execute(
       (names) =>
         names.map((name) => {
@@ -719,22 +965,64 @@ describe('History', () => {
       expect.stringContaining('major-league-baseball'),
     );
     await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
-      expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
+      expect.stringContaining('feat: ドジャースがワールドシリーズ2連覇'),
     );
     await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
-      expect.stringContaining('大谷翔平'),
+      expect.stringContaining('山本由伸'),
     );
     await browser.waitUntil(
       async () => (await $('.commit-list').getText()).includes('feat: 第一子誕生を発表'),
       { timeout: 10_000, timeoutMsg: 'The first-child branch was not shown in History.' },
     );
+    expect((await runGit(repositoryPath, ['rev-parse', 'family-news^'])).trim()).toBe(
+      (await runGit(repositoryPath, ['rev-parse', '50-50'])).trim(),
+    );
+    expect(
+      await browser.execute(
+        () =>
+          [...document.querySelectorAll<HTMLElement>('.history-commit-item')].filter((commit) =>
+            commit.textContent?.includes('feat: 50本塁打・50盗塁 (50-50) を達成'),
+          ).length,
+      ),
+    ).toBe(1);
+    const postseasonSeries = (await runGit(repositoryPath, ['log', '--all', '--format=%s%x1f%P']))
+      .trim()
+      .split('\n')
+      .map((line) => line.split('\x1f'))
+      .filter(([subject]) => /^feat: (?:WCS|DS|LCS) /u.test(subject ?? ''))
+      .map(([subject, parents]) => ({
+        subject,
+        parentCount: parents?.split(' ').length,
+      }))
+      .toSorted((left, right) => left.subject!.localeCompare(right.subject!, 'ja'));
+    expect(postseasonSeries).toEqual(
+      [
+        'feat: WCS ドジャース2勝0敗・レッズ0勝2敗',
+        'feat: WCS カブス2勝1敗・パドレス1勝2敗',
+        'feat: WCS タイガース2勝1敗・ガーディアンズ1勝2敗',
+        'feat: WCS ヤンキース2勝1敗・レッドソックス1勝2敗',
+        'feat: DS ブルージェイズ3勝1敗・ヤンキース1勝3敗',
+        'feat: DS ドジャース3勝1敗・フィリーズ1勝3敗',
+        'feat: DS マリナーズ3勝2敗・タイガース2勝3敗',
+        'feat: DS ブルワーズ3勝2敗・カブス2勝3敗',
+        'feat: LCS ドジャース4勝0敗・ブルワーズ0勝4敗',
+        'feat: LCS ブルージェイズ4勝3敗・マリナーズ3勝4敗',
+      ]
+        .map((subject) => ({ subject, parentCount: 2 }))
+        .toSorted((left, right) => left.subject.localeCompare(right.subject, 'ja')),
+    );
     const showcaseBranch = await browser.execute(() => {
       const commits = [...document.querySelectorAll<HTMLElement>('.history-commit-item')];
       const firstChild = commits.find((commit) => commit.textContent?.includes('第一子誕生'));
+      const fiftyFifty = commits.find((commit) => commit.textContent?.includes('(50-50)'));
+      const postseasonBase = commits.find((commit) =>
+        commit.textContent?.includes('feat: ドジャースがナ・リーグ西地区4連覇'),
+      );
+      const firstCommit = commits[0];
       const firstNode = commits[0]?.querySelector<HTMLElement>('.history-graph-node');
       const firstChildNode = firstChild?.querySelector<HTMLElement>('.history-graph-node');
-      const branchStartEdge = commits[0]?.querySelector<SVGPathElement>(
-        '.history-graph-edge.parent[data-from-lane="0"][data-to-lane="1"]',
+      const branchReturnEdge = fiftyFifty?.querySelector<SVGPathElement>(
+        '.history-graph-edge.incoming[data-from-lane="1"][data-to-lane="0"]',
       );
       const nodeTitleOffsets = [
         ...document.querySelectorAll<HTMLElement>(
@@ -762,10 +1050,16 @@ describe('History', () => {
         ),
         firstColor: firstNode ? getComputedStyle(firstNode).borderColor : undefined,
         firstChildColor: firstChildNode ? getComputedStyle(firstChildNode).borderColor : undefined,
-        branchStartEdgeColor: branchStartEdge
-          ? getComputedStyle(branchStartEdge).stroke
+        branchReturnEdgeColor: branchReturnEdge
+          ? getComputedStyle(branchReturnEdge).stroke
           : undefined,
-        branchStartEdgePath: branchStartEdge?.getAttribute('d'),
+        branchReturnEdgePath: branchReturnEdge?.getAttribute('d'),
+        fanOut: [...(firstCommit?.querySelectorAll('[data-edge-kind="parent"]') ?? [])].map(
+          (edge) => `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
+        ),
+        fanIn: [...(postseasonBase?.querySelectorAll('[data-edge-kind="incoming"]') ?? [])].map(
+          (edge) => `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
+        ),
         maxNodeTitleOffset: Math.max(...nodeTitleOffsets),
       };
     });
@@ -778,12 +1072,26 @@ describe('History', () => {
         'yamamoto-yankees',
         'senga-200-strikeouts',
         'seiya-season-debut',
+        'postseason-dodgers',
+        'postseason-blue-jays',
       ]),
     );
     expect(showcaseBranch.firstChildColor).not.toBe(showcaseBranch.firstColor);
-    expect(showcaseBranch.branchStartEdgeColor).toBe(showcaseBranch.firstChildColor);
-    expect(showcaseBranch.branchStartEdgePath).toBe('M 6 0 L 18 8');
+    expect(showcaseBranch.branchReturnEdgeColor).toBe(showcaseBranch.firstChildColor);
+    expect(showcaseBranch.branchReturnEdgePath).toBe('M 18 0 L 6 8');
+    expect(showcaseBranch.fanOut).toEqual(['0->0', '0->1']);
+    expect(showcaseBranch.fanIn).toEqual(Array.from({ length: 12 }, (_, lane) => `${lane}->0`));
     expect(showcaseBranch.maxNodeTitleOffset).toBeLessThanOrEqual(0.5);
+    await $('.history-commit-item:not(.is-current) .commit-row').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement ===
+            document.querySelector('.history-commit-item.is-current .commit-row'),
+        ),
+      { timeoutMsg: 'A clicked History commit did not keep focus.' },
+    );
     const initiallyFocusedOid = await browser.execute(() => {
       const active = document.activeElement;
       const selected = document.querySelector<HTMLElement>(
@@ -885,39 +1193,45 @@ describe('History', () => {
     await expect($('.repository-view-tabs')).not.toExist();
 
     const historyResizer = $('[role="separator"][aria-label="履歴一覧の幅"]');
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '360');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '472');
     await historyResizer.click();
     await browser.keys(['ArrowRight']);
-    await expect(historyResizer).toHaveAttribute('aria-valuenow', '368');
+    await expect(historyResizer).toHaveAttribute('aria-valuenow', '480');
     await expect($('.commit-list')).toHaveText(
       expect.stringContaining('feat: 50本塁打・50盗塁 (50-50) を達成'),
     );
 
     const historySearch = $('input[aria-label="履歴を検索"]');
     await expect(historySearch).toBeDisplayed();
-    await expect($('.history-pane-toolbar input[aria-label="履歴を検索"]')).toBeDisplayed();
-    await expect($('.commit-list-pane .history-search')).toExist();
+    await expect($('.history-list-footer input[aria-label="履歴を検索"]')).toBeDisplayed();
+    await expect($('.commit-list-pane .history-list-footer')).toExist();
     expect(
       await browser.execute(() => {
-        const toolbar = document.querySelector<HTMLElement>('.history-pane-toolbar')!;
-        const input = toolbar.querySelector<HTMLInputElement>('.history-search input')!;
-        const icon = toolbar.querySelector<HTMLElement>('.history-search-icon')!;
-        const toolbarRect = toolbar.getBoundingClientRect();
+        const footer = document.querySelector<HTMLElement>('.history-list-footer')!;
+        const input = footer.querySelector<HTMLInputElement>('.history-search input')!;
+        const icon = footer.querySelector<HTMLElement>('.history-search-icon')!;
+        const footerRect = footer.getBoundingClientRect();
         const inputRect = input.getBoundingClientRect();
         return {
-          insideToolbar: inputRect.top >= toolbarRect.top && inputRect.bottom <= toolbarRect.bottom,
-          rightGap: toolbarRect.right - inputRect.right,
-          leftGap: inputRect.left - toolbarRect.left,
+          footerHeight: footerRect.height,
+          insideFooter: inputRect.top >= footerRect.top && inputRect.bottom <= footerRect.bottom,
+          leftGap: inputRect.left - footerRect.left,
+          rightGap: footerRect.right - inputRect.right,
+          sidebarToggleCount: footer.querySelectorAll('.sidebar-toggle-button').length,
           iconInset: icon.getBoundingClientRect().left - inputRect.left,
+          inputHeight: inputRect.height,
           inputPaddingLeft: getComputedStyle(input).paddingLeft,
         };
       }),
     ).toEqual({
-      insideToolbar: true,
-      rightGap: 10,
-      leftGap: 10,
-      iconInset: 11,
-      inputPaddingLeft: '34px',
+      footerHeight: 38,
+      insideFooter: true,
+      leftGap: 6,
+      rightGap: 6,
+      sidebarToggleCount: 0,
+      iconInset: 10,
+      inputHeight: 24,
+      inputPaddingLeft: '28px',
     });
     await historySearch.setValue('50本塁打');
     await expect($('.commit-list')).toHaveText(
@@ -926,9 +1240,9 @@ describe('History', () => {
     await historySearch.setValue('一致しない検索');
     await expect($('.history-search-empty')).toHaveText('一致する履歴はありません。');
     await historySearch.setValue('');
-    await browser.waitUntil(async () => (await historyDiffFileCount()) === 3, {
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 15, {
       timeout: 10_000,
-      timeoutMsg: 'The History multi-file diff did not render three files.',
+      timeoutMsg: 'The History multi-file diff did not render fifteen files.',
     });
     const historyDiffNames = await browser.execute(() =>
       [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')].map(
@@ -937,7 +1251,23 @@ describe('History', () => {
             ?.textContent ?? '',
       ),
     );
-    expect(historyDiffNames).toEqual(['CHANGELOG.md', 'docs/first-child.md', 'src/records.ts']);
+    expect(historyDiffNames).toEqual([
+      'CHANGELOG.md',
+      'data/current-champion.json',
+      'docs/2025-postseason/ds/blue-jays-yankees.md',
+      'docs/2025-postseason/ds/mariners-tigers.md',
+      'docs/2025-postseason/lcs/blue-jays-mariners.md',
+      'docs/2025-postseason/teams/blue-jays.md',
+      'docs/2025-postseason/teams/guardians.md',
+      'docs/2025-postseason/teams/mariners.md',
+      'docs/2025-postseason/teams/red-sox.md',
+      'docs/2025-postseason/teams/tigers.md',
+      'docs/2025-postseason/teams/yankees.md',
+      'docs/2025-postseason/wcs/tigers-guardians.md',
+      'docs/2025-postseason/wcs/yankees-red-sox.md',
+      'docs/2025-world-series.md',
+      'src/records.ts',
+    ]);
     const historyFileNameTypography = await browser.execute(() => {
       const fileName = document.querySelector<HTMLElement>(
         '.history-view .diff-file-custom-header-title > span:last-child',
@@ -1118,12 +1448,17 @@ describe('History', () => {
     const branchName = 'history-double-click';
     await $('.branch-toggle').click();
     let switcher = $('[role="dialog"][aria-labelledby]');
+    const sourceBranch = switcher.$('[role="option"][aria-current="true"]');
+    const sourceBranchName = await sourceBranch.getAttribute('data-switcher-item-label');
+    await sourceBranch.click();
     const createBranchButton = switcher.$('button=作成');
     await expect(createBranchButton).toBeEnabled();
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
     await expect(branchDialog).toHaveText(
-      expect.stringContaining('現在のコミットからブランチを作成し、そのブランチへ切り替えます。'),
+      expect.stringContaining(
+        `ブランチ「${sourceBranchName}」から新しいブランチを作成し、そのブランチへ切り替えます。`,
+      ),
     );
     await branchDialog.$('input[aria-label="ブランチ名"]').setValue(branchName);
     await branchDialog.$('button=影響を確認').click();
