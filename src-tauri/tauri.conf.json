@@ -43,7 +43,7 @@
     "resources": {
       "../LICENSE": "LICENSE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
-      "../.tmp/toolchain/bundle/toolchain": "toolchain",
+      "../tmp/toolchain/bundle/toolchain": "toolchain",
       "../node_modules/@pierre/diffs/LICENSE.md": "licenses/pierre-diffs-LICENSE.md",
       "../node_modules/@tauri-apps/plugin-dialog/LICENSE.spdx": "licenses/tauri-plugin-dialog-LICENSE.spdx",
       "../node_modules/i18next/LICENSE": "licenses/i18next-LICENSE",

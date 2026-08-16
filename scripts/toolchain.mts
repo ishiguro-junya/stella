@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = join(repositoryRoot, 'toolchain.lock.json');
-const temporaryRoot = join(repositoryRoot, '.tmp', 'toolchain');
+const temporaryRoot = join(repositoryRoot, 'tmp', 'toolchain');
 const downloadsDirectory = join(temporaryRoot, 'downloads');
 const sourcesDirectory = join(temporaryRoot, 'sources');
 const buildDirectory = join(temporaryRoot, 'build');
@@ -720,7 +720,7 @@ function releaseGate(applicationPath: string) {
     const versionOutput = run(executable, args, { capture: true });
     if (!versionOutput.includes(version)) fail(`${name}のバージョンが${version}ではありません。`);
     const links = run('/usr/bin/otool', ['-L', executable], { capture: true });
-    if (/(?:\.tmp|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
+    if (/(?:\/tmp\/|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
       fail(`${name}の動的リンク先にビルド環境のパスが残っています。\n${links}`);
     }
   }
@@ -732,7 +732,7 @@ function releaseGate(applicationPath: string) {
     const fileOutput = run('/usr/bin/file', [executable], { capture: true });
     if (!fileOutput.includes('arm64')) fail(`${helper}がarm64バイナリではありません。`);
     const links = run('/usr/bin/otool', ['-L', executable], { capture: true });
-    if (/(?:\.tmp|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
+    if (/(?:\/tmp\/|\/opt\/homebrew|\/usr\/local\/opt)/u.test(links)) {
       fail(`${helper}の動的リンク先にビルド環境のパスが残っています。\n${links}`);
     }
   }

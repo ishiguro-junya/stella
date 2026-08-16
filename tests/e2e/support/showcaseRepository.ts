@@ -11,9 +11,9 @@ import {
 } from './fixtures.js';
 
 const run = promisify(execFile);
-const fixtureBaseRoot = join(process.cwd(), '.tmp', 'fixtures', 'base');
+const fixtureBaseRoot = join(process.cwd(), 'tmp', 'fixtures', 'base');
 const fixtureBaseRepository = join(fixtureBaseRoot, 'major-league-baseball');
-const developmentFixtureRoot = join(process.cwd(), '.tmp', 'dev');
+const developmentFixtureRoot = join(process.cwd(), 'tmp', 'dev');
 const developmentRepository = join(developmentFixtureRoot, 'major-league-baseball');
 const developmentRemote = join(developmentFixtureRoot, 'major-league-baseball-remote.git');
 type Contributor = readonly [name: string, email: string];

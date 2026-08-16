@@ -50,7 +50,7 @@ gh release create updater-stable \
 ```sh
 STELLA_VERSION="1.0.0-alpha.5"
 STELLA_TAG="v${STELLA_VERSION}"
-STELLA_RELEASE_DIR=".tmp/release-${STELLA_VERSION}"
+STELLA_RELEASE_DIR="tmp/release-${STELLA_VERSION}"
 STELLA_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_arm64.zip"
 STELLA_UPDATER_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_aarch64.app.tar.gz"
 STELLA_UPDATER_SIGNATURE="${STELLA_UPDATER_ARCHIVE}.sig"
@@ -125,7 +125,7 @@ node --import tsx scripts/toolchain.mts release-gate \
 
 ## 4. リリース成果物を作成する
 
-リリース用の一時ファイルは`.tmp/`配下へ作成します。  
+リリース用の一時ファイルは`tmp/`配下へ作成します。  
 
 ```sh
 mkdir -p "$STELLA_RELEASE_DIR"
@@ -136,7 +136,7 @@ cp target/release/bundle/macos/Stella.app.tar.gz \
   "$STELLA_UPDATER_ARCHIVE"
 cp target/release/bundle/macos/Stella.app.tar.gz.sig \
   "$STELLA_UPDATER_SIGNATURE"
-cp .tmp/toolchain/downloads/git-2.55.0.tar.xz "$STELLA_GIT_SOURCE"
+cp tmp/toolchain/downloads/git-2.55.0.tar.xz "$STELLA_GIT_SOURCE"
 STELLA_SHA256="$(shasum -a 256 "$STELLA_ARCHIVE" | awk '{print $1}')"
 shasum -a 256 "$STELLA_ARCHIVE"
 shasum -a 256 "$STELLA_GIT_SOURCE"

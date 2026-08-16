@@ -284,11 +284,11 @@ describe('appearance preferences', () => {
       selectedRepoPath: '/repo/stella',
     });
 
-    expect(setDevelopmentRepository('/repo/.tmp/dev/major-league-baseball')).toMatchObject({
+    expect(setDevelopmentRepository('/repo/tmp/dev/major-league-baseball')).toMatchObject({
       appearance: 'dark',
-      registeredRepoPaths: ['/repo/.tmp/dev/major-league-baseball'],
-      openRepoPaths: ['/repo/.tmp/dev/major-league-baseball'],
-      selectedRepoPath: '/repo/.tmp/dev/major-league-baseball',
+      registeredRepoPaths: ['/repo/tmp/dev/major-league-baseball'],
+      openRepoPaths: ['/repo/tmp/dev/major-league-baseball'],
+      selectedRepoPath: '/repo/tmp/dev/major-league-baseball',
     });
   });
 

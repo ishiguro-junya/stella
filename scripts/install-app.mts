@@ -25,7 +25,7 @@ const sourceApplication = join(
 );
 const destinationApplication = '/Applications/Stella.app';
 const destinationExecutable = join(destinationApplication, 'Contents', 'MacOS', 'stella');
-const temporaryRoot = join(repositoryRoot, '.tmp');
+const temporaryRoot = join(repositoryRoot, 'tmp');
 const installDirectory = join(temporaryRoot, 'install-app');
 const stagedApplication = join(installDirectory, 'Stella.app');
 const previousApplication = join(installDirectory, 'Stella.previous.app');

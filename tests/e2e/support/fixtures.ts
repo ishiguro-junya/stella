@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
-const fixtureRoot = join(process.cwd(), '.tmp', 'e2e');
+const fixtureRoot = join(process.cwd(), 'tmp', 'e2e');
 
 export async function createFixtureDirectory(prefix: string): Promise<string> {
   await mkdir(fixtureRoot, { recursive: true });

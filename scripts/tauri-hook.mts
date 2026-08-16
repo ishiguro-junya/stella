@@ -9,7 +9,7 @@ import {
 } from '../tests/e2e/support/showcaseRepository.js';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const developmentRepositoryPath = join(repositoryRoot, '.tmp', 'dev', 'major-league-baseball');
+const developmentRepositoryPath = join(repositoryRoot, 'tmp', 'dev', 'major-league-baseball');
 
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {

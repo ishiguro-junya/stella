@@ -15,9 +15,9 @@ const archiveName = basename(archivePath);
 if (!archiveName.endsWith('.app.tar.gz')) {
   throw new Error(`Updater archive must end with .app.tar.gz: ${archiveName}`);
 }
-const outputRelative = relative(resolve('.tmp'), resolve(outputPath));
+const outputRelative = relative(resolve('tmp'), resolve(outputPath));
 if (outputRelative.startsWith('..') || isAbsolute(outputRelative)) {
-  throw new Error('Updater manifest must be written below .tmp/.');
+  throw new Error('Updater manifest must be written below tmp/.');
 }
 
 const signature = readFileSync(signaturePath, 'utf8').trim();
