@@ -25,8 +25,50 @@ const CONTRIBUTORS = {
   senga: ['千賀滉大', 'kodai.senga@example.invalid'],
   imanaga: ['今永昇太', 'shota.imanaga@example.invalid'],
   yamamoto: ['山本由伸', 'yoshinobu.yamamoto@example.invalid'],
+  sasaki: ['佐々木朗希', 'roki.sasaki@example.invalid'],
+  freeman: ['フレディ・フリーマン', 'freddie.freeman@example.invalid'],
+  pages: ['アンディ・パヘス', 'andy.pages@example.invalid'],
+  betts: ['ムーキー・ベッツ', 'mookie.betts@example.invalid'],
+  muncy: ['マックス・マンシー', 'max.muncy@example.invalid'],
+  edman: ['トミー・エドマン', 'tommy.edman@example.invalid'],
+  rojas: ['ミゲル・ロハス', 'miguel.rojas@example.invalid'],
+  enriqueHernandez: ['キケ・ヘルナンデス', 'enrique.hernandez@example.invalid'],
+  teoscarHernandez: ['テオスカー・ヘルナンデス', 'teoscar.hernandez@example.invalid'],
+  scott: ['タナー・スコット', 'tanner.scott@example.invalid'],
+  wrobleski: ['ジャスティン・ロブレスキー', 'justin.wrobleski@example.invalid'],
+  vesia: ['アレックス・ベシア', 'alex.vesia@example.invalid'],
 } as const satisfies Record<string, Contributor>;
+const PLAYER_REPOSITORIES = [
+  { slug: 'suzuki-ichiro', contributor: CONTRIBUTORS.ichiro },
+  { slug: 'darvish-yu', contributor: CONTRIBUTORS.darvish },
+  { slug: 'ohtani-shohei', contributor: CONTRIBUTORS.ohtani },
+  { slug: 'suzuki-seiya', contributor: CONTRIBUTORS.seiya },
+  { slug: 'senga-kodai', contributor: CONTRIBUTORS.senga },
+  { slug: 'imanaga-shota', contributor: CONTRIBUTORS.imanaga },
+  { slug: 'yamamoto-yoshinobu', contributor: CONTRIBUTORS.yamamoto },
+  { slug: 'sasaki-roki', contributor: CONTRIBUTORS.sasaki },
+  { slug: 'freeman-freddie', contributor: CONTRIBUTORS.freeman },
+  { slug: 'pages-andy', contributor: CONTRIBUTORS.pages },
+  { slug: 'betts-mookie', contributor: CONTRIBUTORS.betts },
+  { slug: 'muncy-max', contributor: CONTRIBUTORS.muncy },
+  { slug: 'edman-tommy', contributor: CONTRIBUTORS.edman },
+  { slug: 'rojas-miguel', contributor: CONTRIBUTORS.rojas },
+  { slug: 'hernandez-enrique', contributor: CONTRIBUTORS.enriqueHernandez },
+  { slug: 'hernandez-teoscar', contributor: CONTRIBUTORS.teoscarHernandez },
+  { slug: 'scott-tanner', contributor: CONTRIBUTORS.scott },
+  { slug: 'wrobleski-justin', contributor: CONTRIBUTORS.wrobleski },
+  { slug: 'vesia-alex', contributor: CONTRIBUTORS.vesia },
+] as const;
+const fixtureBasePlayerRepositories = PLAYER_REPOSITORIES.map(({ slug }) =>
+  join(fixtureBaseRoot, slug),
+);
+const developmentPlayerRepositories = PLAYER_REPOSITORIES.map(({ slug }) =>
+  join(developmentFixtureRoot, slug),
+);
 const ACTIVITY_CONTRIBUTOR = ['MLBデータ', 'mlb.data@example.invalid'] as const;
+const FIFTY_FIFTY_MESSAGE = 'feat: 50本塁打・50盗塁 (50-50) を達成';
+const WORLD_SERIES_2024_MESSAGE = 'feat: ドジャースがワールドシリーズ制覇';
+const WORLD_SERIES_2025_MESSAGE = 'feat: ドジャースがワールドシリーズ2連覇';
 // 日本語画面でMLB公式記録の日付のまま表示するため、表示用日時は日本時間で保持する。
 const ACHIEVEMENTS = [
   ['2001-04-02T19:05:00+09:00', 'feat: MLBデビュー戦で初安打を記録', CONTRIBUTORS.ichiro],
@@ -55,8 +97,37 @@ const ACHIEVEMENTS = [
     CONTRIBUTORS.yamamoto,
   ],
   ['2024-07-07T17:00:00+09:00', 'feat: 新人年にオールスターへ初選出', CONTRIBUTORS.imanaga],
-  ['2024-09-19T19:10:00+09:00', 'feat: 50本塁打・50盗塁 (50-50) を達成', CONTRIBUTORS.ohtani],
+  ['2024-09-19T19:10:00+09:00', FIFTY_FIFTY_MESSAGE, CONTRIBUTORS.ohtani],
+  ['2024-10-30T20:08:00+09:00', WORLD_SERIES_2024_MESSAGE, CONTRIBUTORS.ohtani],
+  ['2025-03-19T19:10:00+09:00', 'feat: 佐々木朗希が東京ドームでMLBデビュー', CONTRIBUTORS.sasaki],
+  ['2025-06-17T11:10:00+09:00', 'feat: 大谷翔平が投手として663日ぶりに復帰', CONTRIBUTORS.ohtani],
+  ['2025-09-17T11:10:00+09:00', 'feat: 5回無安打投球と2年連続50本塁打を達成', CONTRIBUTORS.ohtani],
+  ['2025-09-26T07:40:00+09:00', 'feat: ドジャースがナ・リーグ西地区4連覇', CONTRIBUTORS.ohtani],
+  [
+    '2025-10-05T10:38:00+09:00',
+    'feat: 大谷が勝利、佐々木がセーブでPS史を更新',
+    CONTRIBUTORS.sasaki,
+  ],
+  ['2025-10-15T12:08:00+09:00', 'feat: 山本由伸がポストシーズンで完投勝利', CONTRIBUTORS.yamamoto],
+  ['2025-10-18T12:08:00+09:00', 'feat: 大谷が3本塁打・6回無失点でリーグ優勝', CONTRIBUTORS.ohtani],
+  [
+    '2025-10-26T12:08:00+09:00',
+    'feat: 山本由伸がワールドシリーズ第2戦で完投勝利',
+    CONTRIBUTORS.yamamoto,
+  ],
+  ['2025-10-28T15:39:00+09:00', 'feat: フリーマンが18回にサヨナラ本塁打', CONTRIBUTORS.freeman],
+  [
+    '2025-11-01T12:08:00+09:00',
+    'feat: 山本由伸がワールドシリーズ第6戦で勝利',
+    CONTRIBUTORS.yamamoto,
+  ],
+  ['2025-11-02T13:08:00+09:00', WORLD_SERIES_2025_MESSAGE, CONTRIBUTORS.yamamoto],
 ] as const;
+const FIFTY_FIFTY_INDEX = ACHIEVEMENTS.findIndex(([, message]) => message === FIFTY_FIFTY_MESSAGE);
+const WORLD_SERIES_2025_INDEX = ACHIEVEMENTS.findIndex(
+  ([, message]) => message === WORLD_SERIES_2025_MESSAGE,
+);
+const POSTSEASON_START_INDEX = 20;
 const ACTIVITY_COMMITS_BY_MONTH = [8, 10, 13, 17, 23, 31, 42, 56, 73, 93, 116, 140, 168] as const;
 const FIRST_CHILD_DATE = '2025-04-19T12:00:00+09:00';
 const FIRST_CHILD_MESSAGE = 'feat: 第一子誕生を発表';
@@ -104,6 +175,196 @@ const ACHIEVEMENT_BRANCHES = [
     content: '# ヤンキース戦\n\n2024年6月7日、ヤンキース戦で7回無失点・7奪三振を記録。\n',
   },
 ] as const;
+const POSTSEASON_MILESTONES = [
+  {
+    achievementIndex: 16,
+    path: 'docs/2025-roki-mlb-debut.md',
+    content: '# MLBデビュー\n\n2025年3月19日、佐々木朗希が東京ドームでMLBデビュー。\n',
+  },
+  {
+    achievementIndex: 17,
+    path: 'docs/2025-ohtani-pitching-return.md',
+    content: '# 投手復帰\n\n2025年6月16日、大谷翔平が663日ぶりに投手として復帰。\n',
+  },
+  {
+    achievementIndex: 18,
+    path: 'docs/2025-ohtani-50-homers.md',
+    content: '# 2年連続50本塁打\n\n2025年9月16日、5回無安打投球とシーズン50号本塁打を記録。\n',
+  },
+  {
+    achievementIndex: 19,
+    path: 'docs/2025-nl-west-title.md',
+    content: '# ナ・リーグ西地区優勝\n\n2025年9月25日、ドジャースが地区4連覇を達成。\n',
+  },
+  {
+    achievementIndex: 20,
+    path: 'docs/2025-japanese-postseason-win-save.md',
+    content:
+      '# 日本人投手で勝利とセーブ\n\n2025年10月4日、大谷翔平が勝利、佐々木朗希がセーブを記録。\n',
+  },
+  {
+    achievementIndex: 21,
+    path: 'docs/2025-yamamoto-nlcs-complete-game.md',
+    content: '# リーグ優勝決定シリーズ完投\n\n2025年10月14日、山本由伸が9回1失点で完投勝利。\n',
+  },
+  {
+    achievementIndex: 22,
+    path: 'docs/2025-ohtani-nlcs-mvp.md',
+    content:
+      '# リーグ優勝決定シリーズMVP\n\n2025年10月17日、大谷翔平が3本塁打・6回無失点を記録。\n',
+  },
+  {
+    achievementIndex: 23,
+    path: 'docs/2025-yamamoto-world-series-complete-game.md',
+    content: '# ワールドシリーズ完投\n\n2025年10月25日、山本由伸が第2戦で9回1失点の完投勝利。\n',
+  },
+  {
+    achievementIndex: 24,
+    path: 'docs/2025-freeman-world-series-walk-off.md',
+    content:
+      '# 18回サヨナラ本塁打\n\n2025年10月27日、フレディ・フリーマンが第3戦をサヨナラ本塁打で決着。\n',
+  },
+  {
+    achievementIndex: 25,
+    path: 'docs/2025-yamamoto-world-series-game-6.md',
+    content: '# ワールドシリーズ第6戦勝利\n\n2025年10月31日、山本由伸が第6戦で6回1失点の勝利。\n',
+  },
+] as const;
+const POSTSEASON_TEAMS = [
+  { id: 'dodgers', name: 'ドジャース' },
+  { id: 'reds', name: 'レッズ' },
+  { id: 'cubs', name: 'カブス' },
+  { id: 'padres', name: 'パドレス' },
+  { id: 'brewers', name: 'ブルワーズ' },
+  { id: 'phillies', name: 'フィリーズ' },
+  { id: 'tigers', name: 'タイガース' },
+  { id: 'guardians', name: 'ガーディアンズ' },
+  { id: 'yankees', name: 'ヤンキース' },
+  { id: 'red-sox', name: 'レッドソックス' },
+  { id: 'blue-jays', name: 'ブルージェイズ' },
+  { id: 'mariners', name: 'マリナーズ' },
+] as const;
+type PostseasonTeamId = (typeof POSTSEASON_TEAMS)[number]['id'];
+const POSTSEASON_EVENTS: ReadonlyArray<
+  | {
+      kind: 'series';
+      round: 'WCS' | 'DS' | 'LCS';
+      league: 'アメリカン・リーグ' | 'ナショナル・リーグ';
+      winner: PostseasonTeamId;
+      loser: PostseasonTeamId;
+      winnerWins: number;
+      loserWins: number;
+      authoredAt: string;
+    }
+  | { kind: 'milestone'; achievementIndex: number }
+> = [
+  {
+    kind: 'series',
+    round: 'WCS',
+    league: 'ナショナル・リーグ',
+    winner: 'dodgers',
+    loser: 'reds',
+    winnerWins: 2,
+    loserWins: 0,
+    authoredAt: '2025-10-02T12:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'WCS',
+    league: 'ナショナル・リーグ',
+    winner: 'cubs',
+    loser: 'padres',
+    winnerWins: 2,
+    loserWins: 1,
+    authoredAt: '2025-10-03T10:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'WCS',
+    league: 'アメリカン・リーグ',
+    winner: 'tigers',
+    loser: 'guardians',
+    winnerWins: 2,
+    loserWins: 1,
+    authoredAt: '2025-10-03T10:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'WCS',
+    league: 'アメリカン・リーグ',
+    winner: 'yankees',
+    loser: 'red-sox',
+    winnerWins: 2,
+    loserWins: 1,
+    authoredAt: '2025-10-03T10:08:00+09:00',
+  },
+  { kind: 'milestone', achievementIndex: 20 },
+  {
+    kind: 'series',
+    round: 'DS',
+    league: 'アメリカン・リーグ',
+    winner: 'blue-jays',
+    loser: 'yankees',
+    winnerWins: 3,
+    loserWins: 1,
+    authoredAt: '2025-10-09T12:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'DS',
+    league: 'ナショナル・リーグ',
+    winner: 'dodgers',
+    loser: 'phillies',
+    winnerWins: 3,
+    loserWins: 1,
+    authoredAt: '2025-10-10T12:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'DS',
+    league: 'アメリカン・リーグ',
+    winner: 'mariners',
+    loser: 'tigers',
+    winnerWins: 3,
+    loserWins: 2,
+    authoredAt: '2025-10-11T12:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'DS',
+    league: 'ナショナル・リーグ',
+    winner: 'brewers',
+    loser: 'cubs',
+    winnerWins: 3,
+    loserWins: 2,
+    authoredAt: '2025-10-12T12:08:00+09:00',
+  },
+  { kind: 'milestone', achievementIndex: 21 },
+  { kind: 'milestone', achievementIndex: 22 },
+  {
+    kind: 'series',
+    round: 'LCS',
+    league: 'ナショナル・リーグ',
+    winner: 'dodgers',
+    loser: 'brewers',
+    winnerWins: 4,
+    loserWins: 0,
+    authoredAt: '2025-10-18T12:08:00+09:00',
+  },
+  {
+    kind: 'series',
+    round: 'LCS',
+    league: 'アメリカン・リーグ',
+    winner: 'blue-jays',
+    loser: 'mariners',
+    winnerWins: 4,
+    loserWins: 3,
+    authoredAt: '2025-10-21T12:08:00+09:00',
+  },
+  { kind: 'milestone', achievementIndex: 23 },
+  { kind: 'milestone', achievementIndex: 24 },
+  { kind: 'milestone', achievementIndex: 25 },
+];
 const FIFTY_FIFTY_SOURCE = `
 
 export const fiftyFiftyGame = {
@@ -185,11 +446,28 @@ export const transfer = {
   status: 'signed',
 } as const;
 `;
+const ANGELS_UNIFORM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img">
+  <title>Los Angeles Angels uniform</title>
+  <rect width="320" height="240" rx="24" fill="#f7f7f7"/>
+  <path d="M86 42 126 24h68l40 18 42 58-40 24-18-28v120H102V96l-18 28-40-24 42-58Z" fill="#ba0021"/>
+  <text x="160" y="88" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="24" font-weight="700">ANGELS</text>
+  <text x="160" y="158" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="64" font-weight="700">17</text>
+</svg>
+`;
+const DODGERS_UNIFORM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img">
+  <title>Los Angeles Dodgers uniform</title>
+  <rect width="320" height="240" rx="24" fill="#f7f7f7"/>
+  <path d="M86 42 126 24h68l40 18 42 58-40 24-18-28v120H102V96l-18 28-40-24 42-58Z" fill="#005a9c"/>
+  <text x="160" y="88" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="24" font-weight="700">DODGERS</text>
+  <text x="160" y="158" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="64" font-weight="700">17</text>
+</svg>
+`;
 
 export const SHOWCASE_STAGED_PATHS = [
   'data/2024-season.json',
   'docs/50-50.md',
   'assets/number-17.svg',
+  'assets/uniform.svg',
   'src/teams/angels/shohei-ohtani.ts',
   'src/teams/dodgers/shohei-ohtani.ts',
   'src/styles.css',
@@ -240,6 +518,25 @@ async function runDatedGit(
   });
 }
 
+async function createPlayerRepository(
+  root: string,
+  player: (typeof PLAYER_REPOSITORIES)[number],
+  index: number,
+): Promise<void> {
+  const repositoryPath = join(root, player.slug);
+  await mkdir(repositoryPath, { recursive: true });
+  await runGit(repositoryPath, ['init', '-b', 'main']);
+  await configureRepository(repositoryPath, player.contributor[0], player.contributor[1]);
+  const committedAt = `2025-01-01T12:${String(index).padStart(2, '0')}:00+09:00`;
+  await runDatedGit(
+    repositoryPath,
+    ['commit', '--allow-empty', '-m', 'chore: initial commit'],
+    player.contributor,
+    committedAt,
+    committedAt,
+  );
+}
+
 async function commitFile(
   repositoryPath: string,
   path: string,
@@ -261,17 +558,155 @@ async function commitFile(
   );
 }
 
+function postseasonTeam(id: PostseasonTeamId): (typeof POSTSEASON_TEAMS)[number] {
+  return POSTSEASON_TEAMS.find((team) => team.id === id)!;
+}
+
+function postseasonBranch(id: PostseasonTeamId): string {
+  return `postseason-${id}`;
+}
+
+function appendAchievementSource(
+  source: string,
+  index: number,
+): { nextSource: string; recordsSource: string } {
+  const achievement = ACHIEVEMENTS[index];
+  if (!achievement) throw new Error(`実績データがありません: ${index}`);
+  const nextSource = `${source}  { date: '${achievement[0].slice(0, 10)}', title: '${achievement[1].slice(6)}' },\n`;
+  return {
+    nextSource,
+    recordsSource: `${nextSource}] as const;${index >= FIFTY_FIFTY_INDEX ? FIFTY_FIFTY_SOURCE : ''}`,
+  };
+}
+
+async function stageAchievementFile(repositoryPath: string, index: number): Promise<void> {
+  const milestone = POSTSEASON_MILESTONES.find((item) => item.achievementIndex === index);
+  if (!milestone) return;
+  await writeRepositoryFile(repositoryPath, milestone.path, milestone.content);
+  await runGit(repositoryPath, ['add', milestone.path]);
+}
+
+async function createPostseasonTeamBranches(repositoryPath: string, index = 0): Promise<void> {
+  const team = POSTSEASON_TEAMS[index];
+  if (!team) return;
+  await runGit(repositoryPath, ['switch', '--create', postseasonBranch(team.id), 'main']);
+  await commitFile(
+    repositoryPath,
+    `docs/2025-postseason/teams/${team.id}.md`,
+    `# ${team.name}\n\n2025年ポストシーズン出場。\n`,
+    `feat: ${team.name}が2025年ポストシーズンに進出`,
+    ACTIVITY_CONTRIBUTOR,
+    `2025-09-29T12:${String(index).padStart(2, '0')}:00+09:00`,
+    committerDate(40 + index),
+  );
+  await createPostseasonTeamBranches(repositoryPath, index + 1);
+}
+
+async function commitPostseasonSeries(
+  repositoryPath: string,
+  event: Extract<(typeof POSTSEASON_EVENTS)[number], { kind: 'series' }>,
+  index: number,
+): Promise<void> {
+  const winner = postseasonTeam(event.winner);
+  const loser = postseasonTeam(event.loser);
+  await runGit(repositoryPath, ['switch', postseasonBranch(event.winner)]);
+  await runGit(repositoryPath, ['merge', '--no-ff', '--no-commit', postseasonBranch(event.loser)]);
+  const path = `docs/2025-postseason/${event.round.toLowerCase()}/${event.winner}-${event.loser}.md`;
+  await mkdir(dirname(join(repositoryPath, path)), { recursive: true });
+  await writeRepositoryFile(
+    repositoryPath,
+    path,
+    `# ${event.round} ${winner.name}対${loser.name}\n\n${event.league}\n\n- ${winner.name}: ${event.winnerWins}勝${event.loserWins}敗\n- ${loser.name}: ${event.loserWins}勝${event.winnerWins}敗\n`,
+  );
+  await runGit(repositoryPath, ['add', path]);
+  await runDatedGit(
+    repositoryPath,
+    [
+      'commit',
+      '-m',
+      `feat: ${event.round} ${winner.name}${event.winnerWins}勝${event.loserWins}敗・${loser.name}${event.loserWins}勝${event.winnerWins}敗`,
+    ],
+    ACTIVITY_CONTRIBUTOR,
+    event.authoredAt,
+    committerDate(60 + index),
+  );
+}
+
+async function commitPostseasonEvents(
+  repositoryPath: string,
+  source: string,
+  index = 0,
+): Promise<string> {
+  const event = POSTSEASON_EVENTS[index];
+  if (!event) return source;
+  let nextSource = source;
+  if (event.kind === 'series') {
+    await commitPostseasonSeries(repositoryPath, event, index);
+  } else {
+    const achievement = ACHIEVEMENTS[event.achievementIndex];
+    if (!achievement) throw new Error(`実績データがありません: ${event.achievementIndex}`);
+    const sources = appendAchievementSource(source, event.achievementIndex);
+    await runGit(repositoryPath, ['switch', postseasonBranch('dodgers')]);
+    await stageAchievementFile(repositoryPath, event.achievementIndex);
+    await commitFile(
+      repositoryPath,
+      'src/records.ts',
+      sources.recordsSource,
+      achievement[1],
+      achievement[2],
+      achievement[0],
+      committerDate(80 + index),
+    );
+    nextSource = sources.nextSource;
+  }
+  return commitPostseasonEvents(repositoryPath, nextSource, index + 1);
+}
+
+async function commitPostseasonBracket(repositoryPath: string, source: string): Promise<void> {
+  await createPostseasonTeamBranches(repositoryPath);
+  const nextSource = await commitPostseasonEvents(repositoryPath, source);
+  const finalAchievement = ACHIEVEMENTS[WORLD_SERIES_2025_INDEX];
+  if (!finalAchievement) throw new Error('ワールドシリーズの実績データがありません。');
+  const finalSources = appendAchievementSource(nextSource, WORLD_SERIES_2025_INDEX);
+
+  await runGit(repositoryPath, ['switch', 'main']);
+  await runGit(repositoryPath, ['merge', '--ff-only', postseasonBranch('dodgers')]);
+  await runGit(repositoryPath, ['merge', '--no-ff', '--no-commit', postseasonBranch('blue-jays')]);
+  await writeRepositoryFile(
+    repositoryPath,
+    'docs/2025-world-series.md',
+    '# ワールドシリーズ2連覇\n\n2025年11月1日、ドジャースがブルージェイズを4勝3敗で破り2連覇を達成。\n',
+  );
+  await writeRepositoryFile(
+    repositoryPath,
+    'data/current-champion.json',
+    '{\n  "year": 2025,\n  "champion": "Los Angeles Dodgers",\n  "opponent": "Toronto Blue Jays",\n  "series": "4-3",\n  "consecutiveTitles": 2\n}\n',
+  );
+  await runGit(repositoryPath, ['add', 'docs/2025-world-series.md', 'data/current-champion.json']);
+  await commitFile(
+    repositoryPath,
+    'src/records.ts',
+    finalSources.recordsSource,
+    finalAchievement[1],
+    finalAchievement[2],
+    finalAchievement[0],
+    committerDate(100),
+  );
+}
+
 async function commitAchievements(
   repositoryPath: string,
   index = 0,
   source = 'export const achievements = [\n',
 ): Promise<void> {
+  if (index === POSTSEASON_START_INDEX) {
+    await commitPostseasonBracket(repositoryPath, source);
+    return;
+  }
   const achievement = ACHIEVEMENTS[index];
   if (!achievement) return;
-  const isFiftyFifty = index === ACHIEVEMENTS.length - 1;
-  const nextSource = `${source}  { date: '${achievement[0].slice(0, 10)}', title: '${achievement[1].slice(6)}' },\n${
-    isFiftyFifty ? `] as const;${FIFTY_FIFTY_SOURCE}` : ''
-  }`;
+  const isFiftyFifty = index === FIFTY_FIFTY_INDEX;
+  const { nextSource, recordsSource } = appendAchievementSource(source, index);
   const achievementBranch = ACHIEVEMENT_BRANCHES.find(
     (branch) => branch.achievementIndex === index,
   );
@@ -288,21 +723,48 @@ async function commitAchievements(
     );
     await runGit(repositoryPath, ['switch', 'main']);
   } else {
-    const branchToMerge = isFiftyFifty
-      ? 'family-news'
-      : ACHIEVEMENT_BRANCHES.find((branch) => branch.mergeAtIndex === index)?.name;
-    if (isFiftyFifty) await createFirstChildBranch(repositoryPath);
-    if (branchToMerge)
-      await runGit(repositoryPath, ['merge', '--no-ff', '--no-commit', branchToMerge]);
+    const branchesToMerge = ACHIEVEMENT_BRANCHES.filter(
+      (branch) => branch.mergeAtIndex === index,
+    ).map((branch) => branch.name);
+    if (branchesToMerge.length > 0)
+      await runGit(repositoryPath, ['merge', '--no-ff', '--no-commit', ...branchesToMerge]);
+    if (achievement[1] === WORLD_SERIES_2024_MESSAGE) {
+      await Promise.all([
+        mkdir(join(repositoryPath, 'assets'), { recursive: true }),
+        mkdir(join(repositoryPath, 'data'), { recursive: true }),
+      ]);
+      await writeRepositoryFile(
+        repositoryPath,
+        'docs/2024-world-series.md',
+        '# ワールドシリーズ制覇\n\n2024年10月30日、ドジャースがワールドシリーズを制覇。\n',
+      );
+      await writeRepositoryFile(repositoryPath, 'assets/uniform.svg', ANGELS_UNIFORM_SVG);
+      await writeRepositoryFile(
+        repositoryPath,
+        'data/current-champion.json',
+        '{\n  "year": 2024,\n  "champion": "Los Angeles Dodgers",\n  "opponent": "New York Yankees",\n  "series": "4-1",\n  "consecutiveTitles": 1\n}\n',
+      );
+      await runGit(repositoryPath, [
+        'add',
+        'docs/2024-world-series.md',
+        'assets/uniform.svg',
+        'data/current-champion.json',
+      ]);
+    }
+    await stageAchievementFile(repositoryPath, index);
     await commitFile(
       repositoryPath,
       'src/records.ts',
-      nextSource,
+      recordsSource,
       achievement[1],
       achievement[2],
       achievement[0],
       committerDate(index),
     );
+  }
+  if (isFiftyFifty) {
+    await runGit(repositoryPath, ['tag', '50-50']);
+    await createFirstChildBranch(repositoryPath);
   }
   await commitAchievements(repositoryPath, index + 1, nextSource);
 }
@@ -341,7 +803,7 @@ async function createFirstChildBranch(repositoryPath: string): Promise<void> {
     FIRST_CHILD_MESSAGE,
     CONTRIBUTORS.ohtani,
     FIRST_CHILD_DATE,
-    committerDate(ACHIEVEMENTS.length - 2),
+    committerDate(FIFTY_FIFTY_INDEX),
   );
   await runGit(repositoryPath, ['switch', 'main']);
 }
@@ -360,13 +822,16 @@ async function createShowcaseRepository(root: string): Promise<string> {
   );
   await runGit(repositoryPath, ['add', 'src/teams/angels/shohei-ohtani.ts']);
   await commitAchievements(repositoryPath);
-  await runGit(repositoryPath, ['tag', '50-50']);
   return realpath(repositoryPath);
 }
 
 async function requireFixtureBase(): Promise<void> {
   try {
-    await access(join(fixtureBaseRepository, '.git'));
+    await Promise.all(
+      [fixtureBaseRepository, ...fixtureBasePlayerRepositories].map((path) =>
+        access(join(path, '.git')),
+      ),
+    );
   } catch (cause) {
     throw new Error('基底フィクスチャがありません。先に`mise run setup`を実行してください。', {
       cause,
@@ -377,25 +842,57 @@ async function requireFixtureBase(): Promise<void> {
 export async function setupShowcaseFixtureBase(): Promise<string> {
   await rm(fixtureBaseRoot, { recursive: true, force: true });
   const repositoryPath = await createShowcaseRepository(fixtureBaseRoot);
+  await Promise.all(
+    PLAYER_REPOSITORIES.map((player, index) =>
+      createPlayerRepository(fixtureBaseRoot, player, index),
+    ),
+  );
   await prepareShowcaseChanges(repositoryPath);
   await stageShowcaseChanges(repositoryPath);
   return repositoryPath;
 }
 
-export async function resetDevelopmentShowcaseFixture(): Promise<string> {
+export async function resetDevelopmentShowcaseFixture(): Promise<string[]> {
   await requireFixtureBase();
-  await rm(developmentRepository, { recursive: true, force: true });
-  await rm(developmentRemote, { recursive: true, force: true });
-  await rm(join(developmentFixtureRoot, '.showcase-ready'), { force: true });
+  await Promise.all(
+    [developmentRepository, developmentRemote, ...developmentPlayerRepositories].map((path) =>
+      rm(path, { recursive: true, force: true }),
+    ),
+  );
   await mkdir(developmentFixtureRoot, { recursive: true });
-  await cp(fixtureBaseRepository, developmentRepository, { recursive: true });
+  await Promise.all([
+    cp(fixtureBaseRepository, developmentRepository, { recursive: true }),
+    ...fixtureBasePlayerRepositories.map((source, index) =>
+      cp(source, developmentPlayerRepositories[index]!, { recursive: true }),
+    ),
+  ]);
   await ensureLocalBareRemote(developmentRepository, developmentRemote);
-  return realpath(developmentRepository);
+  return Promise.all(
+    [developmentRepository, ...developmentPlayerRepositories].map((path) => realpath(path)),
+  );
 }
 
-export async function ensureDevelopmentShowcaseRemote(): Promise<string> {
+export async function ensureDevelopmentShowcaseFixtures(): Promise<string[]> {
+  await requireFixtureBase();
+  try {
+    await access(join(developmentRepository, '.git'));
+  } catch {
+    return resetDevelopmentShowcaseFixture();
+  }
+  await Promise.all(
+    fixtureBasePlayerRepositories.map(async (source, index) => {
+      const destination = developmentPlayerRepositories[index]!;
+      try {
+        await access(join(destination, '.git'));
+      } catch {
+        await cp(source, destination, { recursive: true });
+      }
+    }),
+  );
   await ensureLocalBareRemote(developmentRepository, developmentRemote);
-  return realpath(developmentRepository);
+  return Promise.all(
+    [developmentRepository, ...developmentPlayerRepositories].map((path) => realpath(path)),
+  );
 }
 
 export async function copyE2EShowcaseRepository(
@@ -468,7 +965,7 @@ async function prepareShowcaseChanges(repositoryPath: string): Promise<void> {
   await writeRepositoryFile(
     repositoryPath,
     'docs/timeline.md',
-    '# 大谷翔平 実績タイムライン\n\n2018年のMLBデビューから2024年の50-50達成まで。\n',
+    '# ドジャース 実績タイムライン\n\n2018年の大谷翔平のMLBデビューから2025年のワールドシリーズ2連覇まで。\n',
   );
   await writeRepositoryFile(
     repositoryPath,
@@ -478,8 +975,9 @@ async function prepareShowcaseChanges(repositoryPath: string): Promise<void> {
   await writeRepositoryFile(
     repositoryPath,
     'assets/number-17.svg',
-    '<svg xmlns="http://www.w3.org/2000/svg"><text x="4" y="20">17</text></svg>\n',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200"><rect width="320" height="200" rx="24" fill="#f7f7f7"/><text x="160" y="105" text-anchor="middle" dominant-baseline="middle" fill="#005a9c" font-family="Arial, sans-serif" font-size="120" font-weight="700">17</text></svg>\n',
   );
+  await writeRepositoryFile(repositoryPath, 'assets/uniform.svg', DODGERS_UNIFORM_SVG);
   await writeRepositoryFile(
     repositoryPath,
     '.github/workflows/check.yml',

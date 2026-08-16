@@ -1,15 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { access } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  ensureDevelopmentShowcaseRemote,
-  resetDevelopmentShowcaseFixture,
-} from '../tests/e2e/support/showcaseRepository.js';
+import { ensureDevelopmentShowcaseFixtures } from '../tests/e2e/support/showcaseRepository.js';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const developmentRepositoryPath = join(repositoryRoot, 'tmp', 'dev', 'major-league-baseball');
 
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {
@@ -21,25 +16,16 @@ function run(command: string, args: string[]) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-async function exists(path: string): Promise<boolean> {
-  return access(path).then(
-    () => true,
-    () => false,
-  );
-}
-
-async function prepareDevelopmentRepository(): Promise<void> {
-  if (!(await exists(join(developmentRepositoryPath, '.git'))))
-    await resetDevelopmentShowcaseFixture();
-  else await ensureDevelopmentShowcaseRemote();
-  process.env.VITE_DEV_REPOSITORY_PATH = developmentRepositoryPath;
+async function prepareDevelopmentRepositories(): Promise<void> {
+  const paths = await ensureDevelopmentShowcaseFixtures();
+  process.env.VITE_DEV_REPOSITORY_PATHS = JSON.stringify(paths);
 }
 
 const mode = process.argv[2];
 const executable = (name: string) => resolve(repositoryRoot, 'node_modules', '.bin', name);
 run(process.execPath, ['--import', 'tsx', 'scripts/toolchain.mts', 'verify']);
 if (mode === 'dev') {
-  await prepareDevelopmentRepository();
+  await prepareDevelopmentRepositories();
   run(executable('vite'), []);
 } else if (mode === 'build') {
   run(executable('tsc'), ['-b']);
