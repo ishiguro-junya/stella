@@ -235,7 +235,7 @@ describe('Diff', () => {
     await selectAndExpectImagePreview('preview.svg');
 
     const svgToggle = $('.diff-file-toolbar button[aria-label="画像プレビュー"]');
-    const fileModeToggle = $('.diff-file-toolbar button[aria-label="編集"]');
+    const fileModeToggle = $('.diff-file-toolbar .file-view-mode-toggle');
     expect((await svgToggle.getLocation('x')) < (await fileModeToggle.getLocation('x'))).toBe(true);
     await $('.diff-file-toolbar .file-action-trigger').click();
     await $('button=画像をプレビュー').click();
@@ -243,7 +243,7 @@ describe('Diff', () => {
     await expect($('.diff-surface')).toBeDisplayed();
     await svgToggle.click();
     await expect(svgToggle).toHaveAttribute('aria-pressed', 'true');
-    await $('.diff-file-toolbar button[aria-label="編集"]').click();
+    await $('.diff-file-toolbar .file-view-mode-toggle').click();
     await expect($('.file-editor')).toBeDisplayed();
     const editorImageToggle = $('.file-editor-toolbar button[aria-label="画像プレビュー"]');
     await expect(editorImageToggle).toBeDisabled();
@@ -1145,10 +1145,11 @@ describe('Diff', () => {
   it('opens a changed file in the editor and returns to its Diff', async () => {
     await $('button.change-row').click();
     await expect($('.selected-file-toggle')).not.toExist();
-    const editToggle = $('.diff-file-toolbar button[aria-label="編集"]');
+    const editToggle = $('.diff-file-toolbar .file-view-mode-toggle');
     await expect(editToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(editToggle).toHaveAttribute('aria-label', 'ファイル編集切り替え');
     await expectInteractiveSelectedColors(
-      '.diff-file-toolbar button[aria-label="編集"] .toggle-button-thumb',
+      '.diff-file-toolbar .file-view-mode-toggle .toggle-button-thumb',
       { palette: 'neutral' },
     );
     await browser.waitUntil(
@@ -1195,7 +1196,7 @@ describe('Diff', () => {
     await expect(editToggle).not.toHaveAttribute('title');
     await browser.execute(() => {
       document
-        .querySelector<HTMLElement>('.diff-file-toolbar button[aria-label="編集"]')!
+        .querySelector<HTMLElement>('.diff-file-toolbar .file-view-mode-toggle')!
         .dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     });
     await expect($('.app-tooltip')).toHaveText('ファイル編集切り替え');
@@ -1205,9 +1206,9 @@ describe('Diff', () => {
     const editor = $('.file-editor-pane');
     await editor.waitForDisplayed({ timeout: 10_000 });
     await expect(editor.$('h2')).toHaveText('README.md');
-    await expect(editor.$('button[aria-label="表示"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(editor.$('.file-view-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
     await expectInteractiveSelectedColors(
-      '.file-editor-pane button[aria-label="表示"] .toggle-button-thumb',
+      '.file-editor-pane .file-view-mode-toggle .toggle-button-thumb',
       { palette: 'neutral' },
     );
     await expect(editor.$('button=保存する')).not.toExist();
@@ -1276,7 +1277,7 @@ describe('Diff', () => {
       { timeout: 10_000, timeoutMsg: 'The unsaved dots did not appear in both panes.' },
     );
 
-    await editor.$('button[aria-label="表示"]').click();
+    await editor.$('.file-view-mode-toggle').click();
     const displayDialog = $('[role="alertdialog"]');
     await displayDialog.waitForDisplayed({ timeout: 10_000 });
     await expect(displayDialog.$('h2')).toHaveText('未保存の変更');
@@ -1321,7 +1322,7 @@ describe('Diff', () => {
     expect(diffTypography.fontSize).toBeCloseTo(15.6);
     expect(diffTypography.lineHeight).toBeCloseTo(24);
 
-    await $('.diff-file-toolbar button[aria-label="編集"]').click();
+    await $('.diff-file-toolbar .file-view-mode-toggle').click();
     const textbox = $('.file-editor-pane [role="textbox"]');
     await textbox.waitForDisplayed({ timeout: 10_000 });
     const editorTypography = await browser.execute(() => {
@@ -1408,7 +1409,7 @@ describe('Diff', () => {
     expect(hunkEditorPosition.viewportRatio).toBeGreaterThan(0.2);
     expect(hunkEditorPosition.viewportRatio).toBeLessThan(0.3);
 
-    await editor.$('button[aria-label="表示"]').click();
+    await editor.$('.file-view-mode-toggle').click();
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -1461,14 +1462,14 @@ describe('Diff', () => {
       '選択した行をコピー',
     ]);
     await browser.keys(['Escape']);
-    await $('.diff-file-actions button[aria-label="編集"]').click();
+    await $('.diff-file-actions .file-view-mode-toggle').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
     const contextEditorPosition = await waitForEditorPosition(contextLineText);
     expect(contextEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(contextEditorPosition.activeLine).toBe(contextLineText);
     expect(contextEditorPosition.focused).toBe(true);
 
-    await $('.file-editor-pane button[aria-label="表示"]').click();
+    await $('.file-editor-pane .file-view-mode-toggle').click();
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -1578,7 +1579,7 @@ describe('Diff', () => {
       );
       deletedLines[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
     });
-    await $('.diff-file-actions button[aria-label="編集"]').click();
+    await $('.diff-file-actions .file-view-mode-toggle').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
 
     const editorPosition = await waitForEditorPosition('line-42');

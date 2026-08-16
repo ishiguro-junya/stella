@@ -1523,6 +1523,7 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   border-bottom: 1px solid var(--border-subtle);
 }
 .diff-file-standalone-header {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   min-height: 32px;
@@ -1530,6 +1531,14 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   border-top: 1px solid var(--border-strong);
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--diff-file-header-surface);
+}
+.diff-file-standalone-header button.toggle-button {
+  height: 30px;
+  min-height: 30px;
+  padding-block: 1px;
+}
+.diff-file-standalone-header .toggle-button-thumb {
+  top: 1px;
 }
 .diff-file-standalone-header.is-sticky {
   position: sticky;

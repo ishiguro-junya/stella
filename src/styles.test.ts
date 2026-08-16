@@ -59,7 +59,10 @@ describe('changes file selection', () => {
   it('uses the same surface and dimensions for regular and image file headers', () => {
     expect(styles).toMatch(/--diff-file-header-surface:\s*light-dark\(/u);
     expect(styles).toMatch(
-      /\.diff-file-standalone-header\s*\{[^}]*min-height:\s*32px;[^}]*padding-inline:\s*8px 16px;[^}]*background-color:\s*var\(--diff-file-header-surface\);/u,
+      /\.diff-file-standalone-header\s*\{[^}]*box-sizing:\s*border-box;[^}]*min-height:\s*32px;[^}]*padding-inline:\s*8px 16px;[^}]*background-color:\s*var\(--diff-file-header-surface\);/u,
+    );
+    expect(styles).toMatch(
+      /\.diff-file-standalone-header button\.toggle-button\s*\{[^}]*height:\s*30px;[^}]*min-height:\s*30px;[^}]*padding-block:\s*1px;/u,
     );
   });
 

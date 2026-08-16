@@ -171,7 +171,7 @@ describe('Repository and Branch navigation', () => {
     ]);
     expect(
       await $$('.titlebar-actions .titlebar-menu-button').map((button) => button.getText()),
-    ).toEqual(['変更', '履歴', '活動', '設定']);
+    ).toEqual(['差分', '履歴', '活動', '設定']);
     expect(
       await browser.tauri.execute(() =>
         document.querySelector('.app-header')?.getAttribute('data-tauri-drag-region'),

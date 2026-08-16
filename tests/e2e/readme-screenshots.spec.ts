@@ -88,7 +88,7 @@ describe('README用スクリーンショット', () => {
       await blurActiveElement();
       await saveLogicalScreenshot(join(outputDirectory, 'changes.png'), 1180, 760);
 
-      await $('.diff-file-toolbar button[aria-label="編集"]').click();
+      await $('.diff-file-toolbar .file-view-mode-toggle').click();
       const editor = $('.file-editor-pane');
       await editor.waitForDisplayed({ timeout: 10_000 });
       await expect(editor.$('[role="textbox"]')).toHaveAttribute(
