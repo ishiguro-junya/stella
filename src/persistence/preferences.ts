@@ -30,7 +30,11 @@ export interface PaneWidths {
   right: number;
 }
 
-export type PaneWidthPreferences = PaneWidths;
+export interface PaneWidthPreferences {
+  changes: PaneWidths;
+  history: { left: number };
+  activity: { left: number };
+}
 
 export interface CommitDraft {
   plainMessage: string;
@@ -57,8 +61,6 @@ export interface StellaPreferences {
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
   repositoryHealthIssues: Record<string, RepositoryHealthIssue[]>;
-  openRepoPaths: string[];
-  selectedRepoPath?: string;
   paneWidths: PaneWidthPreferences;
   commitDrafts: Record<string, CommitDraft>;
 }
@@ -82,8 +84,11 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   registeredRepoPaths: [],
   repositoryNames: {},
   repositoryHealthIssues: {},
-  openRepoPaths: [],
-  paneWidths: { left: 360, right: 336 },
+  paneWidths: {
+    changes: { left: 360, right: 336 },
+    history: { left: 472 },
+    activity: { left: 590 },
+  },
   commitDrafts: {},
 };
 
@@ -272,21 +277,35 @@ export function readPreferences(): StellaPreferences {
       registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
       repositoryNames: repositoryNameRecord(value.repositoryNames),
       repositoryHealthIssues: repositoryHealthIssueRecord(value.repositoryHealthIssues),
-      openRepoPaths: stringArray(value.openRepoPaths, 12),
-      ...(typeof value.selectedRepoPath === 'string'
-        ? { selectedRepoPath: value.selectedRepoPath }
-        : {}),
       paneWidths: {
-        left: boundedWidth(
-          sharedLeftPaneWidth,
-          DEFAULT_PREFERENCES.paneWidths.left,
-          LEFT_PANE_MIN_WIDTH,
-          LEFT_PANE_MAX_WIDTH,
-        ),
-        right: boundedWidth(
-          paneWidths.right ?? changesPaneWidths.right,
-          DEFAULT_PREFERENCES.paneWidths.right,
-        ),
+        changes: {
+          left: boundedWidth(
+            changesPaneWidths.left ?? sharedLeftPaneWidth,
+            DEFAULT_PREFERENCES.paneWidths.changes.left,
+            LEFT_PANE_MIN_WIDTH,
+            LEFT_PANE_MAX_WIDTH,
+          ),
+          right: boundedWidth(
+            changesPaneWidths.right ?? paneWidths.right,
+            DEFAULT_PREFERENCES.paneWidths.changes.right,
+          ),
+        },
+        history: {
+          left: boundedWidth(
+            historyPaneWidths.left ?? sharedLeftPaneWidth,
+            DEFAULT_PREFERENCES.paneWidths.history.left,
+            LEFT_PANE_MIN_WIDTH,
+            LEFT_PANE_MAX_WIDTH,
+          ),
+        },
+        activity: {
+          left: boundedWidth(
+            activityPaneWidths.left ?? sharedLeftPaneWidth,
+            DEFAULT_PREFERENCES.paneWidths.activity.left,
+            LEFT_PANE_MIN_WIDTH,
+            LEFT_PANE_MAX_WIDTH,
+          ),
+        },
       },
       commitDrafts: commitDraftRecord(value.commitDrafts),
     };
@@ -311,12 +330,10 @@ export function updatePreferences(
   return next;
 }
 
-export function setDevelopmentRepository(path: string): StellaPreferences {
+export function setDevelopmentRepositories(paths: readonly string[]): StellaPreferences {
   return updatePreferences((current) => ({
     ...current,
-    registeredRepoPaths: [path],
-    openRepoPaths: [path],
-    selectedRepoPath: path,
+    registeredRepoPaths: [...new Set(paths)],
   }));
 }
 
@@ -358,8 +375,6 @@ export function replaceRepositoryPath(oldPath: string, newPath: string): StellaP
       ),
       repositoryNames,
       repositoryHealthIssues,
-      openRepoPaths: current.openRepoPaths.map((path) => (path === oldPath ? newPath : path)),
-      ...(current.selectedRepoPath === oldPath ? { selectedRepoPath: newPath } : {}),
       commitDrafts,
     };
   });
@@ -373,14 +388,11 @@ export function forgetRepositoryPath(path: string): StellaPreferences {
     delete repositoryNames[path];
     delete repositoryHealthIssues[path];
     delete commitDrafts[path];
-    const withoutSelectedRepoPath = { ...current };
-    delete withoutSelectedRepoPath.selectedRepoPath;
     return {
-      ...(current.selectedRepoPath === path ? withoutSelectedRepoPath : current),
+      ...current,
       registeredRepoPaths: current.registeredRepoPaths.filter((candidate) => candidate !== path),
       repositoryNames,
       repositoryHealthIssues,
-      openRepoPaths: current.openRepoPaths.filter((candidate) => candidate !== path),
       commitDrafts,
     };
   });

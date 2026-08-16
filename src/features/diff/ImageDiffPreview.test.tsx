@@ -298,6 +298,69 @@ describe('ImageDiffPreview', () => {
     expect(screen.queryByAltText('Image: old.png')).not.toBeInTheDocument();
   });
 
+  it('keeps the current image and captions visible until the next image is decoded', async () => {
+    const workspace = adapter();
+    const oldProps = {
+      adapter: workspace,
+      repoId: 'repo-1',
+      target: {
+        kind: 'changes' as const,
+        path: 'old.svg',
+        previousPath: 'before-old.svg',
+        area: 'unstaged' as const,
+        generation: 1,
+        diffId: 'old-diff',
+      },
+      candidate: {
+        path: 'old.svg',
+        previousPath: 'before-old.svg',
+        changeKind: 'renamed' as const,
+        format: 'svg' as const,
+      },
+    };
+    const nextProps = {
+      ...oldProps,
+      target: { ...oldProps.target, path: 'new.svg', generation: 2, diffId: 'new-diff' },
+      candidate: { path: 'new.svg', changeKind: 'added' as const, format: 'svg' as const },
+    };
+    const view = render(
+      <I18nProvider language="en">
+        <ImageDiffPreview {...oldProps} />
+      </I18nProvider>,
+    );
+
+    const oldImage = await screen.findByAltText('After image: old.svg');
+    let finishDecode!: () => void;
+    decodeImage.mockImplementationOnce(
+      async () =>
+        await new Promise<void>((resolve) => {
+          finishDecode = resolve;
+        }),
+    );
+
+    view.rerender(
+      <I18nProvider language="en">
+        <ImageDiffPreview {...nextProps} hidden />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(workspace.query).toHaveBeenCalledTimes(3));
+    expect(screen.getByAltText('After image: old.svg')).toBe(oldImage);
+    expect(screen.getByText('before-old.svg')).toBeVisible();
+    expect(screen.getByText('old.svg')).toBeVisible();
+    expect(screen.queryByAltText('Image: new.svg')).not.toBeInTheDocument();
+
+    await act(async () => finishDecode());
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:image-1'));
+    view.rerender(
+      <I18nProvider language="en">
+        <ImageDiffPreview {...nextProps} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByAltText('Image: new.svg')).toBeVisible();
+    expect(screen.queryByAltText('After image: old.svg')).not.toBeInTheDocument();
+  });
+
   it('probes a pure rename without displaying it until WebKit decodes the image', async () => {
     const workspace = adapter();
     const onProbeResult = vi.fn<(previewable: boolean) => void>();

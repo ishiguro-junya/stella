@@ -1,5 +1,5 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- 共通ダイアログ内でフォーカスを管理し、ARIAの`combobox`と`listbox`の操作規則を実装する。 */
-import { Check, Search } from 'lucide-react';
+import { ArrowRightLeft, Check, Search } from 'lucide-react';
 import {
   useId,
   useMemo,
@@ -44,6 +44,7 @@ export interface SwitcherDialogProps {
   emptyMessage: string;
   hint?: string;
   footer?: ReactNode;
+  renderFooter?: (selectedItem: SwitcherDialogItem | undefined) => ReactNode;
   onDismiss: () => void;
   onSelect: (item: SwitcherDialogItem) => void;
   onAction?: (item: SwitcherDialogItem, action: string) => void;
@@ -61,7 +62,11 @@ function matchingItems(items: readonly SwitcherDialogItem[], query: string): Swi
 }
 
 function initialActiveId(items: readonly SwitcherDialogItem[]): string | undefined {
-  return items.find((item) => item.current)?.id ?? items[0]?.id;
+  return (
+    items.find((item) => item.current)?.id ??
+    items.find((item) => !item.disabled)?.id ??
+    items[0]?.id
+  );
 }
 
 export function SwitcherDialog({
@@ -72,6 +77,7 @@ export function SwitcherDialog({
   emptyMessage,
   hint,
   footer,
+  renderFooter,
   onDismiss,
   onSelect,
   onAction,
@@ -80,32 +86,43 @@ export function SwitcherDialog({
   const titleId = useId();
   const listId = useId();
   const hintId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef(new Map<string, HTMLButtonElement>());
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | undefined>(() => initialActiveId(items));
+  const [selectedId, setSelectedId] = useState<string | undefined>(() => initialActiveId(items));
   const [focusedId, setFocusedId] = useState<string>();
   const [openMenu, setOpenMenu] = useState<OpenItemMenu>();
   const filteredItems = useMemo(() => matchingItems(items, query), [items, query]);
   const effectiveActiveId = filteredItems.some((item) => item.id === activeId)
     ? activeId
     : initialActiveId(filteredItems);
+  const effectiveSelectedId = filteredItems.some((item) => item.id === selectedId)
+    ? selectedId
+    : initialActiveId(filteredItems);
   const activeIndex = filteredItems.findIndex((item) => item.id === effectiveActiveId);
   const activeOptionId = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
-
-  const moveActive = (nextIndex: number): void => {
-    const next = filteredItems[nextIndex];
-    if (next) setActiveId(next.id);
-  };
+  const selectedItem = filteredItems.find((item) => item.id === effectiveSelectedId);
 
   const focusOption = (nextIndex: number): void => {
     const next = filteredItems[nextIndex];
     if (!next) return;
+    listRef.current?.classList.add('is-keyboard-navigating');
     setActiveId(next.id);
+    setSelectedId(next.id);
     optionRefs.current.get(next.id)?.focus();
   };
 
-  const selectItem = (item: SwitcherDialogItem): void => {
-    if (!item.disabled && !item.current) onSelect(item);
+  const activateItem = (item: SwitcherDialogItem): void => {
+    if (item.disabled) return;
+    if (item.current) onDismiss();
+    else onSelect(item);
+  };
+
+  const focusAndSelectItem = (item: SwitcherDialogItem): void => {
+    setActiveId(item.id);
+    setSelectedId(item.id);
+    optionRefs.current.get(item.id)?.focus();
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
@@ -113,25 +130,25 @@ export function SwitcherDialog({
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        moveActive(Math.min(Math.max(activeIndex, -1) + 1, filteredItems.length - 1));
+        focusOption(Math.min(Math.max(activeIndex, -1) + 1, filteredItems.length - 1));
         break;
       case 'ArrowUp':
         event.preventDefault();
-        moveActive(Math.max(activeIndex - 1, 0));
+        focusOption(Math.max(activeIndex - 1, 0));
         break;
       case 'Home':
         event.preventDefault();
-        moveActive(0);
+        focusOption(0);
         break;
       case 'End':
         event.preventDefault();
-        moveActive(filteredItems.length - 1);
+        focusOption(filteredItems.length - 1);
         break;
       case 'Enter': {
         const active = filteredItems[activeIndex];
         if (!active) return;
         event.preventDefault();
-        selectItem(active);
+        activateItem(active);
         break;
       }
     }
@@ -161,7 +178,7 @@ export function SwitcherDialog({
         break;
       case 'Enter':
         event.preventDefault();
-        selectItem(item);
+        activateItem(item);
         break;
     }
   };
@@ -169,8 +186,7 @@ export function SwitcherDialog({
   const openContextMenu = (event: MouseEvent<HTMLDivElement>, item: SwitcherDialogItem): void => {
     if (!item.actions?.length || !onAction) return;
     event.preventDefault();
-    setActiveId(item.id);
-    optionRefs.current.get(item.id)?.focus();
+    focusAndSelectItem(item);
     setOpenMenu({ itemId: item.id, point: { x: event.clientX, y: event.clientY } });
   };
 
@@ -207,6 +223,7 @@ export function SwitcherDialog({
             const nextItems = matchingItems(items, nextQuery);
             setQuery(nextQuery);
             setActiveId(initialActiveId(nextItems));
+            setSelectedId(initialActiveId(nextItems));
             setOpenMenu(undefined);
           }}
           onKeyDown={handleSearchKeyDown}
@@ -218,15 +235,17 @@ export function SwitcherDialog({
         </p>
       ) : null}
       <div
+        ref={listRef}
         id={listId}
         className="switcher-list"
         role="listbox"
         aria-label={title}
         aria-busy={loading}
+        onPointerMove={(event) => event.currentTarget.classList.remove('is-keyboard-navigating')}
       >
         {filteredItems.length ? (
           filteredItems.map((item, index) => {
-            const selected = item.id === effectiveActiveId;
+            const selected = item.id === effectiveSelectedId;
             return (
               <div
                 key={item.id}
@@ -254,8 +273,12 @@ export function SwitcherDialog({
                   data-switcher-item-label={item.label}
                   data-dialog-initial-focus={item.id === initialFocusId ? true : undefined}
                   onFocus={() => setActiveId(item.id)}
-                  onClick={() => setActiveId(item.id)}
-                  onDoubleClick={() => selectItem(item)}
+                  onClick={(event) => {
+                    event.currentTarget.focus();
+                    setActiveId(item.id);
+                    if (!item.disabled) setSelectedId(item.id);
+                  }}
+                  onDoubleClick={() => activateItem(item)}
                   onKeyDown={(event) => handleOptionKeyDown(event, index, item)}
                 >
                   <span className="switcher-check" aria-hidden="true">
@@ -294,7 +317,7 @@ export function SwitcherDialog({
                     contextPoint={openMenu?.itemId === item.id ? openMenu.point : undefined}
                     triggerClassName="switcher-action-trigger is-persistent"
                     onOpenChange={(open) => setOpenMenu(open ? { itemId: item.id } : undefined)}
-                    onTriggerOpen={() => setActiveId(item.id)}
+                    onTriggerOpen={() => focusAndSelectItem(item)}
                     getActionFocusTarget={() => optionRefs.current.get(item.id)}
                     getCloseFocusTarget={() => optionRefs.current.get(item.id)}
                     onAction={(action) => onAction(item, action)}
@@ -308,7 +331,19 @@ export function SwitcherDialog({
         )}
         {loading ? <LoadingIndicator className="switcher-loading" /> : null}
       </div>
-      {footer ? <div className="switcher-footer">{footer}</div> : null}
+      <div className="switcher-footer">
+        {footer}
+        {renderFooter?.(selectedItem)}
+        <Button
+          type="button"
+          variant="primary"
+          disabled={!selectedItem || selectedItem.disabled}
+          onClick={() => selectedItem && activateItem(selectedItem)}
+        >
+          <ArrowRightLeft aria-hidden="true" focusable="false" />
+          {t('switch')}
+        </Button>
+      </div>
     </Dialog>
   );
 }

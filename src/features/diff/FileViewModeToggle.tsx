@@ -1,4 +1,4 @@
-import { Lock, Pencil } from 'lucide-react';
+import { FileDiff, Pencil } from 'lucide-react';
 
 import { ToggleButton } from '../../ui/ToggleButton';
 import { useI18n } from '../../i18n/i18n';
@@ -29,7 +29,7 @@ export function FileViewModeToggle({
       aria-label={t('fileEditToggle')}
       tooltip={t('fileEditToggle')}
       pressed={editing}
-      offIcon={Lock}
+      offIcon={FileDiff}
       onIcon={Pencil}
       disabled={editing ? displayDisabled : editDisabled}
       onPressedChange={(pressed) => (pressed ? onEdit() : onDisplay())}

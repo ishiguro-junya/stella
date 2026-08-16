@@ -263,9 +263,8 @@ export function TextEditor({
             fontFamily: 'var(--font-mono)',
             color: 'var(--text-tertiary)',
             backgroundColor: 'var(--surface-raised)',
-            borderRightColor: 'var(--border-subtle)',
           },
-          '.cm-lineNumbers .cm-gutterElement': { paddingRight: '4px' },
+          '.cm-lineNumbers .cm-gutterElement': { paddingRight: '5px' },
           '.cm-foldGutter': { width: '18px' },
           '.cm-foldGutter .cm-gutterElement': {
             display: 'flex',
@@ -291,7 +290,7 @@ export function TextEditor({
           '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
             backgroundColor: 'var(--selection-strong)',
           },
-          '&.cm-focused': { outline: '2px solid var(--focus)', outlineOffset: '-2px' },
+          '&.cm-focused': { outline: 'none' },
         }),
         languageRef.current.of([]),
         editableRef.current.of([

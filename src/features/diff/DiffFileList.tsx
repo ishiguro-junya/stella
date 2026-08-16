@@ -81,10 +81,12 @@ export interface DiffFileListProps {
   selectedKey: string;
   selectionKeys?: readonly string[] | undefined;
   unsavedFileKey?: string | undefined;
+  editingFileKey?: string | undefined;
   disabled: boolean;
   disabledReasonId?: string | undefined;
   fileActionsDisabled: boolean;
   fileEditDisabled?: boolean | undefined;
+  fileRenameDisabled?: boolean | undefined;
   fileOpenDisabled: boolean;
   fileTrashDisabled: boolean;
   imagePreview?:
@@ -100,6 +102,11 @@ export interface DiffFileListProps {
   onSelectedKeysChange?: ((keys: string[]) => void) | undefined;
   onStageTransition: (request: StageTransitionRequest) => Promise<void>;
   onFileAction: (entries: ChangeEntry[], action: FileActionKind) => Promise<void>;
+  renamingKey?: string | undefined;
+  renamePending?: boolean | undefined;
+  onRenameStart?: ((entry: ChangeEntry) => void) | undefined;
+  onRenameCancel?: (() => void) | undefined;
+  onRename?: ((entry: ChangeEntry, name: string) => Promise<void>) | undefined;
 }
 
 function entryKey(entry: ChangeEntry): string {
@@ -187,10 +194,12 @@ export function DiffFileList({
   selectedKey,
   selectionKeys,
   unsavedFileKey,
+  editingFileKey,
   disabled,
   disabledReasonId,
   fileActionsDisabled,
   fileEditDisabled = false,
+  fileRenameDisabled = false,
   fileOpenDisabled,
   fileTrashDisabled,
   imagePreview,
@@ -198,6 +207,11 @@ export function DiffFileList({
   onSelectedKeysChange,
   onStageTransition,
   onFileAction,
+  renamingKey,
+  renamePending = false,
+  onRenameStart,
+  onRenameCancel,
+  onRename,
 }: DiffFileListProps) {
   const { t } = useI18n();
   const [transferPending, setTransferPending] = useState(false);
@@ -210,6 +224,7 @@ export function DiffFileList({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(selectedKey ? [selectedKey] : []),
   );
+  const [renameDraft, setRenameDraft] = useState('');
   const selectionAnchorRef = useRef<string | undefined>(selectedKey || undefined);
   const pendingFocusRef = useRef<PendingFocus | undefined>(undefined);
   const pendingTrashFocusRef = useRef<PendingTrashFocus | undefined>(undefined);
@@ -220,6 +235,7 @@ export function DiffFileList({
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const groupFocusRefs = useRef(new Map<DisplayGroup, HTMLElement>());
   const focusedRepoRef = useRef<RepoId | undefined>(undefined);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const interactionsDisabled = disabled || transferPending;
   const controlledSelectionSignature = selectionKeys?.join('\0');
 
@@ -232,6 +248,16 @@ export function DiffFileList({
     if (!selectionKeys) return;
     setSelectedKeys(new Set(selectionKeys));
   }, [controlledSelectionSignature, selectionKeys]);
+
+  useEffect(() => {
+    if (!renamingKey) return undefined;
+    const entry = entries.find((candidate) => entryKey(candidate) === renamingKey);
+    if (!entry) return undefined;
+    setRenameDraft(fileName(entry.path));
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+    return undefined;
+  }, [entries, renamingKey]);
 
   const conflictGroup: ChangeGroup = {
     id: 'conflicted',
@@ -326,6 +352,7 @@ export function DiffFileList({
   };
 
   const selectAllFiles = (event: ReactKeyboardEvent<HTMLFieldSetElement>): void => {
+    if (event.target instanceof HTMLInputElement) return;
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return;
     event.preventDefault();
     updateSelectedKeys(new Set(allEntryKeys));
@@ -338,6 +365,7 @@ export function DiffFileList({
     key: string,
     offset: -1 | 1,
   ): void => {
+    event.currentTarget.closest('.change-groups')?.classList.add('is-keyboard-navigating');
     const group = groups.find((candidate) =>
       candidate.entries.some((entry) => entryKey(entry) === key),
     );
@@ -546,10 +574,32 @@ export function DiffFileList({
     }
   };
 
+  const startRename = (entry: ChangeEntry): void => {
+    if (
+      fileActionsDisabled ||
+      fileRenameDisabled ||
+      entry.area === 'conflicted' ||
+      entry.status === 'deleted' ||
+      !onRenameStart
+    )
+      return;
+    onRenameStart(entry);
+  };
+
+  const submitRename = (entry: ChangeEntry): void => {
+    if (!onRename || renamePending) return;
+    if (renameDraft === fileName(entry.path)) {
+      onRenameCancel?.();
+      return;
+    }
+    void onRename(entry, renameDraft).catch(() => undefined);
+  };
+
   return (
     <fieldset
       className={`change-groups${splitStageView ? '' : ' is-stage-hidden'}${splitStageView && collapsedGroups.has('staged') ? ' is-staged-collapsed' : ''}${splitStageView && collapsedGroups.has('worktree') ? ' is-worktree-collapsed' : ''}`}
       onKeyDown={selectAllFiles}
+      onPointerMove={(event) => event.currentTarget.classList.remove('is-keyboard-navigating')}
     >
       <legend className="sr-only">{t('diff')}</legend>
       {groups.map(({ id, label, entries: groupEntries }) => {
@@ -736,11 +786,59 @@ export function DiffFileList({
                     );
                     const discardDisabled =
                       fileTrashDisabled ||
-                      selectedEntries.some(
-                        (candidate) =>
-                          candidate.area !== 'unstaged' || candidate.status === 'deleted',
-                      );
+                      selectedEntries.some((candidate) => candidate.area !== 'unstaged');
                     const stageToggleId = `stage-entry-${encodeURIComponent(key)}`;
+                    const renaming = renamingKey === key;
+                    const rowClassName = `change-row${display === 'nameAndPath' ? '' : ' is-single-line'}${display === 'fullPath' ? ' is-full-path' : ''}${renaming ? ' is-renaming' : ''}`;
+                    const rowStyle =
+                      display === 'tree' ? { paddingLeft: 26 + row.depth * 14 } : undefined;
+                    const rowContent = (
+                      <>
+                        <FileStatusIcon status={entry.status} />
+                        <span
+                          className={`file-path${display === 'nameAndPath' ? '' : ' is-single-line'}`}
+                        >
+                          <span className="file-name">
+                            {renaming ? (
+                              <Input
+                                ref={renameInputRef}
+                                className="rename-file-input"
+                                value={renameDraft}
+                                disabled={renamePending}
+                                aria-label={t('renameFileName', { path: entry.path })}
+                                onChange={(event) => setRenameDraft(event.currentTarget.value)}
+                                onBlur={() => submitRename(entry)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    submitRename(entry);
+                                  } else if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    onRenameCancel?.();
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <strong>
+                                {display === 'fullPath' ? entry.path : fileName(entry.path)}
+                              </strong>
+                            )}
+                            {!renaming && unsavedFileKey === key ? (
+                              <output className="unsaved-file-dot" aria-label={t('unsaved')} />
+                            ) : null}
+                          </span>
+                          {display === 'nameAndPath' ? (
+                            <small>{parentPath(entry.path)}</small>
+                          ) : null}
+                        </span>
+                        {entry.additions !== undefined || entry.deletions !== undefined ? (
+                          <span className="diff-stat">
+                            <i>+{entry.additions ?? 0}</i>
+                            <b>−{entry.deletions ?? 0}</b>
+                          </span>
+                        ) : null}
+                      </>
+                    );
                     return (
                       <li
                         key={key}
@@ -781,64 +879,58 @@ export function DiffFileList({
                         ) : splitStageView ? (
                           <span className="change-row-spacer" aria-hidden="true" />
                         ) : null}
-                        <Button
-                          ref={(element) => {
-                            if (element) rowRefs.current.set(key, element);
-                            else rowRefs.current.delete(key);
-                          }}
-                          type="button"
-                          className={`change-row${display === 'nameAndPath' ? '' : ' is-single-line'}${display === 'fullPath' ? ' is-full-path' : ''}`}
-                          style={
-                            display === 'tree' ? { paddingLeft: 26 + row.depth * 14 } : undefined
-                          }
-                          aria-label={t('changeStatusAria', {
-                            status: t(STATUS_LABELS[entry.status]),
-                            path: entry.path,
-                          })}
-                          aria-current={selectedKey === key ? 'true' : undefined}
-                          aria-pressed={selectedKeys.has(key)}
-                          onClick={(event) => {
-                            event.currentTarget.focus();
-                            selectFile(event, key);
-                          }}
-                          onContextMenu={(event) => openContextMenu(event, key)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'ArrowUp') moveFileSelection(event, key, -1);
-                            else if (event.key === 'ArrowDown') moveFileSelection(event, key, 1);
-                          }}
-                        >
-                          <FileStatusIcon status={entry.status} />
-                          <span
-                            className={`file-path${display === 'nameAndPath' ? '' : ' is-single-line'}`}
+                        {renaming ? (
+                          <div className={rowClassName} style={rowStyle}>
+                            {rowContent}
+                          </div>
+                        ) : (
+                          <Button
+                            ref={(element) => {
+                              if (element) rowRefs.current.set(key, element);
+                              else rowRefs.current.delete(key);
+                            }}
+                            type="button"
+                            className={rowClassName}
+                            style={rowStyle}
+                            aria-label={t('changeStatusAria', {
+                              status: t(STATUS_LABELS[entry.status]),
+                              path: entry.path,
+                            })}
+                            aria-current={selectedKey === key ? 'true' : undefined}
+                            aria-pressed={selectedKeys.has(key)}
+                            onClick={(event) => {
+                              event.currentTarget.focus();
+                              selectFile(event, key);
+                            }}
+                            onDoubleClick={() => startRename(entry)}
+                            onContextMenu={(event) => openContextMenu(event, key)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'ArrowUp') moveFileSelection(event, key, -1);
+                              else if (event.key === 'ArrowDown') moveFileSelection(event, key, 1);
+                            }}
                           >
-                            <span className="file-name">
-                              <strong>
-                                {display === 'fullPath' ? entry.path : fileName(entry.path)}
-                              </strong>
-                              {unsavedFileKey === key ? (
-                                <output className="unsaved-file-dot" aria-label={t('unsaved')} />
-                              ) : null}
-                            </span>
-                            {display === 'nameAndPath' ? (
-                              <small>{parentPath(entry.path)}</small>
-                            ) : null}
-                          </span>
-                          {entry.additions !== undefined || entry.deletions !== undefined ? (
-                            <span className="diff-stat">
-                              <i>+{entry.additions ?? 0}</i>
-                              <b>−{entry.deletions ?? 0}</b>
-                            </span>
-                          ) : null}
-                        </Button>
+                            {rowContent}
+                          </Button>
+                        )}
                         <FileActionMenu
                           path={entry.path}
                           selectedPaths={selectedPaths}
                           open={openMenuKey === key}
                           disabled={fileActionsDisabled}
+                          editing={editingFileKey === key}
                           editDisabled={fileEditDisabled || invalidFileActionEntry}
+                          renameDisabled={
+                            fileRenameDisabled ||
+                            selectedPaths.length !== 1 ||
+                            invalidFileActionEntry ||
+                            !onRenameStart
+                          }
                           openDisabled={
                             fileOpenDisabled || selectedPaths.length !== 1 || invalidFileActionEntry
                           }
+                          revealDisabled={selectedEntries.some(
+                            (candidate) => candidate.status === 'deleted',
+                          )}
                           discardDisabled={discardDisabled}
                           deleteDisabled={fileTrashDisabled || invalidFileActionEntry}
                           imagePreview={imagePreview?.(entry)}
@@ -855,12 +947,16 @@ export function DiffFileList({
                               onSelect(key);
                             }
                           }}
-                          onAction={(fileAction) =>
-                            runFileAction(
+                          onAction={(fileAction) => {
+                            if (fileAction === 'renameFile') {
+                              startRename(entry);
+                              return Promise.resolve();
+                            }
+                            return runFileAction(
                               fileAction === 'editFile' ? [entry] : selectedEntries,
                               fileAction,
-                            )
-                          }
+                            );
+                          }}
                         />
                       </li>
                     );

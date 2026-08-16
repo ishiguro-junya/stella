@@ -7,19 +7,20 @@ import { describe, expect, it } from 'vitest';
 const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
 describe('global scroll behavior', () => {
-  it('disables elastic overscroll for every scroll container', () => {
-    expect(styles).toMatch(/\*\s*\{[^}]*overscroll-behavior:\s*none;/u);
+  it('contains overscroll at the app and History scroll boundaries', () => {
+    expect(styles).not.toMatch(/\*\s*\{[^}]*overscroll-behavior:/u);
+    expect(styles).toMatch(/html,\s*body,\s*#root\s*\{[^}]*overscroll-behavior:\s*none;/u);
+    expect(styles).toMatch(/\.commit-list\s*\{[^}]*overscroll-behavior:\s*none;/u);
+    expect(styles).toMatch(/\.commit-detail-pane\s*\{[^}]*overscroll-behavior:\s*none;/u);
+  });
+
+  it('disables native text selection throughout the app', () => {
+    expect(styles).toMatch(/\*\s*\{[^}]*-webkit-user-select:\s*none;[^}]*user-select:\s*none;/u);
+    expect(styles.match(/^\s*(?:-webkit-)?user-select:\s*none;/gmu)).toHaveLength(2);
   });
 });
 
 describe('changes file selection', () => {
-  it('prevents native text selection from spanning the Diff and file list panes', () => {
-    expect(styles).toMatch(/\.diff-files-scroll-region\s*\{[^}]*user-select:\s*none;/u);
-    expect(styles).toMatch(
-      /\.diff-pane\s*\{[^}]*-webkit-user-select:\s*none;[^}]*user-select:\s*none;/u,
-    );
-  });
-
   it('uses neutral list selection with a one-pixel accent focus ring', () => {
     expect(styles).toMatch(
       /\.change-item\.is-selected,\s*\.change-item\.is-current\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*color:\s*var\(--text-primary\);/u,
@@ -31,19 +32,28 @@ describe('changes file selection', () => {
       /\.activity-list tbody tr\[aria-selected='true'\]\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*color:\s*var\(--text-primary\);/u,
     );
     expect(styles).toMatch(
-      /\.change-item:has\(> \.change-row:focus-visible\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--focus\);/u,
+      /\.change-item:has\(> \.change-row:focus\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--focus\);/u,
     );
     expect(styles).toMatch(
-      /\.history-commit-item:has\(> \.commit-row:focus-visible\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--focus\);/u,
+      /\.history-commit-item:has\(> \.commit-row:focus\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--focus\);/u,
     );
     expect(styles).toMatch(
-      /\.activity-list tbody tr:focus-visible > \*\s*\{[^}]*inset 0 1px 0 var\(--focus\),[^}]*inset 0 -1px 0 var\(--focus\);/u,
+      /\.activity-list tbody tr:focus > \*\s*\{[^}]*inset 0 1px 0 var\(--focus\),[^}]*inset 0 -1px 0 var\(--focus\);/u,
+    );
+    expect(styles).toMatch(
+      /\.settings-category-navigation \.settings-category-button:focus\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--focus\);/u,
+    );
+    expect(styles).toMatch(
+      /\.segmented button:is\(\[aria-selected='true'\], \[aria-pressed='true'\]\):focus\s*\{[^}]*outline-color:\s*var\(--interactive-selected-foreground\);/u,
     );
     expect(styles).toMatch(
       /button\.toggle-button\s*\{[^}]*grid-template-columns:\s*repeat\(2, 29px\);[^}]*width:\s*64px;[^}]*height:\s*34px;[^}]*border-radius:\s*999px;[^}]*background:\s*var\(--surface-sunken\);/u,
     );
     expect(styles).toMatch(
-      /\.toggle-button-thumb\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*box-shadow:\s*var\(--shadow-control\);[^}]*transition:\s*transform 160ms ease;/u,
+      /\.toggle-button-thumb\s*\{[^}]*background:\s*var\(--interactive-selected-surface\);[^}]*box-shadow:\s*var\(--shadow-control\);[^}]*color:\s*var\(--interactive-selected-foreground\);[^}]*transition:\s*transform 160ms ease;/u,
+    );
+    expect(styles).toMatch(
+      /\.toggle-button-option\.is-selected\s*\{[^}]*color:\s*var\(--interactive-selected-foreground\);/u,
     );
     expect(styles).toMatch(
       /button\.toggle-button\[aria-pressed='true'\] \.toggle-button-thumb\s*\{[^}]*transform:\s*translateX\(29px\);/u,
@@ -51,6 +61,8 @@ describe('changes file selection', () => {
     expect(styles).toMatch(
       /button\.toggle-button\[data-reverse-icons\]\[aria-pressed='true'\] \.toggle-button-thumb\s*\{[^}]*transform:\s*none;/u,
     );
+    expect(styles).not.toContain('data-animate-on-mount');
+    expect(styles).not.toContain('toggle-button-thumb-to-');
     expect(styles).toMatch(
       /button\.toggle-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--surface-sunken\);/u,
     );
@@ -118,12 +130,31 @@ describe('history action placement', () => {
     );
   });
 
-  it('suppresses History hover surfaces during arrow-key navigation', () => {
+  it('suppresses list hover surfaces during arrow-key navigation', () => {
     expect(styles).toMatch(
       /\.commit-list\.is-keyboard-navigating \.history-commit-item:hover,\s*\.commit-list\.is-keyboard-navigating \.commit-row:hover:not\(:disabled\)\s*\{[^}]*background:\s*transparent;/u,
     );
     expect(styles).toMatch(
       /\.commit-list\.is-keyboard-navigating \.history-commit-item\.is-current:hover\s*\{[^}]*background:\s*var\(--list-selection-surface\);/u,
+    );
+    expect(styles).toMatch(
+      /\.change-groups\.is-keyboard-navigating \.change-item:hover\s*\{[^}]*background:\s*transparent;/u,
+    );
+    expect(styles).toMatch(
+      /\.activity-list\.is-keyboard-navigating tbody tr\[tabindex\]:hover\s*\{[^}]*background:\s*transparent;/u,
+    );
+    expect(styles).toMatch(
+      /\.registered-repositories\.is-keyboard-navigating\s*\.switcher-option-row:hover:not\(\.is-disabled\)\s*\{[^}]*background:\s*transparent;/u,
+    );
+    expect(styles).toMatch(
+      /\.switcher-list\.is-keyboard-navigating \.switcher-option-row:hover:not\(\.is-disabled\)\s*\{[^}]*background:\s*transparent;/u,
+    );
+    expect(styles).toMatch(
+      /\.settings-category-navigation\.is-keyboard-navigating \.settings-category-button:hover\s*\{[^}]*background:\s*transparent;/u,
+    );
+    expect(styles).toMatch(/\.commit-list\s*\{[^}]*will-change:\s*scroll-position;/u);
+    expect(styles).not.toMatch(
+      /\.commit-list\[aria-busy=['"]true['"]\]\s*\{[^}]*overflow:\s*hidden;/u,
     );
   });
 
@@ -141,26 +172,78 @@ describe('history action placement', () => {
 });
 
 describe('workspace pane resizing', () => {
-  it('uses one full-width header and a separated toolbar inside the left pane', () => {
+  it('uses one full-width header and a fixed footer inside the History left pane', () => {
     expect(styles).toMatch(
       /\.app-header\s*\{[^}]*height:\s*64px;[^}]*border-bottom:\s*1px solid var\(--border-subtle\);/u,
     );
     expect(styles).toMatch(
-      /\.window-header-content\s*\{[^}]*height:\s*100%;[^}]*padding:\s*0 10px 0 76px;/u,
+      /\.window-header-content\s*\{[^}]*height:\s*100%;[^}]*padding:\s*0 10px 0 84px;/u,
     );
-    expect(styles).toMatch(/\.titlebar-left-actions\s*\{[^}]*bottom:\s*10px;[^}]*left:\s*3px;/u);
+    expect(styles).toMatch(/\.window-header-leading\s*\{[^}]*gap:\s*12px;/u);
+    expect(styles).toMatch(/\.titlebar-context\s*\{[^}]*gap:\s*8px;/u);
+    expect(styles).not.toMatch(/\.titlebar-left-actions/u);
     expect(styles).toMatch(
-      /\.left-pane-toolbar\s*\{[^}]*min-height:\s*56px;[^}]*border-bottom:\s*1px solid var\(--border-subtle\);/u,
+      /\.history-list-footer\s*\{[^}]*height:\s*38px;[^}]*gap:\s*4px;[^}]*border-top:\s*1px solid var\(--border-subtle\);/u,
     );
+    expect(styles).not.toMatch(/\.history-pane-toolbar/u);
     expect(styles).not.toMatch(/\.titlebar-context-toggle\.branch-toggle\.is-focused/u);
     expect(styles).toMatch(/\.titlebar-context-toggle\.branch-toggle:focus-visible/u);
+    expect(styles).toMatch(/\.titlebar-context-toggle\s*\{[^}]*color:\s*var\(--text-secondary\);/u);
+    expect(styles).not.toMatch(/\.titlebar-context-toggle\.repository-toggle\s*\{[^}]*color:/u);
+    expect(styles).not.toMatch(/\.titlebar-brand/u);
+    expect(styles).toMatch(
+      /\.titlebar-menu-button\[aria-current='page'\]\s*\{[^}]*background:\s*var\(--interactive-selected-surface\);[^}]*color:\s*var\(--interactive-selected-foreground\);/u,
+    );
+    expect(styles).toMatch(/\.sidebar-toggle-button\s*\{[^}]*flex:\s*none;/u);
+    expect(styles).toMatch(/\.diff-action-button\s*\{[^}]*width:\s*28px;[^}]*min-height:\s*28px;/u);
+    expect(styles).toMatch(
+      /\.diff-action-button > \.lucide\s*\{[^}]*width:\s*16px;[^}]*height:\s*16px;/u,
+    );
+    expect(styles).toMatch(
+      /\.history-search input\.app-input\s*\{[^}]*height:\s*24px;[^}]*min-height:\s*24px;/u,
+    );
   });
 
-  it('keeps pane resizers and configured pane widths at narrow window sizes', () => {
+  it('shows ten repository rows before scrolling the landing list', () => {
+    expect(styles).toMatch(
+      /\.repository-landing-card\.has-repositories\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/u,
+    );
+    expect(styles).not.toMatch(
+      /\.repository-landing-card\.has-repositories\s*\{[^}]*(?:min-height:\s*0|flex:\s*1);/u,
+    );
+    expect(styles).toMatch(/\.repository-landing\s*\{[^}]*padding:\s*28px 32px 32px;/u);
+    expect(styles).toMatch(
+      /\.repository-landing-summary\s*\{[^}]*gap:\s*8px;[^}]*font-size:\s*0\.875rem;/u,
+    );
+    expect(styles).toMatch(
+      /\.repository-landing-summary > svg\s*\{[^}]*width:\s*20px;[^}]*height:\s*20px;/u,
+    );
+    expect(styles).toMatch(
+      /\.registered-repositories\s*\{[^}]*max-height:\s*calc\(56px \* 10 \+ 11px\);[^}]*padding:\s*0;[^}]*overflow-y:\s*auto;[^}]*border-radius:\s*0;[^}]*scrollbar-gutter:\s*stable;/u,
+    );
+    expect(styles).toMatch(
+      /\.registered-repositories \.switcher-option,\s*\.registered-repositories \.switcher-option:hover:not\(:disabled\)\s*\{[^}]*min-width:\s*0;[^}]*grid-template-columns:\s*20px 24px minmax\(0, 1fr\) auto;/u,
+    );
+    expect(styles).not.toMatch(
+      /\.registered-repositories \.switcher-option-row\.is-selected\s*\{[^}]*box-shadow:/u,
+    );
+    expect(styles).toMatch(
+      /\.registered-repositories \.switcher-option-row:focus-within\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--focus\);/u,
+    );
+    expect(styles).toMatch(
+      /\.registered-repositories::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--border-strong\);/u,
+    );
+  });
+
+  it('keeps workspace pane resizers and a fixed Settings category width', () => {
     expect(styles).not.toMatch(/\.three-pane\s*>\s*\.pane-resizer\s*\{[^}]*display:\s*none;/u);
     expect(styles).not.toMatch(
       /\.three-pane\s*\{[^}]*grid-template-columns:\s*minmax\(240px,\s*30%\)/u,
     );
+    expect(styles).toMatch(
+      /\.settings-content\s*\{[^}]*grid-template-columns:\s*200px minmax\(0, 1fr\);/u,
+    );
+    expect(styles).not.toMatch(/\.settings-content\s*>\s*\.pane-resizer/u);
   });
 
   it('keeps a wide drag target with a visible pane line', () => {
@@ -192,6 +275,15 @@ describe('translated sentence layout', () => {
   });
 });
 
+describe('toast placement', () => {
+  it('places every toast at the center of the header', () => {
+    expect(styles).toMatch(
+      /\.global-notice\.info,\s*\.file-action-notice\.info\s*\{[^}]*position:\s*fixed;[^}]*top:\s*32px;[^}]*left:\s*50%;[^}]*transform:\s*translate\(-50%,\s*-50%\);/u,
+    );
+    expect(styles).not.toMatch(/\.file-action-notice\.info\s*\{[^}]*(?:right|bottom):/u);
+  });
+});
+
 describe('repository switcher icons', () => {
   it('gives the fallback repository icon the same box as a custom logo', () => {
     expect(styles).toMatch(
@@ -219,10 +311,11 @@ describe('switcher layout', () => {
     expect(styles).not.toMatch(/\.switcher-footer button\s*\{[^}]*border:\s*0;/u);
   });
 
-  it('uses a neutral switcher selection with an accent focus ring', () => {
+  it('uses a neutral switcher selection and the standard focus ring', () => {
     expect(styles).toMatch(
       /\.switcher-option-row\.is-selected\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*color:\s*var\(--text-primary\);/u,
     );
+    expect(styles).not.toMatch(/(?:^|\n)\.switcher-option-row\.is-selected\s*\{[^}]*box-shadow:/u);
     expect(styles).toMatch(
       /\.switcher-option-row:focus-within,\s*\.switcher-option-row\.is-focused\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--focus\);/u,
     );
@@ -243,6 +336,14 @@ describe('loading layout stability', () => {
 });
 
 describe('settings control widths', () => {
+  it('uses full-width square category rows', () => {
+    expect(styles).toMatch(/\.settings-sidebar-body\s*\{[^}]*padding:\s*28px 0;/u);
+    expect(styles).toMatch(/\.settings-category-navigation\s*\{[^}]*gap:\s*0;/u);
+    expect(styles).toMatch(
+      /\.settings-category-navigation \.settings-category-button\s*\{[^}]*min-height:\s*46px;[^}]*border-radius:\s*0;/u,
+    );
+  });
+
   it('keeps the Git toolchain select at the standard settings width', () => {
     expect(styles).toMatch(/\.settings-select\s*\{[^}]*width:\s*220px;/u);
     expect(styles).not.toMatch(/\.settings-wide-row \.settings-select/u);
@@ -253,5 +354,8 @@ describe('settings control widths', () => {
       /\.settings-permission-row \.settings-path-control\s*\{[^}]*max-width:\s*560px;/u,
     );
     expect(styles).not.toMatch(/\.directory-input-control\s*\{[^}]*max-width:/u);
+    expect(styles).toMatch(
+      /\.dialog-form-field\s*>\s*span:not\(\.directory-input-control\)\s*\{[^}]*font-size:\s*0\.6875rem;/u,
+    );
   });
 });

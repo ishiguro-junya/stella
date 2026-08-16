@@ -51,23 +51,24 @@ describe('App deferred Activity navigation', () => {
     };
     render(<App adapter={adapter} directoryPicker={async () => '/tmp'} />);
 
-    await user.click(screen.getByRole('button', { name: 'Clone Repository' }));
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
     await user.type(
       screen.getByRole('textbox', { name: 'Repository URL' }),
       'https://example.com/repository.git',
     );
     await user.click(
-      within(screen.getByRole('dialog', { name: 'Clone Repository' })).getByRole('button', {
-        name: 'Clone Repository',
+      within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {
+        name: 'Add Repository',
       }),
     );
 
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
     expect(attach).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Repositories' }));
-    expect(screen.getByRole('heading', { name: 'Repositories' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Repository' }));
+    expect(screen.getByRole('region', { name: 'Repositories' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.click(screen.getByRole('tab', { name: 'Local' }));
     await user.type(screen.getByRole('textbox', { name: 'Repository path' }), repo.path);
     await user.click(
       within(screen.getByRole('dialog', { name: 'Add Repository' })).getByRole('button', {

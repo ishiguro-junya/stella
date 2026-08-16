@@ -635,7 +635,10 @@ export function ConflictSurface({
                     role="tab"
                     aria-selected={comparisonSide === side}
                     tabIndex={comparisonSide === side ? 0 : -1}
-                    onClick={() => setComparisonSide(side)}
+                    onClick={(event) => {
+                      event.currentTarget.focus();
+                      setComparisonSide(side);
+                    }}
                     onKeyDown={(event) => handleComparisonTabKey(event, side)}
                   >
                     {t(side === 'current' ? 'conflictCurrent' : 'conflictIncoming')}

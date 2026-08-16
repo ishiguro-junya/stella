@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -216,6 +216,11 @@ describe('ActivityView', () => {
     await user.keyboard('{ArrowDown}');
     expect(commitRow).toHaveFocus();
     expect(commitRow).toHaveAttribute('aria-selected', 'true');
+    expect(operations).toHaveClass('is-keyboard-navigating');
+
+    fireEvent.pointerMove(operations);
+    expect(operations).not.toHaveClass('is-keyboard-navigating');
+
     await user.keyboard('{ArrowUp}');
     expect(fetchRow).toHaveFocus();
     expect(fetchRow).toHaveAttribute('aria-selected', 'true');

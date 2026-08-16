@@ -1,65 +1,79 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AddRepositoryDialog } from './AddRepositoryDialog';
 
 describe('AddRepositoryDialog', () => {
-  it('shows URL and destination fields without source tabs in the Clone dialog', async () => {
+  it('shows Remote first and switches tabs with the keyboard', async () => {
     const user = userEvent.setup();
     const onChoosePath = vi.fn<() => void>();
     const onUrlChange = vi.fn<(url: string) => void>();
+    const onSourceChange = vi.fn<(source: 'url' | 'path') => void>();
     render(
       <AddRepositoryDialog
         source="url"
         url=""
         cloneParentPath="/Users/example/Documents"
         localPath=""
-        name=""
+        remoteName=""
+        localName=""
         busy={false}
+        onSourceChange={onSourceChange}
         onUrlChange={onUrlChange}
         onCloneParentPathChange={() => undefined}
         onLocalPathChange={() => undefined}
-        onNameChange={() => undefined}
+        onRemoteNameChange={() => undefined}
+        onLocalNameChange={() => undefined}
         onChoosePath={onChoosePath}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
       />,
     );
 
-    const dialog = screen.getByRole('dialog', { name: 'Clone Repository' });
-    expect(within(dialog).queryByRole('tab')).not.toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
+    const remoteTab = within(dialog).getByRole('tab', { name: 'Remote' });
+    expect(remoteTab).toHaveAttribute('aria-selected', 'true');
+    const localTab = within(dialog).getByRole('tab', { name: 'Local' });
+    expect(localTab).toHaveAttribute('aria-selected', 'false');
     const url = within(dialog).getByRole('textbox', { name: 'Repository URL' });
     expect(url).not.toHaveAttribute('placeholder');
     const path = within(dialog).getByRole('textbox', { name: 'Repository path' });
     expect(path).toHaveValue('/Users/example/Documents');
-    expect(within(dialog).getByRole('button', { name: 'Clone Repository' })).toHaveTextContent(
-      'Clone',
-    );
+    expect(within(dialog).getByRole('button', { name: 'Add Repository' })).toHaveTextContent('Add');
     const picker = within(dialog).getByRole('button', { name: 'Choose Repository' });
     expect(path.parentElement).toContainElement(picker);
     await user.click(picker);
     expect(onChoosePath).toHaveBeenCalledOnce();
     await user.type(url, 'https://example.com/stella.git');
     expect(onUrlChange).toHaveBeenCalled();
+    url.focus();
+    fireEvent.click(localTab);
+    expect(localTab).toHaveFocus();
+    remoteTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onSourceChange).toHaveBeenCalledWith('path');
   });
 
   it('shows the icon-only path picker and a separate repository name field', async () => {
     const user = userEvent.setup();
     const onChoosePath = vi.fn<() => void>();
-    const onNameChange = vi.fn<(name: string) => void>();
+    const onLocalNameChange = vi.fn<(name: string) => void>();
     render(
       <AddRepositoryDialog
         source="path"
         url=""
         cloneParentPath="/Users/example/Documents"
         localPath="/Users/example/stella"
-        name=""
+        remoteName="remote-stella"
+        localName=""
         busy={false}
+        onSourceChange={() => undefined}
         onUrlChange={() => undefined}
         onCloneParentPathChange={() => undefined}
         onLocalPathChange={() => undefined}
-        onNameChange={onNameChange}
+        onRemoteNameChange={() => undefined}
+        onLocalNameChange={onLocalNameChange}
         onChoosePath={onChoosePath}
         onDismiss={() => undefined}
         onSubmit={() => undefined}
@@ -79,7 +93,7 @@ describe('AddRepositoryDialog', () => {
     expect(onChoosePath).toHaveBeenCalledOnce();
 
     await user.type(name, 'Stella App');
-    expect(onNameChange).toHaveBeenCalled();
+    expect(onLocalNameChange).toHaveBeenCalled();
   });
 
   it('announces an invalid path next to the active field', () => {
@@ -89,13 +103,16 @@ describe('AddRepositoryDialog', () => {
         url=""
         cloneParentPath="/Users/example/Documents"
         localPath="invalid"
-        name=""
+        remoteName=""
+        localName=""
         error="Enter an absolute local path."
         busy={false}
+        onSourceChange={() => undefined}
         onUrlChange={() => undefined}
         onCloneParentPathChange={() => undefined}
         onLocalPathChange={() => undefined}
-        onNameChange={() => undefined}
+        onRemoteNameChange={() => undefined}
+        onLocalNameChange={() => undefined}
         onChoosePath={() => undefined}
         onDismiss={() => undefined}
         onSubmit={() => undefined}

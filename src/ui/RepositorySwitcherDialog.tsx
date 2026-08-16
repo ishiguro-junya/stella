@@ -1,4 +1,4 @@
-import { Download, FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
+import { FolderGit2, FolderPlus, Link2, Trash2 } from 'lucide-react';
 
 import { Button } from './Button';
 import type { RepoSnapshot } from '../domain/workspace';
@@ -16,8 +16,7 @@ export interface RepositorySwitcherDialogProps {
   onSelectRegistered: (path: string) => void;
   onManageRemotes: (path: string) => void;
   onForget: (path: string) => void;
-  onAddLocal: () => void;
-  onClone: () => void;
+  onAdd: () => void;
 }
 
 function registeredStatus(
@@ -59,8 +58,7 @@ export function RepositorySwitcherDialog({
   onSelectRegistered,
   onManageRemotes,
   onForget,
-  onAddLocal,
-  onClone,
+  onAdd,
 }: RepositorySwitcherDialogProps) {
   const { t, message } = useI18n();
   const openPaths = new Set(repos.map((repo) => repo.path));
@@ -89,7 +87,7 @@ export function RepositorySwitcherDialog({
         actions: [
           {
             action: 'select',
-            label: t('switch'),
+            label: t('switchRepository'),
             icon: <FolderGit2 aria-hidden="true" focusable="false" />,
             disabled: repo.repoId === selectedRepoId,
           },
@@ -101,7 +99,7 @@ export function RepositorySwitcherDialog({
           },
           {
             action: 'forget',
-            label: t('delete'),
+            label: t('forgetRepositoryTitle'),
             icon: <Trash2 aria-hidden="true" focusable="false" />,
             disabled: busy || repo.operation.kind !== 'none',
             danger: true,
@@ -122,6 +120,9 @@ export function RepositorySwitcherDialog({
     }),
     ...registeredRepositories
       .filter((repository) => !openPaths.has(repository.path))
+      .toSorted(
+        (left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path),
+      )
       .map((repository) => {
         const status = registeredStatus(repository, t);
         const item: SwitcherDialogItem = {
@@ -134,7 +135,7 @@ export function RepositorySwitcherDialog({
           actions: [
             {
               action: 'select',
-              label: t('switch'),
+              label: t('switchRepository'),
               icon: <FolderGit2 aria-hidden="true" focusable="false" />,
               disabled: busy,
             },
@@ -146,7 +147,7 @@ export function RepositorySwitcherDialog({
             },
             {
               action: 'forget',
-              label: t('delete'),
+              label: t('forgetRepositoryTitle'),
               icon: <Trash2 aria-hidden="true" focusable="false" />,
               disabled: busy,
               danger: true,
@@ -193,21 +194,10 @@ export function RepositorySwitcherDialog({
         else if (action === 'forget') onForget(path);
       }}
       footer={
-        <>
-          <Button
-            type="button"
-            aria-label={t('addLocalRepository')}
-            disabled={busy}
-            onClick={onAddLocal}
-          >
-            <FolderPlus aria-hidden="true" focusable="false" />
-            <span>{t('add')}</span>
-          </Button>
-          <Button type="button" aria-label={t('cloneRepository')} disabled={busy} onClick={onClone}>
-            <Download aria-hidden="true" focusable="false" />
-            <span>{t('clone')}</span>
-          </Button>
-        </>
+        <Button type="button" aria-label={t('addLocalRepository')} disabled={busy} onClick={onAdd}>
+          <FolderPlus aria-hidden="true" focusable="false" />
+          <span>{t('add')}</span>
+        </Button>
       }
     />
   );

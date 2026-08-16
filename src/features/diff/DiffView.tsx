@@ -160,6 +160,11 @@ function imageTarget(
   };
 }
 
+function renamedFilePath(path: string, name: string): string {
+  const separator = path.lastIndexOf('/');
+  return separator < 0 ? name : `${path.slice(0, separator + 1)}${name}`;
+}
+
 export function DiffView({
   repo,
   adapter,
@@ -223,6 +228,8 @@ export function DiffView({
   }>();
   const [fileDocument, setFileDocument] = useState<FileDocument>();
   const [fileEditorExternalStateChanged, setFileEditorExternalStateChanged] = useState(false);
+  const [renamingKey, setRenamingKey] = useState<string>();
+  const [renamePending, setRenamePending] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [remoteDialog, setRemoteDialog] = useState<'pull' | 'push'>();
   const [detailFileMenuOpen, setDetailFileMenuOpen] = useState(false);
@@ -239,6 +246,7 @@ export function DiffView({
   >();
   const conflictQueryIdRef = useRef(0);
   const unsavedLeaveHandleRef = useRef<UnsavedChangesHandle | null>(null);
+  const fileDisplayRequestRef = useRef<(() => void) | null>(null);
   const fileQueryIdRef = useRef(0);
   const syncedExternalConflictRef = useRef<ConflictDocument | undefined>(undefined);
   const pendingStageSelectionRef = useRef<
@@ -251,6 +259,9 @@ export function DiffView({
     | undefined
   >(undefined);
   const pendingEditSelectionRef = useRef<{ path: string; fromGeneration: number } | undefined>(
+    undefined,
+  );
+  const pendingRenameSelectionRef = useRef<{ newPath: string; fromGeneration: number } | undefined>(
     undefined,
   );
 
@@ -271,7 +282,13 @@ export function DiffView({
       ? { path: conflict.path, area: 'conflicted', status: 'conflicted' }
       : undefined;
   const selected = pinnedConflictEntry ?? selectedFromSnapshot ?? repo.changes[0];
-  const displayedSelected = pinnedConflictEntry ?? deferredSelectedFromSnapshot ?? repo.changes[0];
+  const querySelected = pinnedConflictEntry ?? deferredSelectedFromSnapshot ?? repo.changes[0];
+  const displayedSelected =
+    pinnedConflictEntry ??
+    (diff
+      ? repo.changes.find((entry) => entry.area === diff.area && entry.path === diff.path)
+      : undefined) ??
+    querySelected;
   const editingEntry = editingTarget
     ? (repo.changes.find(
         (entry) =>
@@ -304,7 +321,9 @@ export function DiffView({
   const selectedFileKeysSignature = selectedFileKeys.join('\0');
   const selectedArea = displayedSelected?.area;
   const selectedPath = displayedSelected?.path;
-  const selectedPreviousPath = displayedSelected?.previousPath;
+  const queryArea = querySelected?.area;
+  const queryPath = querySelected?.path;
+  const queryPreviousPath = querySelected?.previousPath;
   const visibleDiff =
     diff && diff.path === selectedPath && diff.area === selectedArea ? diff : undefined;
   const visibleImageCandidate = useMemo(
@@ -372,10 +391,13 @@ export function DiffView({
   useEffect(() => {
     setCollapsedMultiDiffKeys(new Set());
     setDisabledImagePreviewKeys(new Set());
-    setImageProbeResults(new Map());
     setMultiDetailFileMenuKey(undefined);
     setMultiDetailFileMenuContext(undefined);
   }, [repo.repoId, selectedFileKeysSignature]);
+
+  useEffect(() => {
+    setImageProbeResults(new Map());
+  }, [repo.repoId]);
 
   const setImagePreviewEnabled = (key: string, enabled: boolean): void => {
     setDisabledImagePreviewKeys((current) => {
@@ -399,7 +421,9 @@ export function DiffView({
     });
   };
 
-  const visibleImageKey = visibleDiff ? `${visibleDiff.area}:${visibleDiff.path}` : '';
+  const visibleImageKey = displayedSelected
+    ? `${displayedSelected.area}:${displayedSelected.path}`
+    : '';
   const visibleImageProbeKey = visibleDiff ? `${visibleImageKey}:${visibleDiff.diffId}` : '';
   const visibleImageTarget =
     visibleDiff && visibleImageCandidate
@@ -410,12 +434,16 @@ export function DiffView({
     visibleImageTarget && visibleImageCandidate && visibleImageProbeResult === undefined,
   );
   const visibleImageUnavailable = visibleImageProbeResult === false;
-  const visibleImagePreviewShown = imagePreviewToggleAvailable(visibleDiff?.path);
+  const visibleImagePreviewShown = imagePreviewToggleAvailable(displayedSelected?.path);
+  const visibleImagePreviewPressed =
+    visibleImagePreviewShown &&
+    visibleImageProbeResult !== false &&
+    !disabledImagePreviewKeys.has(visibleImageKey);
   const visibleImagePreviewEnabled = Boolean(
     visibleImageTarget &&
     visibleImageCandidate &&
     visibleImageProbeResult !== false &&
-    (!visibleImagePreviewShown || !disabledImagePreviewKeys.has(visibleImageKey)),
+    (!visibleImagePreviewShown || visibleImagePreviewPressed),
   );
 
   useEffect(() => {
@@ -440,13 +468,13 @@ export function DiffView({
       !externalConflict ||
       externalConflict === syncedExternalConflictRef.current ||
       externalConflict.repoId !== repo.repoId ||
-      selectedArea !== 'conflicted' ||
-      externalConflict.path !== selectedPath
+      queryArea !== 'conflicted' ||
+      externalConflict.path !== queryPath
     )
       return;
     syncedExternalConflictRef.current = externalConflict;
     setConflict(externalConflict);
-  }, [externalConflict, repo.repoId, selectedArea, selectedPath]);
+  }, [externalConflict, queryArea, queryPath, repo.repoId]);
 
   useEffect(() => {
     const conflictQueryId = ++conflictQueryIdRef.current;
@@ -458,7 +486,7 @@ export function DiffView({
       setSelectionMenuContext(undefined);
       return undefined;
     }
-    if (!selectedArea || !selectedPath) {
+    if (!queryArea || !queryPath) {
       setDiff(undefined);
       setConflict(undefined);
       return undefined;
@@ -469,31 +497,42 @@ export function DiffView({
     setSelectionMenuContext(undefined);
 
     const query =
-      selectedArea === 'conflicted'
-        ? adapter.query({ kind: 'conflict', repoId: repo.repoId, path: selectedPath })
+      queryArea === 'conflicted'
+        ? adapter.query({ kind: 'conflict', repoId: repo.repoId, path: queryPath })
         : adapter.query({
             kind: 'diff',
             repoId: repo.repoId,
-            path: selectedPath,
-            ...(selectedPreviousPath ? { previousPath: selectedPreviousPath } : {}),
-            area: selectedArea,
+            path: queryPath,
+            ...(queryPreviousPath ? { previousPath: queryPreviousPath } : {}),
+            area: queryArea,
           });
 
     void query
       .then((result) => {
         if (cancelled) return;
-        if (result.kind === 'conflict') {
+        if (queryArea === 'conflicted' && result.kind === 'conflict') {
           if (conflictQueryId !== conflictQueryIdRef.current) return;
           setConflict(result.document);
           setDiff(undefined);
-        } else if (result.kind === 'diff') {
+        } else if (queryArea !== 'conflicted' && result.kind === 'diff') {
           setDiff(result.diff);
           setConflict(undefined);
-        }
+        } else throw new Error('The selected file query returned an unexpected result.');
       })
       .catch((cause: unknown) => {
-        if (!cancelled)
+        if (!cancelled) {
+          setDiff((current) =>
+            current && (current.path !== queryPath || current.area !== queryArea)
+              ? undefined
+              : current,
+          );
+          setConflict((current) =>
+            current && (queryArea !== 'conflicted' || current.path !== queryPath)
+              ? undefined
+              : current,
+          );
           reportRuntimeError(t('loadChangesFailedTitle'), cause, t('loadChangesFailed'));
+        }
       });
 
     return () => {
@@ -506,9 +545,9 @@ export function DiffView({
     repo.generation,
     repo.repoId,
     reportRuntimeError,
-    selectedArea,
-    selectedPath,
-    selectedPreviousPath,
+    queryArea,
+    queryPath,
+    queryPreviousPath,
     t,
   ]);
 
@@ -556,7 +595,7 @@ export function DiffView({
   ]);
 
   useEffect(() => {
-    if (selectedArea !== 'conflicted' || !selectedPath) return undefined;
+    if (queryArea !== 'conflicted' || !queryPath) return undefined;
     let cancelled = false;
     const refreshConflict = async (): Promise<void> => {
       if (document.visibilityState === 'hidden') return;
@@ -565,7 +604,7 @@ export function DiffView({
         const result = await adapter.query({
           kind: 'conflict',
           repoId: repo.repoId,
-          path: selectedPath,
+          path: queryPath,
         });
         if (
           !cancelled &&
@@ -589,7 +628,7 @@ export function DiffView({
       window.clearInterval(interval);
       window.removeEventListener('focus', focus);
     };
-  }, [adapter, repo.repoId, selectedArea, selectedPath]);
+  }, [adapter, queryArea, queryPath, repo.repoId]);
 
   useEffect(() => {
     setDivergedPull(undefined);
@@ -602,6 +641,9 @@ export function DiffView({
     setFileDocument(undefined);
     setFileEditorDirty(false);
     setFileEditorExternalStateChanged(false);
+    setRenamingKey(undefined);
+    setRenamePending(false);
+    pendingRenameSelectionRef.current = undefined;
   }, [repo.repoId]);
 
   useEffect(() => {
@@ -704,6 +746,23 @@ export function DiffView({
     pendingEditSelectionRef.current = undefined;
   }, [repo.changes, repo.generation]);
 
+  useEffect(() => {
+    const pending = pendingRenameSelectionRef.current;
+    if (!pending || repo.generation === pending.fromGeneration) return;
+    const next =
+      repo.changes.find(
+        (entry) =>
+          entry.path === pending.newPath &&
+          (entry.area === 'unstaged' || entry.area === 'untracked'),
+      ) ?? repo.changes.find((entry) => entry.path === pending.newPath);
+    if (next) {
+      const nextKey = `${next.area}:${next.path}`;
+      setSelectedKey(nextKey);
+      setSelectedFileKeys([nextKey]);
+    }
+    pendingRenameSelectionRef.current = undefined;
+  }, [repo.changes, repo.generation]);
+
   const handleConflictDirtyChange = useCallback((dirty: boolean): void => {
     setConflictDirty(dirty);
   }, []);
@@ -766,6 +825,7 @@ export function DiffView({
   };
 
   const completeDisplayExit = (): void => {
+    fileDisplayRequestRef.current = null;
     setFileEditorDirty(false);
     setRestoredDiffSelection(editingTarget?.returnSelection);
     setEditingTarget(undefined);
@@ -1112,13 +1172,59 @@ export function DiffView({
     setError(undefined);
   };
 
+  const startRenaming = (entry: ChangeEntry): void => {
+    if (
+      busy ||
+      unsavedDirty ||
+      operationActionDisabledReason ||
+      entry.area === 'conflicted' ||
+      entry.status === 'deleted'
+    )
+      return;
+    if (editingTarget) completeDisplayExit();
+    const key = `${entry.area}:${entry.path}`;
+    setRestoredDiffSelection(undefined);
+    setSelectedKey(key);
+    setSelectedFileKeys([key]);
+    setRenamingKey(key);
+    setDetailFileMenuOpen(false);
+    setMultiDetailFileMenuKey(undefined);
+  };
+
+  const renameFile = async (entry: ChangeEntry, name: string): Promise<void> => {
+    const newPath = renamedFilePath(entry.path, name);
+    if (newPath === entry.path) {
+      setRenamingKey(undefined);
+      return;
+    }
+    pendingRenameSelectionRef.current = { newPath, fromGeneration: repo.generation };
+    setRenamePending(true);
+    try {
+      await onAction({ kind: 'renameFile', path: entry.path, newPath });
+      setRenamingKey(undefined);
+    } catch (cause) {
+      pendingRenameSelectionRef.current = undefined;
+      throw cause;
+    } finally {
+      setRenamePending(false);
+    }
+  };
+
   const runFileAction = async (entries: ChangeEntry[], action: FileActionKind): Promise<void> => {
     setFileActionNotice(undefined);
     const paths = [...new Set(entries.map((entry) => entry.path))];
     const entry = entries[0];
     if (!entry || !paths.length) return;
     if (action === 'editFile') {
+      if (editingTarget?.path === entry.path && fileDocument) {
+        fileDisplayRequestRef.current?.();
+        return;
+      }
       startEditing(entry);
+      return;
+    }
+    if (action === 'renameFile') {
+      startRenaming(entry);
       return;
     }
     if (action === 'copyPath') {
@@ -1365,13 +1471,11 @@ export function DiffView({
       entry.area === 'conflicted' ||
       entry.status === 'deleted' ||
       entry.status === 'binary';
+    const renameInvalid = entry.area === 'conflicted' || entry.status === 'deleted';
     const openDisabled =
       Boolean(operationActionDisabledReason) || unsavedDirty || fileActionInvalid;
     const discardDisabled =
-      Boolean(operationActionDisabledReason) ||
-      unsavedDirty ||
-      entry.area !== 'unstaged' ||
-      entry.status === 'deleted';
+      Boolean(operationActionDisabledReason) || unsavedDirty || entry.area !== 'unstaged';
     return (
       <div
         className={`pane-toolbar diff-file-toolbar${stickyFileHeaders ? ' is-sticky' : ''}`}
@@ -1426,7 +1530,9 @@ export function DiffView({
             open={menuOpen}
             disabled={busy}
             editDisabled={unsavedDirty || fileActionInvalid}
+            renameDisabled={Boolean(operationActionDisabledReason) || unsavedDirty || renameInvalid}
             openDisabled={openDisabled}
+            revealDisabled={entry.status === 'deleted'}
             discardDisabled={discardDisabled}
             deleteDisabled={openDisabled}
             imagePreview={imagePreview}
@@ -1482,10 +1588,16 @@ export function DiffView({
                   ? `${editingTarget.originalEntry.area}:${editingTarget.path}`
                   : undefined
               }
+              editingFileKey={
+                editingTarget && fileDocument
+                  ? `${editingTarget.originalEntry.area}:${editingTarget.path}`
+                  : undefined
+              }
               disabled={stageActionsDisabled}
               disabledReasonId={stageActionDisabledReasonId}
               fileActionsDisabled={busy}
               fileEditDisabled={unsavedDirty}
+              fileRenameDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
               fileOpenDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
               fileTrashDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
               imagePreview={(entry) => {
@@ -1511,6 +1623,11 @@ export function DiffView({
               onSelectedKeysChange={requestSelectedFiles}
               onStageTransition={runStageTransition}
               onFileAction={runFileAction}
+              renamingKey={renamingKey}
+              renamePending={renamePending}
+              onRenameStart={startRenaming}
+              onRenameCancel={() => setRenamingKey(undefined)}
+              onRename={renameFile}
             />
           </section>
           <footer className="diff-list-footer">
@@ -1547,10 +1664,11 @@ export function DiffView({
             lineWrapping={editorLineWrapping}
             wrapColumn={editorWrapColumn}
             initialScrollLine={editingTarget.initialScrollLine}
+            displayRequestRef={fileDisplayRequestRef}
             leadingHeaderActions={
               visibleImagePreviewShown ? (
                 <ImagePreviewToggle
-                  pressed={visibleImagePreviewEnabled}
+                  pressed={visibleImagePreviewPressed}
                   disabled
                   onPressedChange={(pressed) => setImagePreviewEnabled(visibleImageKey, pressed)}
                 />
@@ -1562,19 +1680,20 @@ export function DiffView({
                 selectedPaths={[editingEntry.path]}
                 open={detailFileMenuOpen}
                 disabled={busy}
-                editDisabled
+                editing
+                renameDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
                 openDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
+                revealDisabled={editingEntry.status === 'deleted'}
                 discardDisabled={
                   Boolean(operationActionDisabledReason) ||
                   unsavedDirty ||
-                  editingEntry.area !== 'unstaged' ||
-                  editingEntry.status === 'deleted'
+                  editingEntry.area !== 'unstaged'
                 }
                 deleteDisabled={Boolean(operationActionDisabledReason) || unsavedDirty}
                 imagePreview={
                   visibleImagePreviewShown
                     ? {
-                        pressed: visibleImagePreviewEnabled,
+                        pressed: visibleImagePreviewPressed,
                         disabled: true,
                         onPressedChange: (pressed) =>
                           setImagePreviewEnabled(visibleImageKey, pressed),
@@ -1631,7 +1750,7 @@ export function DiffView({
                   ...(visibleImagePreviewShown
                     ? {
                         imagePreview: {
-                          pressed: visibleImagePreviewEnabled,
+                          pressed: visibleImagePreviewPressed,
                           disabled: visibleImageUnavailable,
                           onPressedChange: (pressed: boolean) =>
                             setImagePreviewEnabled(visibleImageKey, pressed),
@@ -1655,6 +1774,7 @@ export function DiffView({
                 <WorkspaceErrorDetails error={error} />
               </div>
             ) : null}
+            {repo.changes.length === 0 ? <p className="diff-empty-state">{t('noDiff')}</p> : null}
             {multipleFilesSelected ? (
               <div className="multi-diff-list">
                 {multiDiffs.map((document) => {
@@ -1723,7 +1843,7 @@ export function DiffView({
                   return (
                     <section
                       key={`${document.area}:${document.path}:${document.diffId}`}
-                      className={document.binary ? 'multi-diff-binary' : 'multi-diff-item'}
+                      className={`${document.binary ? 'multi-diff-binary' : 'multi-diff-item'}${collapsed ? ' is-collapsed' : ''}`}
                     >
                       {header}
                       {document.truncated && !collapsed ? (

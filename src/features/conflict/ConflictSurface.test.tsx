@@ -293,6 +293,9 @@ describe('ConflictSurface', () => {
     const current = screen.getByRole('tab', { name: 'Current' });
     const incoming = screen.getByRole('tab', { name: 'Incoming' });
 
+    fireEvent.click(incoming);
+    expect(incoming).toHaveFocus();
+
     current.focus();
     await user.keyboard('{ArrowRight}');
     expect(incoming).toHaveFocus();

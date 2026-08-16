@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import {
-  useEffect,
+  useLayoutEffect,
   useRef,
   type FormEventHandler,
   type HTMLAttributes,
@@ -91,7 +91,7 @@ export function Dialog({
   dismissRef.current = onDismiss;
   dismissibleRef.current = dismissible;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return () => undefined;
     const previous = dialogStack.at(-1);
@@ -155,6 +155,16 @@ export function Dialog({
     <div
       className={`modal-backdrop${variant === 'switcher' ? ' switcher-backdrop' : ''}`}
       role="presentation"
+      onMouseDown={(event) => {
+        const target = event.target;
+        if (
+          variant === 'switcher' &&
+          target instanceof Element &&
+          !target.closest(`label,${FOCUSABLE}`)
+        ) {
+          event.preventDefault();
+        }
+      }}
       onClick={(event) => {
         if (
           dismissible &&
@@ -174,7 +184,7 @@ export function Dialog({
           aria-modal="true"
           aria-labelledby={labelledBy}
           aria-describedby={describedBy}
-          tabIndex={-1}
+          tabIndex={variant === 'switcher' ? undefined : -1}
           onSubmit={onSubmit}
         >
           {children}
@@ -201,7 +211,7 @@ export function Dialog({
           aria-modal="true"
           aria-labelledby={labelledBy}
           aria-describedby={describedBy}
-          tabIndex={-1}
+          tabIndex={variant === 'switcher' ? undefined : -1}
         >
           {children}
           {variant !== 'switcher' ? (

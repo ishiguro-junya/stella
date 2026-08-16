@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createRef } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -78,6 +79,7 @@ describe('FileEditorSurface', () => {
     const displayToggle = screen.getByRole('button', { name: 'Toggle file editing' });
 
     expect(displayToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(displayToggle).not.toHaveAttribute('data-animate-on-mount');
     fireEvent.focus(displayToggle);
     expect(screen.getByRole('tooltip')).toHaveTextContent('Toggle file editing');
     expect(displayToggle).not.toHaveAttribute('title');
@@ -114,18 +116,26 @@ describe('FileEditorSurface', () => {
 
   it('confirms an unsaved switch and supports cancelling or displaying without saving', async () => {
     const user = userEvent.setup();
-    const { props, onSave } = renderEditor();
+    const displayRequestRef = createRef<() => void>();
+    const { props, onSave } = renderEditor({
+      displayRequestRef,
+      headerActions: (
+        <button type="button" onClick={() => displayRequestRef.current?.()}>
+          Stop Editing File
+        </button>
+      ),
+    });
     const editor = screen.getByRole('textbox', { name: 'Edit src/app.ts' });
     await user.clear(editor);
     await user.type(editor, 'draft');
 
-    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
+    await user.click(screen.getByRole('button', { name: 'Stop Editing File' }));
     let dialog = screen.getByRole('alertdialog', { name: 'Unsaved changes' });
     expect(dialog).toHaveTextContent('Save or discard the edits before returning to the Diff.');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(props.onDisplay).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Toggle file editing' }));
+    await user.click(screen.getByRole('button', { name: 'Stop Editing File' }));
     dialog = screen.getByRole('alertdialog', { name: 'Unsaved changes' });
     await user.click(within(dialog).getByRole('button', { name: 'Display Without Saving' }));
 

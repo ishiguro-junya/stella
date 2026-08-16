@@ -21,6 +21,7 @@ function Harness({
         open={open}
         disabled={false}
         openDisabled={false}
+        revealDisabled={false}
         discardDisabled={false}
         deleteDisabled={false}
         onOpenChange={setOpen}
@@ -49,6 +50,8 @@ describe('FileActionMenu', () => {
     expect(screen.getByRole('menu', { name: 'src/app.ts actions' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
 
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Rename File' })).toHaveFocus();
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toHaveFocus();
     await user.keyboard('{End}');
@@ -97,7 +100,14 @@ describe('FileActionMenu', () => {
     const user = userEvent.setup();
     const onAction = vi.fn<(action: FileActionKind) => Promise<void>>(async () => undefined);
     render(
-      <Harness editDisabled openDisabled discardDisabled deleteDisabled onAction={onAction} />,
+      <Harness
+        editDisabled
+        renameDisabled
+        openDisabled
+        discardDisabled
+        deleteDisabled
+        onAction={onAction}
+      />,
     );
     const trigger = screen.getByRole('button', { name: 'More actions for src/app.ts' });
 
@@ -123,21 +133,47 @@ describe('FileActionMenu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('exposes and toggles the image preview state', async () => {
+  it('enables image preview from the menu while it is hidden', async () => {
+    const user = userEvent.setup();
+    const onPressedChange = vi.fn<(pressed: boolean) => void>();
+    render(<Harness imagePreview={{ pressed: false, onPressedChange }} />);
+
+    await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
+    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
+    expect(imagePreview).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(imagePreview);
+    expect(onPressedChange).toHaveBeenCalledWith(true);
+  });
+
+  it('ends file editing from the menu while it is active', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn<(action: FileActionKind) => Promise<void>>(async () => undefined);
+    render(<Harness editing onAction={onAction} />);
+
+    await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
+    const stopEditing = screen.getByRole('menuitem', { name: 'Stop Editing File' });
+    expect(stopEditing).toBeEnabled();
+    await user.click(stopEditing);
+    expect(onAction).toHaveBeenCalledWith('editFile');
+  });
+
+  it('ends image preview from the menu while it is shown', async () => {
     const user = userEvent.setup();
     const onPressedChange = vi.fn<(pressed: boolean) => void>();
     render(<Harness imagePreview={{ pressed: true, onPressedChange }} />);
 
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    expect(screen.getByRole('menuitem', { name: 'Edit File' })).toHaveFocus();
-    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Stop Previewing Image' });
     expect(imagePreview).toHaveAttribute('aria-checked', 'true');
+    expect(imagePreview).toBeEnabled();
 
     await user.click(imagePreview);
     expect(onPressedChange).toHaveBeenCalledWith(false);
   });
 
-  it('keeps image preview visible but disabled while editing', async () => {
+  it('allows ending image preview while editing', async () => {
     const user = userEvent.setup();
     const onPressedChange = vi.fn<(pressed: boolean) => void>();
     render(
@@ -145,10 +181,10 @@ describe('FileActionMenu', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'More actions for src/app.ts' }));
-    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
-    expect(imagePreview).toBeDisabled();
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Stop Previewing Image' });
+    expect(imagePreview).toBeEnabled();
 
     await user.click(imagePreview);
-    expect(onPressedChange).not.toHaveBeenCalled();
+    expect(onPressedChange).toHaveBeenCalledWith(false);
   });
 });

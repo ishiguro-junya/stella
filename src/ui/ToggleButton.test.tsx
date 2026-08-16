@@ -64,6 +64,7 @@ describe('ToggleButton', () => {
     const button = screen.getByRole('button', { name: 'Mode' });
     const options = button.querySelectorAll('.toggle-button-option');
     expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).not.toHaveAttribute('data-animate-on-mount');
     expect(button).toHaveAttribute('data-reverse-icons', 'true');
     expect(options[0]).toHaveClass('is-selected');
     expect(options[1]).not.toHaveClass('is-selected');

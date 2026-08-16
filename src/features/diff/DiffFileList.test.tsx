@@ -23,6 +23,11 @@ function renderList(overrides: Partial<DiffFileListProps> = {}) {
   const onFileAction = vi.fn<(entries: ChangeEntry[], action: FileActionKind) => Promise<void>>(
     async () => undefined,
   );
+  const onRenameStart = vi.fn<(entry: ChangeEntry) => void>();
+  const onRenameCancel = vi.fn<() => void>();
+  const onRename = vi.fn<(entry: ChangeEntry, name: string) => Promise<void>>(
+    async () => undefined,
+  );
   const result = render(
     <DiffFileList
       repoId="repo-1"
@@ -31,16 +36,29 @@ function renderList(overrides: Partial<DiffFileListProps> = {}) {
       selectedKey="unstaged:src/app.ts"
       disabled={false}
       fileActionsDisabled={false}
+      fileRenameDisabled={false}
       fileOpenDisabled={false}
       fileTrashDisabled={false}
       onSelect={onSelect}
       onSelectedKeysChange={onSelectedKeysChange}
       onStageTransition={onStageTransition}
       onFileAction={onFileAction}
+      onRenameStart={onRenameStart}
+      onRenameCancel={onRenameCancel}
+      onRename={onRename}
       {...overrides}
     />,
   );
-  return { ...result, onSelect, onSelectedKeysChange, onStageTransition, onFileAction };
+  return {
+    ...result,
+    onSelect,
+    onSelectedKeysChange,
+    onStageTransition,
+    onFileAction,
+    onRenameStart,
+    onRenameCancel,
+    onRename,
+  };
 }
 
 function changeRows(name: RegExp, container: HTMLElement = document.body): HTMLButtonElement[] {
@@ -94,6 +112,11 @@ describe('DiffFileList staging controls', () => {
 
     expect(onSelect).toHaveBeenLastCalledWith('unstaged:src/two.ts');
     expect(second).toHaveFocus();
+    const groups = second.closest('.change-groups');
+    expect(groups).toHaveClass('is-keyboard-navigating');
+
+    fireEvent.pointerMove(groups!);
+    expect(groups).not.toHaveClass('is-keyboard-navigating');
   });
 
   it('moves file selection with the up and down arrow keys within each group', async () => {
@@ -457,6 +480,50 @@ describe('DiffFileList staging controls', () => {
 });
 
 describe('DiffFileList file actions', () => {
+  it('edits the file name inline and submits it with Enter', async () => {
+    const user = userEvent.setup();
+    const entry = { path: 'src/app.ts', area: 'unstaged', status: 'modified' } as const;
+    const { onRename } = renderList({
+      entries: [entry],
+      selectedKey: 'unstaged:src/app.ts',
+      renamingKey: 'unstaged:src/app.ts',
+    });
+
+    const input = screen.getByRole('textbox', { name: 'Rename src/app.ts' });
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(input).toHaveValue('app.ts');
+    await user.clear(input);
+    await user.type(input, 'renamed.ts{Enter}');
+
+    expect(onRename).toHaveBeenCalledWith(entry, 'renamed.ts');
+  });
+
+  it('starts inline rename by double-click and disables it for deleted files', async () => {
+    const user = userEvent.setup();
+    const modified = { path: 'src/app.ts', area: 'unstaged', status: 'modified' } as const;
+    const modifiedList = renderList({ entries: [modified] });
+
+    await user.dblClick(changeRow(/Modified src\/app\.ts/u));
+    expect(modifiedList.onRenameStart).toHaveBeenCalledWith(modified);
+    modifiedList.unmount();
+
+    const added = { path: 'src/new.ts', area: 'untracked', status: 'added' } as const;
+    const addedList = renderList({ entries: [added], selectedKey: 'untracked:src/new.ts' });
+    await user.dblClick(changeRow(/Added src\/new\.ts/u));
+    expect(addedList.onRenameStart).toHaveBeenCalledWith(added);
+    addedList.unmount();
+
+    const deleted = { path: 'src/gone.ts', area: 'unstaged', status: 'deleted' } as const;
+    const deletedList = renderList({
+      entries: [deleted],
+      selectedKey: 'unstaged:src/gone.ts',
+    });
+    await user.dblClick(changeRow(/Deleted src\/gone\.ts/u));
+    expect(deletedList.onRenameStart).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'More actions for src/gone.ts' }));
+    expect(screen.getByRole('menuitem', { name: 'Rename File' })).toBeDisabled();
+  });
+
   it('shows the selected image preview state in the row menu', async () => {
     const user = userEvent.setup();
     const onPressedChange = vi.fn<(pressed: boolean) => void>();
@@ -468,8 +535,9 @@ describe('DiffFileList file actions', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'More actions for image.png' }));
-    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Preview Image' });
+    const imagePreview = screen.getByRole('menuitemcheckbox', { name: 'Stop Previewing Image' });
     expect(imagePreview).toHaveAttribute('aria-checked', 'true');
+    expect(imagePreview).toBeEnabled();
 
     await user.click(imagePreview);
     expect(onPressedChange).toHaveBeenCalledWith(false);
@@ -504,6 +572,7 @@ describe('DiffFileList file actions', () => {
     fireEvent.contextMenu(second, { clientX: 120, clientY: 180 });
     expect(screen.getByRole('menu', { name: 'Actions for 3 selected files' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Rename File' })).toBeDisabled();
     await user.click(screen.getByRole('menuitem', { name: 'Discard Changes' }));
     expect(onFileAction).toHaveBeenCalledWith(entries, 'discardChanges');
   });
@@ -616,20 +685,26 @@ describe('DiffFileList file actions', () => {
       entry: { path: 'src/app.ts', area: 'unstaged', status: 'modified' } as const,
       openDisabled: true,
       trashDisabled: true,
+      finderDisabled: false,
+      discardDisabled: true,
     },
     {
       label: 'a conflicted row',
       entry: { path: 'src/conflict.ts', area: 'conflicted', status: 'conflicted' } as const,
       openDisabled: false,
       trashDisabled: false,
+      finderDisabled: false,
+      discardDisabled: true,
     },
     {
       label: 'a deleted row',
       entry: { path: 'src/deleted.ts', area: 'unstaged', status: 'deleted' } as const,
       openDisabled: false,
       trashDisabled: false,
+      finderDisabled: true,
+      discardDisabled: false,
     },
-  ])('keeps only Finder and Copy available for $label', async (fixture) => {
+  ])('applies file action restrictions to $label', async (fixture) => {
     const user = userEvent.setup();
     renderList({
       entries: [fixture.entry],
@@ -642,9 +717,15 @@ describe('DiffFileList file actions', () => {
     );
 
     expect(screen.getByRole('menuitem', { name: 'Open in Default App' })).toBeDisabled();
-    expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Show in Finder' })).toHaveProperty(
+      'disabled',
+      fixture.finderDisabled,
+    );
     expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeEnabled();
-    expect(screen.getByRole('menuitem', { name: 'Discard Changes' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Discard Changes' })).toHaveProperty(
+      'disabled',
+      fixture.discardDisabled,
+    );
     expect(screen.getByRole('menuitem', { name: 'Delete File' })).toBeDisabled();
   });
 

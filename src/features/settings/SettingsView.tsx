@@ -7,7 +7,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Button } from '../../ui/Button';
 import { DirectoryInput } from '../../ui/DirectoryInput';
@@ -74,6 +74,7 @@ export interface SettingsViewProps {
   onStickyFileHeadersChange: (sticky: boolean) => void;
   onEditorLineWrappingChange: (enabled: boolean) => void;
   onEditorWrapColumnChange: (column: number) => void;
+  onResetPaneWidths: () => void;
   onIgnorePatternsChange: (patterns: string) => void;
   onToolchainModeChange: (mode: ToolchainMode) => void;
 }
@@ -136,10 +137,12 @@ export function SettingsView({
   onStickyFileHeadersChange,
   onEditorLineWrappingChange,
   onEditorWrapColumnChange,
+  onResetPaneWidths,
   onIgnorePatternsChange,
   onToolchainModeChange,
 }: SettingsViewProps) {
   const { t } = useI18n();
+  const categoryButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [category, setCategory] = useState<SettingsCategory>('general');
   const [wrapColumnDraft, setWrapColumnDraft] = useState(String(editorWrapColumn));
   const [repositoryBasePathDraft, setRepositoryBasePathDraft] = useState(repositoryBasePath);
@@ -158,6 +161,7 @@ export function SettingsView({
   const toolchainModeLabel = (mode: ToolchainMode): string =>
     t(mode === 'bundled' ? 'toolchainBundled' : 'toolchainSystem');
 
+  useEffect(() => categoryButtonRefs.current[0]?.focus(), []);
   useEffect(() => setWrapColumnDraft(String(editorWrapColumn)), [editorWrapColumn]);
   useEffect(() => {
     setRepositoryBasePathDraft(repositoryBasePath);
@@ -191,27 +195,57 @@ export function SettingsView({
     onIgnorePatternsChange(ignorePatternsDraft);
   };
 
+  const moveCategory = (event: KeyboardEvent<HTMLButtonElement>, nextIndex: number): void => {
+    const next = categories[nextIndex];
+    if (!next) return;
+    event.preventDefault();
+    event.currentTarget
+      .closest('.settings-category-navigation')
+      ?.classList.add('is-keyboard-navigating');
+    setCategory(next.id);
+    categoryButtonRefs.current[nextIndex]?.focus();
+  };
+
   return (
     <main className="settings-view" aria-labelledby="settings-title">
       <div className="settings-content">
         <aside className="settings-sidebar">
-          <h1 id="settings-title">{t('settingsTitle')}</h1>
-          <nav className="settings-category-navigation" aria-label={t('settingsCategories')}>
-            {categories.map(({ id, label, Icon }) => (
-              <Button
-                key={id}
-                type="button"
-                className="settings-category-button"
-                data-settings-category={id}
-                aria-controls={`settings-category-${id}`}
-                aria-current={category === id ? 'page' : undefined}
-                onClick={() => setCategory(id)}
-              >
-                <Icon aria-hidden="true" focusable="false" />
-                <span>{label}</span>
-              </Button>
-            ))}
-          </nav>
+          <div className="settings-sidebar-body">
+            <h1 id="settings-title">{t('settingsTitle')}</h1>
+            <nav
+              className="settings-category-navigation"
+              aria-label={t('settingsCategories')}
+              onPointerMove={(event) =>
+                event.currentTarget.classList.remove('is-keyboard-navigating')
+              }
+            >
+              {categories.map(({ id, label, Icon }, index) => (
+                <Button
+                  ref={(node) => {
+                    categoryButtonRefs.current[index] = node;
+                  }}
+                  key={id}
+                  type="button"
+                  className="settings-category-button"
+                  data-settings-category={id}
+                  aria-controls={`settings-category-${id}`}
+                  aria-current={category === id ? 'page' : undefined}
+                  onClick={(event) => {
+                    event.currentTarget.focus();
+                    setCategory(id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown')
+                      moveCategory(event, Math.min(index + 1, categories.length - 1));
+                    else if (event.key === 'ArrowUp') moveCategory(event, Math.max(index - 1, 0));
+                  }}
+                >
+                  <Icon aria-hidden="true" focusable="false" />
+                  <span>{label}</span>
+                </Button>
+              ))}
+            </nav>
+          </div>
         </aside>
 
         <div className="settings-detail">
@@ -463,6 +497,20 @@ export function SettingsView({
                     </option>
                   ))}
                 </SelectControl>
+              </section>
+
+              <section className="settings-row" aria-labelledby="pane-positions-title">
+                <div className="settings-row-copy">
+                  <h3 id="pane-positions-title">{t('panePositionsTitle')}</h3>
+                  <p id="pane-positions-description">{t('panePositionsDescription')}</p>
+                </div>
+                <Button
+                  type="button"
+                  aria-describedby="pane-positions-description"
+                  onClick={onResetPaneWidths}
+                >
+                  {t('resetPanePositions')}
+                </Button>
               </section>
             </div>
           </section>

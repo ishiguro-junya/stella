@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_E2E?: string;
-  readonly VITE_DEV_REPOSITORY_PATH?: string;
+  readonly VITE_DEV_REPOSITORY_PATHS?: string;
 }
 
 interface ImportMeta {

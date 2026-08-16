@@ -8,7 +8,7 @@ import {
   recordRemoteHealthIssue,
   rememberRepositoryPath,
   replaceRepositoryPath,
-  setDevelopmentRepository,
+  setDevelopmentRepositories,
   writePreferences,
 } from './preferences';
 
@@ -21,7 +21,6 @@ describe('appearance preferences', () => {
       JSON.stringify({
         version: 1,
         recentRepoPaths: [],
-        openRepoPaths: [],
         paneWidths: { left: 244, right: 336 },
         commitDrafts: {},
       }),
@@ -44,7 +43,7 @@ describe('appearance preferences', () => {
     });
   });
 
-  it('fills a missing v1 language from macOS and keeps the shared pane width', () => {
+  it('fills a missing v1 language from macOS and migrates the shared pane width', () => {
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP']);
     localStorage.setItem(
       'stella.preferences.v1',
@@ -66,23 +65,35 @@ describe('appearance preferences', () => {
       appearance: 'dark',
       registeredRepoPaths: ['/tmp/stella'],
       repositoryNames: {},
-      openRepoPaths: ['/tmp/stella'],
-      selectedRepoPath: '/tmp/stella',
-      paneWidths: { left: 360, right: 400 },
+      paneWidths: {
+        changes: { left: 360, right: 400 },
+        history: { left: 360 },
+        activity: { left: 360 },
+      },
     });
     expect(preferences).not.toHaveProperty('view');
+    expect(preferences).not.toHaveProperty('openRepoPaths');
+    expect(preferences).not.toHaveProperty('selectedRepoPath');
   });
 
-  it('round-trips one pane position shared by Diff, History, and Activity', () => {
+  it('round-trips independent pane positions for Diff, History, and Activity', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
-      paneWidths: { left: 408, right: 408 },
+      paneWidths: {
+        changes: { left: 408, right: 400 },
+        history: { left: 432 },
+        activity: { left: 456 },
+      },
     });
 
-    expect(readPreferences().paneWidths).toEqual({ left: 408, right: 408 });
+    expect(readPreferences().paneWidths).toEqual({
+      changes: { left: 408, right: 400 },
+      history: { left: 432 },
+      activity: { left: 456 },
+    });
   });
 
-  it('migrates screen-specific pane widths using the legacy Changes position', () => {
+  it('restores legacy screen-specific pane widths', () => {
     localStorage.setItem(
       'stella.preferences.v1',
       JSON.stringify({
@@ -95,7 +106,11 @@ describe('appearance preferences', () => {
       }),
     );
 
-    expect(readPreferences().paneWidths).toEqual({ left: 408, right: 400 });
+    expect(readPreferences().paneWidths).toEqual({
+      changes: { left: 408, right: 400 },
+      history: { left: 384 },
+      activity: { left: 560 },
+    });
   });
 
   it('keeps a saved language ahead of the current macOS language', () => {
@@ -275,20 +290,21 @@ describe('appearance preferences', () => {
     expect(readPreferences().registeredRepoPaths).toEqual(['/tmp/remote-clone', '/tmp/local']);
   });
 
-  it('uses only the safe development repository without changing display preferences', () => {
+  it('uses only the safe development repositories without changing display preferences', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       appearance: 'dark',
       registeredRepoPaths: ['/repo/stella'],
-      openRepoPaths: ['/repo/stella'],
-      selectedRepoPath: '/repo/stella',
     });
 
-    expect(setDevelopmentRepository('/repo/tmp/dev/major-league-baseball')).toMatchObject({
+    expect(
+      setDevelopmentRepositories([
+        '/repo/tmp/dev/major-league-baseball',
+        '/repo/tmp/dev/ohtani-shohei',
+      ]),
+    ).toMatchObject({
       appearance: 'dark',
-      registeredRepoPaths: ['/repo/tmp/dev/major-league-baseball'],
-      openRepoPaths: ['/repo/tmp/dev/major-league-baseball'],
-      selectedRepoPath: '/repo/tmp/dev/major-league-baseball',
+      registeredRepoPaths: ['/repo/tmp/dev/major-league-baseball', '/repo/tmp/dev/ohtani-shohei'],
     });
   });
 
@@ -315,7 +331,7 @@ describe('appearance preferences', () => {
     });
   });
 
-  it('moves repository metadata, selection, warnings, and both commit draft formats together', () => {
+  it('moves repository metadata, warnings, and both commit draft formats together', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       registeredRepoPaths: ['/old/repo'],
@@ -325,8 +341,6 @@ describe('appearance preferences', () => {
           { kind: 'remote', remote: 'origin', reason: 'network', failedAt: '2026-08-12T00:00:00Z' },
         ],
       },
-      openRepoPaths: ['/old/repo'],
-      selectedRepoPath: '/old/repo',
       commitDrafts: {
         '/old/repo': {
           plainMessage: 'plain draft',
@@ -346,8 +360,6 @@ describe('appearance preferences', () => {
       repositoryHealthIssues: {
         '/new/repo': [{ kind: 'remote', remote: 'origin', reason: 'network' }],
       },
-      openRepoPaths: ['/new/repo'],
-      selectedRepoPath: '/new/repo',
       commitDrafts: {
         '/new/repo': {
           plainMessage: 'plain draft',
@@ -409,14 +421,10 @@ describe('appearance preferences', () => {
       ...DEFAULT_PREFERENCES,
       registeredRepoPaths: ['/repo', '/other'],
       repositoryNames: { '/repo': 'Repo', '/other': 'Other' },
-      openRepoPaths: ['/repo', '/other'],
-      selectedRepoPath: '/repo',
     });
     expect(forgetRepositoryPath('/repo')).toMatchObject({
       registeredRepoPaths: ['/other'],
       repositoryNames: { '/other': 'Other' },
-      openRepoPaths: ['/other'],
     });
-    expect(readPreferences().selectedRepoPath).toBeUndefined();
   });
 });

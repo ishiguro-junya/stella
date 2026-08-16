@@ -2,6 +2,7 @@ import {
   AppWindowMac,
   Copy,
   FolderOpen,
+  FilePenLine,
   Image as ImageIcon,
   Pencil,
   Trash2,
@@ -17,6 +18,7 @@ import {
 
 export type FileActionKind =
   | 'editFile'
+  | 'renameFile'
   | 'openInDefaultApp'
   | 'revealInFinder'
   | 'copyPath'
@@ -30,8 +32,11 @@ export interface FileActionMenuProps {
   selectedPaths: string[];
   open: boolean;
   disabled: boolean;
+  editing?: boolean | undefined;
   editDisabled?: boolean | undefined;
+  renameDisabled?: boolean | undefined;
   openDisabled: boolean;
+  revealDisabled: boolean;
   discardDisabled: boolean;
   deleteDisabled: boolean;
   imagePreview?:
@@ -53,8 +58,11 @@ export function FileActionMenu({
   selectedPaths,
   open,
   disabled,
+  editing = false,
   editDisabled = false,
+  renameDisabled = false,
   openDisabled,
+  revealDisabled,
   discardDisabled,
   deleteDisabled,
   imagePreview,
@@ -68,18 +76,24 @@ export function FileActionMenu({
   const items: RowActionMenuItem<FileActionKind | 'imagePreview'>[] = [
     {
       action: 'editFile',
-      label: t('actionEditFile'),
+      label: t(editing ? 'actionStopEditingFile' : 'actionEditFile'),
       icon: <Pencil aria-hidden="true" focusable="false" size={15} />,
-      disabled: editDisabled,
+      disabled: !editing && editDisabled,
+    },
+    {
+      action: 'renameFile',
+      label: t('actionRenameFile'),
+      icon: <FilePenLine aria-hidden="true" focusable="false" size={15} />,
+      disabled: renameDisabled,
     },
     ...(imagePreview
       ? [
           {
             action: 'imagePreview' as const,
-            label: t('actionPreviewImage'),
+            label: t(imagePreview.pressed ? 'actionStopPreviewingImage' : 'actionPreviewImage'),
             icon: <ImageIcon aria-hidden="true" focusable="false" size={15} />,
             checked: imagePreview.pressed,
-            disabled: imagePreview.disabled,
+            disabled: imagePreview.disabled && !imagePreview.pressed,
           },
         ]
       : []),
@@ -94,6 +108,7 @@ export function FileActionMenu({
       action: 'revealInFinder',
       label: t('showInFinder'),
       icon: <FolderOpen aria-hidden="true" focusable="false" size={15} />,
+      disabled: revealDisabled,
     },
     {
       action: 'copyPath',

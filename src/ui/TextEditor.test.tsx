@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, vi } from 'vitest';
 
+import { AppearanceProvider } from '../theme/appearance';
 import { TextEditor } from './TextEditor';
 
 describe('TextEditor', () => {
@@ -29,14 +30,16 @@ describe('TextEditor', () => {
 
   it('keeps the line-number and fold-control gutters compact and aligned', () => {
     const { container } = render(
-      <TextEditor
-        value={'function example() {\n  return true;\n}\n'}
-        path="src/app.ts"
-        lineEnding="lf"
-        ariaLabel="Edit src/app.ts"
-        onChange={() => undefined}
-        onSave={() => undefined}
-      />,
+      <AppearanceProvider appearance="dark">
+        <TextEditor
+          value={'function example() {\n  return true;\n}\n'}
+          path="src/app.ts"
+          lineEnding="lf"
+          ariaLabel="Edit src/app.ts"
+          onChange={() => undefined}
+          onSave={() => undefined}
+        />
+      </AppearanceProvider>,
     );
     const lineNumber = container.querySelector('.cm-lineNumbers .cm-gutterElement');
     const gutters = container.querySelector('.cm-gutters');
@@ -59,7 +62,7 @@ describe('TextEditor', () => {
     }
     const foldMarkerChevron = foldMarker.querySelector('polyline');
 
-    expect(getComputedStyle(lineNumber).paddingRight).toBe('4px');
+    expect(getComputedStyle(lineNumber).paddingRight).toBe('5px');
     expect(getComputedStyle(lineNumber).paddingLeft).toBe('5px');
     expect(getComputedStyle(lineNumber).minWidth).toBe('20px');
     expect(getComputedStyle(gutters).fontFamily).toBe('var(--font-mono)');

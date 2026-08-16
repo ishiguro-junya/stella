@@ -238,10 +238,13 @@ describe('DiffSurface line selection', () => {
       '--diffs-min-number-column-width: 10px;',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
-      "[data-indicators='classic'] [data-line] {\n  padding-inline: 2px;\n  padding-inline-start: 24px;",
+      "[data-indicators='classic'] [data-line] {\n  padding-inline: 2px;\n  padding-inline-start: 6px;\n}",
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
-      '[data-code] {\n  overscroll-behavior: none;\n  -webkit-user-select: none;\n  user-select: none;\n}',
+      "[data-indicators='classic'] [data-column-number][data-line-type='change-addition']::before {\n  content: '+';",
+    );
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
+      '[data-code] {\n  overscroll-behavior: none;\n}',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '[data-line][data-selected-line] {\n  --diffs-computed-selected-line-bg: var(--diff-selection-surface);',

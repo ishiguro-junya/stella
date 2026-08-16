@@ -14,8 +14,6 @@ export interface HistoryParentEdge {
   parentOid: string;
   fromLane: number;
   toLane: number;
-  /** 親の経路がこの行の上端まで既に到達している。 */
-  connectsFromAbove: boolean;
 }
 
 export interface HistoryGraphTopology {
@@ -78,22 +76,16 @@ export function assignHistoryLanes<Node extends HistoryLaneNode>(
         parentOid: firstParent,
         fromLane: lane,
         toLane: lane,
-        connectsFromAbove: false,
       });
     }
 
     for (const parentOid of mergeParents) {
-      let parentLane = active.indexOf(parentOid);
-      const connectsFromAbove = parentLane >= 0;
-      if (parentLane < 0) {
-        parentLane = availableLane(lane);
-        active[parentLane] = parentOid;
-      }
+      const parentLane = availableLane(lane);
+      active[parentLane] = parentOid;
       parentEdges.push({
         parentOid,
         fromLane: lane,
         toLane: parentLane,
-        connectsFromAbove,
       });
     }
 

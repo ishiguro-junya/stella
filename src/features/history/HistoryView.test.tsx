@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { HISTORY_PAGE_SIZE } from '../../domain/historyLanes';
@@ -20,45 +20,37 @@ const { diffSurfaceMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(
   imageProbeState: { previewable: true },
 }));
 
-let intersectionObserverCallback: IntersectionObserverCallback | undefined;
-const observeIntersection = vi.fn<(target: Element) => void>();
-const disconnectIntersection = vi.fn<() => void>();
-const unobserveIntersection = vi.fn<(target: Element) => void>();
+interface IntersectionObserverRecord {
+  callback: IntersectionObserverCallback;
+  observer: IntersectionObserver;
+  options: IntersectionObserverInit;
+  target?: Element;
+}
 
-const intersectionObserverArgument: IntersectionObserver = {
-  root: null,
-  rootMargin: '0px',
-  scrollMargin: '0px',
-  thresholds: [0],
-  disconnect: disconnectIntersection,
-  observe: observeIntersection,
-  takeRecords: () => [],
-  unobserve: unobserveIntersection,
-};
+let intersectionObserver: IntersectionObserverRecord | undefined;
 
-class IntersectionObserverMock implements IntersectionObserver {
-  readonly root = null;
-  readonly rootMargin = '0px';
-  readonly scrollMargin = '0px';
-  readonly thresholds = [0];
+function latestIntersectionObserver(): IntersectionObserverRecord {
+  const observer = intersectionObserver;
+  if (!observer?.target) throw new Error('History sentinel was not observed.');
+  return observer;
+}
 
-  constructor(callback: IntersectionObserverCallback) {
-    intersectionObserverCallback = callback;
-  }
-
-  disconnect(): void {
-    disconnectIntersection();
-  }
-
-  observe(target: Element): void {
-    observeIntersection(target);
-  }
-
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
-
-  unobserve(): void {}
+function intersect(observer = latestIntersectionObserver()): void {
+  act(() => {
+    const target = observer.target;
+    if (!target) throw new Error('History sentinel was not observed.');
+    const rect = target.getBoundingClientRect();
+    const entry: IntersectionObserverEntry = {
+      time: 0,
+      target,
+      rootBounds: null,
+      boundingClientRect: rect,
+      intersectionRect: rect,
+      isIntersecting: true,
+      intersectionRatio: 1,
+    };
+    observer.callback([entry], observer.observer);
+  });
 }
 
 vi.mock('../diff/DiffSurface', () => ({
@@ -190,35 +182,37 @@ beforeEach(() => {
   diffSurfaceMock.mockClear();
   imagePreviewToggleMock.mockClear();
   imageProbeState.previewable = true;
-  intersectionObserverCallback = undefined;
-  observeIntersection.mockClear();
-  disconnectIntersection.mockClear();
-  unobserveIntersection.mockClear();
-  vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
+  intersectionObserver = undefined;
+  class MockIntersectionObserver implements IntersectionObserver {
+    readonly root: Element | Document | null;
+    readonly rootMargin: string;
+    readonly scrollMargin: string;
+    readonly thresholds: readonly number[];
+
+    constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
+      this.root = options.root ?? null;
+      this.rootMargin = options.rootMargin ?? '0px';
+      this.scrollMargin = options.scrollMargin ?? '0px';
+      this.thresholds = Array.isArray(options.threshold)
+        ? options.threshold
+        : [options.threshold ?? 0];
+      intersectionObserver = { callback, observer: this, options };
+    }
+
+    observe(target: Element): void {
+      if (intersectionObserver) intersectionObserver.target = target;
+    }
+
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+    unobserve(): void {}
+  }
+  vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
 });
 
-function reachHistoryEnd(): void {
-  const target = screen.getByTestId('history-load-sentinel');
-  if (!intersectionObserverCallback) throw new Error('History observer is not ready.');
-  const callback = intersectionObserverCallback;
-  const bounds = target.getBoundingClientRect();
-  act(() => {
-    callback(
-      [
-        {
-          boundingClientRect: bounds,
-          intersectionRatio: 1,
-          intersectionRect: bounds,
-          isIntersecting: true,
-          rootBounds: null,
-          target,
-          time: 0,
-        },
-      ],
-      intersectionObserverArgument,
-    );
-  });
-}
+afterEach(() => vi.unstubAllGlobals());
 
 async function openCommitMenu(
   user: ReturnType<typeof userEvent.setup>,
@@ -242,6 +236,50 @@ async function openCommitAction(
 }
 
 describe('HistoryView', () => {
+  it('shows the empty History state in the detail pane when the repository has no commits', () => {
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [] })}
+        adapter={adapterWithQuery(async () => ({ kind: 'activity', entries: [] }))}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const emptyState = screen.getByText('No history.');
+    expect(emptyState).toHaveClass('diff-empty-state');
+    expect(emptyState.closest('.commit-detail-pane')).not.toBeNull();
+    expect(screen.queryByText('Select a commit.')).not.toBeInTheDocument();
+  });
+
+  it('shows no Diff content or empty-state message for an empty commit', async () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: commitDetails(undefined) };
+        }
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'feat: current' })).toBeVisible();
+    expect(screen.queryByText('Diff')).not.toBeInTheDocument();
+    expect(screen.queryByText('No changes in this commit.')).not.toBeInTheDocument();
+  });
+
   it('does not show the image preview toggle for a raster image', async () => {
     const rasterDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'raster-revision',
@@ -532,12 +570,127 @@ diff --git a/second.svg b/second.svg
     fireEvent.pointerMove(historyList!);
     expect(historyList).not.toHaveClass('is-keyboard-navigating');
 
+    const historySearch = document.querySelector<HTMLInputElement>('.history-search input');
+    if (!historySearch) throw new Error('History search input was not rendered.');
+    historySearch.focus();
+    fireEvent.click(second);
+    expect(second).toHaveFocus();
+
     second.blur();
     expect(document.body).toHaveFocus();
     await user.keyboard('{ArrowUp}');
 
     expect(first).toHaveFocus();
     expect(first).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('moves once for every rapid global arrow-key event', async () => {
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return {
+            kind: 'commitDetails' as const,
+            commit: { ...commitDetails(undefined), oid: request.oid, shortOid: request.oid },
+          };
+        }
+        if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          selectedCommitOid: 'first',
+          history: ['first', 'second', 'third', 'fourth'].map((oid) => commitSummary(oid)),
+        })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const first = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="first"]')!;
+    const fourth = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="fourth"]')!;
+    await waitFor(() => expect(first).toHaveFocus());
+    first.blur();
+
+    act(() => {
+      for (let index = 0; index < 3; index += 1) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      }
+    });
+
+    expect(fourth).toHaveFocus();
+    expect(fourth).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('moves the left selection without rerendering the loaded detail pane', async () => {
+    const user = userEvent.setup();
+    const diff = {
+      diffId: 'first-diff',
+      repoId: 'repo-1',
+      path: 'src/app.ts',
+      area: 'staged' as const,
+      generation: 1,
+      patch: `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1 +1 @@
+-old
++new
+`,
+      binary: false,
+      tooLarge: false,
+    };
+    const pendingDetails = new Promise<QueryResult>(() => undefined);
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>((request) => {
+        if (request.kind !== 'commitDetails') {
+          return Promise.resolve({ kind: 'activity' as const, entries: [] });
+        }
+        if (request.oid === 'first') {
+          return Promise.resolve({
+            kind: 'commitDetails' as const,
+            commit: { ...commitDetails(diff), oid: 'first', shortOid: 'first' },
+          });
+        }
+        return pendingDetails;
+      }),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          selectedCommitOid: 'first',
+          history: [commitSummary('first'), commitSummary('second')],
+        })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const first = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="first"]')!;
+    const second = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="second"]')!;
+    await waitFor(() => expect(diffSurfaceMock).toHaveBeenCalledOnce());
+    await waitFor(() => expect(first).toHaveFocus());
+    diffSurfaceMock.mockClear();
+    const focus = vi.spyOn(second, 'focus');
+    const scrollIntoView = vi.fn<HTMLElement['scrollIntoView']>();
+    second.scrollIntoView = scrollIntoView;
+
+    await user.keyboard('{ArrowDown}');
+
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute('aria-current', 'true');
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }),
+    );
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
   });
 
   it('checks out an unambiguous local branch when its history item is double-clicked', async () => {
@@ -799,8 +952,9 @@ diff --git a/second.svg b/second.svg
     );
 
     const historyPane = screen.getByRole('complementary', { name: 'Commit history' });
-    expect(historyPane.firstElementChild).toHaveClass('left-pane-toolbar', 'history-pane-toolbar');
-    expect(historyPane.firstElementChild?.firstElementChild).toHaveClass('history-search');
+    expect(historyPane.firstElementChild).toHaveClass('commit-list');
+    expect(historyPane.lastElementChild).toHaveClass('history-list-footer');
+    expect(historyPane.lastElementChild?.firstElementChild).toHaveClass('history-search');
     expect(within(historyPane).queryByRole('tablist')).not.toBeInTheDocument();
     expect(within(historyPane).queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
     expect(historyPane.querySelector('.history-branch-context')).not.toBeInTheDocument();
@@ -1157,14 +1311,16 @@ diff --git a/second.svg b/second.svg
     );
 
     const graph = screen.getByTestId('history-graph-main-base');
+    expect(graph.querySelectorAll('svg')).toHaveLength(1);
     const mainEdge = graph.querySelector<SVGPathElement>(
       '[data-edge-kind="incoming"][data-from-lane="0"]',
     );
-    const sideEdge = graph.querySelector<SVGPathElement>(
+    const sideEdge = graph.querySelector<SVGLineElement>(
       '[data-edge-kind="active"][data-from-lane="1"]',
     );
     expect(mainEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
     expect(sideEdge?.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-1)');
+    expect(sideEdge).toHaveAttribute('y2', '100%');
     expect(graph.style.getPropertyValue('--history-lane-color')).toBe('var(--history-lane-0)');
     expect(
       screen
@@ -1176,7 +1332,7 @@ diff --git a/second.svg b/second.svg
     ).toBe('var(--history-lane-1)');
   });
 
-  it('connects an already active merge-parent lane above the branch point', () => {
+  it('keeps already active merge-parent lanes separate until the shared commit', () => {
     const adapter = adapterWithQuery(
       vi.fn<WorkspaceAdapter['query']>(async (request) =>
         request.kind === 'branches'
@@ -1204,26 +1360,28 @@ diff --git a/second.svg b/second.svg
     );
 
     const branchGraph = screen.getByTestId('history-graph-original');
+    const branchEdge = branchGraph.querySelector<SVGPathElement>(
+      '.history-graph-outgoing-corner [data-edge-kind="parent"][data-from-lane="2"][data-to-lane="3"]',
+    );
+    expect(branchEdge?.getAttribute('d')).toBe('M 30 0 L 42 8');
+    expect(branchEdge?.style.getPropertyValue('--history-lane-color')).toBe(
+      'var(--history-lane-3)',
+    );
+
+    const sharedGraph = screen.getByTestId('history-graph-side');
     expect(
-      branchGraph
-        .querySelector(
-          '.history-graph-incoming-corner [data-edge-kind="parent"][data-from-lane="2"][data-to-lane="1"]',
-        )
+      sharedGraph
+        .querySelector('[data-edge-kind="incoming"][data-from-lane="3"]')
         ?.getAttribute('d'),
-    ).toBe('M 18 0 L 30 8');
-    expect(
-      branchGraph.querySelector(
-        '.history-graph-outgoing-corner [data-edge-kind="parent"][data-from-lane="2"][data-to-lane="1"]',
-      ),
-    ).not.toBeInTheDocument();
+    ).toBe('M 42 0 L 18 8');
 
     const graph = screen.getByTestId('history-graph-base');
     expect(
       graph.querySelector('[data-edge-kind="incoming"][data-from-lane="1"]')?.getAttribute('d'),
-    ).toBe('M 18 0 L 18 4 L 6 8');
+    ).toBe('M 18 0 L 6 8');
     expect(
       graph.querySelector('[data-edge-kind="incoming"][data-from-lane="2"]')?.getAttribute('d'),
-    ).toBe('M 30 0 L 18 4');
+    ).toBe('M 30 0 L 6 8');
   });
 
   it('starts a newly allocated merge-parent lane below the merge point', () => {
@@ -1347,7 +1505,8 @@ diff --git a/second.svg b/second.svg
     );
 
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
-    reachHistoryEnd();
+    expect(query.mock.calls.filter(([request]) => request.kind === 'history')).toHaveLength(0);
+    intersect();
     expect(
       (await screen.findByTestId(`history-graph-current-${HISTORY_PAGE_SIZE}`)).closest('button'),
     ).toBeVisible();
@@ -1362,7 +1521,74 @@ diff --git a/second.svg b/second.svg
     expect(screen.queryByTestId('history-load-sentinel')).not.toBeInTheDocument();
   });
 
-  it('waits until the scroll sentinel is visible before loading the next all-refs page', async () => {
+  it('loads at most one history page for each observed sentinel', async () => {
+    const initial = linearHistory('current', HISTORY_PAGE_SIZE);
+    const middle = linearHistory('current', HISTORY_PAGE_SIZE * 2).slice(HISTORY_PAGE_SIZE);
+    let finishHistory!: (result: Awaited<ReturnType<WorkspaceAdapter['query']>>) => void;
+    const finalPage = new Promise<Awaited<ReturnType<WorkspaceAdapter['query']>>>((resolve) => {
+      finishHistory = resolve;
+    });
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'history') {
+        if (request.skip === HISTORY_PAGE_SIZE) {
+          return { kind: 'history' as const, commits: middle };
+        }
+        return finalPage;
+      }
+      if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+      if (request.kind === 'commitDetails')
+        return { kind: 'commitDetails' as const, commit: commitDetails(undefined) };
+      return { kind: 'activity' as const, entries: [] };
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({
+          branch: {
+            name: 'main',
+            oid: 'current-0',
+            detached: false,
+            ahead: 0,
+            behind: 0,
+          },
+          history: initial,
+        })}
+        adapter={adapterWithQuery(query)}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(query.mock.calls.filter(([request]) => request.kind === 'history')).toHaveLength(0);
+    const firstObserver = latestIntersectionObserver();
+    intersect(firstObserver);
+    expect(await screen.findByTestId(`history-graph-current-${HISTORY_PAGE_SIZE}`)).toBeVisible();
+    expect(query.mock.calls.filter(([request]) => request.kind === 'history')).toHaveLength(1);
+
+    await waitFor(() => expect(latestIntersectionObserver()).not.toBe(firstObserver));
+    intersect(latestIntersectionObserver());
+    await waitFor(() =>
+      expect(query).toHaveBeenCalledWith({
+        kind: 'history',
+        repoId: 'repo-1',
+        limit: HISTORY_PAGE_SIZE,
+        skip: HISTORY_PAGE_SIZE * 2,
+      }),
+    );
+    const list = screen.getByRole('list', { name: '' });
+    expect(list).toHaveAttribute('aria-busy', 'true');
+    finishHistory({
+      kind: 'history',
+      commits: [commitSummary(`current-${HISTORY_PAGE_SIZE * 2}`)],
+    });
+    expect(
+      await screen.findByTestId(`history-graph-current-${HISTORY_PAGE_SIZE * 2}`),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(list).toHaveAttribute('aria-busy', 'false'));
+  });
+
+  it('loads the next all-refs page before scrolling reaches the end', async () => {
     const initial = linearHistory('other', HISTORY_PAGE_SIZE);
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
       if (request.kind === 'history')
@@ -1392,13 +1618,10 @@ diff --git a/second.svg b/second.svg
       />,
     );
 
-    expect(screen.getByTestId('history-load-sentinel')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(query.mock.calls.some(([request]) => request.kind === 'commitDetails')).toBe(true),
-    );
-    expect(query.mock.calls.some(([request]) => request.kind === 'history')).toBe(false);
-
-    reachHistoryEnd();
+    const observer = latestIntersectionObserver();
+    expect(observer.options.root).toBe(screen.getByRole('list', { name: '' }));
+    expect(observer.options.rootMargin).toBe('0px 0px 2400px 0px');
+    intersect(observer);
     await waitFor(() =>
       expect(query.mock.calls.some(([request]) => request.kind === 'history')).toBe(true),
     );
@@ -1431,7 +1654,7 @@ diff --git a/second.svg b/second.svg
       />,
     );
 
-    reachHistoryEnd();
+    intersect();
     expect(
       (await screen.findByTestId(`history-graph-old-${HISTORY_PAGE_SIZE}`)).closest('button'),
     ).toBeVisible();

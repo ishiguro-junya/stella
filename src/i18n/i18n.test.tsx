@@ -105,7 +105,6 @@ describe('Stella i18n', () => {
     expect(translate('en', 'appActivity')).toBe('Activity');
     expect(translate('en', 'copy')).toBe('Copy');
     expect(translate('en', 'create')).toBe('Create');
-    expect(translate('en', 'clone')).toBe('Clone');
     expect(translate('en', 'switch')).toBe('Switch');
     expect(translate('en', 'merge')).toBe('Merge');
     expect(translate('en', 'rebase')).toBe('Rebase');
@@ -153,7 +152,6 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'actionStageSelectedLines')).toBe('選択した行をステージ');
     expect(translate('ja', 'copy')).toBe('コピー');
     expect(translate('ja', 'create')).toBe('作成');
-    expect(translate('ja', 'clone')).toBe('クローン');
     expect(translate('ja', 'switch')).toBe('切り替え');
     expect(translate('ja', 'createBranchMenu')).toBe('ブランチを作成');
     expect(translate('ja', 'createTagMenu')).toBe('タグを作成');
@@ -169,6 +167,7 @@ describe('Stella i18n', () => {
     expect(translate('ja', 'actionAbortOperation')).toBe('操作を中止');
     expect(translate('ja', 'actionCloneRepository')).toBe('リポジトリをクローン');
     expect(translate('ja', 'searchRepositories')).toBe('リポジトリを検索');
+    expect(translate('ja', 'repositoryCount', { count: 10 })).toBe('リポジトリ 10件');
     expect(translate('ja', 'searchBranches')).toBe('ブランチを検索');
     expect(translate('ja', 'forgetRepositoryDescription', { repository: 'xxxx' })).toBe(
       'リポジトリ「xxxx」の登録だけ解除するか、ローカルファイルをゴミ箱へ移動するか選択してください。',

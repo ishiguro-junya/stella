@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 
 import { Button } from '../../ui/Button';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
@@ -26,6 +34,7 @@ export interface FileEditorSurfaceProps {
   initialScrollLine?: number | undefined;
   leadingHeaderActions?: ReactNode | undefined;
   headerActions?: ReactNode | undefined;
+  displayRequestRef?: RefObject<(() => void) | null> | undefined;
   onDisplay: () => void;
   onSave: (input: FileEditorSaveInput) => Promise<FileDocument | undefined>;
   onReload: () => Promise<FileDocument>;
@@ -49,6 +58,7 @@ export function FileEditorSurface({
   initialScrollLine,
   leadingHeaderActions,
   headerActions,
+  displayRequestRef,
   onDisplay,
   onSave,
   onReload,
@@ -190,6 +200,7 @@ export function FileEditorSurface({
     }
     onDisplay();
   };
+  useImperativeHandle(displayRequestRef, () => requestDisplay);
 
   const saveAndDisplay = async (): Promise<void> => {
     setConfirmDisplay(false);

@@ -258,6 +258,7 @@ function OperationsPanel({
     offset: -1 | 1,
   ): void => {
     event.preventDefault();
+    event.currentTarget.closest('.activity-list')?.classList.add('is-keyboard-navigating');
     const nextIndex = Math.min(Math.max(index + offset, 0), activities.length - 1);
     const next = activities[nextIndex];
     if (!next || nextIndex === index) return;
@@ -272,7 +273,12 @@ function OperationsPanel({
       </h2>
       <div className="activity-operations-body">
         <div className="activity-operation-table">
-          <table className="activity-list">
+          <table
+            className="activity-list"
+            onPointerMove={(event) =>
+              event.currentTarget.classList.remove('is-keyboard-navigating')
+            }
+          >
             <caption className="sr-only">{t('activityOperations')}</caption>
             <colgroup>
               <col className="activity-status-column" />
@@ -459,15 +465,12 @@ function AnalyticsPanel({
   const days = ACTIVITY_RANGE_DAYS[range];
   return (
     <section
-      className={`activity-analytics-panel${controls ? ' has-inline-controls' : ''}`}
+      className={`activity-analytics-panel${controls ? ' has-footer-controls' : ''}`}
       aria-labelledby="commit-activity-title"
     >
       <h2 id="commit-activity-title" className="sr-only">
         {t('activityAnalytics')}
       </h2>
-      {controls ? (
-        <header className="left-pane-toolbar activity-analytics-header">{controls}</header>
-      ) : null}
       <div className="activity-analytics-body" aria-live="polite">
         {analytics.kind === 'noRepo' ? (
           <ActivityState title={t('activityNoRepository')}>
@@ -502,6 +505,7 @@ function AnalyticsPanel({
           />
         )}
       </div>
+      {controls ? <footer className="activity-analytics-footer">{controls}</footer> : null}
     </section>
   );
 }

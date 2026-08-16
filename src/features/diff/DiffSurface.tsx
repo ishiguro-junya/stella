@@ -139,26 +139,43 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
 
 [data-code] {
   overscroll-behavior: none;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 [data-gutter-buffer],
 [data-column-number] {
   padding-left: 5px;
-  padding-right: 4px;
+  padding-right: 22px;
 }
 
 [data-indicators='classic'] [data-line] {
   padding-inline: 2px;
-  padding-inline-start: 24px;
+  padding-inline-start: 6px;
 }
 
 [data-indicators='classic']
-  [data-line-type]:where([data-line-type='change-addition'], [data-line-type='change-deletion'])::before {
-  left: 0;
+  [data-column-number]:where([data-line-type='change-addition'], [data-line-type='change-deletion'])::before {
+  position: absolute;
+  top: 0;
+  right: 4px;
   width: 18px;
+  height: 1lh;
+  user-select: none;
   text-align: center;
+}
+
+[data-indicators='classic'] [data-column-number][data-line-type='change-addition']::before {
+  content: '+';
+  color: var(--diffs-addition-base);
+}
+
+[data-indicators='classic'] [data-column-number][data-line-type='change-deletion']::before {
+  content: '-';
+  color: var(--diffs-deletion-base);
+}
+
+[data-indicators='classic'] [data-line]::before,
+[data-indicators='classic'] [data-no-newline]::before {
+  content: none;
 }
 
 [data-diffs-header='default'],

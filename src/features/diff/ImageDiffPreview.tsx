@@ -1,5 +1,5 @@
 import { Image as ImageIcon, ImageOff } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   DiffStyle,
@@ -130,6 +130,7 @@ export function ImageDiffPreview({
 }: ImageDiffPreviewProps) {
   const { t } = useI18n();
   const [sides, setSides] = useState<Partial<Record<ImageSide, SideState>>>({});
+  const [displayedCandidate, setDisplayedCandidate] = useState(candidate);
   const targetKind = target.kind;
   const targetPath = target.path;
   const targetPreviousPath = target.previousPath;
@@ -137,16 +138,25 @@ export function ImageDiffPreview({
   const targetArea = target.kind === 'changes' ? target.area : undefined;
   const targetGeneration = target.kind === 'changes' ? target.generation : undefined;
   const targetOid = target.kind === 'commit' ? target.oid : undefined;
+  const targetKey = `${targetKind}:${targetDiffId}:${targetPath}`;
+  const candidatePath = candidate.path;
+  const candidatePreviousPath = candidate.previousPath;
+  const candidateChangeKind = candidate.changeKind;
+  const candidateFormat = candidate.format;
+  const [displayedTargetKey, setDisplayedTargetKey] = useState(targetKey);
+  const displayedUrlsRef = useRef<Set<string>>(new Set());
+  const onProbeResultRef = useRef(onProbeResult);
+  onProbeResultRef.current = onProbeResult;
 
   useEffect(() => {
     let cancelled = false;
+    let committed = false;
     const objectUrls = new Set<string>();
     const availableSides = (['before', 'after'] as const).filter((side) =>
-      hasSide(candidate.changeKind, side),
+      hasSide(candidateChangeKind, side),
     );
-    setSides(Object.fromEntries(availableSides.map((side) => [side, { status: 'loading' }])));
 
-    const load = async (side: ImageSide): Promise<void> => {
+    const load = async (side: ImageSide): Promise<[ImageSide, SideState]> => {
       let objectUrl: string | undefined;
       try {
         const queryTarget: ImageBytesTarget =
@@ -172,77 +182,96 @@ export function ImageDiffPreview({
           target: queryTarget,
           side,
         });
-        if (cancelled) return;
+        if (cancelled) return [side, { status: 'error' }];
         if (result.kind !== 'imageBytes') throw new Error('Invalid image response.');
         const bytes = Uint8Array.from(result.bytes);
         objectUrl = URL.createObjectURL(
           new Blob([bytes.buffer], {
-            type: imageMimeType(sidePath(candidate.path, candidate.previousPath, side)),
+            type: imageMimeType(sidePath(candidatePath, candidatePreviousPath, side)),
           }),
         );
         objectUrls.add(objectUrl);
         const image = new window.Image();
         image.src = objectUrl;
         await image.decode();
-        if (cancelled) return;
+        if (cancelled) return [side, { status: 'error' }];
         const background = imagePreviewBackground(image);
-        setSides((current) => ({
-          ...current,
-          [side]: {
+        return [
+          side,
+          {
             status: 'loaded',
-            url: objectUrl!,
+            url: objectUrl,
             ...(background ? { background } : {}),
           },
-        }));
+        ];
       } catch {
         if (objectUrl && objectUrls.delete(objectUrl)) URL.revokeObjectURL(objectUrl);
-        if (cancelled) return;
-        setSides((current) => ({ ...current, [side]: { status: 'error' } }));
+        return [side, { status: 'error' }];
       }
     };
 
-    for (const side of availableSides) void load(side);
+    void Promise.all(availableSides.map(load)).then((entries) => {
+      if (cancelled) return;
+      committed = true;
+      const nextSides: Partial<Record<ImageSide, SideState>> = Object.fromEntries(entries);
+      const previousUrls = displayedUrlsRef.current;
+      displayedUrlsRef.current = objectUrls;
+      setDisplayedCandidate({
+        path: candidatePath,
+        ...(candidatePreviousPath ? { previousPath: candidatePreviousPath } : {}),
+        changeKind: candidateChangeKind,
+        format: candidateFormat,
+      });
+      setDisplayedTargetKey(targetKey);
+      setSides(nextSides);
+      onProbeResultRef.current?.(
+        Object.values(nextSides).some((state) => state.status === 'loaded'),
+      );
+      for (const url of previousUrls) URL.revokeObjectURL(url);
+    });
     return () => {
       cancelled = true;
-      for (const url of objectUrls) URL.revokeObjectURL(url);
+      if (!committed) for (const url of objectUrls) URL.revokeObjectURL(url);
     };
   }, [
     adapter,
-    candidate.changeKind,
-    candidate.path,
-    candidate.previousPath,
+    candidateChangeKind,
+    candidateFormat,
+    candidatePath,
+    candidatePreviousPath,
     repoId,
     targetArea,
     targetDiffId,
     targetGeneration,
+    targetKey,
     targetKind,
     targetOid,
     targetPath,
     targetPreviousPath,
   ]);
 
+  useEffect(
+    () => () => {
+      for (const url of displayedUrlsRef.current) URL.revokeObjectURL(url);
+    },
+    [],
+  );
+
   const availableStates = (['before', 'after'] as const)
-    .filter((side) => hasSide(candidate.changeKind, side))
+    .filter((side) => hasSide(displayedCandidate.changeKind, side))
     .map((side) => sides[side]);
-  const beforeStatus = sides.before?.status;
-  const afterStatus = sides.after?.status;
   const probeComplete =
     availableStates.length > 0 &&
     availableStates.every((state) => state && state.status !== 'loading');
-  const probePreviewable = availableStates.some((state) => state?.status === 'loaded');
   const singleSide = availableStates.length === 1;
 
-  useEffect(() => {
-    if (onProbeResult && probeComplete) onProbeResult(probePreviewable);
-  }, [afterStatus, beforeStatus, onProbeResult, probeComplete, probePreviewable]);
-
-  if (hidden || !probeComplete) return null;
+  if ((hidden && displayedTargetKey === targetKey) || !probeComplete) return null;
   if (
-    (candidate.format === 'binary' || candidate.format === 'probe') &&
+    (displayedCandidate.format === 'binary' || displayedCandidate.format === 'probe') &&
     availableStates.length > 0 &&
     availableStates.every((state) => state?.status === 'error')
   ) {
-    if (candidate.format === 'probe') return null;
+    if (displayedCandidate.format === 'probe') return null;
     return <p className="empty-state-small">{binaryFallback ?? t('binaryWholeFileOnly')}</p>;
   }
 
@@ -256,14 +285,14 @@ export function ImageDiffPreview({
       {(['before', 'after'] as const).map((side) => {
         const state = sides[side];
         if (!state || state.status === 'loading') return null;
-        const path = sidePath(candidate.path, candidate.previousPath, side);
+        const path = sidePath(displayedCandidate.path, displayedCandidate.previousPath, side);
         const label = t(side === 'before' ? 'imageBefore' : 'imageAfter');
         return (
           <figure key={side} className="image-diff-side" data-side={side}>
             {!singleSide ? (
               <figcaption>
                 <span>{label}</span>
-                {candidate.previousPath ? <code>{path}</code> : null}
+                {displayedCandidate.previousPath ? <code>{path}</code> : null}
               </figcaption>
             ) : null}
             <div

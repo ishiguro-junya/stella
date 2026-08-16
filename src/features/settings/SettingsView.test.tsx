@@ -23,6 +23,7 @@ describe('SettingsView', () => {
       onStickyFileHeadersChange: vi.fn<SettingsViewProps['onStickyFileHeadersChange']>(),
       onEditorLineWrappingChange: vi.fn<SettingsViewProps['onEditorLineWrappingChange']>(),
       onEditorWrapColumnChange: vi.fn<SettingsViewProps['onEditorWrapColumnChange']>(),
+      onResetPaneWidths: vi.fn<SettingsViewProps['onResetPaneWidths']>(),
       onRepositoryBasePathChange: vi.fn<SettingsViewProps['onRepositoryBasePathChange']>(),
       onChooseRepositoryBasePath: vi.fn<SettingsViewProps['onChooseRepositoryBasePath']>(),
       onOpenFilesAndFoldersSettings: vi.fn<SettingsViewProps['onOpenFilesAndFoldersSettings']>(),
@@ -67,7 +68,10 @@ describe('SettingsView', () => {
     const gitButton = screen.getByRole('button', { name: 'Git' });
 
     expect(screen.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
-    expect(screen.getByRole('navigation', { name: 'Settings categories' })).toBeVisible();
+    const categoryNavigation = screen.getByRole('navigation', { name: 'Settings categories' });
+    expect(categoryNavigation).toBeVisible();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(generalButton).toHaveFocus();
     expect(generalButton).toHaveAttribute('aria-current', 'page');
     for (const button of [
       permissionsButton,
@@ -82,6 +86,17 @@ describe('SettingsView', () => {
     expect(diffButton).toHaveAttribute('aria-controls', 'settings-category-diff');
     expect(diffButton.querySelector('.lucide-file-diff')).toBeInTheDocument();
 
+    await user.keyboard('{ArrowDown}');
+    expect(permissionsButton).toHaveFocus();
+    expect(permissionsButton).toHaveAttribute('aria-current', 'page');
+    expect(categoryNavigation).toHaveClass('is-keyboard-navigating');
+    fireEvent.pointerMove(categoryNavigation);
+    expect(categoryNavigation).not.toHaveClass('is-keyboard-navigating');
+    await user.keyboard('{ArrowUp}');
+    expect(generalButton).toHaveFocus();
+    expect(generalButton).toHaveAttribute('aria-current', 'page');
+    expect(categoryNavigation).toHaveClass('is-keyboard-navigating');
+
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
     ).toEqual(['Language', 'Automatic Updates']);
@@ -93,6 +108,11 @@ describe('SettingsView', () => {
     );
     expect(handlers.onAutomaticUpdateChecksChange).toHaveBeenCalledWith(false);
 
+    fireEvent.click(permissionsButton);
+    expect(permissionsButton).toHaveFocus();
+    fireEvent.keyDown(permissionsButton, { key: 'ArrowDown' });
+    expect(appearanceButton).toHaveFocus();
+    expect(appearanceButton).toHaveAttribute('aria-current', 'page');
     await user.click(permissionsButton);
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
@@ -125,7 +145,7 @@ describe('SettingsView', () => {
     expect(appearanceButton).toHaveAttribute('aria-current', 'page');
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
-    ).toEqual(['Appearance', 'Font Size', 'Interface Font', 'Code Font']);
+    ).toEqual(['Appearance', 'Font Size', 'Interface Font', 'Code Font', 'Split Pane Positions']);
     const fontSizeSelect = screen.getByRole('combobox', { name: 'Font Size' });
     expect(
       within(fontSizeSelect)
@@ -143,6 +163,8 @@ describe('SettingsView', () => {
     expect(handlers.onFontSizeChange).toHaveBeenCalledWith(120);
     expect(handlers.onUiFontChange).toHaveBeenCalledWith('avenirNext');
     expect(handlers.onCodeFontChange).toHaveBeenCalledWith('menlo');
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(handlers.onResetPaneWidths).toHaveBeenCalledOnce();
 
     await user.click(diffButton);
     expect(

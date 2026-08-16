@@ -17,7 +17,6 @@ import {
   History as HistoryIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  RefreshCw,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { documentDir } from '@tauri-apps/api/path';
@@ -60,6 +59,7 @@ import {
   joinRepositoryPath,
   repositoryNameFromPath,
   repositoryNameFromRemoteUrl,
+  isRepositoryDirectoryName,
 } from './domain/repositoryLocation';
 import { DiffView } from './features/diff/DiffView';
 import type { UnsavedChangesHandle, UnsavedRelocationDraft } from './domain/unsavedChanges';
@@ -94,7 +94,12 @@ import { applyNativeLanguage } from './i18n/nativeLanguage';
 import { Dialog, DialogBody, DialogFooter, DialogHeader } from './ui/Dialog';
 import { BranchSwitcherDialog } from './ui/BranchSwitcherDialog';
 import { RepositorySwitcherDialog } from './ui/RepositorySwitcherDialog';
-import { RemoteManagerDialog, type RemoteUrlChange } from './ui/RemoteManagerDialog';
+import {
+  RemoteManagerDialog,
+  type RemoteAddition,
+  type RemoteUrlChange,
+  type RepositoryInformationChange,
+} from './ui/RemoteManagerDialog';
 import {
   markWorkspaceErrorHandled,
   WorkspaceErrorDialog,
@@ -102,8 +107,7 @@ import {
 } from './ui/WorkspaceErrorDialog';
 import { describeWorkspaceError, type WorkspaceErrorContent } from './ui/WorkspaceErrorDetails';
 import {
-  LEFT_PANE_MAX_WIDTH,
-  LEFT_PANE_MIN_WIDTH,
+  DEFAULT_PREFERENCES,
   clearRemoteHealthIssue,
   forgetRepositoryPath,
   readPreferences,
@@ -154,7 +158,7 @@ interface PendingClone {
   repositoryName?: string;
 }
 
-type AppPage = 'workspace' | 'activity' | 'settings';
+type AppPage = 'workspace' | 'repositories' | 'activity' | 'settings';
 
 type GuardedOperationAction = Extract<
   WorkspaceAction,
@@ -176,9 +180,10 @@ interface AddRepositoryState {
   url: string;
   cloneParentPath: string;
   localPath: string;
-  name: string;
+  remoteName: string;
+  localName: string;
   error?: string;
-  errorField?: 'url' | 'path';
+  errorField?: 'url' | 'path' | 'name';
 }
 
 interface BranchDialogState {
@@ -201,13 +206,16 @@ interface RelocationState {
   oldPath: string;
   newPath: string;
   duplicate: boolean;
+  repositoryName?: string;
+  remoteUrlChanges?: readonly RemoteUrlChange[];
+  remoteAddition?: RemoteAddition;
 }
 
 type WorkspaceViewTransitionStyle = CSSProperties & { '--left-pane': string };
 type AppShellStyle = CSSProperties & { '--shell-left-pane': string };
 
 function actionNeedsPreview(action: WorkspaceAction): boolean {
-  if (action.kind === 'setRemoteUrl') return true;
+  if (action.kind === 'setRemoteUrl' || action.kind === 'addRemote') return true;
   if (action.kind === 'fileAction') return action.operation === 'moveToTrash';
   if (action.kind === 'gitFlow') {
     return [
@@ -239,6 +247,7 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
 
 function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): string {
   if (action.kind === 'setRemoteUrl') return t('changeRemoteUrlAction');
+  if (action.kind === 'addRemote') return t('add');
   if (action.kind === 'fileAction' && action.operation === 'moveToTrash') return t('delete');
   if (action.kind === 'discardFiles') return t('discard');
   if (action.kind === 'createBranch' || action.kind === 'createTag') return t('create');
@@ -292,7 +301,15 @@ function selectWorkspaceRepo(
   workspace: WorkspaceSnapshot,
   repoId: string | undefined,
 ): WorkspaceSnapshot {
-  const next: WorkspaceSnapshot = { repos: workspace.repos, activities: workspace.activities };
+  const selected = repoId
+    ? workspace.repos.find((candidate) => candidate.repoId === repoId)
+    : undefined;
+  const next: WorkspaceSnapshot = {
+    repos: selected
+      ? [selected, ...workspace.repos.filter((candidate) => candidate.repoId !== repoId)]
+      : workspace.repos,
+    activities: workspace.activities,
+  };
   if (repoId) next.selectedRepoId = repoId;
   return next;
 }
@@ -337,6 +354,20 @@ function reduceEvent(workspace: WorkspaceSnapshot, event: WorkspaceEvent): Works
 
 function settleUiAction(promise: Promise<unknown>): void {
   void promise.catch(() => undefined);
+}
+
+function focusRepositoryList(): void {
+  (
+    document.querySelector<HTMLElement>(
+      '.registered-repositories .switcher-option[aria-selected="true"]',
+    ) ??
+    document.querySelector<HTMLElement>('.registered-repositories .switcher-option') ??
+    document.getElementById('repositories-title')
+  )?.focus();
+}
+
+function focusSettingsCategory(): void {
+  document.querySelector<HTMLElement>('.settings-category-button[aria-current="page"]')?.focus();
 }
 
 export function App({
@@ -420,7 +451,6 @@ export function App({
   const [pendingUnsavedAction, setPendingUnsavedAction] = useState<WorkspaceAction>();
   const [pendingWindowClose, setPendingWindowClose] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo>();
-  const [manualUpdateChecking, setManualUpdateChecking] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [pendingUpdateInstall, setPendingUpdateInstall] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
@@ -433,18 +463,13 @@ export function App({
   const [relocation, setRelocation] = useState<RelocationState>();
   const [unavailableRepoPath, setUnavailableRepoPath] = useState<string>();
   const [pendingForgetPath, setPendingForgetPath] = useState<string>();
-  const [restoringWorkspace, setRestoringWorkspace] = useState(
-    initialPreferences.openRepoPaths.length > 0,
-  );
   const leaveHandleRef = useRef<UnsavedChangesHandle | null>(null);
   const unsavedDirtyRef = useRef(false);
   const workspaceRef = useRef(workspace);
   const pageRef = useRef(page);
-  const restorePromiseRef = useRef<Promise<RepoSnapshot[]> | undefined>(undefined);
   const pollingRef = useRef(false);
   const pendingPollingRef = useRef(false);
   const requestNavigationRef = useRef<(navigation: PendingNavigation) => void>(() => undefined);
-  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusRepositoriesOnWorkspaceRef = useRef(false);
   const errorIdRef = useRef(0);
   const logoRequestsRef = useRef(new Set<string>());
@@ -455,6 +480,7 @@ export function App({
   const lastAutomaticUpdateCheckRef = useRef(0);
   const promptedUpdateVersionRef = useRef<string | undefined>(undefined);
   const repo = selectedRepo(workspace);
+  const repositoryLandingVisible = page === 'repositories' || (page === 'workspace' && !repo);
   const effectiveRepositoryLogoLoader =
     repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
   const registeredRepositories = useMemo<RepositoryListItem[]>(
@@ -476,6 +502,23 @@ export function App({
       repositoryNames,
     ],
   );
+  const orderedRegisteredRepositories = useMemo(() => {
+    const recentIndex = new Map(
+      workspace.repos.map((candidate, index) => [candidate.path, index] as const),
+    );
+    return registeredRepositories.toSorted((left, right) => {
+      if (left.path === repo?.path) return -1;
+      if (right.path === repo?.path) return 1;
+      const leftRecent = recentIndex.get(left.path);
+      const rightRecent = recentIndex.get(right.path);
+      if (leftRecent !== undefined || rightRecent !== undefined) {
+        if (leftRecent === undefined) return 1;
+        if (rightRecent === undefined) return -1;
+        return leftRecent - rightRecent;
+      }
+      return left.name.localeCompare(right.name) || left.path.localeCompare(right.path);
+    });
+  }, [registeredRepositories, repo?.path, workspace.repos]);
   const repositoryAccessNeedsAttention = registeredRepositories.some(
     (candidate) => candidate.availability === 'inaccessible',
   );
@@ -504,7 +547,6 @@ export function App({
     async (manual = false): Promise<void> => {
       if (manual) {
         manualUpdateCheckRequestedRef.current = true;
-        setManualUpdateChecking(true);
         setNotice(undefined);
       }
       if (updateCheckInFlightRef.current) return;
@@ -533,7 +575,6 @@ export function App({
       } finally {
         updateCheckInFlightRef.current = false;
         manualUpdateCheckRequestedRef.current = false;
-        setManualUpdateChecking(false);
       }
     },
     [showError, t],
@@ -706,18 +747,20 @@ export function App({
   }, [effectiveRepositoryLogoLoader, registeredPaths]);
 
   useEffect(() => {
-    if (page === 'settings') settingsButtonRef.current?.focus();
+    if (page === 'settings') focusSettingsCategory();
   }, [page, settingsFocusRequest]);
 
   useEffect(() => {
-    if (page !== 'workspace' || repo || !focusRepositoriesOnWorkspaceRef.current) return;
+    if (!repositoryLandingVisible || !focusRepositoriesOnWorkspaceRef.current) return;
     focusRepositoriesOnWorkspaceRef.current = false;
-    document.getElementById('repositories-title')?.focus();
-  }, [page, repo]);
+    focusRepositoryList();
+  }, [repositoryLandingVisible]);
 
   useEffect(() => {
     workspaceRef.current = workspace;
-    if (restoringWorkspace) return;
+  }, [workspace]);
+
+  useEffect(() => {
     updatePreferences((current) => ({
       ...current,
       appearance,
@@ -735,8 +778,6 @@ export function App({
       editorLineWrapping,
       editorWrapColumn,
       ...(repositoryBasePath ? { repositoryBasePath } : {}),
-      openRepoPaths: workspace.repos.map((candidate) => candidate.path),
-      ...(repo ? { selectedRepoPath: repo.path } : {}),
       paneWidths,
     }));
   }, [
@@ -751,18 +792,15 @@ export function App({
     fontSize,
     language,
     paneWidths,
-    repo,
     repositoryBasePath,
-    restoringWorkspace,
     splitStageView,
     useConventionalCommits,
     stickyFileHeaders,
     uiFont,
-    workspace,
   ]);
 
   useEffect(() => {
-    if (restoringWorkspace || !automaticUpdateChecks) return undefined;
+    if (!automaticUpdateChecks) return undefined;
     const checkIfDue = (): void => {
       const now = Date.now();
       if (now - lastAutomaticUpdateCheckRef.current < APP_UPDATE_INTERVAL_MS) return;
@@ -776,7 +814,7 @@ export function App({
       window.clearInterval(interval);
       window.removeEventListener('focus', checkIfDue);
     };
-  }, [automaticUpdateChecks, checkAppUpdate, restoringWorkspace]);
+  }, [automaticUpdateChecks, checkAppUpdate]);
 
   useEffect(() => {
     setLatestConflict((current) => {
@@ -840,34 +878,6 @@ export function App({
       active = false;
     };
   }, [adapter]);
-
-  useEffect(() => {
-    const preferences = initialPreferences;
-    if (!preferences.openRepoPaths.length) return () => undefined;
-    let active = true;
-    const restorePromise =
-      restorePromiseRef.current ??
-      Promise.allSettled(
-        preferences.openRepoPaths.map((path) => adapter.attach({ kind: 'openExisting', path })),
-      ).then((results) =>
-        results.flatMap((result) => (result.status === 'fulfilled' ? result.value.repos : [])),
-      );
-    restorePromiseRef.current = restorePromise;
-    void restorePromise.then((restored) => {
-      if (!active) return;
-      const selected =
-        restored.find((candidate) => candidate.path === preferences.selectedRepoPath) ??
-        restored[0];
-      if (selected)
-        setWorkspace((current) =>
-          selectWorkspaceRepo(restored.reduce(replaceRepo, current), selected.repoId),
-        );
-      setRestoringWorkspace(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [adapter, initialPreferences]);
 
   useEffect(() => {
     if (notice?.level !== 'info') return undefined;
@@ -962,17 +972,24 @@ export function App({
   }, [adapter, checkRegisteredRepositories, disconnectRepository, inspectRepositoryPath]);
 
   const attach = useCallback(
-    async (request: AttachRequest, repositoryName?: string): Promise<RepoSnapshot | undefined> => {
+    async (
+      request: AttachRequest,
+      repositoryName?: string,
+      navigate = true,
+    ): Promise<RepoSnapshot | undefined> => {
       setBusy(true);
       setNotice(undefined);
       try {
         const attached = await adapter.attach(request);
         setWorkspace((current) => {
           const withRepos = attached.repos.reduce(replaceRepo, current);
-          return {
+          const withActivities = {
             ...withRepos,
             activities: mergeActivityEntries(attached.activities, current.activities),
           };
+          return navigate
+            ? withActivities
+            : selectWorkspaceRepo(withActivities, current.selectedRepoId);
         });
         const attachedRepoId = attached.selectedRepoId ?? attached.repos[0]?.repoId;
         const attachedPath = attached.repos[0]?.path;
@@ -984,7 +1001,7 @@ export function App({
           setRepositoryAvailability((current) => ({ ...current, [attachedPath]: 'available' }));
         }
         setAddRepositoryDialog(undefined);
-        if (attachedRepoId) {
+        if (attachedRepoId && navigate) {
           requestNavigationRef.current({
             repoId: attachedRepoId,
             ...(request.kind === 'clone' ? {} : { page: 'workspace', view: 'diff' }),
@@ -1024,7 +1041,6 @@ export function App({
 
   const openRemoteManager = useCallback(
     async (path: string): Promise<void> => {
-      setRepositorySwitcherOpen(false);
       const availability =
         repositoryAvailability[path] ?? (await inspectRepositoryPath(path).catch(() => undefined));
       if (availability && availability !== 'available') {
@@ -1032,7 +1048,10 @@ export function App({
         return;
       }
       const current = workspaceRef.current.repos.find((candidate) => candidate.path === path);
-      const attached = current ?? (await attach({ kind: 'openExisting', path }));
+      if (!current && !selectedRepo(workspaceRef.current) && pageRef.current === 'workspace') {
+        setPage('repositories');
+      }
+      const attached = current ?? (await attach({ kind: 'openExisting', path }, undefined, false));
       if (attached) await loadRemoteManager(attached.repoId, path);
     },
     [attach, inspectRepositoryPath, loadRemoteManager, repositoryAvailability],
@@ -1045,15 +1064,15 @@ export function App({
     settleUiAction(repositoryName ? attach(request, repositoryName) : attach(request));
   }, [activityReady, attach, cloneToStart, page]);
 
-  const openRepositoryDialog = (source: AddRepositoryState['source']): void => {
-    setRepositorySwitcherOpen(false);
+  const openRepositoryDialog = (): void => {
     setBranchDialog(undefined);
     setAddRepositoryDialog({
-      source,
+      source: 'url',
       url: '',
       cloneParentPath: repositoryBasePath,
       localPath: '',
-      name: '',
+      remoteName: '',
+      localName: '',
     });
   };
 
@@ -1071,9 +1090,11 @@ export function App({
     if (path) setRepositoryBasePath(path);
   };
 
-  const chooseRelocatedRepository = async (oldPath: string): Promise<void> => {
-    const newPath = await chooseDirectory(t('chooseRelocatedRepository'));
-    if (!newPath) return;
+  const prepareRepositoryRelocation = async (
+    oldPath: string,
+    newPath: string,
+    information?: Pick<RepositoryInformationChange, 'name' | 'remoteUrlChanges' | 'remoteAddition'>,
+  ): Promise<boolean> => {
     try {
       const availability = await inspectRepositoryPath(newPath);
       if (availability !== 'available') {
@@ -1084,16 +1105,30 @@ export function App({
               ? t('repositoryNotRepository')
               : t('repositoryInaccessible');
         showError(t('repositoryRelocationFailedTitle'), new Error(detail), detail);
-        return;
+        return false;
       }
       setRelocation({
         oldPath,
         newPath,
         duplicate: oldPath !== newPath && registeredPaths.includes(newPath),
+        ...(information
+          ? {
+              repositoryName: information.name,
+              remoteUrlChanges: information.remoteUrlChanges,
+              ...(information.remoteAddition ? { remoteAddition: information.remoteAddition } : {}),
+            }
+          : {}),
       });
+      return true;
     } catch (cause) {
       showError(t('repositoryRelocationFailedTitle'), cause, t('repositoryCheckFailed'));
+      return false;
     }
+  };
+
+  const chooseRelocatedRepository = async (oldPath: string): Promise<void> => {
+    const newPath = await chooseDirectory(t('chooseRelocatedRepository'));
+    if (newPath) await prepareRepositoryRelocation(oldPath, newPath);
   };
 
   const transferRelocationDraft = async (
@@ -1142,6 +1177,60 @@ export function App({
     return outcome.snapshot ?? newRepo;
   };
 
+  const applyRemoteChanges = async (
+    changes: readonly RemoteUrlChange[],
+    addition: RemoteAddition | undefined,
+    repoId: string,
+  ): Promise<RepoSnapshot | undefined> => {
+    let snapshot: RepoSnapshot | undefined;
+    const actions: WorkspaceAction[] = [
+      ...(addition ? [{ kind: 'addRemote' as const, ...addition }] : []),
+      ...changes.map((change) => ({ kind: 'setRemoteUrl' as const, ...change })),
+    ];
+    for (const action of actions) {
+      const request: ActionRequest = {
+        repoId,
+        action,
+      };
+      let preview: ActionPreview;
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 対象リモートを各変更の直前に検証する。
+        preview = await adapter.preview(request);
+      } catch (cause) {
+        showError(t('previewFailedTitle'), cause, t('previewFailed'));
+        throw markWorkspaceErrorHandled(cause, t('previewFailed'));
+      }
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 変更を順番に適用し、最初の失敗で停止する。
+        const outcome = await adapter.execute({ ...request, preview });
+        snapshot = outcome.snapshot ?? snapshot;
+      } catch (cause) {
+        showError(t('operationFailedTitle'), cause, t('operationFailed'));
+        throw markWorkspaceErrorHandled(cause, t('operationFailed'));
+      }
+    }
+    return snapshot;
+  };
+
+  const fetchChangedRemotes = async (
+    repoId: string,
+    changes: readonly RemoteUrlChange[],
+    addition?: RemoteAddition,
+  ): Promise<void> => {
+    const remotesToFetch = new Set(
+      changes.filter((change) => change.urlKind === 'fetch').map((change) => change.remote),
+    );
+    if (addition) remotesToFetch.add(addition.remote);
+    for (const remote of remotesToFetch) {
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 共有の処理中状態を競合させずリモートごとに実行する。
+        await execute({ repoId, action: { kind: 'fetch', remote } });
+      } catch {
+        // リモート設定は完了済みのため、フェッチ失敗は通常のエラー表示に残す。
+      }
+    }
+  };
+
   const confirmRepositoryRelocation = async (): Promise<void> => {
     if (!relocation || relocation.duplicate) return;
     const oldRepo = workspaceRef.current.repos.find(
@@ -1152,6 +1241,7 @@ export function App({
         ? leaveHandleRef.current?.relocationDraft?.()
         : undefined;
     let attachedRepo: RepoSnapshot | undefined;
+    let relocatedRepoId: string | undefined;
     setBusy(true);
     try {
       const attached = await adapter.attach({ kind: 'openExisting', path: relocation.newPath });
@@ -1173,7 +1263,17 @@ export function App({
         const next = replaceRepo(withoutOld, restoredRepo);
         return { ...next, selectedRepoId: restoredRepo.repoId };
       });
-      const preferences = replaceRepositoryPath(relocation.oldPath, relocation.newPath);
+      let preferences = replaceRepositoryPath(relocation.oldPath, relocation.newPath);
+      if (relocation.repositoryName) {
+        const repositoryName = relocation.repositoryName;
+        preferences = updatePreferences((current) => ({
+          ...current,
+          repositoryNames: {
+            ...current.repositoryNames,
+            [relocation.newPath]: repositoryName,
+          },
+        }));
+      }
       setRegisteredPaths(preferences.registeredRepoPaths);
       setRepositoryNames(preferences.repositoryNames);
       setRepositoryHealthIssues(preferences.repositoryHealthIssues);
@@ -1187,6 +1287,7 @@ export function App({
       unsavedDirtyRef.current = false;
       setWorkspaceViewRevision((current) => current + 1);
       setNotice({ level: 'info', message: { id: 'repositoryRelocated' } });
+      relocatedRepoId = restoredRepo.repoId;
     } catch (cause) {
       if (attachedRepo && attachedRepo.repoId !== oldRepo?.repoId) {
         await adapter.detach?.(attachedRepo.repoId).catch(() => undefined);
@@ -1195,6 +1296,27 @@ export function App({
     } finally {
       setBusy(false);
     }
+
+    if (!relocatedRepoId || (!relocation.remoteUrlChanges?.length && !relocation.remoteAddition))
+      return;
+    setBusy(true);
+    setNotice(undefined);
+    try {
+      applyOutcome(
+        await applyRemoteChanges(
+          relocation.remoteUrlChanges ?? [],
+          relocation.remoteAddition,
+          relocatedRepoId,
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+    await fetchChangedRemotes(
+      relocatedRepoId,
+      relocation.remoteUrlChanges ?? [],
+      relocation.remoteAddition,
+    );
   };
 
   const requestForgetRepository = (path: string): void => {
@@ -1250,25 +1372,30 @@ export function App({
   const chooseRepositoryPath = async (): Promise<void> => {
     const path = await chooseDirectory(t('chooseRepositoryDirectory'));
     if (path) {
-      setAddRepositoryDialog((current) =>
-        current
-          ? {
-              source: current.source,
-              url: current.url,
-              cloneParentPath: current.source === 'url' ? path : current.cloneParentPath,
-              localPath: current.source === 'path' ? path : current.localPath,
-              name: current.name,
-            }
-          : current,
-      );
+      setAddRepositoryDialog((current) => {
+        if (!current) return current;
+        const previousInferredName = repositoryNameFromPath(current.localPath);
+        return {
+          source: current.source,
+          url: current.url,
+          cloneParentPath: current.source === 'url' ? path : current.cloneParentPath,
+          localPath: current.source === 'path' ? path : current.localPath,
+          remoteName: current.remoteName,
+          localName:
+            current.source === 'path' &&
+            (!current.localName || current.localName === previousInferredName)
+              ? (repositoryNameFromPath(path) ?? '')
+              : current.localName,
+        };
+      });
     }
   };
 
   const submitAddRepository = async (): Promise<void> => {
     if (!addRepositoryDialog) return;
-    const repositoryName = addRepositoryDialog.name.trim() || undefined;
     if (addRepositoryDialog.source === 'path') {
       const path = addRepositoryDialog.localPath.trim();
+      const repositoryName = addRepositoryDialog.localName.trim() || undefined;
       if (!isAbsoluteLocalPath(path)) {
         setAddRepositoryDialog((current) =>
           current ? { ...current, error: t('invalidRepositoryPath'), errorField: 'path' } : current,
@@ -1282,10 +1409,18 @@ export function App({
     }
 
     const remoteUrl = addRepositoryDialog.url.trim();
+    const repositoryName = addRepositoryDialog.remoteName.trim() || undefined;
     const inferredName = repositoryNameFromRemoteUrl(remoteUrl);
     if (!inferredName) {
       setAddRepositoryDialog((current) =>
         current ? { ...current, error: t('invalidRepositoryUrl'), errorField: 'url' } : current,
+      );
+      return;
+    }
+
+    if (!repositoryName || !isRepositoryDirectoryName(repositoryName)) {
+      setAddRepositoryDialog((current) =>
+        current ? { ...current, error: t('invalidRepositoryName'), errorField: 'name' } : current,
       );
       return;
     }
@@ -1302,9 +1437,9 @@ export function App({
       cloneRequest: {
         kind: 'clone',
         remoteUrl,
-        destination: joinRepositoryPath(parent, inferredName),
+        destination: joinRepositoryPath(parent, repositoryName),
       },
-      ...(repositoryName ? { repositoryName } : {}),
+      repositoryName,
     });
   };
 
@@ -1442,35 +1577,38 @@ export function App({
     }
   };
 
-  const saveRemoteUrls = async (
-    changes: readonly RemoteUrlChange[],
+  const saveRepositoryInformation = async (
+    information: RepositoryInformationChange,
     manager: RemoteManagerState,
   ): Promise<void> => {
+    if (information.path !== manager.path) {
+      const prepared = await prepareRepositoryRelocation(manager.path, information.path, {
+        name: information.name,
+        remoteUrlChanges: information.remoteUrlChanges,
+        ...(information.remoteAddition ? { remoteAddition: information.remoteAddition } : {}),
+      });
+      if (prepared) setRemoteManager(undefined);
+      return;
+    }
+
     setBusy(true);
     setNotice(undefined);
     try {
-      for (const change of changes) {
-        const request: ActionRequest = {
-          repoId: manager.repoId,
-          action: { kind: 'setRemoteUrl', ...change },
-        };
-        let preview: ActionPreview;
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- 変更前URLを各変更の直前に検証する。
-          preview = await adapter.preview(request);
-        } catch (cause) {
-          showError(t('previewFailedTitle'), cause, t('previewFailed'));
-          throw markWorkspaceErrorHandled(cause, t('previewFailed'));
-        }
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- 変更を順番に適用し、最初の失敗で停止する。
-          const outcome = await adapter.execute({ ...request, preview });
-          applyOutcome(outcome.snapshot);
-        } catch (cause) {
-          showError(t('operationFailedTitle'), cause, t('operationFailed'));
-          throw markWorkspaceErrorHandled(cause, t('operationFailed'));
-        }
-      }
+      applyOutcome(
+        await applyRemoteChanges(
+          information.remoteUrlChanges,
+          information.remoteAddition,
+          manager.repoId,
+        ),
+      );
+      const preferences = updatePreferences((current) => ({
+        ...current,
+        repositoryNames: {
+          ...current.repositoryNames,
+          [manager.path]: information.name,
+        },
+      }));
+      setRepositoryNames(preferences.repositoryNames);
     } catch (cause) {
       await loadRemoteManager(manager.repoId, manager.path);
       throw cause;
@@ -1479,17 +1617,11 @@ export function App({
     }
 
     setRemoteManager(undefined);
-    const remotesToFetch = new Set(
-      changes.filter((change) => change.urlKind === 'fetch').map((change) => change.remote),
+    await fetchChangedRemotes(
+      manager.repoId,
+      information.remoteUrlChanges,
+      information.remoteAddition,
     );
-    for (const remote of remotesToFetch) {
-      try {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- 共有の処理中状態を競合させずリモートごとに実行する。
-        await execute({ repoId: manager.repoId, action: { kind: 'fetch', remote } });
-      } catch {
-        // URL変更は完了済みのため、フェッチ失敗は通常のエラー表示に残す。
-      }
-    }
   };
 
   const requestOperationAction = (action: GuardedOperationAction): void => {
@@ -1540,15 +1672,15 @@ export function App({
     };
     setPendingAction(undefined);
     await execute(request);
-    if (completedAction.kind === 'setRemoteUrl') {
-      if (completedAction.urlKind === 'fetch') {
+    if (completedAction.kind === 'setRemoteUrl' || completedAction.kind === 'addRemote') {
+      if (completedAction.kind === 'addRemote' || completedAction.urlKind === 'fetch') {
         try {
           await execute({
             repoId: request.repoId,
             action: { kind: 'fetch', remote: completedAction.remote },
           });
         } catch {
-          // URL変更は完了済みのため、フェッチ失敗は警告と通常の詳細画面に残す。
+          // リモート設定は完了済みのため、フェッチ失敗は警告と通常の詳細画面に残す。
         }
       }
       if (remoteManager) await loadRemoteManager(remoteManager.repoId, remoteManager.path);
@@ -1561,10 +1693,13 @@ export function App({
       discardConflict = false,
     ): void => {
       if (discardConflict) setWorkspaceViewRevision((current) => current + 1);
-      if (repoId) setWorkspace((current) => ({ ...current, selectedRepoId: repoId }));
+      if (repoId) {
+        setWorkspace((current) => selectWorkspaceRepo(current, repoId));
+        setRepositorySwitcherOpen(false);
+      }
       if (nextView) setView(nextView);
       if (nextPage) setPage(nextPage);
-      if (nextPage === 'settings' || nextPage === 'activity') {
+      if (nextPage === 'settings' || nextPage === 'activity' || nextPage === 'repositories') {
         setAddRepositoryDialog(undefined);
         setRepositorySwitcherOpen(false);
         setBranchDialog(undefined);
@@ -1744,20 +1879,23 @@ export function App({
   };
   const activeError = errors[0];
   const currentRepositoryState = repo ? repositoryState(repo, message) : undefined;
-  const showActivityMenu = Boolean(repo) || hasRunningActivity || page === 'activity';
-  const showRepositoryMenu = !repo && page !== 'workspace';
   const activeWorkspaceView = workspaceViewTransition ?? view;
+  const activeNavigationPage = repositoryLandingVisible
+    ? 'repositories'
+    : page === 'workspace'
+      ? activeWorkspaceView
+      : page;
   const sidebarAvailable = (page === 'workspace' && Boolean(repo)) || page === 'activity';
   const sidebarVisible = sidebarAvailable && sidebarOpen;
-  const shellLeftPane = Math.min(
-    LEFT_PANE_MAX_WIDTH,
-    Math.max(LEFT_PANE_MIN_WIDTH, paneWidths.left),
-  );
+  const workspaceLeftPane =
+    activeWorkspaceView === 'diff' ? paneWidths.changes.left : paneWidths.history.left;
+  const shellLeftPane =
+    page === 'settings' ? 200 : page === 'activity' ? paneWidths.activity.left : workspaceLeftPane;
   const appShellStyle: AppShellStyle = { '--shell-left-pane': `${shellLeftPane}px` };
   const workspaceViewTransitionStyle: WorkspaceViewTransitionStyle | undefined =
     workspaceViewTransition
       ? {
-          '--left-pane': `${shellLeftPane}px`,
+          '--left-pane': `${workspaceLeftPane}px`,
         }
       : undefined;
   const branchDialogRepo = branchDialog
@@ -1773,7 +1911,8 @@ export function App({
   const sidebarControl = (
     <Button
       type="button"
-      className="icon-button sidebar-toggle-button"
+      variant="quiet"
+      className="diff-action-button sidebar-toggle-button"
       aria-label={sidebarControlLabel}
       aria-expanded={sidebarOpen}
       tooltip={sidebarControlLabel}
@@ -1786,22 +1925,6 @@ export function App({
       )}
     </Button>
   );
-
-  if (restoringWorkspace) {
-    return (
-      <I18nProvider language={language}>
-        <AppearanceProvider appearance={appearance}>
-          <div className="app-shell" data-testid="app-shell" aria-busy="true" style={appShellStyle}>
-            <header className="app-header" data-tauri-drag-region="deep" />
-            <main className="app-restoring-workspace">
-              <LoadingIndicator />
-            </main>
-          </div>
-        </AppearanceProvider>
-      </I18nProvider>
-    );
-  }
-
   return (
     <I18nProvider language={language}>
       <AppearanceProvider appearance={appearance}>
@@ -1811,147 +1934,126 @@ export function App({
           style={appShellStyle}
         >
           <header className="app-header" data-tauri-drag-region="deep">
-            {sidebarAvailable || availableUpdate || manualUpdateChecking ? (
-              <div className="titlebar-left-actions">
-                {sidebarAvailable ? sidebarControl : null}
-                {manualUpdateChecking ? (
-                  <LoadingIndicator className="titlebar-update-loading" />
-                ) : availableUpdate ? (
-                  <Button
-                    type="button"
-                    className="icon-button titlebar-update-button"
-                    aria-label={t('updateAvailableAria', { version: availableUpdate.version })}
-                    tooltip={t('updateAvailableAria', { version: availableUpdate.version })}
-                    onClick={() => setUpdateDialogOpen(true)}
-                  >
-                    <RefreshCw aria-hidden="true" focusable="false" />
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
             <div className="window-header-content">
               <div className="window-header-leading">
-                {page !== 'settings' ? (
-                  <nav className="titlebar-context" aria-label={t('workspaceContext')}>
-                    {repo ? (
-                      <>
-                        <Button
-                          type="button"
-                          className="titlebar-context-toggle repository-toggle"
-                          aria-label={t('switchRepositoryCurrent', {
-                            repository: repoDisplayName ?? repo.name,
-                            state: currentRepositoryState
-                              ? t('repositoryStateSuffix', { state: currentRepositoryState.label })
-                              : '',
-                          })}
-                          aria-haspopup="dialog"
-                          aria-expanded={repositorySwitcherOpen}
-                          data-repository-path={repo.path}
-                          onClick={openRepositorySwitcher}
-                        >
-                          <FolderGit2 aria-hidden="true" focusable="false" />
-                          <span>{repoDisplayName ?? repo.name}</span>
-                          {currentRepositoryState ? (
-                            <i
-                              className={`repository-status-dot ${currentRepositoryState.tone}`}
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                          <ChevronDown aria-hidden="true" focusable="false" />
-                        </Button>
-                        <Button
-                          type="button"
-                          className="titlebar-context-toggle branch-toggle"
-                          aria-label={t('switchBranchCurrent', {
-                            branch: repo.branch.detached
-                              ? t('detachedHead')
-                              : (repo.branch.name ?? ''),
-                          })}
-                          aria-haspopup="dialog"
-                          aria-expanded={Boolean(branchDialog)}
-                          onClick={openBranchSwitcher}
-                        >
-                          <GitBranch aria-hidden="true" focusable="false" />
-                          <span>{repo.branch.detached ? t('detachedHead') : repo.branch.name}</span>
-                          <ChevronDown aria-hidden="true" focusable="false" />
-                        </Button>
-                      </>
-                    ) : null}
-                  </nav>
-                ) : null}
+                {sidebarAvailable ? sidebarControl : null}
+                <nav className="titlebar-context" aria-label={t('workspaceContext')}>
+                  {repo && (page === 'workspace' || page === 'activity') ? (
+                    <>
+                      <Button
+                        type="button"
+                        className="titlebar-context-toggle repository-toggle"
+                        aria-label={t('switchRepositoryCurrent', {
+                          repository: repoDisplayName ?? repo.name,
+                          state: currentRepositoryState
+                            ? t('repositoryStateSuffix', { state: currentRepositoryState.label })
+                            : '',
+                        })}
+                        aria-haspopup="dialog"
+                        aria-expanded={repositorySwitcherOpen}
+                        data-repository-path={repo.path}
+                        onClick={openRepositorySwitcher}
+                      >
+                        <FolderGit2 aria-hidden="true" focusable="false" />
+                        <span>{repoDisplayName ?? repo.name}</span>
+                        {currentRepositoryState ? (
+                          <i
+                            className={`repository-status-dot ${currentRepositoryState.tone}`}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        <ChevronDown aria-hidden="true" focusable="false" />
+                      </Button>
+                      <Button
+                        type="button"
+                        className="titlebar-context-toggle branch-toggle"
+                        aria-label={t('switchBranchCurrent', {
+                          branch: repo.branch.detached
+                            ? t('detachedHead')
+                            : (repo.branch.name ?? ''),
+                        })}
+                        aria-haspopup="dialog"
+                        aria-expanded={Boolean(branchDialog)}
+                        onClick={openBranchSwitcher}
+                      >
+                        <GitBranch aria-hidden="true" focusable="false" />
+                        <span>{repo.branch.detached ? t('detachedHead') : repo.branch.name}</span>
+                        <ChevronDown aria-hidden="true" focusable="false" />
+                      </Button>
+                    </>
+                  ) : null}
+                </nav>
               </div>
               <nav className="titlebar-actions" aria-label={t('appNavigation')}>
-                {repo ? (
-                  <>
-                    <Button
-                      type="button"
-                      className="titlebar-menu-button"
-                      aria-label={t('diff')}
-                      aria-current={
-                        page === 'workspace' && activeWorkspaceView === 'diff' ? 'page' : undefined
-                      }
-                      onClick={() => {
-                        if (page !== 'workspace' || activeWorkspaceView !== 'diff')
-                          requestNavigation({ page: 'workspace', view: 'diff' });
-                      }}
-                    >
-                      <FileDiff aria-hidden="true" focusable="false" />
-                      <span>{t('diff')}</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      className="titlebar-menu-button"
-                      aria-label={t('history')}
-                      aria-current={
-                        page === 'workspace' && activeWorkspaceView === 'history'
-                          ? 'page'
-                          : undefined
-                      }
-                      onClick={() => {
-                        if (page !== 'workspace' || activeWorkspaceView !== 'history')
-                          requestNavigation({ page: 'workspace', view: 'history' });
-                      }}
-                    >
-                      <HistoryIcon aria-hidden="true" focusable="false" />
-                      <span>{t('history')}</span>
-                    </Button>
-                  </>
-                ) : showRepositoryMenu ? (
-                  <Button
-                    type="button"
-                    className="titlebar-menu-button"
-                    aria-label={t('repositoriesTitle')}
-                    onClick={() => {
-                      focusRepositoriesOnWorkspaceRef.current = true;
-                      requestNavigation({ page: 'workspace' });
-                    }}
-                  >
-                    <FolderGit2 aria-hidden="true" focusable="false" />
-                    <span>{t('repositoriesTitle')}</span>
-                  </Button>
-                ) : null}
-                {showActivityMenu ? (
-                  <Button
-                    type="button"
-                    className="titlebar-menu-button activity-toggle"
-                    aria-label={t('appActivity')}
-                    aria-current={page === 'activity' ? 'page' : undefined}
-                    onClick={() => {
-                      if (page !== 'activity') requestNavigation({ page: 'activity' });
-                    }}
-                  >
-                    <ChartNoAxesCombined aria-hidden="true" focusable="false" />
-                    <span>{t('appActivity')}</span>
-                  </Button>
-                ) : null}
                 <Button
-                  ref={settingsButtonRef}
+                  type="button"
+                  className="titlebar-menu-button"
+                  aria-label={t('diff')}
+                  aria-current={activeNavigationPage === 'diff' ? 'page' : undefined}
+                  disabled={!repo}
+                  onClick={() => {
+                    if (page !== 'workspace' || activeWorkspaceView !== 'diff')
+                      requestNavigation({ page: 'workspace', view: 'diff' });
+                  }}
+                >
+                  <FileDiff aria-hidden="true" focusable="false" />
+                  <span>{t('diff')}</span>
+                </Button>
+                <Button
+                  type="button"
+                  className="titlebar-menu-button"
+                  aria-label={t('history')}
+                  aria-current={activeNavigationPage === 'history' ? 'page' : undefined}
+                  disabled={!repo}
+                  onClick={() => {
+                    if (page !== 'workspace' || activeWorkspaceView !== 'history')
+                      requestNavigation({ page: 'workspace', view: 'history' });
+                  }}
+                >
+                  <HistoryIcon aria-hidden="true" focusable="false" />
+                  <span>{t('history')}</span>
+                </Button>
+                <Button
+                  type="button"
+                  className="titlebar-menu-button activity-toggle"
+                  aria-label={t('appActivity')}
+                  aria-current={activeNavigationPage === 'activity' ? 'page' : undefined}
+                  disabled={!repo}
+                  onClick={() => {
+                    if (page !== 'activity') requestNavigation({ page: 'activity' });
+                  }}
+                >
+                  <ChartNoAxesCombined aria-hidden="true" focusable="false" />
+                  <span>{t('appActivity')}</span>
+                </Button>
+                <Button
+                  type="button"
+                  className="titlebar-menu-button"
+                  aria-label={t('repositoryList')}
+                  aria-current={activeNavigationPage === 'repositories' ? 'page' : undefined}
+                  onClick={() => {
+                    if (repositoryLandingVisible) {
+                      focusRepositoryList();
+                      return;
+                    }
+                    focusRepositoriesOnWorkspaceRef.current = true;
+                    requestNavigation({ page: 'repositories' });
+                  }}
+                >
+                  <FolderGit2 aria-hidden="true" focusable="false" />
+                  <span>{t('repositoryList')}</span>
+                </Button>
+                <Button
                   type="button"
                   className="titlebar-menu-button"
                   aria-label={t('appSettings')}
-                  aria-current={page === 'settings' ? 'page' : undefined}
+                  aria-current={activeNavigationPage === 'settings' ? 'page' : undefined}
                   onClick={() => {
-                    if (page !== 'settings') requestNavigation({ page: 'settings' });
+                    if (page === 'settings') {
+                      focusSettingsCategory();
+                      return;
+                    }
+                    requestNavigation({ page: 'settings' });
                   }}
                 >
                   <SettingsIcon aria-hidden="true" focusable="false" />
@@ -2006,6 +2108,10 @@ export function App({
               onStickyFileHeadersChange={setStickyFileHeaders}
               onEditorLineWrappingChange={setEditorLineWrapping}
               onEditorWrapColumnChange={setEditorWrapColumn}
+              onResetPaneWidths={() => {
+                setPaneWidths(DEFAULT_PREFERENCES.paneWidths);
+                setNotice({ level: 'info', message: { id: 'panePositionsResetCompleted' } });
+              }}
               onIgnorePatternsChange={changeIgnorePatterns}
               onToolchainModeChange={changeToolchainMode}
             />
@@ -2030,8 +2136,10 @@ export function App({
                 adapter={adapter}
                 repo={repo}
                 entries={currentActivities}
-                paneWidth={shellLeftPane}
-                onPaneWidthChange={(left) => setPaneWidths((current) => ({ ...current, left }))}
+                paneWidth={paneWidths.activity.left}
+                onPaneWidthChange={(left) =>
+                  setPaneWidths((current) => ({ ...current, activity: { left } }))
+                }
                 onCancel={cancelActivity}
                 onError={showError}
                 onReady={markActivityReady}
@@ -2040,8 +2148,8 @@ export function App({
             </Suspense>
           ) : null}
 
-          <div className="app-content" hidden={page !== 'workspace'}>
-            {repo ? (
+          <div className="app-content" hidden={page !== 'workspace' && page !== 'repositories'}>
+            {repo && page === 'workspace' ? (
               <>
                 {operationActions ? (
                   <section
@@ -2109,7 +2217,7 @@ export function App({
                       onUnsavedLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
-                      paneWidths={paneWidths}
+                      paneWidths={paneWidths.changes}
                       diffStyle={diffStyle}
                       imagePreviewLayout={imagePreviewLayout}
                       splitStageView={splitStageView}
@@ -2118,7 +2226,9 @@ export function App({
                       stickyFileHeaders={stickyFileHeaders}
                       editorLineWrapping={editorLineWrapping}
                       editorWrapColumn={editorWrapColumn}
-                      onPaneWidthsChange={setPaneWidths}
+                      onPaneWidthsChange={(changes) =>
+                        setPaneWidths((current) => ({ ...current, changes }))
+                      }
                     />
                   ) : (
                     <HistoryView
@@ -2134,9 +2244,9 @@ export function App({
                       lineWrapping={editorLineWrapping}
                       wrapColumn={editorWrapColumn}
                       stickyFileHeaders={stickyFileHeaders}
-                      paneWidths={paneWidths}
+                      paneWidths={paneWidths.history}
                       onPaneWidthsChange={({ left }) =>
-                        setPaneWidths((current) => ({ ...current, left }))
+                        setPaneWidths((current) => ({ ...current, history: { left } }))
                       }
                     />
                   )}
@@ -2144,10 +2254,11 @@ export function App({
               </>
             ) : (
               <RepositoryLanding
-                repositories={registeredRepositories}
+                repositories={orderedRegisteredRepositories}
+                currentPath={repo?.path}
+                focusFirst={repositoryLandingVisible}
                 busy={busy}
-                onAddLocal={() => openRepositoryDialog('path')}
-                onClone={() => openRepositoryDialog('url')}
+                onAdd={openRepositoryDialog}
                 onOpen={(path) => settleUiAction(attach({ kind: 'openExisting', path }))}
                 onRepair={(path) => settleUiAction(chooseRelocatedRepository(path))}
                 onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
@@ -2252,17 +2363,15 @@ export function App({
           {repositorySwitcherOpen && repo ? (
             <RepositorySwitcherDialog
               repos={workspace.repos}
-              registeredRepositories={registeredRepositories}
+              registeredRepositories={orderedRegisteredRepositories}
               selectedRepoId={repo.repoId}
               busy={busy}
               onDismiss={() => setRepositorySwitcherOpen(false)}
               onSelectOpen={(repoId) => {
-                setRepositorySwitcherOpen(false);
                 if (repoId === repo.repoId) return;
                 requestNavigation({ repoId });
               }}
               onSelectRegistered={(path) => {
-                setRepositorySwitcherOpen(false);
                 const registration = registeredRepositories.find(
                   (candidate) => candidate.path === path,
                 );
@@ -2274,16 +2383,20 @@ export function App({
               }}
               onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
               onForget={(path) => {
-                setRepositorySwitcherOpen(false);
                 requestForgetRepository(path);
               }}
-              onAddLocal={() => openRepositoryDialog('path')}
-              onClone={() => openRepositoryDialog('url')}
+              onAdd={openRepositoryDialog}
             />
           ) : null}
 
           {remoteManager ? (
             <RemoteManagerDialog
+              repositoryName={
+                repositoryNames[remoteManager.path] ??
+                repositoryNameFromPath(remoteManager.path) ??
+                remoteManager.path
+              }
+              repositoryPath={remoteManager.path}
               remotes={remoteManager.remotes}
               loading={remoteManager.loading}
               busy={busy}
@@ -2292,7 +2405,10 @@ export function App({
               onReload={() =>
                 settleUiAction(loadRemoteManager(remoteManager.repoId, remoteManager.path))
               }
-              onSave={(changes) => settleUiAction(saveRemoteUrls(changes, remoteManager))}
+              onChoosePath={() => chooseDirectory(t('chooseRelocatedRepository'))}
+              onSave={(information) =>
+                settleUiAction(saveRepositoryInformation(information, remoteManager))
+              }
             />
           ) : null}
 
@@ -2793,24 +2909,37 @@ export function App({
               url={addRepositoryDialog.url}
               cloneParentPath={addRepositoryDialog.cloneParentPath}
               localPath={addRepositoryDialog.localPath}
-              name={addRepositoryDialog.name}
+              remoteName={addRepositoryDialog.remoteName}
+              localName={addRepositoryDialog.localName}
               {...(addRepositoryDialog.error ? { error: addRepositoryDialog.error } : {})}
               {...(addRepositoryDialog.errorField
                 ? { errorField: addRepositoryDialog.errorField }
                 : {})}
               busy={busy}
+              onSourceChange={(source) =>
+                setAddRepositoryDialog((current) => {
+                  if (!current) return current;
+                  const { error: _error, errorField: _errorField, ...values } = current;
+                  return { ...values, source };
+                })
+              }
               onUrlChange={(url) =>
-                setAddRepositoryDialog((current) =>
-                  current
-                    ? {
-                        source: current.source,
-                        url,
-                        cloneParentPath: current.cloneParentPath,
-                        localPath: current.localPath,
-                        name: current.name,
-                      }
-                    : current,
-                )
+                setAddRepositoryDialog((current) => {
+                  if (!current) return current;
+                  const previousInferredName = repositoryNameFromRemoteUrl(current.url);
+                  const nextInferredName = repositoryNameFromRemoteUrl(url);
+                  return {
+                    source: current.source,
+                    url,
+                    cloneParentPath: current.cloneParentPath,
+                    localPath: current.localPath,
+                    remoteName:
+                      !current.remoteName || current.remoteName === previousInferredName
+                        ? (nextInferredName ?? '')
+                        : current.remoteName,
+                    localName: current.localName,
+                  };
+                })
               }
               onCloneParentPathChange={(cloneParentPath) =>
                 setAddRepositoryDialog((current) =>
@@ -2820,26 +2949,37 @@ export function App({
                         url: current.url,
                         cloneParentPath,
                         localPath: current.localPath,
-                        name: current.name,
+                        remoteName: current.remoteName,
+                        localName: current.localName,
                       }
                     : current,
                 )
               }
               onLocalPathChange={(localPath) =>
+                setAddRepositoryDialog((current) => {
+                  if (!current) return current;
+                  const previousInferredName = repositoryNameFromPath(current.localPath);
+                  const nextInferredName = repositoryNameFromPath(localPath);
+                  return {
+                    source: current.source,
+                    url: current.url,
+                    cloneParentPath: current.cloneParentPath,
+                    localPath,
+                    remoteName: current.remoteName,
+                    localName:
+                      !current.localName || current.localName === previousInferredName
+                        ? (nextInferredName ?? '')
+                        : current.localName,
+                  };
+                })
+              }
+              onRemoteNameChange={(remoteName) =>
                 setAddRepositoryDialog((current) =>
-                  current
-                    ? {
-                        source: current.source,
-                        url: current.url,
-                        cloneParentPath: current.cloneParentPath,
-                        localPath,
-                        name: current.name,
-                      }
-                    : current,
+                  current ? { ...current, remoteName } : current,
                 )
               }
-              onNameChange={(name) =>
-                setAddRepositoryDialog((current) => (current ? { ...current, name } : current))
+              onLocalNameChange={(localName) =>
+                setAddRepositoryDialog((current) => (current ? { ...current, localName } : current))
               }
               onChoosePath={() => settleUiAction(chooseRepositoryPath())}
               onDismiss={() => setAddRepositoryDialog(undefined)}
