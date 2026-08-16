@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isAbsoluteLocalPath,
+  isRepositoryDirectoryName,
   joinRepositoryPath,
   repositoryNameFromPath,
   repositoryNameFromRemoteUrl,
@@ -39,4 +40,18 @@ describe('repository location', () => {
   it('derives a repository name from a local path', () => {
     expect(repositoryNameFromPath('/Users/example/project/stella/')).toBe('stella');
   });
+
+  it.each(['stella', 'Stella Desktop', 'stella.git'])(
+    'accepts a clone directory name: %s',
+    (name) => {
+      expect(isRepositoryDirectoryName(name)).toBe(true);
+    },
+  );
+
+  it.each(['', '.', '..', '../stella', 'owner/stella', 'owner\\stella'])(
+    'rejects an unsafe clone directory name: %s',
+    (name) => {
+      expect(isRepositoryDirectoryName(name)).toBe(false);
+    },
+  );
 });

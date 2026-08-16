@@ -221,6 +221,42 @@ describe('tauriWorkspaceAdapter', () => {
     expect(attachCall?.[1]?.request).toEqual({ kind: 'openExisting', path: '/tmp/stella' });
   });
 
+  it('maps Add Remote through the typed preview boundary', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_preview') {
+        return {
+          confirmationToken: 'add-remote-token',
+          expiresAtUnixMs: 1,
+          summary: { id: 'actionAddRemote' },
+          destructive: false,
+          affectedPaths: [],
+          affectedCommits: [],
+          remoteEffect: { id: 'previewAddRemote', args: { remote: 'origin' } },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'openExisting', path: '/tmp/stella' });
+
+    await adapter.preview({
+      repoId: 'repo-1',
+      action: { kind: 'addRemote', remote: 'origin', url: 'https://example.test/stella.git' },
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('workspace_preview', {
+      request: {
+        repoId: 'repo-1',
+        expectedGeneration: 1,
+        action: {
+          kind: 'addRemote',
+          remote: 'origin',
+          url: 'https://example.test/stella.git',
+        },
+      },
+    });
+  });
+
   it('maps the changed-line summary without adding counts to each file row', async () => {
     const current = snapshot({ kind: 'none' }, [
       {
@@ -602,6 +638,37 @@ describe('tauriWorkspaceAdapter', () => {
         tooLarge: true,
       }),
     });
+  });
+
+  it('omits the Diff for an empty commit', async () => {
+    invokeMock.mockResolvedValue({
+      kind: 'commitDetails',
+      data: {
+        oid: 'empty-commit',
+        parents: ['parent'],
+        refs: [],
+        author: 'Stella',
+        authorEmail: 'stella@example.com',
+        authoredAt: '2026-08-08T00:00:00Z',
+        subject: 'chore: empty',
+        body: '',
+        patch: ' \n',
+        truncated: false,
+        diffRevision: 'empty-revision',
+        repoGeneration: 1,
+      },
+    });
+    const adapter = createTauriWorkspaceAdapter();
+
+    const result = await adapter.query({
+      kind: 'commitDetails',
+      repoId: 'repo-1',
+      oid: 'empty-commit',
+    });
+
+    expect(result.kind).toBe('commitDetails');
+    if (result.kind !== 'commitDetails') return;
+    expect(result.commit.diff).toBeUndefined();
   });
 
   it('queries both rename paths so Git can preserve rename metadata', async () => {
@@ -1195,6 +1262,22 @@ describe('tauriWorkspaceAdapter', () => {
           path: 'src/app.ts',
           text: 'const value = 2;\r\n',
           expectedContentHash: 'hash-1',
+        },
+      }),
+    });
+
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: { kind: 'renameFile', path: 'src/app.ts', newPath: 'src/renamed.ts' },
+    });
+    expect(invokeMock).toHaveBeenLastCalledWith('workspace_execute', {
+      request: expect.objectContaining({
+        repoId: 'repo-1',
+        expectedGeneration: 2,
+        action: {
+          kind: 'renameFile',
+          path: 'src/app.ts',
+          newPath: 'src/renamed.ts',
         },
       }),
     });

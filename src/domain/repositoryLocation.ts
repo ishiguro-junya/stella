@@ -26,6 +26,18 @@ export function isAbsoluteLocalPath(value: string): boolean {
   return value.trim().startsWith('/');
 }
 
+export function isRepositoryDirectoryName(value: string): boolean {
+  const name = value.trim();
+  return Boolean(
+    name &&
+    name !== '.' &&
+    name !== '..' &&
+    !name.includes('/') &&
+    !name.includes('\\') &&
+    !name.includes('\0'),
+  );
+}
+
 export function joinRepositoryPath(parent: string, repositoryName: string): string {
   const trimmedParent = parent.replace(/\/+$/u, '');
   return `${trimmedParent || ''}/${repositoryName}`;

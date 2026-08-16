@@ -259,6 +259,10 @@ pub(crate) enum GitCommand {
         new_url: String,
         expected_url: String,
     },
+    AddRemote {
+        remote: String,
+        url: String,
+    },
     CreateBranch {
         name: String,
         start_point: String,
@@ -690,6 +694,7 @@ impl GitCommand {
                 args.push(exact_git_regex(expected_url).into());
                 args
             }
+            Self::AddRemote { remote, url } => strings(["remote", "add", remote, url]),
             Self::CreateBranch { name, start_point } => vec![
                 "branch".into(),
                 "--".into(),
@@ -1488,6 +1493,13 @@ mod tests {
         .args();
         assert!(args.contains(&"ssh://example.test/repo.git;touch injected".into()));
         assert!(args.contains(&"^ssh://example\\.test/old\\.\\[git\\]$".into()));
+
+        let add_args = GitCommand::AddRemote {
+            remote: "origin".into(),
+            url: "ssh://example.test/repo.git;touch injected".into(),
+        }
+        .args();
+        assert!(add_args.contains(&"ssh://example.test/repo.git;touch injected".into()));
     }
 
     #[test]

@@ -148,6 +148,7 @@ export type WireAction =
       expectedUrl: string;
       newUrl: string;
     }
+  | { kind: 'addRemote'; remote: string; url: string }
   | { kind: 'createBranch'; name: string; startPoint: string; checkout: boolean }
   | { kind: 'deleteBranch'; name: string }
   | { kind: 'createTag'; name: string; target: string }
@@ -199,6 +200,7 @@ export type WireAction =
       editor: { kind: 'systemDefault' };
     }
   | { kind: 'saveFile'; path: string; text: string; expectedContentHash: string }
+  | { kind: 'renameFile'; path: string; newPath: string }
   | {
       kind: 'fileAction';
       paths: string[];

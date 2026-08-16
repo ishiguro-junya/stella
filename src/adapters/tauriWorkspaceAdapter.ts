@@ -388,7 +388,9 @@ function updateConflictFromEdit(
 }
 
 function mapCommitDetails(details: WireCommitDetails, repoId: string): CommitDetails {
-  const profile = profileDiffPatch(details.patch, details.truncated);
+  const profile = details.patch.trim()
+    ? profileDiffPatch(details.patch, details.truncated)
+    : undefined;
   return {
     oid: details.oid,
     shortOid: details.oid.slice(0, 7),
@@ -400,17 +402,21 @@ function mapCommitDetails(details: WireCommitDetails, repoId: string): CommitDet
     parents: [...details.parents],
     refs: [...details.refs],
     lane: 0,
-    diff: {
-      diffId: details.diffRevision,
-      repoId,
-      path: details.oid,
-      area: 'staged',
-      generation: details.repoGeneration,
-      patch: details.patch,
-      binary: profile.binary,
-      tooLarge: profile.performanceMode,
-      truncated: details.truncated,
-    },
+    ...(profile
+      ? {
+          diff: {
+            diffId: details.diffRevision,
+            repoId,
+            path: details.oid,
+            area: 'staged' as const,
+            generation: details.repoGeneration,
+            patch: details.patch,
+            binary: profile.binary,
+            tooLarge: profile.performanceMode,
+            truncated: details.truncated,
+          },
+        }
+      : {}),
   };
 }
 
@@ -533,6 +539,8 @@ async function mapAction(
         expectedUrl: action.expectedUrl,
         newUrl: action.newUrl,
       };
+    case 'addRemote':
+      return { kind: 'addRemote', remote: action.remote, url: action.url };
     case 'createBranch':
       return {
         kind: 'createBranch',
@@ -634,6 +642,8 @@ async function mapAction(
         text: action.text,
         expectedContentHash: action.expectedContentHash,
       };
+    case 'renameFile':
+      return { kind: 'renameFile', path: action.path, newPath: action.newPath };
     case 'fileAction':
       return { kind: 'fileAction', paths: action.paths, operation: action.operation };
   }
@@ -718,6 +728,8 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionFetch');
     case 'setRemoteUrl':
       return localized('actionSetRemoteUrl');
+    case 'addRemote':
+      return localized('actionAddRemote');
     case 'pull':
       return localized('actionPull');
     case 'push':
@@ -760,6 +772,8 @@ function actionTitle(action: WorkspaceAction): LocalizedMessage {
       return localized('actionOpenConflictExternally');
     case 'saveFile':
       return localized('actionSaveFile');
+    case 'renameFile':
+      return localized('actionRenameFile');
     case 'fileAction':
       switch (action.operation) {
         case 'moveToTrash':

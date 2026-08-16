@@ -390,6 +390,10 @@ pub enum Action {
         expected_url: String,
         new_url: String,
     },
+    AddRemote {
+        remote: String,
+        url: String,
+    },
     CreateBranch {
         name: String,
         start_point: String,
@@ -467,6 +471,10 @@ pub enum Action {
         text: String,
         expected_content_hash: String,
     },
+    RenameFile {
+        path: String,
+        new_path: String,
+    },
     FileAction {
         paths: Vec<String>,
         operation: FileOperation,
@@ -503,6 +511,7 @@ impl Action {
             Self::Pull { .. } => "pull",
             Self::Push { .. } => "push",
             Self::SetRemoteUrl { .. } => "setRemoteUrl",
+            Self::AddRemote { .. } => "addRemote",
             Self::CreateBranch { .. } => "createBranch",
             Self::DeleteBranch { .. } => "deleteBranch",
             Self::CreateTag { .. } => "createTag",
@@ -522,6 +531,7 @@ impl Action {
             Self::ConflictMaterialize { .. } => "conflictMaterialize",
             Self::ConflictOpenExternal { .. } => "conflictOpenExternal",
             Self::SaveFile { .. } => "saveFile",
+            Self::RenameFile { .. } => "renameFile",
             Self::FileAction { .. } => "fileAction",
         }
     }
@@ -538,6 +548,7 @@ impl Action {
                     | Self::CreateBranch { .. }
                     | Self::CreateTag { .. }
                     | Self::SetRemoteUrl { .. }
+                    | Self::AddRemote { .. }
                     | Self::GitFlow { .. }
             )
     }
@@ -1487,6 +1498,18 @@ mod tests {
                 "kind": "cherryPick",
                 "commit": "merge-oid",
                 "mainline": 2
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Action::RenameFile {
+                path: "src/old.ts".into(),
+                new_path: "src/new.ts".into(),
+            })
+            .unwrap(),
+            json!({
+                "kind": "renameFile",
+                "path": "src/old.ts",
+                "newPath": "src/new.ts"
             })
         );
         assert_eq!(

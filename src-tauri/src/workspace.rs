@@ -1485,6 +1485,33 @@ impl Workspace {
             }));
         }
 
+        if let Action::AddRemote { remote, .. } = action {
+            let remotes = self.remote_definitions(repo, control)?;
+            if remotes.iter().any(|definition| definition.name == *remote) {
+                return Err(WorkspaceError::new(
+                    ErrorCode::PreviewMismatch,
+                    "The remote already exists",
+                ));
+            }
+            let impact_payload = serde_json::to_vec(&(
+                action.kind_name(),
+                remote,
+                remotes
+                    .iter()
+                    .map(|definition| &definition.name)
+                    .collect::<Vec<_>>(),
+                &snapshot.operation,
+            ))
+            .map_err(|error| WorkspaceError::new(ErrorCode::Internal, error.to_string()))?;
+            return Ok(Some(TargetBinding {
+                resolved_targets: Vec::new(),
+                impact_digest: hash(&impact_payload),
+                affected_paths: Vec::new(),
+                affected_commits: Vec::new(),
+                lost_commit_oids: Vec::new(),
+            }));
+        }
+
         let oid = if let Some(input) = input {
             let oid = self
                 .git
@@ -3136,6 +3163,34 @@ impl Workspace {
                 }
                 Ok((LocalizedMessage::new("backendRemoteUrlUpdated"), output))
             }
+            Action::AddRemote { remote, url } => {
+                let output = self.run_checked(
+                    repo,
+                    GitCommand::AddRemote {
+                        remote: remote.clone(),
+                        url: url.clone(),
+                    },
+                    None,
+                    control,
+                )?;
+                let added = self
+                    .remote_definitions(repo, Some(control))?
+                    .into_iter()
+                    .find(|definition| definition.name == *remote)
+                    .ok_or_else(|| {
+                        WorkspaceError::new(
+                            ErrorCode::Internal,
+                            "The added remote could not be read back",
+                        )
+                    })?;
+                if !added.fetch_urls.contains(url) || !added.push_urls.contains(url) {
+                    return Err(WorkspaceError::new(
+                        ErrorCode::Internal,
+                        "The added remote URL did not match the requested value",
+                    ));
+                }
+                Ok((LocalizedMessage::new("backendRemoteAdded"), output))
+            }
             Action::CreateBranch {
                 name,
                 start_point,
@@ -3456,6 +3511,32 @@ impl Workspace {
                 Ok((
                     LocalizedMessage::new("backendFileSaved").arg("path", path.clone()),
                     synthetic_output("file-save"),
+                ))
+            }
+            Action::RenameFile { path, new_path } => {
+                let source = checked_repo_path(&repo.root, path)?;
+                let destination = checked_repo_path(&repo.root, new_path)?;
+                ensure_renameable_file(&source)?;
+                match fs::symlink_metadata(&destination) {
+                    Ok(_) => {
+                        return Err(WorkspaceError::new(
+                            ErrorCode::InvalidRequest,
+                            "The destination file already exists",
+                        )
+                        .detail("path", new_path.clone()));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(WorkspaceError::new(ErrorCode::Io, error.to_string()));
+                    }
+                }
+                fs::rename(&source, &destination)
+                    .map_err(|error| WorkspaceError::new(ErrorCode::Io, error.to_string()))?;
+                Ok((
+                    LocalizedMessage::new("backendFileRenamed")
+                        .arg("path", path.clone())
+                        .arg("newPath", new_path.clone()),
+                    synthetic_output("file-rename"),
                 ))
             }
             Action::FileAction { paths, operation } => match operation {
@@ -5566,6 +5647,14 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
                 "The expected content hash is required",
             ));
         }
+        Action::RenameFile { path, new_path } => {
+            if path == new_path || Path::new(path).parent() != Path::new(new_path).parent() {
+                return Err(WorkspaceError::new(
+                    ErrorCode::InvalidRequest,
+                    "A file rename must change only the file name",
+                ));
+            }
+        }
         Action::Fetch { remote } | Action::Pull { remote, .. } | Action::Push { remote, .. } => {
             validate_remote(remote)?
         }
@@ -5584,6 +5673,10 @@ fn validate_action(action: &Action) -> WorkspaceResult<()> {
                     "The new remote URL must be different",
                 ));
             }
+        }
+        Action::AddRemote { remote, url } => {
+            validate_remote(remote)?;
+            validate_remote_url(url)?;
         }
         _ => {}
     }
@@ -5668,6 +5761,27 @@ fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> Workspac
                 "The selected entry cannot be edited",
             )
             .localized_message(LocalizedMessage::new("fileEditUnsupported"))
+            .detail("path", path.clone()));
+        }
+        return Ok(());
+    }
+    if let Action::RenameFile { path, .. } = action {
+        let entry = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.path == *path)
+            .ok_or_else(|| {
+                WorkspaceError::new(
+                    ErrorCode::InvalidRequest,
+                    "Only files in Changes can be renamed",
+                )
+                .detail("path", path.clone())
+            })?;
+        if entry.conflict || entry.submodule != "N..." {
+            return Err(WorkspaceError::new(
+                ErrorCode::InvalidRequest,
+                "The selected entry cannot be renamed",
+            )
             .detail("path", path.clone()));
         }
         return Ok(());
@@ -6009,6 +6123,7 @@ fn action_paths(action: &Action) -> Vec<String> {
         }
         Action::FileAction { paths, .. } => paths.clone(),
         Action::SaveFile { path, .. } => vec![path.clone()],
+        Action::RenameFile { path, new_path } => vec![path.clone(), new_path.clone()],
         Action::GitFlow { request } if request.shared => vec![".gitflow".into()],
         _ => Vec::new(),
     }
@@ -6057,6 +6172,9 @@ fn remote_effect(
                 .arg("remote", remote.clone())
                 .arg("kind", format!("{url_kind:?}")),
         ),
+        Action::AddRemote { remote, .. } => {
+            Some(LocalizedMessage::new("previewAddRemote").arg("remote", remote.clone()))
+        }
         Action::GitFlow { request }
             if request.command == GitFlowCommand::Delete && request.remote =>
         {
@@ -6117,6 +6235,7 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::Pull { .. } => "actionPull",
         Action::Push { .. } => "actionPush",
         Action::SetRemoteUrl { .. } => "actionSetRemoteUrl",
+        Action::AddRemote { .. } => "actionAddRemote",
         Action::CreateBranch { .. } => "actionCreateBranch",
         Action::DeleteBranch { .. } => "actionDeleteBranch",
         Action::CreateTag { .. } => "actionCreateTag",
@@ -6136,6 +6255,7 @@ fn action_display_message(action: &Action) -> LocalizedMessage {
         Action::ConflictMaterialize { .. } => "actionApplyConflictSide",
         Action::ConflictOpenExternal { .. } => "actionOpenConflictExternally",
         Action::SaveFile { .. } => "actionSaveFile",
+        Action::RenameFile { .. } => "actionRenameFile",
         Action::FileAction { operation, .. } => match operation {
             FileOperation::MoveToTrash => "actionMoveFileToTrash",
             FileOperation::RevealInFinder => "actionShowInFinder",
@@ -6188,6 +6308,17 @@ fn ensure_trashable_file(path: &Path) -> WorkspaceResult<()> {
     Err(WorkspaceError::new(
         ErrorCode::InvalidRequest,
         "Only regular files and symbolic links can be moved to Trash",
+    ))
+}
+
+fn ensure_renameable_file(path: &Path) -> WorkspaceResult<()> {
+    let metadata = file_action_metadata(path)?;
+    if metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    Err(WorkspaceError::new(
+        ErrorCode::InvalidRequest,
+        "Only regular files and symbolic links can be renamed",
     ))
 }
 
@@ -6696,6 +6827,13 @@ mod tests {
         assert!(validate_path(".").is_err());
         assert!(validate_path("dir/./file").is_err());
         assert!(validate_branch_name("-bad").is_err());
+        assert!(
+            validate_action(&Action::RenameFile {
+                path: "src/old.ts".into(),
+                new_path: "docs/new.ts".into(),
+            })
+            .is_err()
+        );
     }
 
     #[test]
@@ -7250,6 +7388,82 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PreviewMismatch);
+    }
+
+    #[test]
+    fn add_remote_rechecks_absence_and_reads_back_the_url() {
+        let fixture = GitFixture::new();
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::OpenExisting {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let action = Action::AddRemote {
+            remote: "origin".into(),
+            url: "https://example.test/repository.git".into(),
+        };
+        let token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            attached.snapshot.repo_generation,
+            action.clone(),
+        );
+        let outcome = workspace
+            .execute(ExecuteRequest {
+                operation_id: "add-remote".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action,
+                confirmation_token: Some(token),
+            })
+            .unwrap();
+        assert_eq!(
+            fixture.git_output(&["remote", "get-url", "origin"]),
+            "https://example.test/repository.git"
+        );
+
+        let stale_action = Action::AddRemote {
+            remote: "backup".into(),
+            url: "https://example.test/backup.git".into(),
+        };
+        let stale_token = preview_token(
+            &workspace,
+            &attached.repo_id,
+            outcome.snapshot.repo_generation,
+            stale_action.clone(),
+        );
+        fixture.git(&[
+            "remote",
+            "add",
+            "backup",
+            "https://example.test/external.git",
+        ]);
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "stale-add-remote".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: outcome.snapshot.repo_generation,
+                action: stale_action,
+                confirmation_token: Some(stale_token),
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::PreviewMismatch);
+
+        let invalid = workspace
+            .preview(PreviewRequest {
+                repo_id: attached.repo_id,
+                expected_generation: outcome.snapshot.repo_generation,
+                action: Action::AddRemote {
+                    remote: "invalid".into(),
+                    url: "-unsafe".into(),
+                },
+            })
+            .unwrap_err();
+        assert_eq!(invalid.code, ErrorCode::InvalidRequest);
     }
 
     #[test]
@@ -13036,6 +13250,80 @@ mod tests {
             assert_eq!(document.path, path);
             assert_eq!(document.text, expected);
         }
+    }
+
+    #[test]
+    fn rename_file_moves_modified_and_untracked_files_without_overwriting() {
+        let fixture = GitFixture::new();
+        fixture.write("modified.txt", "base\n");
+        fixture.git(&["add", "--", "modified.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        fixture.write("modified.txt", "changed\n");
+        fixture.write("new.txt", "new\n");
+        fixture.write("occupied.txt", "occupied\n");
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let renamed = workspace
+            .execute(ExecuteRequest {
+                operation_id: "rename-modified".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: attached.snapshot.repo_generation,
+                action: Action::RenameFile {
+                    path: "modified.txt".into(),
+                    new_path: "renamed.txt".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+        assert!(!fixture.repo.join("modified.txt").exists());
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("renamed.txt")).unwrap(),
+            "changed\n"
+        );
+
+        let renamed_new = workspace
+            .execute(ExecuteRequest {
+                operation_id: "rename-untracked".into(),
+                repo_id: attached.repo_id.clone(),
+                expected_generation: renamed.repo_generation,
+                action: Action::RenameFile {
+                    path: "new.txt".into(),
+                    new_path: "new-name.txt".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap();
+        assert!(!fixture.repo.join("new.txt").exists());
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("new-name.txt")).unwrap(),
+            "new\n"
+        );
+
+        let error = workspace
+            .execute(ExecuteRequest {
+                operation_id: "rename-overwrite".into(),
+                repo_id: attached.repo_id,
+                expected_generation: renamed_new.repo_generation,
+                action: Action::RenameFile {
+                    path: "new-name.txt".into(),
+                    new_path: "occupied.txt".into(),
+                },
+                confirmation_token: None,
+            })
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join("occupied.txt")).unwrap(),
+            "occupied\n"
+        );
     }
 
     #[test]

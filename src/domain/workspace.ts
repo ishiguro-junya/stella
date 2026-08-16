@@ -394,6 +394,7 @@ export type WorkspaceAction =
       expectedUrl: string;
       newUrl: string;
     }
+  | { kind: 'addRemote'; remote: string; url: string }
   | { kind: 'createBranch'; name: string; startOid: string; checkout?: boolean }
   | { kind: 'deleteBranch'; name: string }
   | { kind: 'createTag'; name: string; targetOid: string }
@@ -439,6 +440,7 @@ export type WorkspaceAction =
     }
   | { kind: 'openExternal'; path: string }
   | { kind: 'saveFile'; path: string; text: string; expectedContentHash: string }
+  | { kind: 'renameFile'; path: string; newPath: string }
   | { kind: 'fileAction'; paths: string[]; operation: FileOperation };
 
 export type AttachRequest =
