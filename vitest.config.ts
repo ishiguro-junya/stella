@@ -6,8 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', '.markdownlint-rules/**/*.test.mts'],
+    setupFiles: ['./app/test/setup.ts'],
+    include: ['app/**/*.{test,spec}.{ts,tsx}', '.markdownlint-rules/**/*.test.mts'],
     clearMocks: true,
     restoreMocks: true,
     mockReset: true,

@@ -12,8 +12,8 @@ coverage/
 
 # Tauri
 target/
-src-tauri/target/
-src-tauri/gen/schemas/
+app/native/target/
+app/native/gen/schemas/
 
 # Test
 .lycheecache

@@ -18,6 +18,7 @@ fn git_output(repository: &Path, args: &[&str]) -> Option<String> {
 fn main() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
+        .and_then(Path::parent)
         .expect("リポジトリのパスを取得できませんでした");
     if let Some(head_log) = git_output(repository, &["rev-parse", "--git-path", "logs/HEAD"]) {
         let head_log = Path::new(&head_log);

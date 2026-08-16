@@ -79,16 +79,17 @@ mise run dev
 ```text
 .
 ├── Casks/                  # Homebrew Cask
-├── src/                    # 画面と操作を実装するReactとTypeScriptのコード
+├── app/                    # アプリの実装
 │   ├── adapters/           # Tauriとの通信
 │   ├── domain/             # Gitの型とルール
 │   ├── features/           # 機能ごとの画面と操作
+│   ├── fixtures/           # フロントエンドとRustで共有するテストデータ
 │   ├── i18n/               # i18nextの設定と翻訳カタログ
+│   ├── native/             # Git操作とTauriの設定
 │   ├── persistence/        # アプリ設定の保存
 │   ├── test/               # ユニットテスト
 │   ├── theme/              # 外観テーマの制御
 │   └── ui/                 # 共通の画面部品
-├── src-tauri/              # Git操作とTauriの設定
 ├── tests/                  # E2Eテストのコード
 ├── scripts/                # スクリプト
 └── docs/                   # ドキュメント

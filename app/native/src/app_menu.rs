@@ -59,8 +59,8 @@ struct MenuLabels {
     native_menu_help: String,
 }
 
-const ENGLISH_MESSAGES: &str = include_str!("../../src/i18n/locales/en.json");
-const JAPANESE_MESSAGES: &str = include_str!("../../src/i18n/locales/ja.json");
+const ENGLISH_MESSAGES: &str = include_str!("../../i18n/locales/en.json");
+const JAPANESE_MESSAGES: &str = include_str!("../../i18n/locales/ja.json");
 
 fn labels(language: AppLanguage) -> MenuLabels {
     let catalog = match language {

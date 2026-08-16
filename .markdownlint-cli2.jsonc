@@ -6,7 +6,7 @@
   ],
   "globs": ["**/*.md"],
   "gitignore": true,
-  "ignores": ["coverage/**", "dist/**", "node_modules/**", "src-tauri/target/**", "target/**"],
+  "ignores": ["app/native/target/**", "coverage/**", "dist/**", "node_modules/**", "target/**"],
   "config": {
     "default": true,
     "MD009": {

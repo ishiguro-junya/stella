@@ -1,4 +1,4 @@
-import fixtures from '../../fixtures/conventional-commits.json';
+import fixtures from '../fixtures/conventional-commits.json';
 import { describe, expect, it } from 'vitest';
 
 import {

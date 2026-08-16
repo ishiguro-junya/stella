@@ -18,7 +18,7 @@ run = [
 
 [tasks.dev]
 description = "Tauriアプリを開発モードで起動する"
-run = "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER='node --import tsx ../scripts/mode-app.mts dev' pnpm exec tauri dev --config src-tauri/tauri.dev.conf.json"
+run = "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER='node --import tsx ../../scripts/mode-app.mts dev' pnpm exec tauri dev --config app/native/tauri.dev.conf.json"
 
 [tasks.reset]
 description = "開発用データを初期状態へ戻す"
@@ -73,7 +73,7 @@ run = "cargo test --workspace --all-targets --all-features workspace::tests"
 [tasks."test:e2e"]
 description = "E2Eテストを実行する"
 run = [
-  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   "pnpm exec wdio run wdio.conf.ts",
 ]
@@ -81,7 +81,7 @@ run = [
 [tasks."screenshot"]
 description = "README用のスクリーンショットを生成する"
 run = [
-  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   "STELLA_VISUAL_QA_DIR=docs/assets pnpm exec wdio run wdio.conf.ts --spec tests/e2e/readme-screenshots.spec.ts",
 ]

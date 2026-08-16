@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+const styles = readFileSync(resolve(process.cwd(), 'app/styles.css'), 'utf8');
 
 describe('global scroll behavior', () => {
   it('contains overscroll at the app and History scroll boundaries', () => {

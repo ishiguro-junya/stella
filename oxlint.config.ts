@@ -23,8 +23,8 @@ export default defineConfig({
     'coverage/**',
     'dist/**',
     'node_modules/**',
-    'src-tauri/gen/**',
-    'src-tauri/target/**',
+    'app/native/gen/**',
+    'app/native/target/**',
     'target/**',
   ],
   overrides: [
@@ -36,7 +36,7 @@ export default defineConfig({
       },
     },
     {
-      files: ['src/**/*.{test,spec}.{ts,tsx}'],
+      files: ['app/**/*.{test,spec}.{ts,tsx}'],
       env: {
         vitest: true,
       },

@@ -21,7 +21,7 @@ export default defineConfig({
         }
       : {}),
     watch: {
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/app/native/**'],
     },
   },
   build: {

@@ -6,7 +6,7 @@
     "beforeDevCommand": "node --import tsx scripts/tauri-hook.mts dev",
     "beforeBuildCommand": "node --import tsx scripts/tauri-hook.mts build",
     "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
+    "frontendDist": "../../dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -42,17 +42,17 @@
     "copyright": "© Junya Ishiguro",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
     "resources": {
-      "../LICENSE": "LICENSE",
-      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
-      "../tmp/toolchain/bundle/toolchain": "toolchain",
-      "../node_modules/@pierre/diffs/LICENSE.md": "licenses/pierre-diffs-LICENSE.md",
-      "../node_modules/@tauri-apps/plugin-dialog/LICENSE.spdx": "licenses/tauri-plugin-dialog-LICENSE.spdx",
-      "../node_modules/i18next/LICENSE": "licenses/i18next-LICENSE",
-      "../node_modules/react-i18next/LICENSE": "licenses/react-i18next-LICENSE",
-      "../licenses/tauri-plugin-updater-LICENSE.spdx": "licenses/tauri-plugin-updater-LICENSE.spdx",
-      "../node_modules/lucide-react/LICENSE": "licenses/lucide-react-LICENSE",
-      "../node_modules/react-is/LICENSE": "licenses/react-is-LICENSE",
-      "../node_modules/recharts/LICENSE": "licenses/recharts-LICENSE",
+      "../../LICENSE": "LICENSE",
+      "../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../../tmp/toolchain/bundle/toolchain": "toolchain",
+      "../../node_modules/@pierre/diffs/LICENSE.md": "licenses/pierre-diffs-LICENSE.md",
+      "../../node_modules/@tauri-apps/plugin-dialog/LICENSE.spdx": "licenses/tauri-plugin-dialog-LICENSE.spdx",
+      "../../node_modules/i18next/LICENSE": "licenses/i18next-LICENSE",
+      "../../node_modules/react-i18next/LICENSE": "licenses/react-i18next-LICENSE",
+      "licenses/tauri-plugin-updater-LICENSE.spdx": "licenses/tauri-plugin-updater-LICENSE.spdx",
+      "../../node_modules/lucide-react/LICENSE": "licenses/lucide-react-LICENSE",
+      "../../node_modules/react-is/LICENSE": "licenses/react-is-LICENSE",
+      "../../node_modules/recharts/LICENSE": "licenses/recharts-LICENSE",
       "infoplist/ja.lproj/InfoPlist.strings": "ja.lproj/InfoPlist.strings"
     },
     "macOS": {

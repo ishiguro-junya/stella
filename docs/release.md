@@ -100,7 +100,7 @@ export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password \
   -s com.emuni.stella.updater \
   -w)"
 pnpm exec tauri build \
-  --config src-tauri/tauri.updater.conf.json \
+  --config app/native/tauri.updater.conf.json \
   --config "{\"version\":\"${STELLA_VERSION}\"}"
 unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```

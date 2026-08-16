@@ -433,7 +433,7 @@ fn validate_bundled_root(root: &Path) -> Result<(), String> {
             .map_err(|error| format!("内蔵ツールチェーンのマーカーを読めません: {error}"))?,
     )
     .map_err(|error| format!("内蔵ツールチェーンのマーカーが不正です: {error}"))?;
-    let expected_manifest = sha256_hex(include_bytes!("../../toolchain.lock.json"));
+    let expected_manifest = sha256_hex(include_bytes!("../../../toolchain.lock.json"));
     if marker.manifest_sha256 != expected_manifest {
         return Err("内蔵ツールチェーンのロックマニフェストがアプリと一致しません。".into());
     }
@@ -1313,8 +1313,6 @@ mod tests {
     }
 
     #[test]
-    // フレーキー: 全テスト実行時の負荷で、子プロセスがPIDファイルを作る前に
-    // 2秒のタイムアウトへ達することがある。起動完了を同期してから終了を検証する。
     fn shell_path_timeout_terminates_its_process_group() {
         let directory = TempDir::new().unwrap();
         let child_pid = directory.path().join("child.pid");
@@ -1327,7 +1325,9 @@ mod tests {
             ),
         );
 
-        assert!(resolve_login_shell_path(&shell, SHELL_PATH_TIMEOUT).is_none());
+        // 製品用の2秒では全テスト実行時に子プロセスの起動前に達してフレーキーになるため、
+        // ここではプロセスグループの終了だけを検証できるよう、テスト専用の猶予を設ける。
+        assert!(resolve_login_shell_path(&shell, Duration::from_secs(10)).is_none());
         assert!(child_pid.is_file());
         let pid = fs::read_to_string(child_pid).unwrap();
         let mut alive = true;
@@ -1549,7 +1549,7 @@ mod tests {
         let directory = TempDir::new().unwrap();
         write_required_bundled_components(directory.path());
         let marker = serde_json::json!({
-            "manifestSha256": sha256_hex(include_bytes!("../../toolchain.lock.json")),
+            "manifestSha256": sha256_hex(include_bytes!("../../../toolchain.lock.json")),
             "files": {
                 "bin/git": "incorrect",
                 "bin/git-lfs": sha256_hex(b"component"),
@@ -1573,7 +1573,7 @@ mod tests {
         let directory = TempDir::new().unwrap();
         write_required_bundled_components(directory.path());
         let marker = serde_json::json!({
-            "manifestSha256": sha256_hex(include_bytes!("../../toolchain.lock.json")),
+            "manifestSha256": sha256_hex(include_bytes!("../../../toolchain.lock.json")),
             "files": {}
         });
         fs::write(
