@@ -8,6 +8,7 @@
         "label": "main",
         "title": "Stella (DEV)",
         "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 14, "y": 34 },
         "hiddenTitle": true,
         "width": 1180,
         "height": 760,

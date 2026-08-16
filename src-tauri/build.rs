@@ -39,7 +39,6 @@ fn main() {
             String::from_utf8_lossy(&output.stdout).trim()
         );
     }
-    println!("cargo:rerun-if-changed=icons/about-icon.png");
     println!("cargo:rerun-if-changed=icons/icon.png");
     tauri_build::build()
 }

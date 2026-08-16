@@ -21,7 +21,7 @@ const DEVELOPMENT_VERSION: &str = "0.0.0-dev";
 const FILES_AND_FOLDERS_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const PRIVACY_SETTINGS_URL: &str = "x-apple.systempreferences:com.apple.preference.security";
-const ABOUT_ICON: Image<'static> = tauri::include_image!("./icons/about-icon.png");
+const ABOUT_ICON: Image<'static> = tauri::include_image!("./icons/icon.png");
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
