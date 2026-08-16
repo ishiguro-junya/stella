@@ -13,7 +13,7 @@
 
 ## 参考画面
 
-- [ファイル変更](docs/assets/changes.png)
+- [ファイル差分](docs/assets/diff.png)
 - [ファイル編集](docs/assets/editor.png)
 - [履歴](docs/assets/history.png)
 - [活動](docs/assets/activity.png)

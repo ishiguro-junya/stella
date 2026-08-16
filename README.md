@@ -16,11 +16,11 @@
 
 ## ✨ 機能
 
-### 変更
+### 差分
 
 ファイル、ハンク、行単位でファイルの差分の確認と編集ができます。  
 
-![ファイル変更の画面](docs/assets/changes.png)
+![ファイル差分の画面](docs/assets/diff.png)
 
 ![ファイル編集の画面](docs/assets/editor.png)
 
@@ -56,9 +56,6 @@ mise install
 mise run setup
 mise run dev
 ```
-
-開発用リポジトリの`origin`にはローカルのベアリポジトリを使用し、GitHubやネットワークへは接続しません。  
-`mise run reset`を実行すると、作業内容とローカルリモートをまとめて初期状態へ戻します。  
 
 ## 🧰 コマンド
 
@@ -97,6 +94,43 @@ mise run dev
 └── docs/                   # ドキュメント
 ```
 
+## 🗺️ 画面遷移図
+
+```text
+アプリ起動
+└── リポジトリ一覧ページ
+    ├── リポジトリを追加ダイアログ
+    ├── リポジトリ情報を変更ダイアログ
+    ├── リポジトリを削除ダイアログ
+    ├── リポジトリの場所を復旧ダイアログ
+    ├── 設定ページ
+    └── リポジトリを開く
+        ├── 差分ページ
+        │   ├── コミットダイアログ
+        │   ├── プルダイアログ
+        │   ├── プッシュダイアログ
+        │   ├── ファイル編集
+        │   └── 変更の破棄・未保存内容の確認ダイアログ
+        ├── 履歴ページ
+        │   ├── ブランチ作成ダイアログ
+        │   ├── タグ作成ダイアログ
+        │   ├── マージダイアログ
+        │   ├── リベースダイアログ
+        │   ├── チェリーピックダイアログ
+        │   ├── リバートダイアログ
+        │   └── リセットダイアログ
+        ├── 活動ページ
+        ├── リポジトリ切り替えダイアログ
+        │   ├── リポジトリを追加ダイアログ
+        │   ├── リポジトリ情報を変更ダイアログ
+        │   └── リポジトリを削除ダイアログ
+        ├── ブランチ切り替えダイアログ
+        │   ├── ブランチ作成ダイアログ
+        │   └── ブランチ削除の確認ダイアログ
+        ├── リポジトリ一覧ページ
+        └── 設定ページ
+```
+
 ## 📚 ドキュメント
 
 - [AGENTS.md](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
@@ -115,6 +149,8 @@ mise run dev
 - [ponytail](https://www.skills.sh/dietrichgebert/ponytail/ponytail)
 - [natural-japanese](https://www.skills.sh/coji/natural-japanese/natural-japanese)
 - [stop-ai-slop-jp](https://www.skills.sh/ikora128/stop-ai-slop-jp/stop-ai-slop-jp)
+- [vercel-react-best-practices](https://www.skills.sh/vercel-labs/agent-skills/vercel-react-best-practices)
+- [frontend-design](https://www.skills.sh/anthropics/skills/frontend-design)
 
 ## 🔗 参考リンク
 
