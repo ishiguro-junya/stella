@@ -824,7 +824,12 @@ kbd {
 
 .titlebar-context-toggle.branch-toggle {
   max-width: min(400px, 64vw);
-  outline: none;
+}
+
+.sidebar-toggle-button:focus-visible,
+.titlebar-context-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .titlebar-context-toggle > span {

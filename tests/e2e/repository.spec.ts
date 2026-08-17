@@ -436,14 +436,12 @@ describe('Repository and Branch navigation', () => {
       await browser.execute(() => {
         const toggle = document.querySelector<HTMLElement>('.branch-toggle');
         if (!toggle) return undefined;
-        const style = getComputedStyle(toggle);
         return {
           focused: document.activeElement === toggle,
           customFocused: toggle.classList.contains('is-focused'),
-          outlineStyle: style.outlineStyle,
         };
       }),
-    ).toEqual({ focused: true, customFocused: false, outlineStyle: 'none' });
+    ).toEqual({ focused: true, customFocused: false });
 
     await $('button[aria-label="設定"]').click();
     await selectSetting('language', 'en');

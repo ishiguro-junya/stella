@@ -195,6 +195,10 @@ describe('workspace pane resizing', () => {
       /\.titlebar-menu-button\[aria-current='page'\]\s*\{[^}]*background:\s*var\(--interactive-selected-surface\);[^}]*color:\s*var\(--interactive-selected-foreground\);/u,
     );
     expect(styles).toMatch(/\.sidebar-toggle-button\s*\{[^}]*flex:\s*none;/u);
+    // 埋め込みWebDriverのキーボードフォーカス判定はフレーキーなため、線の配置はCSSで固定する。
+    expect(styles).toMatch(
+      /\.sidebar-toggle-button:focus-visible,\s*\.titlebar-context-toggle:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);[^}]*outline-offset:\s*-2px;/u,
+    );
     expect(styles).toMatch(/\.diff-action-button\s*\{[^}]*width:\s*28px;[^}]*min-height:\s*28px;/u);
     expect(styles).toMatch(
       /\.diff-action-button > \.lucide\s*\{[^}]*width:\s*16px;[^}]*height:\s*16px;/u,
