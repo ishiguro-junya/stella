@@ -106,6 +106,7 @@ async function commitPendingHistoryAction(description: string): Promise<void> {
 describe('History', () => {
   let fixturePath = '';
   let repositoryPath = '';
+  let fixtureHeadOid = '';
 
   beforeEach(async () => {
     fixturePath = await createFixtureDirectory('history');
@@ -113,10 +114,11 @@ describe('History', () => {
     await writeRepositoryFile(
       repositoryPath,
       'CHANGELOG.md',
-      `${Array.from({ length: 30 }, (_, index) => `History layout line ${index + 1}`).join('\n')}\n`,
+      `${Array.from({ length: 120 }, (_, index) => `History layout line ${index + 1}`).join('\n')}\n`,
     );
     await runGit(repositoryPath, ['add', 'CHANGELOG.md']);
     await runGit(repositoryPath, ['commit', '--amend', '--no-edit']);
+    fixtureHeadOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
     await resetApp({ language: 'ja', appearance: 'dark', stickyFileHeaders: true });
     await openRepository(repositoryPath);
   });
@@ -125,6 +127,7 @@ describe('History', () => {
     await removeFixture(fixturePath);
     fixturePath = '';
     repositoryPath = '';
+    fixtureHeadOid = '';
   });
 
   it('loads History incrementally and keeps every visible graph painted while scrolling', async () => {
@@ -404,7 +407,24 @@ describe('History', () => {
 
   it('scrolls the commit details in the right pane', async () => {
     await $('button=履歴').click();
-    await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
+    const fixtureHeadCommit = $(`[data-history-commit-oid="${fixtureHeadOid}"]`);
+    await fixtureHeadCommit.waitForDisplayed({ timeout: 20_000 });
+    await fixtureHeadCommit.click();
+    await browser.waitUntil(
+      () =>
+        browser.execute((oid) => {
+          const selected = document.querySelector<HTMLElement>(
+            '.history-commit-item.is-current [data-history-commit-oid]',
+          );
+          return (
+            selected?.dataset.historyCommitOid === oid &&
+            [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')].some(
+              (host) => host.shadowRoot?.textContent?.includes('History layout line 120'),
+            )
+          );
+        }, fixtureHeadOid),
+      { timeout: 20_000, timeoutMsg: 'The amended History commit details did not render.' },
+    );
 
     const scrollState = await browser.execute(() => {
       const detailPane = document.querySelector<HTMLElement>('.commit-detail-pane');
@@ -746,51 +766,101 @@ describe('History', () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Git参照のロック競合を避けるため直列に作成する。
       await runGit(repositoryPath, ['branch', branchName, 'HEAD']);
     }
+    const refTargetOid = fixtureHeadOid;
+    const graphTargetOid = (await runGit(repositoryPath, ['rev-parse', '50-50^'])).trim();
+    const secondParentOid = (
+      await runGit(repositoryPath, ['rev-parse', `${graphTargetOid}^2`])
+    ).trim();
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
     await $('button=履歴').click();
     await browser.waitUntil(
       () =>
-        browser.execute((branchNames) => {
-          const firstCommit = document.querySelector<HTMLElement>('.history-commit-item');
-          return branchNames.every((branchName) => firstCommit?.textContent?.includes(branchName));
-        }, overflowBranchNames),
+        browser.execute(
+          ({ branchNames, oid }) => {
+            const commit = document
+              .querySelector<HTMLElement>(`[data-history-commit-oid="${oid}"]`)
+              ?.closest<HTMLElement>('.history-commit-item');
+            return branchNames.every((branchName) => commit?.textContent?.includes(branchName));
+          },
+          { branchNames: overflowBranchNames, oid: refTargetOid },
+        ),
       { timeout: 10_000, timeoutMsg: 'The overflow refs were not shown in History.' },
     );
-    const layout = await browser.execute(() => {
-      const firstCommit = document.querySelector<HTMLElement>('.history-commit-item');
-      const corner = firstCommit?.querySelector<SVGPathElement>(
-        '.history-graph-edge.parent[data-from-lane="0"][data-to-lane="1"]',
-      );
-      const vertical = firstCommit?.querySelector<SVGPathElement>(
-        '.history-graph-edge.parent-vertical[data-to-lane="1"]',
-      );
-      const yamamotoBranch = [
-        ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
-      ].find((commit) => commit.textContent?.includes('ヤンキース戦で7回無失点7奪三振'));
-      const yamamotoBase = [...document.querySelectorAll<HTMLElement>('.history-commit-item')].find(
-        (commit) => commit.textContent?.includes('5回無失点8奪三振でMLB初勝利'),
-      );
-      const branchContinuesVertically = yamamotoBranch?.querySelector(
-        '.history-graph-edge.parent[data-from-lane="1"][data-to-lane="1"]',
-      );
-      const baseStartsDiagonally = yamamotoBase?.querySelector(
-        '.history-graph-edge.incoming[data-from-lane="1"][data-to-lane="0"]',
-      );
-      const refs = [...(firstCommit?.querySelectorAll<HTMLElement>('.ref-chip') ?? [])];
-      const refList = firstCommit?.querySelector<HTMLElement>('.ref-list');
-      if (!corner || !vertical || !refList || refs.length === 0) return null;
-      const cornerRect = corner.getBoundingClientRect();
-      const verticalRect = vertical.getBoundingClientRect();
+    const graphTarget = $(`[data-history-commit-oid="${graphTargetOid}"]`);
+    await graphTarget.waitForDisplayed({ timeout: 20_000 });
+    const secondParent = $(`[data-history-commit-oid="${secondParentOid}"]`);
+    await secondParent.waitForDisplayed({ timeout: 20_000 });
+    const graphLayout = await browser.execute(
+      ({ mergeOid, secondParentOid: targetSecondParentOid }) => {
+        const mergeCommit = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${mergeOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const secondParentCommit = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${targetSecondParentOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const mergeLane =
+          mergeCommit?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
+        const secondParentLane =
+          secondParentCommit?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
+        const corner =
+          mergeLane && secondParentLane
+            ? mergeCommit?.querySelector<SVGPathElement>(
+                `.history-graph-edge.parent[data-from-lane="${mergeLane}"][data-to-lane="${secondParentLane}"]`,
+              )
+            : undefined;
+        const vertical = secondParentLane
+          ? mergeCommit?.querySelector<SVGPathElement>(
+              `.history-graph-edge.parent-vertical[data-to-lane="${secondParentLane}"]`,
+            )
+          : undefined;
+        const yamamotoBranch = [
+          ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
+        ].find((commit) => commit.textContent?.includes('ヤンキース戦で7回無失点7奪三振'));
+        const yamamotoBase = [
+          ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
+        ].find((commit) => commit.textContent?.includes('5回無失点8奪三振でMLB初勝利'));
+        const branchLane =
+          yamamotoBranch?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
+        const baseLane =
+          yamamotoBase?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
+        const branchContinuesVertically = branchLane
+          ? yamamotoBranch?.querySelector(
+              `.history-graph-edge.parent[data-from-lane="${branchLane}"][data-to-lane="${branchLane}"]`,
+            )
+          : undefined;
+        const baseStartsDiagonally =
+          branchLane && baseLane
+            ? yamamotoBase?.querySelector(
+                `.history-graph-edge.incoming[data-from-lane="${branchLane}"][data-to-lane="${baseLane}"]`,
+              )
+            : undefined;
+        if (!corner || !vertical) return null;
+        const cornerRect = corner.getBoundingClientRect();
+        const verticalRect = vertical.getBoundingClientRect();
+        return {
+          mergeLane,
+          secondParentLane,
+          cornerHeight: cornerRect.height,
+          cornerPath: corner.getAttribute('d'),
+          cornerToVerticalGap: Math.abs(cornerRect.bottom - verticalRect.top),
+          branchContinuesVertically: Boolean(branchContinuesVertically),
+          baseStartsDiagonally: Boolean(baseStartsDiagonally),
+        };
+      },
+      { mergeOid: graphTargetOid, secondParentOid },
+    );
+    const refLayout = await browser.execute((oid) => {
+      const targetCommit = document
+        .querySelector<HTMLElement>(`[data-history-commit-oid="${oid}"]`)
+        ?.closest<HTMLElement>('.history-commit-item');
+      const refs = [...(targetCommit?.querySelectorAll<HTMLElement>('.ref-chip') ?? [])];
+      const refList = targetCommit?.querySelector<HTMLElement>('.ref-list');
+      if (!refList || refs.length === 0) return null;
       const refListRect = refList.getBoundingClientRect();
       const visibleRefs = refs.filter(
         (ref) => ref.getBoundingClientRect().bottom <= refListRect.bottom + 1,
       );
       return {
-        cornerHeight: cornerRect.height,
-        cornerPath: corner.getAttribute('d'),
-        cornerToVerticalGap: Math.abs(cornerRect.bottom - verticalRect.top),
-        branchContinuesVertically: Boolean(branchContinuesVertically),
-        baseStartsDiagonally: Boolean(baseStartsDiagonally),
         refRows: new Set(refs.map((ref) => Math.round(ref.getBoundingClientRect().top))).size,
         visibleRefRows: new Set(
           visibleRefs.map((ref) => Math.round(ref.getBoundingClientRect().top)),
@@ -798,25 +868,38 @@ describe('History', () => {
         hasClippedRefs: refList.scrollHeight > refList.clientHeight,
         visibleRefsAreComplete: visibleRefs.every((ref) => ref.scrollWidth <= ref.clientWidth + 1),
       };
-    });
+    }, refTargetOid);
 
-    expect(layout).toEqual(
+    expect(graphLayout).toEqual(
       expect.objectContaining({
         cornerHeight: 8,
-        cornerPath: 'M 6 0 L 18 8',
         cornerToVerticalGap: 0,
         branchContinuesVertically: true,
         baseStartsDiagonally: true,
+      }),
+    );
+    expect(graphLayout?.cornerPath).toBe(
+      `M ${6 + Number(graphLayout?.mergeLane) * 12} 0 L ${6 + Number(graphLayout?.secondParentLane) * 12} 8`,
+    );
+    expect(refLayout).toEqual(
+      expect.objectContaining({
         visibleRefRows: 3,
         hasClippedRefs: true,
         visibleRefsAreComplete: true,
       }),
     );
-    expect(layout?.refRows).toBeGreaterThan(3);
+    expect(refLayout?.refRows).toBeGreaterThan(3);
   });
 
   it('shows several branch tips that have not been merged', async () => {
     const branchNames = ['darvish-mlb-debut', 'family-news', 'ohtani-mlb-debut', 'senga-mlb-debut'];
+    const mainOid = (await runGit(repositoryPath, ['rev-parse', 'main'])).trim();
+    const branchTipOids = await Promise.all(
+      branchNames.map(async (name) => ({
+        name,
+        oid: (await runGit(repositoryPath, ['rev-parse', name])).trim(),
+      })),
+    );
     const unmergedBranches = (
       await runGit(repositoryPath, [
         'branch',
@@ -838,7 +921,9 @@ describe('History', () => {
       },
       { timeout: 10_000, timeoutMsg: 'Unmerged branch tips were not shown in History.' },
     );
-    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
+    const mainCommit = $(`[data-history-commit-oid="${mainOid}"]`);
+    await mainCommit.waitForDisplayed({ timeout: 20_000 });
+    await expect(mainCommit).toHaveText(
       expect.stringContaining('feat: ドジャースがワールドシリーズ2連覇'),
     );
     const branchTips = await browser.execute(
@@ -851,6 +936,8 @@ describe('History', () => {
           const lane = row?.querySelector<HTMLElement>('.history-graph-node')?.dataset.nodeLane;
           return {
             name,
+            oid: row?.querySelector<HTMLElement>('[data-history-commit-oid]')?.dataset
+              .historyCommitOid,
             incomingEdges: row?.querySelectorAll('[data-edge-kind="incoming"]').length,
             continuesToParent: Boolean(
               lane &&
@@ -863,7 +950,12 @@ describe('History', () => {
       branchNames,
     );
     expect(branchTips).toEqual(
-      branchNames.map((name) => ({ name, incomingEdges: 0, continuesToParent: true })),
+      branchTipOids.map(({ name, oid }) => ({
+        name,
+        oid,
+        incomingEdges: 0,
+        continuesToParent: true,
+      })),
     );
   });
 
@@ -1000,18 +1092,26 @@ describe('History', () => {
 
   it('searches history and creates Tags and Branches from a Commit', async function () {
     this.timeout(process.env.STELLA_E2E_BREAKPOINT ? 2_147_483_646 : 120_000);
+    const multiFileCommitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    const mainSecondParentOid = (
+      await runGit(repositoryPath, ['rev-parse', `${multiFileCommitOid}^2`])
+    ).trim();
+    const familyNewsOid = (await runGit(repositoryPath, ['rev-parse', 'family-news'])).trim();
+    const fiftyFiftyOid = (await runGit(repositoryPath, ['rev-parse', '50-50'])).trim();
     await $('button=履歴').click();
+    const multiFileCommit = $(`[data-history-commit-oid="${multiFileCommitOid}"]`);
+    await multiFileCommit.waitForDisplayed({ timeout: 20_000 });
+    const mainSecondParentCommit = $(`[data-history-commit-oid="${mainSecondParentOid}"]`);
+    await mainSecondParentCommit.waitForDisplayed({ timeout: 20_000 });
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="履歴"]')).toHaveAttribute('aria-current', 'page');
     await expect($('.repository-toggle')).toHaveText(
       expect.stringContaining('major-league-baseball'),
     );
-    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
+    await expect(multiFileCommit).toHaveText(
       expect.stringContaining('feat: ドジャースがワールドシリーズ2連覇'),
     );
-    await expect($('.history-commit-item:first-child .commit-row')).toHaveText(
-      expect.stringContaining('山本由伸'),
-    );
+    await expect(multiFileCommit).toHaveText(expect.stringContaining('山本由伸'));
     await browser.waitUntil(
       async () => (await $('.commit-list').getText()).includes('feat: 第一子誕生を発表'),
       { timeout: 10_000, timeoutMsg: 'The first-child branch was not shown in History.' },
@@ -1053,61 +1153,108 @@ describe('History', () => {
         .map((subject) => ({ subject, parentCount: 2 }))
         .toSorted((left, right) => left.subject.localeCompare(right.subject, 'ja')),
     );
-    const showcaseBranch = await browser.execute(() => {
-      const commits = [...document.querySelectorAll<HTMLElement>('.history-commit-item')];
-      const firstChild = commits.find((commit) => commit.textContent?.includes('第一子誕生'));
-      const fiftyFifty = commits.find((commit) => commit.textContent?.includes('(50-50)'));
-      const postseasonBase = commits.find((commit) =>
-        commit.textContent?.includes('feat: ドジャースがナ・リーグ西地区4連覇'),
-      );
-      const firstCommit = commits[0];
-      const firstNode = commits[0]?.querySelector<HTMLElement>('.history-graph-node');
-      const firstChildNode = firstChild?.querySelector<HTMLElement>('.history-graph-node');
-      const branchReturnEdge = fiftyFifty?.querySelector<SVGPathElement>(
-        '.history-graph-edge.incoming[data-from-lane="1"][data-to-lane="0"]',
-      );
-      const nodeTitleOffsets = [
-        ...document.querySelectorAll<HTMLElement>(
-          '.history-working-tree-item, .history-commit-item',
-        ),
-      ]
-        .slice(0, 4)
-        .map((row) => {
-          const node = row.querySelector<HTMLElement>('.history-graph-node');
-          const title = row.querySelector<HTMLElement>('.commit-copy strong');
-          if (!node || !title) return undefined;
-          const nodeRect = node.getBoundingClientRect();
-          const titleRect = title.getBoundingClientRect();
-          return Math.abs(
-            nodeRect.top + nodeRect.height / 2 - (titleRect.top + titleRect.height / 2),
-          );
-        })
-        .filter((offset): offset is number => offset !== undefined);
-      return {
-        firstLane: firstNode?.dataset.nodeLane,
-        firstChildLane: firstChildNode?.dataset.nodeLane,
-        branch: firstChild?.querySelector<HTMLElement>('.ref-chip.branch')?.textContent,
-        branches: [...document.querySelectorAll<HTMLElement>('.ref-chip.branch')].map(
-          (ref) => ref.textContent,
-        ),
-        firstColor: firstNode ? getComputedStyle(firstNode).borderColor : undefined,
-        firstChildColor: firstChildNode ? getComputedStyle(firstChildNode).borderColor : undefined,
-        branchReturnEdgeColor: branchReturnEdge
-          ? getComputedStyle(branchReturnEdge).stroke
-          : undefined,
-        branchReturnEdgePath: branchReturnEdge?.getAttribute('d'),
-        fanOut: [...(firstCommit?.querySelectorAll('[data-edge-kind="parent"]') ?? [])].map(
-          (edge) => `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
-        ),
-        fanIn: [...(postseasonBase?.querySelectorAll('[data-edge-kind="incoming"]') ?? [])].map(
-          (edge) => `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
-        ),
-        maxNodeTitleOffset: Math.max(...nodeTitleOffsets),
-      };
-    });
-    expect(showcaseBranch).toEqual(
-      expect.objectContaining({ firstLane: '0', firstChildLane: '1', branch: 'family-news' }),
+    const showcaseBranch = await browser.execute(
+      ({
+        familyNewsOid: targetFamilyNewsOid,
+        fiftyFiftyOid: targetFiftyFiftyOid,
+        mainOid,
+        mainSecondParentOid: targetMainSecondParentOid,
+      }) => {
+        const commits = [...document.querySelectorAll<HTMLElement>('.history-commit-item')];
+        const postseasonBase = commits.find((commit) =>
+          commit.textContent?.includes('feat: ドジャースがナ・リーグ西地区4連覇'),
+        );
+        const familyNews = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${targetFamilyNewsOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const fiftyFifty = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${targetFiftyFiftyOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const mainCommit = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${mainOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const targetMainSecondParentCommit = document
+          .querySelector<HTMLElement>(`[data-history-commit-oid="${targetMainSecondParentOid}"]`)
+          ?.closest<HTMLElement>('.history-commit-item');
+        const mainNode = mainCommit?.querySelector<HTMLElement>('.history-graph-node');
+        const mainSecondParentNode =
+          targetMainSecondParentCommit?.querySelector<HTMLElement>('.history-graph-node');
+        const familyNewsNode = familyNews?.querySelector<HTMLElement>('.history-graph-node');
+        const fiftyFiftyNode = fiftyFifty?.querySelector<HTMLElement>('.history-graph-node');
+        const postseasonBaseNode =
+          postseasonBase?.querySelector<HTMLElement>('.history-graph-node');
+        const mainLane = mainNode?.dataset.nodeLane;
+        const mainSecondParentLane = mainSecondParentNode?.dataset.nodeLane;
+        const familyNewsLane = familyNewsNode?.dataset.nodeLane;
+        const fiftyFiftyLane = fiftyFiftyNode?.dataset.nodeLane;
+        const postseasonBaseLane = postseasonBaseNode?.dataset.nodeLane;
+        const branchReturnEdge =
+          familyNewsLane && fiftyFiftyLane
+            ? fiftyFifty?.querySelector<SVGPathElement>(
+                `.history-graph-edge.incoming[data-from-lane="${familyNewsLane}"][data-to-lane="${fiftyFiftyLane}"]`,
+              )
+            : undefined;
+        const mainSecondParentEdge =
+          mainLane && mainSecondParentLane
+            ? mainCommit?.querySelector<SVGPathElement>(
+                `.history-graph-edge.parent[data-from-lane="${mainLane}"][data-to-lane="${mainSecondParentLane}"]`,
+              )
+            : undefined;
+        const nodeTitleOffsets = [
+          ...document.querySelectorAll<HTMLElement>(
+            '.history-working-tree-item, .history-commit-item',
+          ),
+        ]
+          .slice(0, 4)
+          .map((row) => {
+            const node = row.querySelector<HTMLElement>('.history-graph-node');
+            const title = row.querySelector<HTMLElement>('.commit-copy strong');
+            if (!node || !title) return undefined;
+            const nodeRect = node.getBoundingClientRect();
+            const titleRect = title.getBoundingClientRect();
+            return Math.abs(
+              nodeRect.top + nodeRect.height / 2 - (titleRect.top + titleRect.height / 2),
+            );
+          })
+          .filter((offset): offset is number => offset !== undefined);
+        return {
+          mainLane,
+          mainSecondParentLane,
+          familyNewsLane,
+          fiftyFiftyLane,
+          postseasonBaseLane,
+          branch: familyNews?.querySelector<HTMLElement>('.ref-chip.branch')?.textContent,
+          branches: [...document.querySelectorAll<HTMLElement>('.ref-chip.branch')].map(
+            (ref) => ref.textContent,
+          ),
+          mainColor: mainNode ? getComputedStyle(mainNode).borderColor : undefined,
+          mainSecondParentColor: mainSecondParentNode
+            ? getComputedStyle(mainSecondParentNode).borderColor
+            : undefined,
+          mainSecondParentEdgeColor: mainSecondParentEdge
+            ? getComputedStyle(mainSecondParentEdge).stroke
+            : undefined,
+          firstChildColor: familyNewsNode
+            ? getComputedStyle(familyNewsNode).borderColor
+            : undefined,
+          branchReturnEdgeColor: branchReturnEdge
+            ? getComputedStyle(branchReturnEdge).stroke
+            : undefined,
+          branchReturnEdgePath: branchReturnEdge?.getAttribute('d'),
+          fanOut: [...(mainCommit?.querySelectorAll('[data-edge-kind="parent"]') ?? [])].map(
+            (edge) =>
+              `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
+          ),
+          fanIn: [...(postseasonBase?.querySelectorAll('[data-edge-kind="incoming"]') ?? [])].map(
+            (edge) =>
+              `${edge.getAttribute('data-from-lane')}->${edge.getAttribute('data-to-lane')}`,
+          ),
+          maxNodeTitleOffset: Math.max(...nodeTitleOffsets),
+        };
+      },
+      { familyNewsOid, fiftyFiftyOid, mainOid: multiFileCommitOid, mainSecondParentOid },
     );
+    expect(showcaseBranch).toEqual(expect.objectContaining({ branch: 'family-news' }));
     expect(showcaseBranch.branches).toEqual(
       expect.arrayContaining([
         'family-news',
@@ -1118,11 +1265,26 @@ describe('History', () => {
         'postseason-blue-jays',
       ]),
     );
-    expect(showcaseBranch.firstChildColor).not.toBe(showcaseBranch.firstColor);
+    expect(showcaseBranch.mainLane).toBeTruthy();
+    expect(showcaseBranch.mainSecondParentLane).toBeTruthy();
+    expect(showcaseBranch.familyNewsLane).toBeTruthy();
+    expect(showcaseBranch.fiftyFiftyLane).toBeTruthy();
+    expect(showcaseBranch.postseasonBaseLane).toBeTruthy();
+    expect(showcaseBranch.familyNewsLane).not.toBe(showcaseBranch.mainLane);
+    expect(showcaseBranch.firstChildColor).not.toBe(showcaseBranch.mainColor);
+    expect(showcaseBranch.mainSecondParentEdgeColor).toBe(showcaseBranch.mainSecondParentColor);
     expect(showcaseBranch.branchReturnEdgeColor).toBe(showcaseBranch.firstChildColor);
-    expect(showcaseBranch.branchReturnEdgePath).toBe('M 18 0 L 6 8');
-    expect(showcaseBranch.fanOut).toEqual(['0->0', '0->1']);
-    expect(showcaseBranch.fanIn).toEqual(Array.from({ length: 12 }, (_, lane) => `${lane}->0`));
+    expect(showcaseBranch.branchReturnEdgePath).toBe(
+      `M ${6 + Number(showcaseBranch.familyNewsLane) * 12} 0 L ${6 + Number(showcaseBranch.fiftyFiftyLane) * 12} 8`,
+    );
+    expect(showcaseBranch.fanOut).toEqual([
+      `${showcaseBranch.mainLane}->${showcaseBranch.mainLane}`,
+      `${showcaseBranch.mainLane}->${showcaseBranch.mainSecondParentLane}`,
+    ]);
+    expect(showcaseBranch.fanIn).toHaveLength(12);
+    expect(
+      showcaseBranch.fanIn.every((edge) => edge.endsWith(`->${showcaseBranch.postseasonBaseLane}`)),
+    ).toBe(true);
     expect(showcaseBranch.maxNodeTitleOffset).toBeLessThanOrEqual(0.5);
     await $('.history-commit-item:not(.is-current) .commit-row').click();
     await browser.waitUntil(
@@ -1282,6 +1444,25 @@ describe('History', () => {
     await historySearch.setValue('一致しない検索');
     await expect($('.history-search-empty')).toHaveText('一致する履歴はありません。');
     await historySearch.setValue('');
+    await browser.waitUntil(
+      () =>
+        browser.execute((oid) => {
+          const search = document.querySelector<HTMLInputElement>('input[aria-label="履歴を検索"]');
+          const list = document.querySelector<HTMLElement>('.commit-list');
+          return (
+            search?.value === '' &&
+            !document.querySelector('.history-search-loading') &&
+            list?.getAttribute('aria-busy') === 'false' &&
+            Boolean(document.querySelector(`[data-history-commit-oid="${oid}"]`))
+          );
+        }, multiFileCommitOid),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The cleared History search did not restore the target commit.',
+      },
+    );
+    await multiFileCommit.click();
+    await expect(multiFileCommit).toHaveAttribute('aria-current', 'true');
     await browser.waitUntil(async () => (await historyDiffFileCount()) === 15, {
       timeout: 10_000,
       timeoutMsg: 'The History multi-file diff did not render fifteen files.',
