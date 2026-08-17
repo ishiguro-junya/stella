@@ -43,6 +43,7 @@ export default function CommitActivityChart({ data, metricLabel }: CommitActivit
           dataKey="value"
           name={metricLabel}
           fill="var(--accent)"
+          isAnimationActive={false}
           maxBarSize={24}
           radius={[3, 3, 0, 0]}
         />

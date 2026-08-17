@@ -17,7 +17,10 @@
         "height": 760,
         "minWidth": 860,
         "minHeight": 560,
-        "incognito": true
+        "incognito": true,
+        "visible": false,
+        "focus": false,
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {
@@ -29,6 +32,8 @@
           "permissions": [
             "core:default",
             "core:window:allow-destroy",
+            "core:window:allow-show",
+            "core:window:allow-set-focus",
             "core:window:allow-start-dragging",
             "core:app:allow-set-app-theme",
             "dialog:allow-open",

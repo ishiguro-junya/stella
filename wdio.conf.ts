@@ -1,5 +1,8 @@
+import { browser } from '@wdio/globals';
+
 const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
 const breakpoint = process.env.STELLA_E2E_BREAKPOINT;
+const headless = process.env.STELLA_E2E_HEADLESS !== 'false';
 
 const readmeScreenshotSpec = './app/test/e2e/readme-screenshots.spec.ts';
 const visualQaSpec = './app/test/e2e/visual-qa.spec.ts';
@@ -33,6 +36,15 @@ export const config: WebdriverIO.Config = {
   connectionRetryCount: 1,
   framework: 'mocha',
   reporters: ['spec'],
+  beforeSuite: async () => {
+    if (headless) return;
+    await browser.tauri.execute(
+      "window.__TAURI__.core.invoke('plugin:window|show', { label: 'main' })",
+    );
+    await browser.tauri.execute(
+      "window.__TAURI__.core.invoke('plugin:window|set_focus', { label: 'main' })",
+    );
+  },
   mochaOpts: {
     ui: 'bdd',
     // WebdriverIOが3ms差し引くため、停止時はMochaの上限値より1ms小さくして実質無効化する。

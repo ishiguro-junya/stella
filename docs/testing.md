@@ -45,6 +45,7 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 実リポジトリや外部ネットワークは使いません。  
 開発用の隔離されたリポジトリだけを操作します。  
 画面移動、主要なGit操作、ダイアログ、キーボード操作、永続化がフロントエンドからRustとGitまで正しく動くことを確認します。  
+既定ではウィンドウを表示せず、画面を確認しながらデバッグする場合は`mise run test:e2e --headless=false`を実行します。  
 
 開発アプリはViteの`1420`番ポート、HMRの`1421`番ポート、`target/debug/Stella (DEV)`を使います。  
 E2Eは組み込みWebDriverの`4445`番ポートと`target/release/Stella (TEST)`を使い、Viteの開発サーバーを起動しません。  
@@ -88,6 +89,7 @@ STELLA_E2E_BREAKPOINT=pull-dialog \
 ピクセル差だけで判断せず、用途別トークン、ブラウザーが算出したスタイル、要素の位置関係も確認します。  
 
 README画像はテスト名で1画面だけ生成できます。  
+`mise run screenshot`もウィンドウを表示せずに撮影します。  
 追加の視覚確認は`visual-qa.spec.ts`から対象を選び、README参照画像以外はGit管理外の`screenshots/`へ保存します。  
 
 ```sh

@@ -32,6 +32,19 @@ describe('App shell and Settings', () => {
   it('launches the native app', async () => {
     await expect(browser).toHaveTitle('Stella');
     await expect($('[data-testid="app-shell"]')).toBeDisplayed();
+    const windowStates = await browser.tauri.execute(({ core }) =>
+      core.invoke('plugin:wdio|get_window_states'),
+    );
+    const headless = process.env.STELLA_E2E_HEADLESS !== 'false';
+    expect(windowStates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'main',
+          is_visible: !headless,
+          is_focused: !headless,
+        }),
+      ]),
+    );
     await debugAt('app-shell');
     const { stdout: launchServices } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
     const app = launchServices
