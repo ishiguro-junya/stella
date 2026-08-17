@@ -55,7 +55,8 @@ STELLA_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_arm64.zip"
 STELLA_UPDATER_ARCHIVE="${STELLA_RELEASE_DIR}/Stella_${STELLA_VERSION}_aarch64.app.tar.gz"
 STELLA_UPDATER_SIGNATURE="${STELLA_UPDATER_ARCHIVE}.sig"
 STELLA_UPDATER_MANIFEST="${STELLA_RELEASE_DIR}/latest.json"
-STELLA_GIT_SOURCE="${STELLA_RELEASE_DIR}/git-2.55.0.tar.xz"
+STELLA_GIT_ARCHIVE="$(node -p "require('./toolchain.lock.json').components.git.archive")"
+STELLA_GIT_SOURCE="${STELLA_RELEASE_DIR}/${STELLA_GIT_ARCHIVE}"
 if [[ "$STELLA_VERSION" == *-* ]]; then
   STELLA_RELEASE_FLAGS=(--prerelease)
 else
@@ -121,7 +122,7 @@ node --import tsx scripts/toolchain.mts release-gate \
 ```
 
 出力がそれぞれ`$STELLA_VERSION`、`com.emuni.stella`、`arm64`であることを確認します。  
-ツールチェーンのリリース検査では、Git 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0のバージョン、arm64アーキテクチャ、チェックサム、ヘルパー、テンプレート、動的リンク先を検証します。  
+ツールチェーンのリリース検査では、同梱するGit、Git LFS、git-flow-nextのバージョン、arm64アーキテクチャ、チェックサム、ヘルパー、テンプレート、動的リンク先を検証します。  
 
 ## 4. リリース成果物を作成する
 
@@ -136,7 +137,7 @@ cp target/release/bundle/macos/Stella.app.tar.gz \
   "$STELLA_UPDATER_ARCHIVE"
 cp target/release/bundle/macos/Stella.app.tar.gz.sig \
   "$STELLA_UPDATER_SIGNATURE"
-cp tmp/toolchain/downloads/git-2.55.0.tar.xz "$STELLA_GIT_SOURCE"
+cp "tmp/toolchain/downloads/${STELLA_GIT_ARCHIVE}" "$STELLA_GIT_SOURCE"
 STELLA_SHA256="$(shasum -a 256 "$STELLA_ARCHIVE" | awk '{print $1}')"
 shasum -a 256 "$STELLA_ARCHIVE"
 shasum -a 256 "$STELLA_GIT_SOURCE"

@@ -433,7 +433,7 @@ describe('App shell and Settings', () => {
       await selectToolchainMode('bundled');
       await expect(toolchain).toHaveText(expect.stringContaining('git version 2.55.0'));
       await expect(toolchain).toHaveText(expect.stringContaining('git-lfs/3.7.1'));
-      await expect(toolchain).toHaveText(expect.stringContaining('1.2.0'));
+      await expect(toolchain).toHaveText(expect.stringContaining('2.0.0'));
       const pendingMode = activeMode === 'bundled' ? 'system' : 'bundled';
       await selectToolchainMode(pendingMode);
       await expect(toolchain.$('.settings-restart-notice')).toBeDisplayed();

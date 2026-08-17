@@ -20,11 +20,11 @@
       "license": "MIT"
     },
     "gitFlow": {
-      "version": "1.2.0",
-      "url": "https://github.com/gittower/git-flow-next/releases/download/v1.2.0/git-flow-next-v1.2.0-darwin-arm64.tar.gz",
-      "archive": "git-flow-next-v1.2.0-darwin-arm64.tar.gz",
-      "sha256": "20456ff5820b4b3a6b287ef0ddad0463b2f6fb4295ab2791877f0288d0d6ec9e",
-      "licenseUrl": "https://raw.githubusercontent.com/gittower/git-flow-next/v1.2.0/LICENSE",
+      "version": "2.0.0",
+      "url": "https://github.com/gittower/git-flow-next/releases/download/v2.0.0/git-flow-next-v2.0.0-darwin-arm64.tar.gz",
+      "archive": "git-flow-next-v2.0.0-darwin-arm64.tar.gz",
+      "sha256": "6b031aaef47a335880004663536e02d3486144a5197385916879e1b7aa3d4187",
+      "licenseUrl": "https://raw.githubusercontent.com/gittower/git-flow-next/v2.0.0/LICENSE",
       "licenseFile": "git-flow-next-LICENSE",
       "licenseSha256": "ffce931e266741227d90ffde3eff4baca8d9739ccc149d0072de0410d9f6852b",
       "license": "BSD-2-Clause"

@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    execArgv: ['--no-experimental-webstorage'],
     globals: true,
     setupFiles: ['./app/test/unit/setup.ts'],
     include: ['app/**/*.{test,spec}.{ts,tsx}', '.markdownlint-rules/**/*.test.mts'],

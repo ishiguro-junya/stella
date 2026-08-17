@@ -7,7 +7,7 @@
 <p align="center">ファイルの差分の確認に集中できるシンプルなGitクライアント</p>
 
 > [!WARNING]
-> このアプリは現在α版です。  
+> このアプリは現在評価版です。  
 > 将来的に破壊的な変更が入る可能性があります。  
 > 操作やバグによって生じた損害について、作者は一切の責任を負いません。  
 
@@ -69,7 +69,9 @@ mise run dev
 | `mise run test:unit` | 単体テストを実行する。 |
 | `mise run test:integration` | 統合テストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
+| `mise run ci` | 全ての検査を実行する。 |
 | `mise run screenshot` | スクリーンショットを生成する。 |
+| `mise run update` | パッケージを最新にアップデートする。 |
 
 ## 📁 ディレクトリ構成
 

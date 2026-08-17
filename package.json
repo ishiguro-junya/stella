@@ -21,7 +21,7 @@
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "2.7.2",
     "i18next": "26.3.6",
-    "lucide-react": "1.30.0",
+    "lucide-react": "1.31.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-i18next": "17.0.11",
@@ -30,12 +30,12 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
-    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
-    "@testing-library/user-event": "14.6.3",
+    "@testing-library/user-event": "14.6.4",
     "@textlint-ja/textlint-rule-preset-ai-writing": "1.7.0",
     "@types/mocha": "10.0.10",
-    "@types/node": "24.13.3",
+    "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
@@ -50,10 +50,10 @@
     "knip": "6.32.2",
     "markdownlint": "0.41.1",
     "markdownlint-cli2": "0.23.2",
-    "oxfmt": "0.62.0",
-    "oxlint": "1.77.0",
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0",
     "oxlint-tsgolint": "7.0.2001",
-    "textlint": "15.7.1",
+    "textlint": "15.8.0",
     "tsx": "4.23.12",
     "typescript": "7.0.2",
     "vite": "8.2.1",
@@ -61,8 +61,8 @@
     "webdriverio": "9.30.1"
   },
   "engines": {
-    "node": "24.18.1",
-    "pnpm": "11.16.0"
+    "node": "26.7.0",
+    "pnpm": "11.22.0"
   },
-  "packageManager": "pnpm@11.16.0"
+  "packageManager": "pnpm@11.22.0"
 }

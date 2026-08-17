@@ -1,10 +1,11 @@
 [tools]
+"cargo:cargo-edit" = "0.13.13"
 cocogitto = "7.0.0"
 lefthook = "2.1.10"
 lychee = "0.24.2"
-node = "24.18.1"
-pnpm = "11.16.0"
-rust = { version = "1.96.0", components = "clippy,rustfmt" }
+node = "26.7.0"
+pnpm = "11.22.0"
+rust = { version = "1.97.1", components = "clippy,rustfmt" }
 taplo = "0.10.0"
 
 [tasks.setup]
@@ -27,6 +28,10 @@ run = "node --import tsx scripts/showcase-fixture.mts reset"
 [tasks.build]
 description = "配布用のTauriアプリをビルドする"
 run = "pnpm exec tauri build"
+
+[tasks.ci]
+description = "全ての検査を実行する"
+run = [ "mise run lint ::: typecheck ::: test", "mise run build" ]
 
 [tasks."install"]
 description = "アプリをビルドして`/Applications`へインストールする"
@@ -94,4 +99,12 @@ run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   "STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT=true pnpm exec wdio run wdio.conf.ts",
+]
+
+[tasks.update]
+description = "パッケージを最新にアップデートする"
+run = [
+  "pnpm update --latest --include-github-actions",
+  "cargo upgrade --manifest-path app/native/Cargo.toml --incompatible allow --pinned allow",
+  "cargo update",
 ]

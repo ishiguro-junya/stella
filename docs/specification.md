@@ -454,7 +454,7 @@ Git、Git Flow、HEAD、URL、GPG、Git LFS、Conventional Commits、UTF-8、LF�
 
 ## Git実行環境
 
-既定ではアプリに同梱したGit 2.55.0、Git LFS 3.7.1、git-flow-next 1.2.0を使用します。  
+既定ではアプリに同梱したGit、Git LFS、git-flow-nextを使用します。  
 設定で内蔵またはシステムを選択でき、変更は保存後の次回起動からリポジトリ操作へ反映します。  
 設定には選択中と次回起動時のモード、各構成要素のバージョン、パス、検証結果を表示します。  
 

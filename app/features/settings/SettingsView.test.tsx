@@ -53,7 +53,7 @@ describe('SettingsView', () => {
         restartRequired: false,
         git: { available: true, path: '/app/git', version: 'git version 2.55.0', error: null },
         gitLfs: { available: true, path: '/app/git-lfs', version: 'git-lfs/3.7.1', error: null },
-        gitFlow: { available: true, path: '/app/git-flow', version: '1.2.0', error: null },
+        gitFlow: { available: true, path: '/app/git-flow', version: '2.0.0', error: null },
         gpgAvailable: true,
         ignorePatterns: '.DS_Store\n._*\nThumbs.db\n[Dd]esktop.ini',
       },

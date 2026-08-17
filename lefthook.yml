@@ -7,12 +7,6 @@ commit-msg:
       run: cog verify --file "{1}"
 
 pre-push:
-  jobs:
-    - name: quality-gates
-      group:
-        parallel: true
-        jobs:
-          - name: lint
-            run: mise run lint
-          - name: test
-            run: mise run test
+  commands:
+    ci:
+      run: mise run ci

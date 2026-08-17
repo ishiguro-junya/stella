@@ -261,7 +261,7 @@ function buildGit(component: ToolchainComponent, archive: string) {
   const stage = join(buildDirectory, 'git-stage');
   mkdirSync(stage, { recursive: true });
   const cargoDirectory = executableDirectory('cargo');
-  if (!cargoDirectory) fail('Cargo is required to build Git 2.55.0 but was not found.');
+  if (!cargoDirectory) fail('Cargo is required to build Git but was not found.');
   const environment = {
     ...process.env,
     PATH: `${cargoDirectory}:${systemPath}`,

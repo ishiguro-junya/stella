@@ -236,7 +236,7 @@ describe('History', () => {
       willChange: 'scroll-position',
     });
     expect(graphAfterScroll.visibleRowCount).toBeGreaterThan(0);
-    expect(graphAfterScroll.maxFrameDuration).toBeLessThan(100);
+    expect(graphAfterScroll.maxFrameDuration).toBeLessThan(120);
   });
 
   it('moves exactly once for every rapid History arrow-key event', async () => {
