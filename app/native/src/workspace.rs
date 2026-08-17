@@ -55,7 +55,7 @@ pub struct Workspace {
     repos: RwLock<HashMap<String, Arc<RepoContext>>>,
     previews: Mutex<HashMap<String, PreviewRecord>>,
     running: Arc<Mutex<HashMap<String, RunControl>>>,
-    common_mutations: Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>,
+    common_mutations: Mutex<HashMap<PathBuf, Arc<RwLock<()>>>>,
 }
 
 struct QueryRegistration {
@@ -78,7 +78,8 @@ struct RepoContext {
     root: PathBuf,
     git_dir: PathBuf,
     common_dir: PathBuf,
-    mutation: Arc<Mutex<()>>,
+    mutation: Arc<RwLock<()>>,
+    snapshot: Mutex<()>,
     tracker: Mutex<GenerationTracker>,
     event_seq: AtomicU64,
     channel: Mutex<Option<Channel<WorkspaceEvent>>>,
@@ -283,7 +284,7 @@ impl Workspace {
                 .lock()
                 .expect("common mutation lock")
                 .entry(common_dir.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .or_insert_with(|| Arc::new(RwLock::new(())))
                 .clone();
 
             let repo = {
@@ -302,6 +303,7 @@ impl Workspace {
                         git_dir,
                         common_dir,
                         mutation,
+                        snapshot: Mutex::new(()),
                         tracker: Mutex::new(GenerationTracker::default()),
                         event_seq: AtomicU64::new(0),
                         channel: Mutex::new(None),
@@ -2338,6 +2340,13 @@ impl Workspace {
     }
 
     fn snapshot(&self, repo: &RepoContext) -> WorkspaceResult<RepoSnapshot> {
+        let _mutation = repo.mutation.read().expect("mutation read lock");
+        self.snapshot_locked(repo)
+    }
+
+    /// `repo.mutation`の書き込みロックを保持する変更操作から呼び出す。
+    fn snapshot_locked(&self, repo: &RepoContext) -> WorkspaceResult<RepoSnapshot> {
+        let _snapshot = repo.snapshot.lock().expect("snapshot lock");
         let output = self
             .git
             .run(Some(&repo.root), GitCommand::Status, None, None)?
@@ -2560,14 +2569,14 @@ impl Workspace {
         request: &ExecuteRequest,
         control: &RunControl,
     ) -> WorkspaceResult<ActionOutcome> {
-        let _mutation = repo.mutation.lock().expect("mutation lock");
+        let _mutation = repo.mutation.write().expect("mutation write lock");
         if control.is_cancelled() {
             return Err(WorkspaceError::new(
                 ErrorCode::Cancelled,
                 "Git operation was cancelled",
             ));
         }
-        let before = self.snapshot(repo)?;
+        let before = self.snapshot_locked(repo)?;
         ensure_generation(request.expected_generation, before.repo_generation)?;
         validate_action(&request.action)?;
         validate_action_targets(&before, &request.action)?;
@@ -2628,7 +2637,7 @@ impl Workspace {
                     sessions.remove(session_id);
                     sessions.insert(refreshed_session.id.clone(), refreshed_session);
                 }
-                let mut snapshot = self.snapshot(repo)?;
+                let mut snapshot = self.snapshot_locked(repo)?;
                 let summary = LocalizedMessage::new("backendConflictResultSaved");
                 let event_seq = self.send_event(
                     repo,
@@ -2686,7 +2695,7 @@ impl Workspace {
                         },
                     )?
                 };
-                let mut snapshot = self.snapshot(repo)?;
+                let mut snapshot = self.snapshot_locked(repo)?;
                 let summary = LocalizedMessage::new("backendConflictChoiceApplied");
                 let event_seq = self.send_event(
                     repo,
@@ -2751,7 +2760,7 @@ impl Workspace {
                     sessions.remove(session_id);
                     sessions.insert(refreshed_session.id.clone(), refreshed_session);
                 }
-                let mut snapshot = self.snapshot(repo)?;
+                let mut snapshot = self.snapshot_locked(repo)?;
                 let summary = LocalizedMessage::new("backendConflictSideApplied");
                 let event_seq = self.send_event(
                     repo,
@@ -2786,7 +2795,7 @@ impl Workspace {
         );
         match execution {
             Ok((summary, output)) => {
-                let snapshot = self.snapshot(repo)?;
+                let snapshot = self.snapshot_locked(repo)?;
                 let event_seq = self.send_event(
                     repo,
                     Some(&request.operation_id),
@@ -2823,7 +2832,7 @@ impl Workspace {
         error: WorkspaceError,
     ) -> WorkspaceError {
         // フック、フィルター、失敗したシーケンサーコマンドもGitの状態を変更する可能性がある。
-        let refreshed = self.snapshot(repo).ok();
+        let refreshed = self.snapshot_locked(repo).ok();
         let generation = refreshed
             .as_ref()
             .map_or(before.repo_generation, |value| value.repo_generation);
@@ -8589,6 +8598,145 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PullDiverged);
         assert_eq!(fixture.git_output(&["rev-parse", "HEAD"]), local_head);
+    }
+
+    #[test]
+    fn polling_during_fetch_does_not_make_the_fetch_generation_stale() {
+        let fixture = GitFixture::new();
+        fixture.write("f.txt", "base\n");
+        fixture.git(&["add", "--", "f.txt"]);
+        fixture.git(&["commit", "-m", "feat: base"]);
+        let bare = fixture.temp.path().join("polling-fetch.git");
+        run_git(
+            fixture.temp.path(),
+            &["init", "--bare", "-b", "main", bare.to_str().unwrap()],
+        );
+        fixture.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        fixture.git(&["push", "-u", "origin", "main"]);
+        let peer = fixture.temp.path().join("polling-fetch-peer");
+        run_git(
+            fixture.temp.path(),
+            &["clone", bare.to_str().unwrap(), peer.to_str().unwrap()],
+        );
+        run_git(&peer, &["config", "user.name", "Remote Test"]);
+        run_git(&peer, &["config", "user.email", "remote@example.test"]);
+        fs::write(peer.join("remote.txt"), "remote\n").unwrap();
+        run_git(&peer, &["add", "--", "remote.txt"]);
+        run_git(&peer, &["commit", "-m", "feat: remote"]);
+        run_git(&peer, &["push", "origin", "main"]);
+
+        let block_references = fixture.temp.path().join("block-references");
+        let references_captured = fixture.temp.path().join("references-captured");
+        let release_references = fixture.temp.path().join("release-references");
+        let captured_references = fixture.temp.path().join("captured-references");
+        let fetch_finished = fixture.temp.path().join("fetch-operation-finished");
+        let wrapper = fixture.temp.path().join("interleaved-git");
+        fs::write(
+            &wrapper,
+            format!(
+                r#"#!/bin/sh
+case "$*" in
+  *"for-each-ref --format=%(refname)%00%(objectname) refs/heads refs/remotes refs/tags"*)
+    if [ -f '{block_references}' ]; then
+      /bin/rm '{block_references}'
+      /usr/bin/git "$@" > '{captured_references}'
+      status=$?
+      : > '{references_captured}'
+      while [ ! -f '{release_references}' ]; do /bin/sleep 0.01; done
+      /bin/cat '{captured_references}'
+      exit "$status"
+    fi
+    ;;
+esac
+exec /usr/bin/git "$@"
+"#,
+                block_references = block_references.display(),
+                captured_references = captured_references.display(),
+                references_captured = references_captured.display(),
+                release_references = release_references.display(),
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&wrapper).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&wrapper, permissions).unwrap();
+
+        let workspace = Arc::new(Workspace::new(
+            GitExecutor::at(wrapper),
+            test_journal_store(&fixture.temp.path().join("polling-fetch-journal")).unwrap(),
+        ));
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        fs::write(&block_references, "").unwrap();
+        let polling_workspace = Arc::clone(&workspace);
+        let polling_repo_id = attached.repo_id.clone();
+        let polling = std::thread::spawn(move || {
+            polling_workspace.query(QueryRequest {
+                repo_id: polling_repo_id,
+                query: Query::Status,
+            })
+        });
+        for _ in 0..200 {
+            if references_captured.is_file() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            references_captured.is_file(),
+            "polling snapshot did not pause"
+        );
+
+        let fetch_workspace = Arc::clone(&workspace);
+        let fetch_repo_id = attached.repo_id.clone();
+        let fetch_generation = attached.snapshot.repo_generation;
+        let fetch_finished_marker = fetch_finished.clone();
+        let fetch = std::thread::spawn(move || {
+            let result = fetch_workspace.execute(ExecuteRequest {
+                operation_id: "fetch-while-polling".into(),
+                repo_id: fetch_repo_id,
+                expected_generation: fetch_generation,
+                action: Action::Fetch {
+                    remote: "origin".into(),
+                },
+                confirmation_token: None,
+            });
+            fs::write(fetch_finished_marker, "").unwrap();
+            result
+        });
+        for _ in 0..200 {
+            if fetch_finished.is_file() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let fetch_overlapped_polling = fetch_finished.is_file();
+        fs::write(&release_references, "").unwrap();
+        polling.join().unwrap().unwrap();
+        let fetched = fetch.join().unwrap().unwrap();
+
+        let pulled = workspace.execute(ExecuteRequest {
+            operation_id: "pull-after-polling".into(),
+            repo_id: attached.repo_id,
+            expected_generation: fetched.repo_generation,
+            action: Action::Pull {
+                remote: "origin".into(),
+                remote_branch: "main".into(),
+            },
+            confirmation_token: None,
+        });
+        assert!(
+            pulled.is_ok(),
+            "Fetch overlapped a polling snapshot ({fetch_overlapped_polling}) and left a stale generation: {:?}",
+            pulled.as_ref().err()
+        );
+        assert!(!fetch_overlapped_polling);
     }
 
     #[test]

@@ -862,6 +862,9 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
         skip: 0,
       });
       if (history.kind !== 'history') throw new Error('Invalid workspace history response.');
+      const latest = state.repos.get(repoId);
+      // 履歴取得中に完了した操作を、取得開始時の古い状態で上書きしない。
+      if (latest && isOlderSnapshot(latest, status.data)) return latest;
       mappedHistory = replaceHistoryCache(state, repoId, history.data);
     }
     state.headOids.set(repoId, nextHeadOid);

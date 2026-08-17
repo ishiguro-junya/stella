@@ -894,6 +894,70 @@ describe('tauriWorkspaceAdapter', () => {
     ]);
   });
 
+  it('does not replace a completed Fetch with an older concurrent refresh', async () => {
+    let historyCalls = 0;
+    let releaseStaleHistory: (() => void) | undefined;
+    const staleHistory = new Promise<void>((resolve) => {
+      releaseStaleHistory = resolve;
+    });
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_attach') return { repoId: 'repo-1', snapshot: snapshot() };
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'status') {
+        return {
+          kind: 'status',
+          data: { ...snapshot(), repoGeneration: 2, eventSeq: 2 },
+        };
+      }
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'history') {
+        historyCalls += 1;
+        if (historyCalls === 2) await staleHistory;
+        return {
+          kind: 'history',
+          data: { commits: [], repoGeneration: Math.min(historyCalls, 3) },
+        };
+      }
+      if (command === 'workspace_execute') {
+        const request = isRecord(args?.request) ? args.request : {};
+        const action = isRecord(request.action) ? request.action : {};
+        const generation = action.kind === 'fetch' ? 3 : 4;
+        return {
+          operationId: `${String(action.kind)}-${generation}`,
+          summary: { id: 'backendFetchCompleted' },
+          repoGeneration: generation,
+          eventSeq: generation,
+          snapshot: { ...snapshot(), repoGeneration: generation, eventSeq: generation },
+          command: {
+            argv: ['git'],
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            cancelled: false,
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    await adapter.attach({ kind: 'open', path: '/tmp/stella' });
+
+    const refresh = adapter.query({ kind: 'snapshot', repoId: 'repo-1' });
+    await vi.waitFor(() => expect(historyCalls).toBe(2));
+    await adapter.execute({ repoId: 'repo-1', action: { kind: 'fetch', remote: 'origin' } });
+    releaseStaleHistory?.();
+    await refresh;
+    await adapter.execute({
+      repoId: 'repo-1',
+      action: { kind: 'pull', remote: 'origin', remoteBranch: 'main' },
+    });
+
+    const pullRequest = invokeMock.mock.calls
+      .filter(([command]) => command === 'workspace_execute')
+      .map(([, args]) => args?.request)
+      .filter(isRecord)
+      .find((request) => isRecord(request.action) && request.action.kind === 'pull');
+    expect(pullRequest?.expectedGeneration).toBe(3);
+  });
+
   it('sets the selected Push target as upstream only when none exists', async () => {
     const untracked = { ...snapshot(), upstream: null };
     invokeMock.mockImplementation(async (command, args) => {
