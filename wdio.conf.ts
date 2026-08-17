@@ -26,7 +26,7 @@ const testModes = {
   scr: {
     appBinaryPath: './target/release/Stella (SCR)',
     embeddedPort: 4447,
-    specs: [readmeScreenshotSpec],
+    specs: [readmeScreenshotSpec, visualQaSpec],
     exclude: [],
   },
 } as const;

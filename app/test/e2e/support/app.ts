@@ -1,11 +1,19 @@
 import { $, browser, expect } from '@wdio/globals';
 import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 type Language = 'en' | 'ja';
-type Appearance = 'system' | 'light' | 'dark';
+export type ScreenshotAppearance = 'light' | 'dark';
+type Appearance = 'system' | ScreenshotAppearance;
 type FontSize = 80 | 90 | 100 | 110 | 120;
 type UiFont = 'system' | 'hiraginoSans' | 'helveticaNeue' | 'avenirNext';
 type CodeFont = 'sfMono' | 'menlo' | 'monaco';
+
+export const SCREENSHOT_APPEARANCES: readonly ScreenshotAppearance[] = ['light', 'dark'];
+const SCREENSHOT_SIZES = [
+  { width: 1180, height: 760 },
+  { width: 860, height: 560 },
+] as const;
 
 export async function debugAt(name: string): Promise<void> {
   if (process.env.STELLA_E2E_BREAKPOINT === name) await browser.debug();
@@ -489,6 +497,22 @@ export async function saveLogicalScreenshot(
   if (changedRatio > 0.001) {
     throw new Error(
       `画像差分が許容範囲を超えました: ${path} (${difference.changedPixels}/${difference.totalPixels} pixels)`,
+    );
+  }
+}
+
+export async function saveScreenshotSizes(
+  outputDirectory: string,
+  appearance: ScreenshotAppearance,
+  relativePath: string,
+): Promise<void> {
+  for (const { width, height } of SCREENSHOT_SIZES) {
+    // 画面サイズを順番に変更して同じ表示状態を撮影するため直列に実行する。
+    // oxlint-disable-next-line no-await-in-loop
+    await saveLogicalScreenshot(
+      join(outputDirectory, appearance, `${width}x${height}`, relativePath),
+      width,
+      height,
     );
   }
 }

@@ -13,11 +13,11 @@
 
 ## 参考画面
 
-- [ファイル差分](screenshots/diff/diff.png)
-- [ファイル編集](screenshots/diff/editor.png)
-- [履歴](screenshots/history/history.png)
-- [活動](screenshots/activity/activity.png)
-- [設定](screenshots/settings/settings.png)
+- [ファイル差分](screenshots/dark/1180x760/diff/diff.png)
+- [ファイル編集](screenshots/dark/1180x760/diff/editor.png)
+- [履歴](screenshots/dark/1180x760/history/history.png)
+- [活動](screenshots/dark/1180x760/activity/activity.png)
+- [設定](screenshots/dark/1180x760/settings/settings.png)
 
 参考画面と仕様が異なる場合は、現在の仕様を優先します。  
 

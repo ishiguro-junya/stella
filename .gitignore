@@ -21,20 +21,13 @@ test-results/
 wdio-logs/
 
 # Screenshots
-screenshots/*
-!screenshots/diff/
-screenshots/diff/*
-!screenshots/diff/diff.png
-!screenshots/diff/editor.png
-!screenshots/history/
-screenshots/history/*
-!screenshots/history/history.png
-!screenshots/activity/
-screenshots/activity/*
-!screenshots/activity/activity.png
-!screenshots/settings/
-screenshots/settings/*
-!screenshots/settings/settings.png
+screenshots/**
+!screenshots/**/
+!screenshots/dark/1180x760/diff/diff.png
+!screenshots/dark/1180x760/diff/editor.png
+!screenshots/dark/1180x760/history/history.png
+!screenshots/dark/1180x760/activity/activity.png
+!screenshots/dark/1180x760/settings/settings.png
 
 # Environment
 *.local

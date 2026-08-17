@@ -3,11 +3,13 @@ import '@wdio/tauri-service';
 import { join } from 'node:path';
 
 import {
+  SCREENSHOT_APPEARANCES,
   debugAt,
   openRepository,
   resetApp,
-  saveLogicalScreenshot,
+  saveScreenshotSizes,
   selectSetting,
+  type ScreenshotAppearance,
 } from './support/app.js';
 import { createFixtureDirectory, removeFixture, runGit } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
@@ -109,16 +111,24 @@ async function prepareDiffScreenshot(): Promise<void> {
   await waitForAddedAndDeletedLines();
 }
 
-async function withReadmeRepository(run: (repositoryPath: string) => Promise<void>): Promise<void> {
+async function withReadmeRepository(
+  run: (repositoryPath: string, appearance: ScreenshotAppearance) => Promise<void>,
+): Promise<void> {
   if (!screenshotMode) return;
   const fixtureRoot = await createFixtureDirectory('readme-screenshots');
   try {
     const repositoryPath = await copyE2EShowcaseRepository(fixtureRoot, 'major-league-baseball', {
       preserveChanges: true,
     });
-    await resetApp({ language: 'ja', appearance: 'dark', splitStageView: true });
-    await openRepository(repositoryPath);
-    await run(repositoryPath);
+    for (const appearance of SCREENSHOT_APPEARANCES) {
+      // 外観ごとに初期状態を復元して同じ操作を撮影するため直列に実行する。
+      // oxlint-disable-next-line no-await-in-loop
+      await resetApp({ language: 'ja', appearance, splitStageView: true });
+      // oxlint-disable-next-line no-await-in-loop
+      await openRepository(repositoryPath);
+      // oxlint-disable-next-line no-await-in-loop
+      await run(repositoryPath, appearance);
+    }
   } finally {
     await removeFixture(fixtureRoot);
   }
@@ -126,7 +136,7 @@ async function withReadmeRepository(run: (repositoryPath: string) => Promise<voi
 
 describe('README用スクリーンショット', () => {
   it('履歴を撮影する', async function () {
-    await withReadmeRepository(async () => {
+    await withReadmeRepository(async (_repositoryPath, appearance) => {
       await $('button=履歴').click();
       await expect($('.history-view')).toBeDisplayed();
       const worldSeries = $('.history-commit-item > .commit-row');
@@ -142,22 +152,22 @@ describe('README用スクリーンショット', () => {
       await waitForAddedAndDeletedLines();
       await blurActiveElement();
       await debugAt('history');
-      await saveLogicalScreenshot(join(outputDirectory, 'history', 'history.png'), 1180, 760);
+      await saveScreenshotSizes(outputDirectory, appearance, join('history', 'history.png'));
     });
   });
 
   it('差分を撮影する', async function () {
-    await withReadmeRepository(async () => {
+    await withReadmeRepository(async (_repositoryPath, appearance) => {
       await prepareDiffScreenshot();
       await expect($('.diff-view')).toBeDisplayed();
       await blurActiveElement();
       await debugAt('diff-screenshot');
-      await saveLogicalScreenshot(join(outputDirectory, 'diff', 'diff.png'), 1180, 760);
+      await saveScreenshotSizes(outputDirectory, appearance, join('diff', 'diff.png'));
     });
   });
 
   it('エディタを撮影する', async function () {
-    await withReadmeRepository(async () => {
+    await withReadmeRepository(async (_repositoryPath, appearance) => {
       await prepareDiffScreenshot();
       const dodgersRoster = $(
         'button.change-row[aria-label$="src/teams/dodgers/shohei-ohtani.ts"]',
@@ -197,12 +207,12 @@ describe('README用スクリーンショット', () => {
       );
       await expect(editor.$('.cm-activeLineGutter')).toHaveText('17');
       await debugAt('editor');
-      await saveLogicalScreenshot(join(outputDirectory, 'diff', 'editor.png'), 1180, 760);
+      await saveScreenshotSizes(outputDirectory, appearance, join('diff', 'editor.png'));
     });
   });
 
   it('活動を撮影する', async function () {
-    await withReadmeRepository(async (repositoryPath) => {
+    await withReadmeRepository(async (repositoryPath, appearance) => {
       // 基底フィクスチャの日付に時計を固定し、撮影時刻による画像差分を防ぐ。
       const screenshotNow = new Date(
         (await runGit(repositoryPath, ['log', '-1', '--format=%cI'])).trim(),
@@ -282,12 +292,12 @@ describe('README用スクリーンショット', () => {
       });
       await blurActiveElement();
       await debugAt('activity');
-      await saveLogicalScreenshot(join(outputDirectory, 'activity', 'activity.png'), 1180, 760);
+      await saveScreenshotSizes(outputDirectory, appearance, join('activity', 'activity.png'));
     });
   });
 
   it('設定を撮影する', async function () {
-    await withReadmeRepository(async () => {
+    await withReadmeRepository(async (_repositoryPath, appearance) => {
       await $('button[aria-label="設定"]').click();
       await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
       await $('button[data-settings-category="editor"]').click();
@@ -295,7 +305,7 @@ describe('README用スクリーンショット', () => {
       await expect($('#settings-category-editor-title')).toBeDisplayed();
       await blurActiveElement();
       await debugAt('settings');
-      await saveLogicalScreenshot(join(outputDirectory, 'settings', 'settings.png'), 1180, 760);
+      await saveScreenshotSizes(outputDirectory, appearance, join('settings', 'settings.png'));
     });
   });
 });

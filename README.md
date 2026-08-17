@@ -17,27 +17,27 @@
 
 ファイル、ハンク、行単位でファイルの差分の確認と編集ができます。  
 
-![ファイル差分の画面](screenshots/diff/diff.png)
+![ファイル差分の画面](screenshots/dark/1180x760/diff/diff.png)
 
-![ファイル編集の画面](screenshots/diff/editor.png)
+![ファイル編集の画面](screenshots/dark/1180x760/diff/editor.png)
 
 ### 履歴
 
 コミット、ブランチ、タグを確認し、検索できます。  
 
-![履歴の画面](screenshots/history/history.png)
+![履歴の画面](screenshots/dark/1180x760/history/history.png)
 
 ### 活動
 
 コミット数、コントリビューター数、ブランチ数の推移を閲覧できます。  
 
-![活動の画面](screenshots/activity/activity.png)
+![活動の画面](screenshots/dark/1180x760/activity/activity.png)
 
 ### 設定
 
 言語や外観、文字サイズ、レイアウト、ステージの表示などを好みに合わせて設定できます。  
 
-![設定の画面](screenshots/settings/settings.png)
+![設定の画面](screenshots/dark/1180x760/settings/settings.png)
 
 ## 📦 インストール
 

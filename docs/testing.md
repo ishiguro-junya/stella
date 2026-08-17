@@ -97,9 +97,10 @@ STELLA_E2E_BREAKPOINT=pull-dialog \
 画面全体から判断できる場合は、拡大画像や比較画像を追加しません。  
 ピクセル差だけで判断せず、用途別トークン、ブラウザーが算出したスタイル、要素の位置関係も確認します。  
 
-README画像はテスト名で1画面だけ生成できます。  
-`mise run screenshot`もウィンドウを表示せずに撮影します。  
-追加の視覚確認は`visual-qa.spec.ts`から対象を選び、README参照画像以外はGit管理外の`screenshots/`へ保存します。  
+`mise run screenshot`はREADME用画像と追加の視覚確認画像を、ライトとダーク、1180×760と860×560の組み合わせで生成します。  
+ウィンドウは表示せず、`screenshots/<外観>/<サイズ>/<画面・状態>.png`へ保存します。  
+テスト名を指定すると、対象画面の4画像だけを生成できます。  
+README参照画像以外はGit管理しません。  
 
 ```sh
 mise run screenshot -- --mochaOpts.grep '履歴を撮影する'
@@ -123,8 +124,8 @@ mise run test:visual-regression --update
 ## 検証用データと画像を製品データから分離する
 
 - E2Eと視覚検証では、テストが作成したリポジトリとローカルのベアリモートだけを使います。
-- スクリーンショットは画面遷移に沿って`screenshots/diff`、`history`、`activity`、`settings`、`repositories`、`branches`へ分けます。
+- スクリーンショットは外観、ウィンドウサイズ、画面遷移の順に、`screenshots/<light|dark>/<1180x760|860x560>/<画面・状態>.png`へ分けます。
 - ビジュアルリグレッションの基準画像と比較画像は`tmp/visual-regression`へ保存します。
-- READMEへ掲載する5画像だけをGit管理し、それ以外のスクリーンショット、切り出し画像、比較画像はGit管理外とします。
+- READMEへ掲載する`screenshots/dark/1180x760`配下の5画像だけをGit管理し、それ以外のスクリーンショット、切り出し画像、比較画像はGit管理外とします。
 - ローカルの絶対パス、テスト件数、実行日時、過去の合格結果はドキュメントへ記録しません。
 - 個別の実行結果は、コミットまたはプルリクエストの説明へ残します。
