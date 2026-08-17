@@ -2,11 +2,18 @@ import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 import { join } from 'node:path';
 
-import { openRepository, resetApp, saveLogicalScreenshot, selectSetting } from './support/app.js';
+import {
+  debugAt,
+  openRepository,
+  resetApp,
+  saveLogicalScreenshot,
+  selectSetting,
+} from './support/app.js';
 import { createFixtureDirectory, removeFixture } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
-const outputDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
+const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
+const outputDirectory = 'screenshots';
 
 async function waitForDiff(): Promise<void> {
   await browser.waitUntil(
@@ -58,19 +65,68 @@ async function recordStageActivity(path: string): Promise<void> {
   await $(`input[aria-label="ステージ ${path}"]`).waitForDisplayed({ timeout: 20_000 });
 }
 
+async function recordScreenshotActivity(): Promise<void> {
+  for (const path of [
+    'src/records.ts',
+    'README.md',
+    'tests/records.test.ts',
+    'tests/fifty-fifty.test.ts',
+    'src/career.ts',
+  ]) {
+    // StageとUnstageは同じ画面状態を順番に更新するため直列に実行する。
+    // oxlint-disable-next-line no-await-in-loop
+    await recordStageActivity(path);
+  }
+}
+
+async function prepareDiffScreenshot(): Promise<void> {
+  await recordScreenshotActivity();
+  await $('button[aria-label="設定"]').click();
+  await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
+  await $('button[data-settings-category="diff"]').click();
+  await selectSetting('stage-display', 'hide');
+  await $('button=差分').click();
+  await expect($('.diff-view')).toBeDisplayed();
+  await expect($('.change-groups')).toHaveElementClass('is-stage-hidden');
+  await expect($('.stage-toggle')).not.toExist();
+
+  await $('button.change-row[aria-label$="src/teams/angels/shohei-ohtani.ts"]').click();
+  await browser.execute(() => {
+    document
+      .querySelector<HTMLButtonElement>(
+        'button.change-row[aria-label$="src/teams/dodgers/shohei-ohtani.ts"]',
+      )
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+  });
+  await browser.waitUntil(
+    async () =>
+      (await browser.execute(
+        () => document.querySelectorAll('button.change-row[aria-pressed="true"]').length,
+      )) === 2,
+    { timeout: 10_000, timeoutMsg: '移籍前後のファイルを同時選択できませんでした。' },
+  );
+  await waitForDiff();
+  await waitForAddedAndDeletedLines();
+}
+
+async function withReadmeRepository(run: () => Promise<void>): Promise<void> {
+  if (!screenshotMode) return;
+  const fixtureRoot = await createFixtureDirectory('readme-screenshots');
+  try {
+    const repositoryPath = await copyE2EShowcaseRepository(fixtureRoot, 'major-league-baseball', {
+      preserveChanges: true,
+    });
+    await resetApp({ language: 'ja', appearance: 'dark', splitStageView: true });
+    await openRepository(repositoryPath);
+    await run();
+  } finally {
+    await removeFixture(fixtureRoot);
+  }
+}
+
 describe('README用スクリーンショット', () => {
-  it('差分、履歴、活動、設定を撮影する', async function () {
-    this.timeout(180_000);
-    if (!outputDirectory) return;
-
-    const fixtureRoot = await createFixtureDirectory('readme-screenshots');
-    try {
-      const repositoryPath = await copyE2EShowcaseRepository(fixtureRoot, 'major-league-baseball', {
-        preserveChanges: true,
-      });
-
-      await resetApp({ language: 'ja', appearance: 'dark', splitStageView: true });
-      await openRepository(repositoryPath);
+  it('履歴を撮影する', async function () {
+    await withReadmeRepository(async () => {
       await $('button=履歴').click();
       await expect($('.history-view')).toBeDisplayed();
       const worldSeries = $('.history-commit-item > .commit-row');
@@ -85,52 +141,27 @@ describe('README用スクリーンショット', () => {
       await waitForDiff();
       await waitForAddedAndDeletedLines();
       await blurActiveElement();
-      await saveLogicalScreenshot(join(outputDirectory, 'history.png'), 1180, 760);
+      await debugAt('history');
+      await saveLogicalScreenshot(join(outputDirectory, 'history', 'history.png'), 1180, 760);
+    });
+  });
 
-      await browser.execute(() => window.dispatchEvent(new Event('focus')));
-      await $('.history-working-tree-entry').waitForDisplayed({ timeout: 20_000 });
-      await $('button=差分').click();
+  it('差分を撮影する', async function () {
+    await withReadmeRepository(async () => {
+      await prepareDiffScreenshot();
       await expect($('.diff-view')).toBeDisplayed();
+      await blurActiveElement();
+      await debugAt('diff-screenshot');
+      await saveLogicalScreenshot(join(outputDirectory, 'changes', 'diff.png'), 1180, 760);
+    });
+  });
 
-      await recordStageActivity('src/records.ts');
-      await recordStageActivity('README.md');
-      await recordStageActivity('tests/records.test.ts');
-      await recordStageActivity('tests/fifty-fifty.test.ts');
-      await recordStageActivity('src/career.ts');
-
-      await $('button[aria-label="設定"]').click();
-      await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
-      await $('button[data-settings-category="diff"]').click();
-      await selectSetting('stage-display', 'hide');
-      await $('button=差分').click();
-      await expect($('.diff-view')).toBeDisplayed();
-      await expect($('.change-groups')).toHaveElementClass('is-stage-hidden');
-      await expect($('.stage-toggle')).not.toExist();
-
-      const angelsRoster = $('button.change-row[aria-label$="src/teams/angels/shohei-ohtani.ts"]');
+  it('エディタを撮影する', async function () {
+    await withReadmeRepository(async () => {
+      await prepareDiffScreenshot();
       const dodgersRoster = $(
         'button.change-row[aria-label$="src/teams/dodgers/shohei-ohtani.ts"]',
       );
-      await angelsRoster.click();
-      await browser.execute(() => {
-        document
-          .querySelector<HTMLButtonElement>(
-            'button.change-row[aria-label$="src/teams/dodgers/shohei-ohtani.ts"]',
-          )
-          ?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
-      });
-      await browser.waitUntil(
-        async () =>
-          (await browser.execute(
-            () => document.querySelectorAll('button.change-row[aria-pressed="true"]').length,
-          )) === 2,
-        { timeout: 10_000, timeoutMsg: '移籍前後のファイルを同時選択できませんでした。' },
-      );
-      await waitForDiff();
-      await waitForAddedAndDeletedLines();
-      await blurActiveElement();
-      await saveLogicalScreenshot(join(outputDirectory, 'diff.png'), 1180, 760);
-
       await dodgersRoster.click();
       await expect(dodgersRoster).toHaveAttribute('aria-current', 'true');
       await expect($('#selected-file-title')).toHaveText('src/teams/dodgers/shohei-ohtani.ts');
@@ -165,8 +196,14 @@ describe('README用スクリーンショット', () => {
         'src/teams/dodgers/shohei-ohtani.tsを編集',
       );
       await expect(editor.$('.cm-activeLineGutter')).toHaveText('17');
-      await saveLogicalScreenshot(join(outputDirectory, 'editor.png'), 1180, 760);
+      await debugAt('editor');
+      await saveLogicalScreenshot(join(outputDirectory, 'changes', 'editor.png'), 1180, 760);
+    });
+  });
 
+  it('活動を撮影する', async function () {
+    await withReadmeRepository(async () => {
+      await recordScreenshotActivity();
       await $('button[aria-label="活動"]').click();
       await expect($('.activity-view')).toBeDisplayed();
       await browser.waitUntil(
@@ -224,16 +261,21 @@ describe('README用スクリーンショット', () => {
           .forEach((bar) => bar.setAttribute('fill', accent));
       });
       await blurActiveElement();
-      await saveLogicalScreenshot(join(outputDirectory, 'activity.png'), 1180, 760);
+      await debugAt('activity');
+      await saveLogicalScreenshot(join(outputDirectory, 'activity', 'activity.png'), 1180, 760);
+    });
+  });
 
+  it('設定を撮影する', async function () {
+    await withReadmeRepository(async () => {
       await $('button[aria-label="設定"]').click();
       await $('#settings-title').waitForDisplayed({ timeout: 10_000 });
       await $('button[data-settings-category="editor"]').click();
       await $('#settings-category-editor-title').waitForDisplayed({ timeout: 10_000 });
+      await expect($('#settings-category-editor-title')).toBeDisplayed();
       await blurActiveElement();
-      await saveLogicalScreenshot(join(outputDirectory, 'settings.png'), 1180, 760);
-    } finally {
-      await removeFixture(fixtureRoot);
-    }
+      await debugAt('settings');
+      await saveLogicalScreenshot(join(outputDirectory, 'settings', 'settings.png'), 1180, 760);
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { conflictDocument } from '../test/fixtures';
+import { conflictDocument } from '../test/unit/fixtures';
 import { profileConflictDocument } from './performance';
 
 describe('conflict performance profile', () => {

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import type { QueryResult } from '../../domain/workspace';
-import { repoSnapshot } from '../../test/fixtures';
+import { repoSnapshot } from '../../test/unit/fixtures';
 import { RemoteOperationDialog } from './RemoteOperationDialog';
 
 const branches: QueryResult = {

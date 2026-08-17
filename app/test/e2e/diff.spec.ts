@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  debugAt,
   expectAttachedTabs,
   expectInteractiveSelectedColors,
   openRepository,
@@ -473,6 +474,7 @@ describe('Diff', () => {
     const trigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await trigger.click();
     const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+    await debugAt('commit-dialog');
     await dialog.$('[data-commit-field="description"]').setValue('全変更をコミットする');
     await dialog.$('.commit-form button[type="submit"]').click();
 
@@ -529,6 +531,7 @@ describe('Diff', () => {
         browser.execute(() => document.documentElement.dataset.pullDialogReadyTop !== undefined),
       { timeoutMsg: 'Pull dialog did not finish loading remote branches.' },
     );
+    await debugAt('pull-dialog');
     const positions = await browser.execute(() => {
       const data = document.documentElement.dataset;
       return {
@@ -660,6 +663,7 @@ describe('Diff', () => {
     await $('.diff-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
     await expect(pullDialog).toBeDisplayed();
+    await debugAt('pull-dialog');
     await browser.waitUntil(
       () =>
         browser.execute(
@@ -686,6 +690,7 @@ describe('Diff', () => {
     await $('.diff-action-button[aria-label="プッシュ"]').click();
     let pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
+    await debugAt('push-dialog');
     await browser.waitUntil(
       () =>
         browser.execute(
@@ -1010,6 +1015,7 @@ describe('Diff', () => {
     await expect(activeCommitTrigger).toHaveAttribute('aria-expanded', 'true');
     const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
     await expect(commitDialog).toBeDisplayed();
+    await debugAt('commit-dialog');
     expect(
       await browser.execute(() => document.activeElement?.getAttribute('data-commit-field')),
     ).toBe('description');
@@ -1465,6 +1471,7 @@ describe('Diff', () => {
     await $('.file-status.conflicted').waitForDisplayed({ timeout: 20_000 });
     await $('button.change-row').click();
     await $('.conflict-workspace').waitForDisplayed({ timeout: 10_000 });
+    await debugAt('conflict-editor');
     await expectAttachedTabs('.conflict-comparison .segmented');
     await expectInteractiveSelectedColors('.conflict-comparison .segmented [aria-selected="true"]');
     await expectInteractiveSelectedColors('.block-selector[aria-current="true"]');
@@ -1513,6 +1520,7 @@ describe('Diff', () => {
     }
     await editor.waitForDisplayed({ timeout: 10_000 });
     const hunkEditorPosition = await waitForEditorPosition('line-117');
+    await debugAt('hunk-editor');
     expect(hunkEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(hunkEditorPosition.activeLine).toBe('line-117');
     expect(hunkEditorPosition.focused).toBe(true);
@@ -1651,6 +1659,7 @@ describe('Diff', () => {
     await $('button=選択した行を編集').click();
     await $('.file-editor-pane').waitForDisplayed({ timeout: 10_000 });
     const lineEditorPosition = await waitForEditorPosition('changed-120');
+    await debugAt('line-editor');
     expect(lineEditorPosition.scrollTop).toBeGreaterThan(0);
     expect(lineEditorPosition.activeLine).toBe('changed-120');
     expect(lineEditorPosition.focused).toBe(true);

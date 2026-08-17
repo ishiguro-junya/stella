@@ -5,6 +5,7 @@ import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
 import {
+  debugAt,
   expectInteractiveSelectedColors,
   resetApp,
   selectSetting,
@@ -31,6 +32,7 @@ describe('App shell and Settings', () => {
   it('launches the native app', async () => {
     await expect(browser).toHaveTitle('Stella');
     await expect($('[data-testid="app-shell"]')).toBeDisplayed();
+    await debugAt('app-shell');
     const { stdout: launchServices } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
     const app = launchServices
       .split('\n---')

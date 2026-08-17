@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ensureDevelopmentShowcaseFixtures } from '../tests/e2e/support/showcaseRepository.js';
+import { ensureDevelopmentShowcaseFixtures } from '../app/test/e2e/support/showcaseRepository.js';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

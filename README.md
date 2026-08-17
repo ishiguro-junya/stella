@@ -20,27 +20,27 @@
 
 ファイル、ハンク、行単位でファイルの差分の確認と編集ができます。  
 
-![ファイル差分の画面](docs/assets/diff.png)
+![ファイル差分の画面](screenshots/changes/diff.png)
 
-![ファイル編集の画面](docs/assets/editor.png)
+![ファイル編集の画面](screenshots/changes/editor.png)
 
 ### 履歴
 
 コミット、ブランチ、タグを確認し、検索できます。  
 
-![履歴の画面](docs/assets/history.png)
+![履歴の画面](screenshots/history/history.png)
 
 ### 活動
 
 コミット数、コントリビューター数、ブランチ数の推移を閲覧できます。  
 
-![活動の画面](docs/assets/activity.png)
+![活動の画面](screenshots/activity/activity.png)
 
 ### 設定
 
 言語や外観、文字サイズ、レイアウト、ステージの表示などを好みに合わせて設定できます。  
 
-![設定の画面](docs/assets/settings.png)
+![設定の画面](screenshots/settings/settings.png)
 
 ## 📦 インストール
 
@@ -87,12 +87,14 @@ mise run dev
 │   ├── i18n/               # i18nextの設定と翻訳カタログ
 │   ├── native/             # Git操作とTauriの設定
 │   ├── persistence/        # アプリ設定の保存
-│   ├── test/               # ユニットテスト
+│   ├── test/               # テストコードと共通処理
+│   │   ├── e2e/            # E2Eテスト
+│   │   └── unit/           # 単体テストの共通処理
 │   ├── theme/              # 外観テーマの制御
 │   └── ui/                 # 共通の画面部品
-├── tests/                  # E2Eテストのコード
-├── scripts/                # スクリプト
-└── docs/                   # ドキュメント
+├── docs/                   # ドキュメント
+├── screenshots/            # 画面ごとのスクリーンショット
+└── scripts/                # スクリプト
 ```
 
 ## 🗺️ 画面遷移図

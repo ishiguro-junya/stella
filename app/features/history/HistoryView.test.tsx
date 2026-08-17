@@ -11,7 +11,7 @@ import type {
   QueryResult,
   WorkspaceAction,
 } from '../../domain/workspace';
-import { repoSnapshot } from '../../test/fixtures';
+import { repoSnapshot } from '../../test/unit/fixtures';
 import { HistoryView } from './HistoryView';
 
 const { diffSurfaceMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(() => ({

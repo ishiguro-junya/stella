@@ -7,7 +7,7 @@
     "scripts/showcase-fixture.mts",
     "scripts/tauri-hook.mts",
     "scripts/toolchain.mts",
-    "tests/e2e/**/*.spec.ts",
+    "app/test/e2e/**/*.spec.ts",
   ],
   "ignoreDependencies": [
     // mise.tomlから直接実行するコマンドはKnipが参照を追跡できない。

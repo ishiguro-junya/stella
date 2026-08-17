@@ -12,7 +12,7 @@ import type {
 } from './domain/workspace';
 import type { AppUpdateInfo, AppUpdateInstallEvent } from './features/update/appUpdate';
 import { DEFAULT_PREFERENCES, readPreferences, writePreferences } from './persistence/preferences';
-import { conflictDocument, repoSnapshot } from './test/fixtures';
+import { conflictDocument, repoSnapshot } from './test/unit/fixtures';
 
 const tauriWindowMock = vi.hoisted(() => ({
   destroy: vi.fn<() => Promise<void>>(async () => undefined),

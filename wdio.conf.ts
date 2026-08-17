@@ -1,13 +1,13 @@
-const visualQaDirectory = process.env.STELLA_VISUAL_QA_DIR;
-if (visualQaDirectory) {
-  // 保存先はテスト用ワーカーだけへ渡し、ネイティブアプリの起動環境から分離する。
-  delete process.env.STELLA_VISUAL_QA_DIR;
-}
+const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
+const breakpoint = process.env.STELLA_E2E_BREAKPOINT;
+
+const readmeScreenshotSpec = './app/test/e2e/readme-screenshots.spec.ts';
+const visualQaSpec = './app/test/e2e/visual-qa.spec.ts';
 
 export const config: WebdriverIO.Config = {
   runner: 'local',
-  ...(visualQaDirectory ? { runnerEnv: { VISUAL_QA_OUTPUT_DIR: visualQaDirectory } } : {}),
-  specs: ['./tests/e2e/**/*.spec.ts'],
+  specs: screenshotMode ? [readmeScreenshotSpec] : ['./app/test/e2e/**/*.spec.ts'],
+  exclude: screenshotMode ? [] : [readmeScreenshotSpec, visualQaSpec],
   maxInstances: 1,
   services: [
     [
@@ -35,6 +35,7 @@ export const config: WebdriverIO.Config = {
   reporters: ['spec'],
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60_000,
+    // WebdriverIOが3ms差し引くため、停止時はMochaの上限値より1ms小さくして実質無効化する。
+    timeout: breakpoint ? 2_147_483_646 : screenshotMode ? 180_000 : 60_000,
   },
 };

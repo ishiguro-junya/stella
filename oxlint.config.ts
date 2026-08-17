@@ -29,7 +29,7 @@ export default defineConfig({
   ],
   overrides: [
     {
-      files: ['*.config.ts', 'scripts/**/*.mts', 'tests/e2e/**/*.ts'],
+      files: ['*.config.ts', 'scripts/**/*.mts', 'app/test/e2e/**/*.ts'],
       env: {
         browser: false,
         node: true,
@@ -37,6 +37,7 @@ export default defineConfig({
     },
     {
       files: ['app/**/*.{test,spec}.{ts,tsx}'],
+      excludeFiles: ['app/test/e2e/**'],
       env: {
         vitest: true,
       },

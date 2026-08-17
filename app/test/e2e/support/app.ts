@@ -7,6 +7,10 @@ type FontSize = 80 | 90 | 100 | 110 | 120;
 type UiFont = 'system' | 'hiraginoSans' | 'helveticaNeue' | 'avenirNext';
 type CodeFont = 'sfMono' | 'menlo' | 'monaco';
 
+export async function debugAt(name: string): Promise<void> {
+  if (process.env.STELLA_E2E_BREAKPOINT === name) await browser.debug();
+}
+
 interface ResetAppOptions {
   language?: Language;
   appearance?: Appearance;
@@ -266,6 +270,7 @@ export async function openRepository(
   const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
   await dialog.$(`button=${language === 'ja' ? 'ローカル' : 'Local'}`).click();
+  await debugAt('add-repository-dialog');
   if (options.inspectDialog) {
     await expect(dialog.$('[role="tab"][aria-selected="true"]')).toHaveText(
       language === 'ja' ? 'ローカル' : 'Local',
@@ -277,16 +282,19 @@ export async function openRepository(
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   await waitForDiffOrThrow();
+  await debugAt('diff');
 }
 
 export async function openRepositoryFromSwitcher(path: string, language: Language): Promise<void> {
   await $('.repository-toggle').click();
   const switcher = $('[role="dialog"]');
   await expect(switcher).toBeDisplayed();
+  await debugAt('repository-switcher');
   await switcher.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
   await expect(dialog).toBeDisplayed();
   await dialog.$(`button=${language === 'ja' ? 'ローカル' : 'Local'}`).click();
+  await debugAt('add-repository-dialog');
   await dialog.$('#repository-location').setValue(path);
   await dialog.$(`button=${language === 'ja' ? '追加' : 'Add'}`).click();
   await $(`.repository-toggle[data-repository-path="${path}"]`).waitForDisplayed({
@@ -303,6 +311,7 @@ export async function commitCurrentChange(description: string): Promise<void> {
   await trigger.waitForClickable();
   await trigger.click();
   const dialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+  await debugAt('commit-dialog');
   const type = dialog.$('[data-commit-field="type"]');
   if (await type.isExisting()) await type.setValue('feat');
   await dialog.$('[data-commit-field="description"]').setValue(description);

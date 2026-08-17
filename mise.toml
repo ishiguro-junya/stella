@@ -80,9 +80,9 @@ run = [
 ]
 
 [tasks."screenshot"]
-description = "README用のスクリーンショットを生成する"
+description = "スクリーンショットを生成する"
 run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",
-  "STELLA_VISUAL_QA_DIR=docs/assets pnpm exec wdio run wdio.conf.ts --spec tests/e2e/readme-screenshots.spec.ts",
+  "STELLA_SCREENSHOT=true pnpm exec wdio run wdio.conf.ts",
 ]

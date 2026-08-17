@@ -1,7 +1,7 @@
 import {
   resetDevelopmentShowcaseFixture,
   setupShowcaseFixtureBase,
-} from '../tests/e2e/support/showcaseRepository.js';
+} from '../app/test/e2e/support/showcaseRepository.js';
 
 const command = process.argv[2];
 

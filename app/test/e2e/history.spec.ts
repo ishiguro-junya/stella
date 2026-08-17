@@ -3,6 +3,7 @@ import '@wdio/tauri-service';
 import { join } from 'node:path';
 
 import {
+  debugAt,
   dispatchDoubleClick,
   expectInteractiveSelectedColors,
   expectHistoryCommitLayout,
@@ -20,7 +21,7 @@ import {
 } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
-const visualQaDirectory = process.env.VISUAL_QA_OUTPUT_DIR;
+const visualQaDirectory = process.env.STELLA_SCREENSHOT === 'true' ? 'screenshots' : undefined;
 
 async function clickHistoryDiffToggle(): Promise<void> {
   await browser.execute(() => {
@@ -532,7 +533,7 @@ describe('History', () => {
 
     if (visualQaDirectory) {
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'history-commit-body-1180x760.png'),
+        join(visualQaDirectory, 'history', 'commit-body-1180x760.png'),
         1180,
         760,
       );
@@ -650,7 +651,7 @@ describe('History', () => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       });
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'history-graph-and-branch-dark-1180x760.png'),
+        join(visualQaDirectory, 'history', 'graph-and-branch-dark-1180x760.png'),
         1180,
         760,
       );
@@ -696,7 +697,7 @@ describe('History', () => {
     expect(lightHistoryColors?.selectedCommitNode).not.toBe(lightHistoryColors?.workingTreeEdge);
     if (visualQaDirectory) {
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'history-graph-and-branch-light-1180x760.png'),
+        join(visualQaDirectory, 'history', 'graph-and-branch-light-1180x760.png'),
         1180,
         760,
       );
@@ -967,7 +968,7 @@ describe('History', () => {
   });
 
   it('searches history and creates Tags and Branches from a Commit', async function () {
-    this.timeout(120_000);
+    this.timeout(process.env.STELLA_E2E_BREAKPOINT ? 2_147_483_646 : 120_000);
     await $('button=履歴').click();
     await expect($('.history-view')).toBeDisplayed();
     await expect($('button[aria-label="履歴"]')).toHaveAttribute('aria-current', 'page');
@@ -1410,6 +1411,7 @@ describe('History', () => {
     await historyActionsMenu.$('button=タグを作成').click();
     const historyActionsDialog = $('[role="dialog"][aria-labelledby="history-createTag-title"]');
     await expect(historyActionsDialog).toBeDisplayed();
+    await debugAt('history-tag-dialog');
     await setLogicalWindowSize(860, 560);
     const createTagHelp = historyActionsDialog.$('#create-tag-help');
     await expect(createTagHelp).toHaveText(
@@ -1465,6 +1467,7 @@ describe('History', () => {
     await expect(createBranchButton).toBeEnabled();
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
+    await debugAt('create-branch-dialog');
     await expect(branchDialog).toHaveText(
       expect.stringContaining(
         `ブランチ「${sourceBranchName}」から新しいブランチを作成し、そのブランチへ切り替えます。`,

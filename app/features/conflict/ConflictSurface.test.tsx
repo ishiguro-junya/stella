@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
-import { conflictDocument } from '../../test/fixtures';
+import { conflictDocument } from '../../test/unit/fixtures';
 import { markWorkspaceErrorHandled, type ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import { ConflictSurface, type ConflictSurfaceActions } from './ConflictSurface';
 

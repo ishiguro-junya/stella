@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BranchSummary } from '../domain/workspace';
-import { repoSnapshot } from '../test/fixtures';
+import { repoSnapshot } from '../test/unit/fixtures';
 import { BranchSwitcherDialog } from './BranchSwitcherDialog';
 import { RepositorySwitcherDialog } from './RepositorySwitcherDialog';
 

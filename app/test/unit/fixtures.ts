@@ -1,4 +1,4 @@
-import type { ConflictDocument, RepoSnapshot } from '../domain/workspace';
+import type { ConflictDocument, RepoSnapshot } from '../../domain/workspace';
 
 export function conflictDocument(overrides: Partial<ConflictDocument> = {}): ConflictDocument {
   return {

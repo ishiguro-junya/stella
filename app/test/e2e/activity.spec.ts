@@ -3,6 +3,7 @@ import '@wdio/tauri-service';
 
 import {
   commitCurrentChange,
+  debugAt,
   expectInteractiveSelectedColors,
   openRepository,
   resetApp,
@@ -37,6 +38,7 @@ describe('Activity', () => {
     await activity.waitForClickable();
     await activity.click();
     await expect($('.activity-view')).toBeDisplayed();
+    await debugAt('activity');
     const firstOperation = $('.activity-list tbody tr:first-child');
     const secondOperation = $('.activity-list tbody tr:nth-child(2)');
     await firstOperation.waitForDisplayed();

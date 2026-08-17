@@ -23,5 +23,6 @@
     "useUnknownInCatchVariables": true,
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
   },
-  "include": ["app"]
+  "include": ["app"],
+  "exclude": ["app/test/e2e"]
 }

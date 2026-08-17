@@ -3,6 +3,17 @@
 このドキュメントは、変更内容に応じて実行するテストと、再現可能な検証手順を定義します。  
 画面の見た目は[デザイン](../DESIGN.md)、利用者から見える動作は[仕様](specification.md)、内部構造は[アーキテクチャ](architecture.md)を参照してください。  
 
+## 基本方針
+
+テストは、開発者やAIエージェントによる変更で、意図しない破壊や仕様からの逸脱を防ぐガードレールです。  
+まず変更箇所に近いテストを実行し、完了前にその変更を含む範囲まで検証を広げます。  
+ドキュメントを変更した場合も`mise run lint`を実行し、Markdownの書式、文章、リンクを確認します。  
+フレーキーなテストには、分かっている再現条件と修正方針をコードコメントで残します。  
+
+GitHub Actionsの実行コストを抑えるため、テスト用のCIワークフローは追加しません。  
+代わりにLefthookのプッシュ前フックで`mise run lint`と`mise run test`を実行し、単体テスト、統合テスト、E2Eテストをローカルで確認します。  
+配布物固有の検証は[リリース手順](release.md)に従います。  
+
 ## 変更内容に合う最小の検証から始める
 
 | 変更内容 | コマンド | 確認対象 |
@@ -13,12 +24,7 @@
 | コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、未使用コードと依存関係、設定、Markdown、文章、リンク |
 | ネイティブ画面とGit操作 | `mise run test:e2e` | Tauriアプリを使ったE2Eテスト |
 | 全てのテスト | `mise run test` | 単体テスト、統合テスト、E2Eテスト |
-| READMEの画面画像 | `mise run screenshot` | `docs/assets`に置くREADME用画像 |
-
-まず変更箇所に近いテストを実行します。  
-完了前には、その変更を含む範囲の検証も実行します。  
-ドキュメントを変更した場合も`mise run lint`を実行し、Markdownの書式、文章、リンクを確認します。  
-フレーキーなテストには、分かっている再現条件と修正方針をコードコメントで残します。  
+| READMEの画面画像 | `mise run screenshot` | `screenshots`に置くREADME用画像 |
 
 ## 各テスト層の責務
 
@@ -40,6 +46,30 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 開発用の隔離されたリポジトリだけを操作します。  
 画面移動、主要なGit操作、ダイアログ、キーボード操作、永続化がフロントエンドからRustとGitまで正しく動くことを確認します。  
 
+開発アプリはViteの`1420`番ポート、HMRの`1421`番ポート、`target/debug/Stella (DEV)`を使います。  
+E2Eは組み込みWebDriverの`4445`番ポートと`target/release/Stella (TEST)`を使い、Viteの開発サーバーを起動しません。  
+バンドルIDも`com.emuni.stella.dev`と`com.emuni.stella.e2e`に分かれているため、開発アプリを起動したままE2Eを実行できます。  
+
+機能または画面単位では`--spec`、個別テストまたはダイアログ単位では`--mochaOpts.grep`を使います。  
+
+```sh
+mise run test:e2e -- --spec app/test/e2e/history.spec.ts
+mise run test:e2e -- \
+  --spec app/test/e2e/diff.spec.ts \
+  --mochaOpts.grep 'opens the Pull dialog'
+```
+
+指定した画面で停止する場合は、名前付き停止点を指定して標準入出力を端末へ接続します。  
+停止中はWebdriverIOの対話操作を利用でき、`.exit`でテストを再開します。  
+利用できる停止点名は`rg "debugAt\\(" app/test/e2e`で確認できます。  
+
+```sh
+STELLA_E2E_BREAKPOINT=pull-dialog \
+  mise run --raw test:e2e -- \
+  --spec app/test/e2e/diff.spec.ts \
+  --mochaOpts.grep 'opens the Pull dialog'
+```
+
 ## 視覚変更は実画面で比較する
 
 視覚変更は単体テストだけで完了としません。  
@@ -57,16 +87,20 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 画面全体から判断できる場合は、拡大画像や比較画像を追加しません。  
 ピクセル差だけで判断せず、用途別トークン、ブラウザーが算出したスタイル、要素の位置関係も確認します。  
 
+README画像はテスト名で1画面だけ生成できます。  
+追加の視覚確認は`visual-qa.spec.ts`から対象を選び、README参照画像以外はGit管理外の`screenshots/`へ保存します。  
+
+```sh
+mise run screenshot -- --mochaOpts.grep '履歴を撮影する'
+mise run screenshot -- \
+  --spec app/test/e2e/visual-qa.spec.ts \
+  --mochaOpts.grep 'リポジトリ追加ダイアログ'
+```
+
 ## 検証用データと画像を製品データから分離する
 
 - E2Eと視覚検証では、テストが作成したリポジトリとローカルのベアリモートだけを使います。
-- 一時的なスクリーンショット、切り出し画像、比較画像は`tmp/`配下へ保存します。
-- READMEへ掲載する画像だけを`mise run screenshot`で`docs/assets`へ書き出します。
+- スクリーンショットは画面遷移に沿って`screenshots/changes`、`history`、`activity`、`settings`、`repositories`、`branches`へ分けます。
+- READMEへ掲載する5画像だけをGit管理し、それ以外のスクリーンショット、切り出し画像、比較画像はGit管理外とします。
 - ローカルの絶対パス、テスト件数、実行日時、過去の合格結果はドキュメントへ記録しません。
 - 個別の実行結果は、コミットまたはプルリクエストの説明へ残します。
-
-## プッシュ前の検証
-
-Lefthookのプッシュ前フックは、`mise run lint`とアプリケーションの検証を実行します。  
-アプリケーションの検証では`mise run test`を実行し、単体テスト、統合テスト、E2Eテストの順に実行します。  
-配布物固有の検証は[リリース手順](release.md)に従います。  

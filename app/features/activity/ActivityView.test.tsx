@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import type { ActivityEntry, CommitActivitySeries, WorkspaceQuery } from '../../domain/workspace';
 import { I18nProvider } from '../../i18n/i18n';
-import { repoSnapshot } from '../../test/fixtures';
+import { repoSnapshot } from '../../test/unit/fixtures';
 import type { ShowWorkspaceError } from '../../ui/WorkspaceErrorDialog';
 import { ActivityView } from './ActivityView';
 

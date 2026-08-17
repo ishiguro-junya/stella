@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceAdapter } from './adapters/workspaceAdapter';
 import { App } from './App';
-import { repoSnapshot } from './test/fixtures';
+import { repoSnapshot } from './test/unit/fixtures';
 
 const activityHarness = vi.hoisted(() => ({
   onReady: undefined as (() => void) | undefined,

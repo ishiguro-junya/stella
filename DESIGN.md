@@ -13,11 +13,11 @@
 
 ## 参考画面
 
-- [ファイル差分](docs/assets/diff.png)
-- [ファイル編集](docs/assets/editor.png)
-- [履歴](docs/assets/history.png)
-- [活動](docs/assets/activity.png)
-- [設定](docs/assets/settings.png)
+- [ファイル差分](screenshots/changes/diff.png)
+- [ファイル編集](screenshots/changes/editor.png)
+- [履歴](screenshots/history/history.png)
+- [活動](screenshots/activity/activity.png)
+- [設定](screenshots/settings/settings.png)
 
 参考画面と仕様が異なる場合は、現在の仕様を優先します。  
 

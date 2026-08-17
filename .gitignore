@@ -20,6 +20,22 @@ app/native/gen/schemas/
 test-results/
 wdio-logs/
 
+# Screenshots
+screenshots/*
+!screenshots/changes/
+screenshots/changes/*
+!screenshots/changes/diff.png
+!screenshots/changes/editor.png
+!screenshots/history/
+screenshots/history/*
+!screenshots/history/history.png
+!screenshots/activity/
+screenshots/activity/*
+!screenshots/activity/activity.png
+!screenshots/settings/
+screenshots/settings/*
+!screenshots/settings/settings.png
+
 # Environment
 *.local
 .env

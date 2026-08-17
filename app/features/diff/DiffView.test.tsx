@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceAdapterError, type WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import type { ConflictDocument, QueryResult, WorkspaceAction } from '../../domain/workspace';
-import { conflictDocument, repoSnapshot } from '../../test/fixtures';
+import { conflictDocument, repoSnapshot } from '../../test/unit/fixtures';
 import { DiffView } from './DiffView';
 
 interface MockConflictSurfaceProps {

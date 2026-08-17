@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 
 import {
+  debugAt,
   expectInteractiveSelectedColors,
   openRepository,
   resetApp,
@@ -98,6 +99,7 @@ describe('Repository and Branch navigation', () => {
     await addRepository.click();
     const dialog = $('[role="dialog"][aria-labelledby="add-repository-title"]');
     await expect(dialog).toBeDisplayed();
+    await debugAt('add-repository-dialog');
     await expect(dialog.$('[role="tab"][aria-selected="true"]')).toHaveText('リモート');
     await expect(dialog.$('#repository-url')).toBeDisplayed();
     await expect(dialog.$('#repository-clone-parent')).toBeDisplayed();
@@ -346,6 +348,7 @@ describe('Repository and Branch navigation', () => {
     await repositoryToggle.click();
     let switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
+    await debugAt('repository-switcher');
     await expect(switcher.$('[role="option"][aria-current="true"]')).toBeDisplayed();
     await expect(
       switcher.$('[role="option"][aria-current="true"] .switcher-option-copy small'),
@@ -417,6 +420,7 @@ describe('Repository and Branch navigation', () => {
     await branchToggle.click();
     switcher = $('[role="dialog"][aria-labelledby]');
     await expect(switcher).toBeDisplayed();
+    await debugAt('branch-switcher');
     await expect(switcher.$('[role="option"][aria-current="true"]')).toHaveText(
       expect.stringContaining('main'),
     );
@@ -650,6 +654,7 @@ describe('Repository and Branch navigation', () => {
       await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
       await $('button=リポジトリ情報を変更').click();
       const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
+      await debugAt('remote-manager-dialog');
       await expect(manager.$('[role="tab"][aria-selected="true"]')).toHaveText('リモート');
       await manager.$('button=ローカル').click();
       expect(
@@ -702,6 +707,7 @@ describe('Repository and Branch navigation', () => {
     await switcher.$('[role="option"][aria-current="true"] + .switcher-action-trigger').click();
     await $('button=リポジトリ情報を変更').click();
     const manager = $('[role="dialog"][aria-labelledby="remote-manager-title"]');
+    await debugAt('remote-manager-dialog');
     const firstUrlInput = manager.$('.remote-url-group input');
     if (!firstUrlInput) throw new Error('The remote URL input was not displayed.');
     await expect(firstUrlInput).toHaveValue(missingRemote);
