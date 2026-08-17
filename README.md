@@ -109,10 +109,10 @@ mise run dev
 ├── .gitattributes          # Gitで扱うファイル属性
 ├── .gitignore              # Git管理外にするファイル
 ├── .markdownlint-cli2.jsonc # Markdown検査設定
-├── .textlintrc.json        # 日本語文書の検査設定
+├── .textlintrc.json        # 日本語ドキュメントの検査設定
 ├── CONTRIBUTING.md         # 開発への参加方法
 ├── DESIGN.md               # プロダクト設計の原則
-├── LICENSE                 # Stellaのライセンス
+├── LICENSE                 # アプリのライセンス
 ├── README.md               # 製品概要と開発の入口
 ├── THIRD_PARTY_NOTICES.md  # 第三者ソフトウェアのライセンス表示
 ├── Cargo.lock              # Rust依存の固定情報

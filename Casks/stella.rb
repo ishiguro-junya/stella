@@ -26,8 +26,8 @@ cask "stella" do
   ]
 
   caveats <<~EOS
-    StellaはDeveloper ID署名とApple公証にまだ対応していません。
-    初回起動が拒否された場合は、Stellaを一度開いてから
+    Developer ID署名とApple公証にまだ対応していません。
+    初回起動が拒否された場合は、一度開いてから
     「システム設定」→「プライバシーとセキュリティ」→「このまま開く」を選択してください。
   EOS
 end

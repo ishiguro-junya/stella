@@ -3,16 +3,16 @@
 <plist version="1.0">
 <dict>
   <key>NSDesktopFolderUsageDescription</key>
-  <string>Stella needs access to repositories in this folder to read and update Git working files.</string>
+  <string>The app needs access to repositories in this folder to read and update Git working files.</string>
   <key>NSDocumentsFolderUsageDescription</key>
-  <string>Stella needs access to repositories in this folder to read and update Git working files.</string>
+  <string>The app needs access to repositories in this folder to read and update Git working files.</string>
   <key>NSDownloadsFolderUsageDescription</key>
-  <string>Stella needs access to repositories in this folder to read and update Git working files.</string>
+  <string>The app needs access to repositories in this folder to read and update Git working files.</string>
   <key>NSFileProviderDomainUsageDescription</key>
-  <string>Stella needs access to repositories in this folder to read and update Git working files.</string>
+  <string>The app needs access to repositories in this folder to read and update Git working files.</string>
   <key>NSNetworkVolumesUsageDescription</key>
-  <string>Stella needs access to repositories on this network volume to read and update Git working files.</string>
+  <string>The app needs access to repositories on this network volume to read and update Git working files.</string>
   <key>NSRemovableVolumesUsageDescription</key>
-  <string>Stella needs access to repositories on this removable volume to read and update Git working files.</string>
+  <string>The app needs access to repositories on this removable volume to read and update Git working files.</string>
 </dict>
 </plist>

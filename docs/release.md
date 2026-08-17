@@ -1,7 +1,7 @@
 # リリース手順
 
-このドキュメントでは、StellaのGitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
-StellaはApple Silicon向けに配布します。  
+このドキュメントでは、GitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
+Apple Silicon向けに配布します。  
 Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
 
 ## 前提
@@ -15,14 +15,14 @@ Developer ID署名とApple公証は行いませんが、自動更新用ファイ
 - 自動更新用の秘密鍵と、そのパスを示す`STELLA_UPDATER_KEY`環境変数
 - macOSのキーチェーンに保存した`com.emuni.stella.updater`のパスワード
 
-すべてのコマンドはStellaリポジトリのルートから同じシェルで実行します。  
+すべてのコマンドはリポジトリのルートから同じシェルで実行します。  
 
 ```sh
 mise install
 mise run setup
 ```
 
-秘密鍵を紛失すると、既存のStellaへ新しい更新を配布できなくなります。  
+秘密鍵を紛失すると、既存のアプリへ新しい更新を配布できなくなります。  
 秘密鍵とキーチェーンのパスワードは、リポジトリ外の安全な場所へバックアップします。  
 
 ### 初回だけ行う設定
@@ -34,12 +34,12 @@ mise run setup
 gh release create updater-prerelease \
   --repo ishiguro-junya/stella \
   --title "Stella prerelease update feed" \
-  --notes "Stellaのプレリリース向け自動更新情報です。" \
+  --notes "アプリのプレリリース向け自動更新情報です。" \
   --prerelease
 gh release create updater-stable \
   --repo ishiguro-junya/stella \
   --title "Stella stable update feed" \
-  --notes "Stellaの安定版向け自動更新情報です。" \
+  --notes "アプリの安定版向け自動更新情報です。" \
   --prerelease
 ```
 

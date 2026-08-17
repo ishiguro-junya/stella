@@ -136,7 +136,7 @@ function delay(milliseconds: number) {
 async function waitForInstalledApplicationToExit(deadline: number) {
   if (installedApplicationPids().length === 0) return;
   if (Date.now() >= deadline) {
-    fail('Stella did not exit within 10 seconds. The application was not replaced.');
+    fail('The app did not exit within 10 seconds. The application was not replaced.');
   }
   await delay(100);
   await waitForInstalledApplicationToExit(deadline);
@@ -146,7 +146,7 @@ async function terminateInstalledApplication() {
   const pids = installedApplicationPids();
   if (pids.length === 0) return;
 
-  console.log('Stopping the running Stella application.');
+  console.log('Stopping the running app.');
   for (const pid of pids) {
     try {
       process.kill(pid, 'SIGTERM');
@@ -224,7 +224,7 @@ async function install() {
   }
 
   rmSync(installDirectory, { recursive: true, force: true });
-  console.log(`Installed Stella ${sourceBundle.version} to ${destinationApplication}.`);
+  console.log(`Installed the app ${sourceBundle.version} to ${destinationApplication}.`);
 }
 
 try {

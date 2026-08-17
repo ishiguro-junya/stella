@@ -1,6 +1,6 @@
-NSDesktopFolderUsageDescription = "Stellaがこのフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
-NSDocumentsFolderUsageDescription = "Stellaがこのフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
-NSDownloadsFolderUsageDescription = "Stellaがこのフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
-NSFileProviderDomainUsageDescription = "Stellaがこのフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
-NSNetworkVolumesUsageDescription = "Stellaがこのネットワークボリューム内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
-NSRemovableVolumesUsageDescription = "Stellaがこのリムーバブルボリューム内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSDesktopFolderUsageDescription = "このフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSDocumentsFolderUsageDescription = "このフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSDownloadsFolderUsageDescription = "このフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSFileProviderDomainUsageDescription = "このフォルダ内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSNetworkVolumesUsageDescription = "このネットワークボリューム内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";
+NSRemovableVolumesUsageDescription = "このリムーバブルボリューム内のリポジトリを読み取り、Gitの作業ファイルを更新するために使用します。";

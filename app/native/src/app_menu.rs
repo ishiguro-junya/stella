@@ -254,7 +254,7 @@ pub(crate) fn handle_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         return;
     };
     if let Err(error) = app.emit_to(MENU_EVENT_TARGET, event_name, ()) {
-        eprintln!("Stellaのメニュー操作を通知できませんでした: {error}");
+        eprintln!("アプリのメニュー操作を通知できませんでした: {error}");
     }
 }
 
