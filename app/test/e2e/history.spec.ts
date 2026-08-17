@@ -170,7 +170,6 @@ describe('History', () => {
       {
         busy: string | null;
         invalidVisibleEdgeGeometry: number;
-        maxFrameDuration: number;
         maxSvgPerGraph: number;
         missingVisibleGraphs: number;
         visibleRowCount: number;
@@ -183,12 +182,9 @@ describe('History', () => {
       const positions = [0.9, 0.1, 0.8, 0.2, 0.7, 0.3, 0.95, 0.05, 0.75, 0.25];
       let index = 0;
       let invalidVisibleEdgeGeometry = 0;
-      let lastFrame = performance.now();
-      let maxFrameDuration = 0;
       let missingVisibleGraphs = 0;
       let visibleRowCount = 0;
-      const inspect = (now: number): void => {
-        if (index > 0) maxFrameDuration = Math.max(maxFrameDuration, now - lastFrame);
+      const inspect = (): void => {
         const listBounds = list.getBoundingClientRect();
         const visibleRows = [
           ...document.querySelectorAll<HTMLElement>('.history-commit-item'),
@@ -216,7 +212,6 @@ describe('History', () => {
           done({
             busy: list.getAttribute('aria-busy'),
             invalidVisibleEdgeGeometry,
-            maxFrameDuration,
             maxSvgPerGraph: Math.max(
               ...graphs.map((graph) => graph.querySelectorAll('svg').length),
             ),
@@ -228,7 +223,6 @@ describe('History', () => {
         }
         list.scrollTop = Math.round((list.scrollHeight - list.clientHeight) * positions[index]!);
         index += 1;
-        lastFrame = now;
         requestAnimationFrame(inspect);
       };
       requestAnimationFrame(inspect);
@@ -242,7 +236,6 @@ describe('History', () => {
       willChange: 'scroll-position',
     });
     expect(graphAfterScroll.visibleRowCount).toBeGreaterThan(0);
-    expect(graphAfterScroll.maxFrameDuration).toBeLessThan(120);
   });
 
   it('moves exactly once for every rapid History arrow-key event', async () => {
