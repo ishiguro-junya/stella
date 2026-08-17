@@ -38,6 +38,7 @@ description = "コード、設定、ドキュメントを検査する"
 run = [
   "pnpm exec oxfmt --check .",
   "pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives .",
+  "pnpm exec knip",
   "cargo fmt --all --check",
   "cargo clippy --workspace --all-targets --all-features -- -D warnings",
   "taplo fmt --check",

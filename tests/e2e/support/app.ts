@@ -240,7 +240,7 @@ export async function expectHistoryCommitLayout(width: number, height: number): 
   expect(layout.overlaps).toEqual([]);
 }
 
-export async function waitForDiffOrThrow(): Promise<void> {
+async function waitForDiffOrThrow(): Promise<void> {
   const runtimeErrorSelector = '[role="alertdialog"][aria-labelledby="runtime-error-title"]';
   await browser.waitUntil(
     async () =>

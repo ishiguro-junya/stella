@@ -72,7 +72,7 @@ export function detectLanguage(languages?: readonly string[]): Language {
   return first?.toLowerCase().split(/[-_]/u)[0] === 'ja' ? 'ja' : 'en';
 }
 
-export function localeForLanguage(language: Language): 'ja-JP' | 'en-US' {
+function localeForLanguage(language: Language): 'ja-JP' | 'en-US' {
   return language === 'ja' ? 'ja-JP' : 'en-US';
 }
 

@@ -3,7 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 
 import { Tooltip } from './Tooltip';
 
-export type ButtonVariant = 'default' | 'primary' | 'danger' | 'dangerQuiet' | 'quiet';
+type ButtonVariant = 'default' | 'primary' | 'danger' | 'dangerQuiet' | 'quiet';
 
 export interface ButtonProps extends Omit<ComponentPropsWithoutRef<'button'>, 'title'> {
   variant?: ButtonVariant;

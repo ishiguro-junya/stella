@@ -1,4 +1,3 @@
-import type { Channel } from '@tauri-apps/api/core';
 import type { LocalizedMessage } from '../i18n/i18n';
 
 export type WireOpenRequest =
@@ -9,16 +8,6 @@ export type WireOpenRequest =
 export interface WireWorkspaceSession {
   repoId: string;
   snapshot: WireRepoSnapshot;
-}
-
-export interface WireAttachArgs {
-  request: WireOpenRequest;
-  onEvent: Channel<WireWorkspaceEvent>;
-}
-
-export interface WireQueryRequest {
-  repoId: string;
-  query: WireQuery;
 }
 
 export type WireQuery =
@@ -38,7 +27,7 @@ export type WireQuery =
       bucketBoundariesUnixSeconds: number[];
     };
 
-export type WireDiffTarget = 'unstaged' | 'staged' | 'head';
+type WireDiffTarget = 'unstaged' | 'staged' | 'head';
 
 export type WireQueryOutcome =
   | {
@@ -59,12 +48,6 @@ export type WireQueryOutcome =
   | { kind: 'remotes'; data: WireRemoteResult }
   | { kind: 'commitActivity'; data: WireCommitActivitySeries };
 
-export interface WirePreviewRequest {
-  repoId: string;
-  expectedGeneration: number;
-  action: WireAction;
-}
-
 export interface WirePreviewOutcome {
   confirmationToken: string | null;
   expiresAtUnixMs: number | null;
@@ -76,18 +59,6 @@ export interface WirePreviewOutcome {
   resolvedTargets?: Array<{ input: string; oid: string }>;
   impactDigest?: string;
   lostCommitOids?: string[];
-}
-
-export interface WireExecuteRequest {
-  operationId: string;
-  repoId: string;
-  expectedGeneration: number;
-  action: WireAction;
-  confirmationToken: string | null;
-}
-
-export interface WireCancelRequest {
-  operationId: string;
 }
 
 export interface WireActionOutcome {
@@ -106,14 +77,14 @@ interface WireSelectionBase {
   diffRevision: string;
 }
 
-export interface WireLineSelection extends WireSelectionBase {
+interface WireLineSelection extends WireSelectionBase {
   kind: 'lines';
   side: 'additions' | 'deletions';
   startLine: number;
   endLine: number;
 }
 
-export interface WireHunkSelection extends WireSelectionBase {
+interface WireHunkSelection extends WireSelectionBase {
   kind: 'hunk';
   hunkIndex: number;
 }
@@ -207,7 +178,7 @@ export type WireAction =
       operation: 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
     };
 
-export type WireCommitInput =
+type WireCommitInput =
   | { format: 'plain'; message: string }
   | {
       format: 'conventional';
@@ -238,7 +209,7 @@ export interface WireRepoSnapshot {
   eventSeq: number;
 }
 
-export interface WireRemoteResult {
+interface WireRemoteResult {
   remotes: Array<{ name: string; fetchUrls: string[]; pushUrls: string[] }>;
   repoGeneration: number;
 }
@@ -253,7 +224,7 @@ export interface WireStatusEntry {
   submodule: string;
 }
 
-export interface WireFileDocument {
+interface WireFileDocument {
   repoId: string;
   path: string;
   text: string;
@@ -283,7 +254,7 @@ export type WireOperationState =
       preHeadOid: string;
     };
 
-export interface WireDiffResult {
+interface WireDiffResult {
   patch: string;
   diffRevision: string;
   repoGeneration: number;
@@ -313,7 +284,7 @@ export interface WireCommitDetails extends WireCommitSummary {
   repoGeneration: number;
 }
 
-export interface WireBranchResult {
+interface WireBranchResult {
   branches: Array<{
     fullName: string;
     shortName: string;
@@ -325,7 +296,7 @@ export interface WireBranchResult {
   repoGeneration: number;
 }
 
-export interface WireGitFlowOverview {
+interface WireGitFlowOverview {
   initialized: boolean;
   available: boolean;
   raw: unknown;
@@ -333,7 +304,7 @@ export interface WireGitFlowOverview {
   repoGeneration: number;
 }
 
-export interface WireGitFlowRequest {
+interface WireGitFlowRequest {
   command:
     | 'init'
     | 'start'
@@ -381,7 +352,7 @@ export interface WireGitFlowRequest {
   tag?: boolean;
 }
 
-export interface WireCommitActivitySeries {
+interface WireCommitActivitySeries {
   repoGeneration: number;
   historyRevision: string;
   timeBasis: 'committed';
@@ -401,7 +372,7 @@ export interface WireCommitActivitySeries {
   coverage: { kind: 'complete' } | { kind: 'truncated'; scanLimit: number };
 }
 
-export interface WireCommandActivity {
+interface WireCommandActivity {
   argv: string[];
   exitCode: number | null;
   stdout: string;

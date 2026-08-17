@@ -1,6 +1,6 @@
 import type { ConflictBlock, ConflictDocument } from './workspace';
 
-export interface ConflictSnapshot {
+interface ConflictSnapshot {
   resultText: string;
   blocks: ConflictBlock[];
   contentHash: string;
@@ -61,7 +61,7 @@ function documentSnapshot(document: ConflictDocument, revision: number): Conflic
   };
 }
 
-export function conflictSnapshotChargedBytes(snapshot: ConflictSnapshot): number {
+function conflictSnapshotChargedBytes(snapshot: ConflictSnapshot): number {
   return snapshot.blocks.reduce(
     (bytes, block) => bytes + BLOCK_SNAPSHOT_OVERHEAD_BYTES + block.id.length * 4,
     SNAPSHOT_OVERHEAD_BYTES + snapshot.resultText.length * 4,

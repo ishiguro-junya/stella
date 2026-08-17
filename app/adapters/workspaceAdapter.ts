@@ -22,7 +22,7 @@ export interface WorkspaceAdapter {
   subscribe: (onEvent: (event: WorkspaceEvent) => void) => Promise<() => void>;
 }
 
-export interface WorkspaceQueryOptions {
+interface WorkspaceQueryOptions {
   signal?: AbortSignal;
 }
 

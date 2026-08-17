@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export type ToolchainMode = 'bundled' | 'system';
 
-export interface ToolchainComponentStatus {
+interface ToolchainComponentStatus {
   available: boolean;
   path: string | null;
   version: string | null;

@@ -1,7 +1,7 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-export const CHECK_APP_UPDATES_EVENT = 'stella://check-updates';
+const CHECK_APP_UPDATES_EVENT = 'stella://check-updates';
 
 export interface AppUpdateInfo {
   currentVersion: string;

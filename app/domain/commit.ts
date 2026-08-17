@@ -67,21 +67,6 @@ export function validatePlainCommitMessage(message: string): CommitFieldErrors {
   return errors;
 }
 
-export function composeCommitMessage(input: ConventionalCommitInput): string {
-  const type = input.type.trim();
-  const scope = input.scope?.trim();
-  const suffix = input.breaking ? '!' : '';
-  const header = `${type}${scope ? `(${scope})` : ''}${suffix}: ${input.description.trim()}`;
-  const sections = [header];
-  const body = input.body?.trim();
-  const footer = input.footer?.trim();
-
-  if (body) sections.push(body);
-  if (footer) sections.push(footer);
-
-  return sections.join('\n\n');
-}
-
 export function isValidConventionalCommitMessage(message: string): boolean {
   const [header = ''] = message.split('\n', 1);
   return HEADER_PATTERN.test(header);

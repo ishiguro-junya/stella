@@ -35,7 +35,7 @@ import {
 } from '../../ui/WorkspaceErrorDetails';
 import { ConflictResultEditor } from './ConflictResultEditor';
 
-export interface ConflictChoiceInput {
+interface ConflictChoiceInput {
   conflict: ConflictDocument;
   blockId: string;
   choice: ConflictChoice;
@@ -44,7 +44,7 @@ export interface ConflictChoiceInput {
   baseDocumentRevision: string;
 }
 
-export interface ConflictSaveInput {
+interface ConflictSaveInput {
   conflict: ConflictDocument;
   draftText: string;
   documentRevision: string;

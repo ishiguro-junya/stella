@@ -10,7 +10,7 @@
 | ReactまたはRustのロジック | `mise run test:unit` | ReactとRustの単体テスト |
 | `Workspace`を介したGit操作 | `mise run test:integration` | 一時リポジトリを使うRustの統合テスト |
 | TypeScriptの型 | `mise run typecheck` | TypeScript全体の型整合性 |
-| コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、設定、Markdown、文章、リンク |
+| コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、未使用コードと依存関係、設定、Markdown、文章、リンク |
 | ネイティブ画面とGit操作 | `mise run test:e2e` | Tauriアプリを使ったE2Eテスト |
 | 全てのテスト | `mise run test` | 単体テスト、統合テスト、E2Eテスト |
 | READMEの画面画像 | `mise run screenshot` | `docs/assets`に置くREADME用画像 |

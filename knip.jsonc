@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "entry": [
+    "scripts/create-updater-manifest.mts",
+    "scripts/install-app.mts",
+    "scripts/mode-app.mts",
+    "scripts/showcase-fixture.mts",
+    "scripts/tauri-hook.mts",
+    "scripts/toolchain.mts",
+    "tests/e2e/**/*.spec.ts",
+  ],
+  "ignoreDependencies": [
+    // mise.tomlから直接実行するコマンドはKnipが参照を追跡できない。
+    "@tauri-apps/cli",
+    "@wdio/cli",
+    "markdownlint-cli2",
+    "textlint",
+    // textlintとWebdriverIOが設定値から読み込むパッケージは静的なimportを持たない。
+    "@textlint-ja/textlint-rule-preset-ai-writing",
+    "@wdio/local-runner",
+  ],
+}

@@ -463,7 +463,7 @@ const DODGERS_UNIFORM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="320"
 </svg>
 `;
 
-export const SHOWCASE_STAGED_PATHS = [
+const SHOWCASE_STAGED_PATHS = [
   'data/2024-season.json',
   'docs/50-50.md',
   'assets/number-17.svg',

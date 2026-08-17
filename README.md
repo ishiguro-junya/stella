@@ -159,6 +159,7 @@ mise run dev
 - [tsx](https://github.com/privatenumber/tsx)
 - [Tauri](https://github.com/tauri-apps/tauri)
 - [Oxc](https://oxc.rs/)
+- [Knip](https://knip.dev/)
 - [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
 - [textlint](https://github.com/textlint/textlint)
 - [@textlint-ja/textlint-rule-preset-ai-writing](https://github.com/textlint-ja/textlint-rule-preset-ai-writing)

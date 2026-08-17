@@ -1,7 +1,7 @@
 import type { LocalizedMessage } from '../i18n/i18n';
 
 export type RepoId = string;
-export type Generation = number;
+type Generation = number;
 
 export type WorkspaceView = 'diff' | 'history';
 export type ActivityRange = '7d' | '30d' | '90d' | '180d' | '1y';
@@ -78,7 +78,7 @@ export interface LineDiffSelection extends DiffSelectionBase {
   endLine: number;
 }
 
-export interface HunkDiffSelection extends DiffSelectionBase {
+interface HunkDiffSelection extends DiffSelectionBase {
   kind: 'hunk';
   hunkIndex: number;
 }
@@ -152,7 +152,7 @@ export type GitFlowCommand =
   | 'continue'
   | 'abort';
 
-export type GitFlowPreset = 'classic' | 'github' | 'gitlab' | 'custom';
+type GitFlowPreset = 'classic' | 'github' | 'gitlab' | 'custom';
 export type GitFlowStrategy = 'merge' | 'rebase' | 'squash';
 
 export interface GitFlowRequest {
@@ -188,7 +188,7 @@ export interface GitFlowOverview {
   repoGeneration: Generation;
 }
 
-export type OperationState =
+type OperationState =
   | { kind: 'none' }
   | {
       kind:
@@ -270,7 +270,7 @@ export interface WorkspaceSnapshot {
   activities: ActivityEntry[];
 }
 
-export type ConflictOperation = 'merge' | 'rebase' | 'cherryPick' | 'revert';
+type ConflictOperation = 'merge' | 'rebase' | 'cherryPick' | 'revert';
 
 export interface ConflictSide {
   oid: string;
@@ -278,7 +278,7 @@ export interface ConflictSide {
   text?: string;
 }
 
-export type ConflictKind =
+type ConflictKind =
   | 'text'
   | 'addAdd'
   | 'modifyDelete'
@@ -291,7 +291,7 @@ export type ConflictKind =
   | 'submodule'
   | 'directoryFile';
 
-export interface ConflictCapabilities {
+interface ConflictCapabilities {
   inAppEdit: boolean;
   performanceView: boolean;
   chooseCurrent: boolean;
@@ -301,7 +301,7 @@ export interface ConflictCapabilities {
   externalEditor: boolean;
 }
 
-export type ConflictBlockState = 'unresolved' | 'current' | 'incoming' | 'both' | 'manual';
+type ConflictBlockState = 'unresolved' | 'current' | 'incoming' | 'both' | 'manual';
 
 export interface ConflictBlock {
   id: string;
@@ -355,7 +355,7 @@ export interface FileDocument {
 }
 
 export type ConflictChoice = 'current' | 'incoming' | 'both' | 'delete';
-export type FileOperation = 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
+type FileOperation = 'moveToTrash' | 'revealInFinder' | 'openInDefaultApp';
 
 export interface ConventionalCommitInput {
   type: string;
@@ -531,10 +531,6 @@ export type WorkspaceEvent =
       level: 'info' | 'warning' | 'error';
       message: LocalizedMessage;
     };
-
-export function isConflictResolved(document: Pick<ConflictDocument, 'blocks'>): boolean {
-  return document.blocks.every((block) => block.state !== 'unresolved');
-}
 
 export function selectedRepo(snapshot: WorkspaceSnapshot): RepoSnapshot | undefined {
   return (

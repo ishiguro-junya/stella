@@ -3,7 +3,7 @@ import { FileDiff, Pencil } from 'lucide-react';
 import { ToggleButton } from '../../ui/ToggleButton';
 import { useI18n } from '../../i18n/i18n';
 
-export type FileViewMode = 'display' | 'edit';
+type FileViewMode = 'display' | 'edit';
 
 export interface FileViewModeToggleProps {
   mode: FileViewMode;

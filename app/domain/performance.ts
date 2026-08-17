@@ -1,6 +1,6 @@
 import type { ConflictDocument } from './workspace';
 
-export type ConflictRenderMode = 'standard' | 'performance' | 'external';
+type ConflictRenderMode = 'standard' | 'performance' | 'external';
 
 export interface ConflictPerformanceProfile {
   mode: ConflictRenderMode;
@@ -10,12 +10,12 @@ export interface ConflictPerformanceProfile {
   reason?: 'binary' | 'structural' | 'tooLarge';
 }
 
-export const CONFLICT_STANDARD_LIMITS = {
+const CONFLICT_STANDARD_LIMITS = {
   bytes: 1024 * 1024,
   lines: 20_000,
 } as const;
 
-export const CONFLICT_PERFORMANCE_LIMITS = {
+const CONFLICT_PERFORMANCE_LIMITS = {
   bytes: 5 * 1024 * 1024,
   lines: 100_000,
   maxLineBytes: 256 * 1024,

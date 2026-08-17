@@ -5,18 +5,18 @@ export interface HistoryLaneNode {
   parents: readonly string[];
 }
 
-export interface HistoryIncomingEdge {
+interface HistoryIncomingEdge {
   fromLane: number;
   toLane: number;
 }
 
-export interface HistoryParentEdge {
+interface HistoryParentEdge {
   parentOid: string;
   fromLane: number;
   toLane: number;
 }
 
-export interface HistoryGraphTopology {
+interface HistoryGraphTopology {
   lane: number;
   /** この行の上端で使用中のレーン。 */
   activeLanes: readonly number[];

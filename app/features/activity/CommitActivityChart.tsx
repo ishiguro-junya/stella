@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-export interface CommitActivityChartDatum {
+interface CommitActivityChartDatum {
   label: string;
   value: number;
 }

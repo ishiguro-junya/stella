@@ -371,7 +371,7 @@ export interface HunkActionConfig {
   onDiscard?: (selection: SurfaceHunkSelection) => void;
 }
 
-export interface SurfaceContextPoint {
+interface SurfaceContextPoint {
   x: number;
   y: number;
 }
