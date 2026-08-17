@@ -44,5 +44,8 @@ CLAUDE.md
 .codex/
 .claude/
 
+# Git Worktree
+/worktrees/
+
 # Temporary
 tmp/

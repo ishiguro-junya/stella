@@ -19,7 +19,7 @@ run = [
 
 [tasks.dev]
 description = "Tauriアプリを開発モードで起動する"
-run = "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER='node --import tsx ../../scripts/mode-app.mts dev' pnpm exec tauri dev --config app/native/tauri.dev.conf.json"
+run = "node --import tsx scripts/native-slot.mts node --import tsx scripts/tauri-hook.mts launch-dev"
 
 [tasks.reset]
 description = "開発用データを初期状態へ戻す"
@@ -27,11 +27,11 @@ run = "node --import tsx scripts/showcase-fixture.mts reset"
 
 [tasks.build]
 description = "配布用のTauriアプリをビルドする"
-run = "pnpm exec tauri build"
+run = "node --import tsx scripts/native-slot.mts pnpm exec tauri build"
 
 [tasks.ci]
 description = "全ての検査を実行する"
-run = [ "mise run lint ::: typecheck ::: test", "mise run build" ]
+run = [ "mise run lint", "mise run typecheck", "mise run test", "mise run build" ]
 
 [tasks."install"]
 description = "アプリをビルドして`/Applications`へインストールする"
@@ -45,7 +45,7 @@ run = [
   "pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives .",
   "pnpm exec knip",
   "cargo fmt --all --check",
-  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+  "node --import tsx scripts/native-slot.mts cargo clippy --workspace --all-targets --all-features -- -D warnings",
   "taplo fmt --check",
   "taplo check",
   "pnpm exec markdownlint-cli2",
@@ -74,12 +74,12 @@ run = [
 description = "単体テストを実行する"
 run = [
   "pnpm exec vitest run",
-  "cargo test --workspace --all-targets --all-features -- --skip workspace::tests",
+  "node --import tsx scripts/native-slot.mts cargo test --workspace --all-targets --all-features -- --skip workspace::tests",
 ]
 
 [tasks."test:integration"]
 description = "統合テストを実行する"
-run = "cargo test --workspace --all-targets --all-features workspace::tests"
+run = "node --import tsx scripts/native-slot.mts cargo test --workspace --all-targets --all-features workspace::tests"
 
 [tasks."test:e2e"]
 description = "E2Eテストを実行する"
@@ -90,7 +90,7 @@ flag "--headless <headless>" help="ウィンドウを表示せずに実行する
 arg "[wdio_args]" var=#true double_dash="required"
 '''
 run = [
-  "VITE_E2E=true node --import tsx scripts/mode-app.mts e2e target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
+  "VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts e2e target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   '''
   eval "set -- ${usage_wdio_args-}"
   STELLA_TEST_MODE=e2e STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
@@ -110,7 +110,7 @@ run = [
   fi
   rm -rf tmp/visual-regression/current
   ''',
-  "VITE_E2E=true node --import tsx scripts/mode-app.mts vrt target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (VRT)\",\"identifier\":\"com.emuni.stella.vrt\"}'",
+  "VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts vrt target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (VRT)\",\"identifier\":\"com.emuni.stella.vrt\"}'",
   "STELLA_TEST_MODE=vrt STELLA_VRT_UPDATE=${usage_update:-false} STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT_OUTPUT=tmp/visual-regression/current pnpm exec wdio run wdio.conf.ts",
   '''
   if [ "${usage_update:-false}" = "true" ]; then
@@ -123,7 +123,7 @@ run = [
 [tasks."screenshot"]
 description = "スクリーンショットを生成する"
 run = [
-  "VITE_E2E=true node --import tsx scripts/mode-app.mts scr target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (SCR)\",\"identifier\":\"com.emuni.stella.scr\"}'",
+  "VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts scr target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (SCR)\",\"identifier\":\"com.emuni.stella.scr\"}'",
   "STELLA_TEST_MODE=scr STELLA_E2E_HEADLESS=true pnpm exec wdio run wdio.conf.ts",
 ]
 

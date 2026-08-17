@@ -1,5 +1,12 @@
 include = [ "**/*.toml" ]
-exclude = [ ".pnpm-store/**", "app/native/target/**", "tmp/**", "node_modules/**", "target/**" ]
+exclude = [
+  ".pnpm-store/**",
+  "app/native/target/**",
+  "tmp/**",
+  "node_modules/**",
+  "target/**",
+  "worktrees/**",
+]
 
 [formatting]
 align_comments = true

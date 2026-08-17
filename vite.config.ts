@@ -1,27 +1,35 @@
+import { resolve } from 'node:path';
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const tauriDevHost = process.env.TAURI_DEV_HOST;
+const devPort = Number(process.env.STELLA_DEV_PORT ?? 1420);
 const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);
+const managedWorktreesDirectory = resolve('worktrees');
 
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: {
     host: tauriDevHost || false,
-    port: 1420,
+    port: devPort,
     strictPort: true,
     ...(tauriDevHost
       ? {
           hmr: {
             protocol: 'ws' as const,
             host: tauriDevHost,
-            port: 1421,
+            port: devPort,
           },
         }
       : {}),
     watch: {
-      ignored: ['**/app/native/**'],
+      ignored: [
+        '**/app/native/**',
+        (path) =>
+          path === managedWorktreesDirectory || path.startsWith(`${managedWorktreesDirectory}/`),
+      ],
     },
   },
   build: {

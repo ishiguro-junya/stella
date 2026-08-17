@@ -1,7 +1,10 @@
 import { execFile } from 'node:child_process';
+import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import { browser } from '@wdio/globals';
+
+import { reserveAvailablePort } from './scripts/available-port.mts';
 
 const execFileAsync = promisify(execFile);
 
@@ -13,19 +16,19 @@ const visualQaSpec = './app/test/e2e/visual-qa.spec.ts';
 const testModes = {
   e2e: {
     appBinaryPath: './target/release/Stella (E2E)',
-    embeddedPort: 4445,
+    portRange: [4445, 4464],
     specs: ['./app/test/e2e/**/*.spec.ts'],
     exclude: [readmeScreenshotSpec, visualQaSpec],
   },
   vrt: {
     appBinaryPath: './target/release/Stella (VRT)',
-    embeddedPort: 4446,
+    portRange: [4465, 4484],
     specs: [visualQaSpec],
     exclude: [],
   },
   scr: {
     appBinaryPath: './target/release/Stella (SCR)',
-    embeddedPort: 4447,
+    portRange: [4485, 4504],
     specs: [readmeScreenshotSpec, visualQaSpec],
     exclude: [],
   },
@@ -37,9 +40,25 @@ if (requestedMode !== 'e2e' && requestedMode !== 'vrt' && requestedMode !== 'scr
 }
 const testMode = requestedMode;
 const mode = testModes[requestedMode];
+const isWorker = process.env.WDIO_WORKER_ID !== undefined;
+const isLauncher = process.argv.some((argument) => argument.endsWith('/wdio.js'));
+const portReservation =
+  !isWorker && isLauncher
+    ? await reserveAvailablePort({
+        label: `${testMode.toUpperCase()} test`,
+        start: mode.portRange[0],
+        end: mode.portRange[1],
+        explicitPort: process.env.TAURI_WEBDRIVER_PORT,
+      })
+    : undefined;
+const embeddedPort = portReservation?.port ?? mode.portRange[0];
+if (!isWorker && isLauncher) {
+  console.log(`${testMode.toUpperCase()} test WebDriver port: ${embeddedPort}`);
+}
 
 export const config: WebdriverIO.Config = {
   runner: 'local',
+  outputDir: resolve('tmp', 'wdio-logs', testMode),
   specs: [...mode.specs],
   exclude: [...mode.exclude],
   maxInstances: 1,
@@ -49,7 +68,10 @@ export const config: WebdriverIO.Config = {
       {
         appBinaryPath: mode.appBinaryPath,
         driverProvider: 'embedded',
-        embeddedPort: mode.embeddedPort,
+        embeddedPort,
+        env: {
+          TAURI_DATA_DIR: resolve('tmp', 'tauri-data', testMode),
+        },
         startTimeout: 60_000,
         statusPollTimeout: 5_000,
       },
@@ -72,7 +94,7 @@ export const config: WebdriverIO.Config = {
     const { stdout } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
     const app = stdout.split('\n---').find((entry) => entry.includes(`/target/release/${appName}`));
     if (!app?.includes(`"LSDisplayName"="${appName}"`)) {
-      throw new Error(`${appName}が専用のアプリ名で起動していません。`);
+      throw new Error(`${appName} did not launch with its dedicated application name.`);
     }
   },
   beforeSuite: async () => {
@@ -84,9 +106,12 @@ export const config: WebdriverIO.Config = {
       "window.__TAURI__.core.invoke('plugin:window|set_focus', { label: 'main' })",
     );
   },
+  onComplete: async () => {
+    await portReservation?.release();
+  },
   mochaOpts: {
     ui: 'bdd',
-    // WebdriverIOが3ms差し引くため、停止時はMochaの上限値より1ms小さくして実質無効化する。
+    // WebdriverIO subtracts 3ms, so use one less than Mocha's limit to effectively disable it.
     timeout: breakpoint ? 2_147_483_646 : testMode === 'e2e' ? 60_000 : 180_000,
   },
 };

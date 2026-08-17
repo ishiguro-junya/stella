@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
-import { link, mkdir, readlink, rename, rm, symlink } from 'node:fs/promises';
+import { link, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 
 const mode = process.argv[2];
 const source = process.argv[3];
@@ -18,45 +17,6 @@ if ((mode !== 'dev' && mode !== 'e2e' && mode !== 'vrt' && mode !== 'scr') || !s
 const name = names[mode];
 const executable = resolve(source);
 const namedExecutable = join(dirname(executable), name);
-const buildLock = resolve('target', '.stella-mode-build.lock');
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
-}
-
-async function acquireBuildLock(): Promise<void> {
-  await mkdir(dirname(buildLock), { recursive: true });
-  // 別プロセスが構築とリンクを完了するまで、同じロックを直列に確認する。
-  /* oxlint-disable no-await-in-loop */
-  while (true) {
-    try {
-      await symlink(String(process.pid), buildLock);
-      return;
-    } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) throw error;
-    }
-
-    const owner = Number(await readlink(buildLock).catch(() => ''));
-    if (Number.isInteger(owner) && owner > 0) {
-      try {
-        process.kill(owner, 0);
-        await delay(100);
-        continue;
-      } catch (error) {
-        if (!hasErrorCode(error, 'ESRCH')) throw error;
-      }
-    }
-
-    const staleLock = `${buildLock}.stale-${process.pid}-${Date.now()}`;
-    try {
-      await rename(buildLock, staleLock);
-      await rm(staleLock, { force: true });
-    } catch (error) {
-      if (!hasErrorCode(error, 'ENOENT')) throw error;
-    }
-  }
-  /* oxlint-enable no-await-in-loop */
-}
 
 async function run(command: string, args: string[]): Promise<number> {
   const child = spawn(command, args, { stdio: 'inherit' });
@@ -83,11 +43,6 @@ if (mode === 'dev') {
   if (!command) {
     throw new Error('Build command is required for e2e, vrt, and scr modes.');
   }
-  await acquireBuildLock();
-  try {
-    process.exitCode = await run(command, process.argv.slice(5));
-    if (process.exitCode === 0) await linkExecutable();
-  } finally {
-    await rm(buildLock, { force: true });
-  }
+  process.exitCode = await run(command, process.argv.slice(5));
+  if (process.exitCode === 0) await linkExecutable();
 }
