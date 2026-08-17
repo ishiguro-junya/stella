@@ -9,7 +9,7 @@ import {
   saveLogicalScreenshot,
   selectSetting,
 } from './support/app.js';
-import { createFixtureDirectory, removeFixture } from './support/fixtures.js';
+import { createFixtureDirectory, removeFixture, runGit } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
 const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
@@ -109,7 +109,7 @@ async function prepareDiffScreenshot(): Promise<void> {
   await waitForAddedAndDeletedLines();
 }
 
-async function withReadmeRepository(run: () => Promise<void>): Promise<void> {
+async function withReadmeRepository(run: (repositoryPath: string) => Promise<void>): Promise<void> {
   if (!screenshotMode) return;
   const fixtureRoot = await createFixtureDirectory('readme-screenshots');
   try {
@@ -118,7 +118,7 @@ async function withReadmeRepository(run: () => Promise<void>): Promise<void> {
     });
     await resetApp({ language: 'ja', appearance: 'dark', splitStageView: true });
     await openRepository(repositoryPath);
-    await run();
+    await run(repositoryPath);
   } finally {
     await removeFixture(fixtureRoot);
   }
@@ -202,7 +202,21 @@ describe('README用スクリーンショット', () => {
   });
 
   it('活動を撮影する', async function () {
-    await withReadmeRepository(async () => {
+    await withReadmeRepository(async (repositoryPath) => {
+      // 基底フィクスチャの日付に時計を固定し、撮影時刻による画像差分を防ぐ。
+      const screenshotNow = new Date(
+        (await runGit(repositoryPath, ['log', '-1', '--format=%cI'])).trim(),
+      ).toISOString();
+      await browser.execute((now) => {
+        const fixedTime = Date.parse(now);
+        window.Date = new Proxy(Date, {
+          apply: (target) => new target(fixedTime).toString(),
+          construct: (target, args) =>
+            Reflect.construct(target, args.length === 0 ? [fixedTime] : args),
+          get: (target, property, receiver) =>
+            property === 'now' ? () => fixedTime : Reflect.get(target, property, receiver),
+        });
+      }, screenshotNow);
       await recordScreenshotActivity();
       await $('button[aria-label="活動"]').click();
       await expect($('.activity-view')).toBeDisplayed();
@@ -213,6 +227,12 @@ describe('README用スクリーンショット', () => {
           )) >= 10,
         { timeout: 10_000, timeoutMsg: '活動の操作一覧が10件まで揃いませんでした。' },
       );
+      expect(
+        await browser.execute((now) => {
+          const timestamps = [...document.querySelectorAll<HTMLTimeElement>('.activity-view time')];
+          return timestamps.length >= 10 && timestamps.every((time) => time.dateTime === now);
+        }, screenshotNow),
+      ).toBe(true);
       await browser.waitUntil(
         async () => /[1-9]\d*件/.test(await $('.activity-chart-data').getText()),
         { timeout: 10_000, timeoutMsg: '活動の初期集計が完了しませんでした。' },
