@@ -848,7 +848,7 @@ impl Workspace {
                     .ok_or_else(|| {
                         WorkspaceError::new(
                             ErrorCode::InvalidRequest,
-                            "Only files in Changes can be edited",
+                            "Only working tree files can be edited",
                         )
                         .localized_message(LocalizedMessage::new("fileEditUnavailable"))
                         .detail("path", path.clone())
@@ -900,7 +900,7 @@ impl Workspace {
     fn image_bytes(&self, request: ImageBytesRequest) -> WorkspaceResult<Vec<u8>> {
         let repo = self.repo(&request.repo_id)?;
         match request.target {
-            ImageBytesTarget::Changes {
+            ImageBytesTarget::WorkingTree {
                 path,
                 previous_path,
                 area,
@@ -5750,7 +5750,7 @@ fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> Workspac
             .ok_or_else(|| {
                 WorkspaceError::new(
                     ErrorCode::InvalidRequest,
-                    "Only files in Changes can be edited",
+                    "Only working tree files can be edited",
                 )
                 .localized_message(LocalizedMessage::new("fileEditUnavailable"))
                 .detail("path", path.clone())
@@ -5773,7 +5773,7 @@ fn validate_action_targets(snapshot: &RepoSnapshot, action: &Action) -> Workspac
             .ok_or_else(|| {
                 WorkspaceError::new(
                     ErrorCode::InvalidRequest,
-                    "Only files in Changes can be renamed",
+                    "Only working tree files can be renamed",
                 )
                 .detail("path", path.clone())
             })?;
@@ -13578,7 +13578,7 @@ mod tests {
             "image.bin",
             DiffTarget::Unstaged,
         );
-        let changes_target = |area, diff: &DiffResult| ImageBytesTarget::Changes {
+        let working_tree_target = |area, diff: &DiffResult| ImageBytesTarget::WorkingTree {
             path: "image.bin".into(),
             previous_path: None,
             area,
@@ -13589,7 +13589,7 @@ mod tests {
             workspace
                 .image_bytes(ImageBytesRequest {
                     repo_id: attached.repo_id.clone(),
-                    target: changes_target(ImageChangeArea::Unstaged, &unstaged),
+                    target: working_tree_target(ImageChangeArea::Unstaged, &unstaged),
                     side: ImageDiffSide::Before,
                 })
                 .unwrap(),
@@ -13599,7 +13599,7 @@ mod tests {
             workspace
                 .image_bytes(ImageBytesRequest {
                     repo_id: attached.repo_id.clone(),
-                    target: changes_target(ImageChangeArea::Unstaged, &unstaged),
+                    target: working_tree_target(ImageChangeArea::Unstaged, &unstaged),
                     side: ImageDiffSide::After,
                 })
                 .unwrap(),
@@ -13613,7 +13613,7 @@ mod tests {
             workspace
                 .image_bytes(ImageBytesRequest {
                     repo_id: attached.repo_id.clone(),
-                    target: ImageBytesTarget::Changes {
+                    target: ImageBytesTarget::WorkingTree {
                         path: "untracked.bin".into(),
                         previous_path: None,
                         area: ImageChangeArea::Untracked,
@@ -13637,7 +13637,7 @@ mod tests {
             workspace
                 .image_bytes(ImageBytesRequest {
                     repo_id: attached.repo_id.clone(),
-                    target: changes_target(ImageChangeArea::Staged, &staged),
+                    target: working_tree_target(ImageChangeArea::Staged, &staged),
                     side: ImageDiffSide::Before,
                 })
                 .unwrap(),
@@ -13647,7 +13647,7 @@ mod tests {
             workspace
                 .image_bytes(ImageBytesRequest {
                     repo_id: attached.repo_id.clone(),
-                    target: changes_target(ImageChangeArea::Staged, &staged),
+                    target: working_tree_target(ImageChangeArea::Staged, &staged),
                     side: ImageDiffSide::After,
                 })
                 .unwrap(),
@@ -13740,7 +13740,7 @@ mod tests {
         };
         assert!(diff.patch.contains("similarity index 100%"));
         assert!(!diff.patch.contains("GIT binary patch"));
-        let target = ImageBytesTarget::Changes {
+        let target = ImageBytesTarget::WorkingTree {
             path: "new.bin".into(),
             previous_path: Some("old.bin".into()),
             area: ImageChangeArea::Staged,
@@ -13786,7 +13786,7 @@ mod tests {
         let stale_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id.clone(),
-                target: ImageBytesTarget::Changes {
+                target: ImageBytesTarget::WorkingTree {
                     path: "tracked.bin".into(),
                     previous_path: None,
                     area: ImageChangeArea::Unstaged,
@@ -13802,7 +13802,7 @@ mod tests {
         let forged_previous_path_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id.clone(),
-                target: ImageBytesTarget::Changes {
+                target: ImageBytesTarget::WorkingTree {
                     path: "tracked.bin".into(),
                     previous_path: Some("unrelated.bin".into()),
                     area: ImageChangeArea::Unstaged,
@@ -13819,7 +13819,7 @@ mod tests {
         let link_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id.clone(),
-                target: ImageBytesTarget::Changes {
+                target: ImageBytesTarget::WorkingTree {
                     path: "link.bin".into(),
                     previous_path: None,
                     area: ImageChangeArea::Untracked,
@@ -13839,7 +13839,7 @@ mod tests {
         let large_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id.clone(),
-                target: ImageBytesTarget::Changes {
+                target: ImageBytesTarget::WorkingTree {
                     path: "large.bin".into(),
                     previous_path: None,
                     area: ImageChangeArea::Untracked,
@@ -13854,7 +13854,7 @@ mod tests {
         let path_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id,
-                target: ImageBytesTarget::Changes {
+                target: ImageBytesTarget::WorkingTree {
                     path: "../outside.bin".into(),
                     previous_path: None,
                     area: ImageChangeArea::Untracked,

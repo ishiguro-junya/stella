@@ -869,7 +869,7 @@ describe('Diff', () => {
 
     const stage = $('input[aria-label="ステージ README.md"]');
     await stage.waitForClickable();
-    const changesPaneLayout = await browser.execute(() => {
+    const diffPaneLayout = await browser.execute(() => {
       const sidebar = document.querySelector<HTMLElement>('.diff-sidebar-pane')!;
       const footer = sidebar.querySelector<HTMLElement>('.diff-list-footer')!;
       const actionBar = footer.querySelector<HTMLElement>('.diff-action-bar')!;
@@ -912,7 +912,7 @@ describe('Diff', () => {
         unstagedOverflow: getComputedStyle(unstagedContent).overflowY,
       };
     });
-    expect(changesPaneLayout).toEqual({
+    expect(diffPaneLayout).toEqual({
       actionsInFooter: true,
       firstGroupOffset: 0,
       actionLabelsRemoved: true,

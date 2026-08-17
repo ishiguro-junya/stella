@@ -50,7 +50,7 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
     registeredRepoPaths: options.registeredRepoPaths ?? [],
     repositoryNames: {},
     paneWidths: {
-      changes: { left: 360, right: 336 },
+      diff: { left: 360, right: 336 },
       history: { left: 472 },
       activity: { left: 590 },
     },

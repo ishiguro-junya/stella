@@ -151,7 +151,7 @@ function imageTarget(
 ): ImageBytesTarget | undefined {
   if (document.area === 'conflicted') return undefined;
   return {
-    kind: 'changes',
+    kind: 'workingTree',
     path: candidate.path,
     ...(candidate.previousPath ? { previousPath: candidate.previousPath } : {}),
     area: document.area,

@@ -50,7 +50,7 @@ export interface ImageDiffCandidate {
 
 export type ImageBytesTarget =
   | {
-      kind: 'changes';
+      kind: 'workingTree';
       path: string;
       previousPath?: string;
       area: Exclude<ChangeArea, 'conflicted'>;

@@ -1904,7 +1904,7 @@ export function App({
   const sidebarAvailable = (page === 'workspace' && Boolean(repo)) || page === 'activity';
   const sidebarVisible = sidebarAvailable && sidebarOpen;
   const workspaceLeftPane =
-    activeWorkspaceView === 'diff' ? paneWidths.changes.left : paneWidths.history.left;
+    activeWorkspaceView === 'diff' ? paneWidths.diff.left : paneWidths.history.left;
   const shellLeftPane =
     page === 'settings' ? 200 : page === 'activity' ? paneWidths.activity.left : workspaceLeftPane;
   const appShellStyle: AppShellStyle = { '--shell-left-pane': `${shellLeftPane}px` };
@@ -2222,7 +2222,7 @@ export function App({
                     </div>
                   ) : view === 'diff' ? (
                     <DiffView
-                      key={`changes:${repo.repoId}:${workspaceViewRevision}`}
+                      key={`diff:${repo.repoId}:${workspaceViewRevision}`}
                       repo={repo}
                       adapter={adapter}
                       externalConflict={latestConflict}
@@ -2233,7 +2233,7 @@ export function App({
                       onUnsavedLeaveHandleChange={(handle) => {
                         leaveHandleRef.current = handle;
                       }}
-                      paneWidths={paneWidths.changes}
+                      paneWidths={paneWidths.diff}
                       diffStyle={diffStyle}
                       imagePreviewLayout={imagePreviewLayout}
                       splitStageView={splitStageView}
@@ -2242,8 +2242,8 @@ export function App({
                       stickyFileHeaders={stickyFileHeaders}
                       editorLineWrapping={editorLineWrapping}
                       editorWrapColumn={editorWrapColumn}
-                      onPaneWidthsChange={(changes) =>
-                        setPaneWidths((current) => ({ ...current, changes }))
+                      onPaneWidthsChange={(diff) =>
+                        setPaneWidths((current) => ({ ...current, diff }))
                       }
                     />
                   ) : (

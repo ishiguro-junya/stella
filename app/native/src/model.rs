@@ -99,7 +99,7 @@ pub struct ImageBytesRequest {
     tag = "kind"
 )]
 pub enum ImageBytesTarget {
-    Changes {
+    WorkingTree {
         path: String,
         previous_path: Option<String>,
         area: ImageChangeArea,

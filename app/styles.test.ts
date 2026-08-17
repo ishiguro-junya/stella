@@ -20,7 +20,7 @@ describe('global scroll behavior', () => {
   });
 });
 
-describe('changes file selection', () => {
+describe('Diff file selection', () => {
   it('uses neutral list selection with a one-pixel accent focus ring', () => {
     expect(styles).toMatch(
       /\.change-item\.is-selected,\s*\.change-item\.is-current\s*\{[^}]*background:\s*var\(--list-selection-surface\);[^}]*color:\s*var\(--text-primary\);/u,

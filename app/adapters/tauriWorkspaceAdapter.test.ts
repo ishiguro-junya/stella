@@ -136,7 +136,7 @@ describe('tauriWorkspaceAdapter', () => {
     invokeMock.mockResolvedValue(Uint8Array.from([0, 1, 2, 255]).buffer);
     const adapter = createTauriWorkspaceAdapter();
     const target = {
-      kind: 'changes' as const,
+      kind: 'workingTree' as const,
       path: 'image.png',
       area: 'unstaged' as const,
       generation: 3,

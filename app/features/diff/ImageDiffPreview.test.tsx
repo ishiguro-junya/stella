@@ -69,7 +69,7 @@ describe('ImageDiffPreview', () => {
           adapter={workspace}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'new.png',
             area: 'untracked',
             generation: 1,
@@ -92,7 +92,7 @@ describe('ImageDiffPreview', () => {
           adapter={workspace}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'new.png',
             previousPath: 'old.png',
             area: 'staged',
@@ -138,7 +138,7 @@ describe('ImageDiffPreview', () => {
           adapter={adapter()}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'new.png',
             area: 'untracked',
             generation: 1,
@@ -192,7 +192,7 @@ describe('ImageDiffPreview', () => {
           adapter={adapter()}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'new.png',
             previousPath: 'old.png',
             area: 'staged',
@@ -222,7 +222,7 @@ describe('ImageDiffPreview', () => {
             adapter={adapter()}
             repoId="repo-1"
             target={{
-              kind: 'changes',
+              kind: 'workingTree',
               path: 'new.png',
               area: 'untracked',
               generation: 1,
@@ -261,7 +261,7 @@ describe('ImageDiffPreview', () => {
           adapter={workspace}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'old.png',
             area: 'untracked',
             generation: 1,
@@ -279,7 +279,7 @@ describe('ImageDiffPreview', () => {
           adapter={workspace}
           repoId="repo-1"
           target={{
-            kind: 'changes',
+            kind: 'workingTree',
             path: 'new.png',
             area: 'untracked',
             generation: 2,
@@ -304,7 +304,7 @@ describe('ImageDiffPreview', () => {
       adapter: workspace,
       repoId: 'repo-1',
       target: {
-        kind: 'changes' as const,
+        kind: 'workingTree' as const,
         path: 'old.svg',
         previousPath: 'before-old.svg',
         area: 'unstaged' as const,

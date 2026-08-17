@@ -13,8 +13,8 @@
 
 ## 参考画面
 
-- [ファイル差分](screenshots/changes/diff.png)
-- [ファイル編集](screenshots/changes/editor.png)
+- [ファイル差分](screenshots/diff/diff.png)
+- [ファイル編集](screenshots/diff/editor.png)
 - [履歴](screenshots/history/history.png)
 - [活動](screenshots/activity/activity.png)
 - [設定](screenshots/settings/settings.png)

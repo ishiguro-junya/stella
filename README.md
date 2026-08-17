@@ -20,9 +20,9 @@
 
 ファイル、ハンク、行単位でファイルの差分の確認と編集ができます。  
 
-![ファイル差分の画面](screenshots/changes/diff.png)
+![ファイル差分の画面](screenshots/diff/diff.png)
 
-![ファイル編集の画面](screenshots/changes/editor.png)
+![ファイル編集の画面](screenshots/diff/editor.png)
 
 ### 履歴
 

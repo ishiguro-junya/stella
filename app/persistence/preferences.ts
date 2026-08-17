@@ -31,7 +31,7 @@ export interface PaneWidths {
 }
 
 export interface PaneWidthPreferences {
-  changes: PaneWidths;
+  diff: PaneWidths;
   history: { left: number };
   activity: { left: number };
 }
@@ -85,7 +85,7 @@ export const DEFAULT_PREFERENCES: StellaPreferences = {
   repositoryNames: {},
   repositoryHealthIssues: {},
   paneWidths: {
-    changes: { left: 360, right: 336 },
+    diff: { left: 360, right: 336 },
     history: { left: 472 },
     activity: { left: 590 },
   },
@@ -224,16 +224,15 @@ export function readPreferences(): StellaPreferences {
     }
     const value = parsed;
     const paneWidths = isRecord(value.paneWidths) ? value.paneWidths : {};
-    const changesPaneWidths = isRecord(paneWidths.changes) ? paneWidths.changes : {};
+    const diffPaneWidths = isRecord(paneWidths.diff) ? paneWidths.diff : {};
     const historyPaneWidths = isRecord(paneWidths.history) ? paneWidths.history : {};
     const activityPaneWidths = isRecord(paneWidths.activity) ? paneWidths.activity : {};
     const sharedLeftPaneWidth = [
       paneWidths.left,
-      changesPaneWidths.left,
+      diffPaneWidths.left,
       historyPaneWidths.left,
       activityPaneWidths.left,
     ].find((width) => typeof width === 'number' && Number.isFinite(width));
-    const diffFileListDisplay = value.diffFileListDisplay ?? value.changeListDisplay;
     return {
       version: STORAGE_VERSION,
       appearance: isAppearance(value.appearance)
@@ -255,8 +254,8 @@ export function readPreferences(): StellaPreferences {
         typeof value.splitStageView === 'boolean'
           ? value.splitStageView
           : DEFAULT_PREFERENCES.splitStageView,
-      diffFileListDisplay: isDiffFileListDisplay(diffFileListDisplay)
-        ? diffFileListDisplay
+      diffFileListDisplay: isDiffFileListDisplay(value.diffFileListDisplay)
+        ? value.diffFileListDisplay
         : DEFAULT_PREFERENCES.diffFileListDisplay,
       useConventionalCommits:
         typeof value.useConventionalCommits === 'boolean'
@@ -278,16 +277,16 @@ export function readPreferences(): StellaPreferences {
       repositoryNames: repositoryNameRecord(value.repositoryNames),
       repositoryHealthIssues: repositoryHealthIssueRecord(value.repositoryHealthIssues),
       paneWidths: {
-        changes: {
+        diff: {
           left: boundedWidth(
-            changesPaneWidths.left ?? sharedLeftPaneWidth,
-            DEFAULT_PREFERENCES.paneWidths.changes.left,
+            diffPaneWidths.left ?? sharedLeftPaneWidth,
+            DEFAULT_PREFERENCES.paneWidths.diff.left,
             LEFT_PANE_MIN_WIDTH,
             LEFT_PANE_MAX_WIDTH,
           ),
           right: boundedWidth(
-            changesPaneWidths.right ?? paneWidths.right,
-            DEFAULT_PREFERENCES.paneWidths.changes.right,
+            diffPaneWidths.right ?? paneWidths.right,
+            DEFAULT_PREFERENCES.paneWidths.diff.right,
           ),
         },
         history: {

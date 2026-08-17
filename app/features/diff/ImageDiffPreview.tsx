@@ -135,8 +135,8 @@ export function ImageDiffPreview({
   const targetPath = target.path;
   const targetPreviousPath = target.previousPath;
   const targetDiffId = target.diffId;
-  const targetArea = target.kind === 'changes' ? target.area : undefined;
-  const targetGeneration = target.kind === 'changes' ? target.generation : undefined;
+  const targetArea = target.kind === 'workingTree' ? target.area : undefined;
+  const targetGeneration = target.kind === 'workingTree' ? target.generation : undefined;
   const targetOid = target.kind === 'commit' ? target.oid : undefined;
   const targetKey = `${targetKind}:${targetDiffId}:${targetPath}`;
   const candidatePath = candidate.path;
@@ -160,9 +160,9 @@ export function ImageDiffPreview({
       let objectUrl: string | undefined;
       try {
         const queryTarget: ImageBytesTarget =
-          targetKind === 'changes'
+          targetKind === 'workingTree'
             ? {
-                kind: 'changes',
+                kind: 'workingTree',
                 path: targetPath,
                 ...(targetPreviousPath ? { previousPath: targetPreviousPath } : {}),
                 area: targetArea!,

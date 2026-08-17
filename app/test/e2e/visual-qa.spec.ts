@@ -102,7 +102,7 @@ async function captureTooltip(
     foreground: expectedColors.foreground,
   });
   await debugAt(breakpoint);
-  await saveLogicalScreenshot(join(visualQaDirectory, 'changes', 'tooltips', fileName), 1180, 760);
+  await saveLogicalScreenshot(join(visualQaDirectory, 'diff', 'tooltips', fileName), 1180, 760);
   expect(await readTooltipPlacement()).toEqual({ centerDelta: 0, gap: 8, side: 'top' });
   await browser.keys(['Escape']);
 }
@@ -124,7 +124,7 @@ describe('視覚確認用スクリーンショット', () => {
       await expect($('.diff-view')).toBeDisplayed();
       await debugAt('diff-screenshot');
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'changes', 'diff', 'segmented-unified-1180x760.png'),
+        join(visualQaDirectory, 'diff', 'segmented-unified-1180x760.png'),
         1180,
         760,
       );
@@ -134,7 +134,7 @@ describe('視覚確認用スクリーンショット', () => {
       await $('button=Diff').click();
       await blurActiveElement();
       await saveLogicalScreenshot(
-        join(visualQaDirectory, 'changes', 'diff', 'segmented-split-1180x760.png'),
+        join(visualQaDirectory, 'diff', 'segmented-split-1180x760.png'),
         1180,
         760,
       );
@@ -143,16 +143,8 @@ describe('視覚確認用スクリーンショット', () => {
       await settings.click();
       await selectSetting('language', 'ja');
       await $('button[aria-label="差分"]').click();
-      await saveLogicalScreenshot(
-        join(visualQaDirectory, 'changes', 'diff', 'ja-1180x760.png'),
-        1180,
-        760,
-      );
-      await saveLogicalScreenshot(
-        join(visualQaDirectory, 'changes', 'diff', 'ja-860x560.png'),
-        860,
-        560,
-      );
+      await saveLogicalScreenshot(join(visualQaDirectory, 'diff', 'ja-1180x760.png'), 1180, 760);
+      await saveLogicalScreenshot(join(visualQaDirectory, 'diff', 'ja-860x560.png'), 860, 560);
     });
   });
 
@@ -381,7 +373,7 @@ describe('視覚確認用スクリーンショット', () => {
       await commit.waitForClickable({ timeout: 10_000 });
       await commit.click();
       await expect($('[role="dialog"][aria-labelledby="commit-dialog-title"]')).toBeDisplayed();
-      await captureDialog('changes/dialogs/commit', 'commit-dialog');
+      await captureDialog('diff/dialogs/commit', 'commit-dialog');
     });
   });
 
@@ -393,7 +385,7 @@ describe('視覚確認用スクリーンショット', () => {
       const dialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
       await expect(dialog).toBeDisplayed();
       await expect(dialog.$('select')).toHaveValue('origin/main');
-      await captureDialog('changes/dialogs/pull', 'pull-dialog');
+      await captureDialog('diff/dialogs/pull', 'pull-dialog');
     });
   });
 
@@ -405,7 +397,7 @@ describe('視覚確認用スクリーンショット', () => {
       const dialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
       await expect(dialog).toBeDisplayed();
       await expect(dialog.$('select')).toHaveValue('origin');
-      await captureDialog('changes/dialogs/push', 'push-dialog');
+      await captureDialog('diff/dialogs/push', 'push-dialog');
     });
   });
 

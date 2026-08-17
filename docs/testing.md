@@ -100,7 +100,7 @@ mise run screenshot -- \
 ## 検証用データと画像を製品データから分離する
 
 - E2Eと視覚検証では、テストが作成したリポジトリとローカルのベアリモートだけを使います。
-- スクリーンショットは画面遷移に沿って`screenshots/changes`、`history`、`activity`、`settings`、`repositories`、`branches`へ分けます。
+- スクリーンショットは画面遷移に沿って`screenshots/diff`、`history`、`activity`、`settings`、`repositories`、`branches`へ分けます。
 - READMEへ掲載する5画像だけをGit管理し、それ以外のスクリーンショット、切り出し画像、比較画像はGit管理外とします。
 - ローカルの絶対パス、テスト件数、実行日時、過去の合格結果はドキュメントへ記録しません。
 - 個別の実行結果は、コミットまたはプルリクエストの説明へ残します。

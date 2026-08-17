@@ -491,7 +491,7 @@ describe('App repository attach', () => {
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('stella.preferences.v1') ?? '{}')).toMatchObject({
         paneWidths: {
-          changes: { left: 384, right: 336 },
+          diff: { left: 384, right: 336 },
           history: { left: 480 },
           activity: { left: 600 },
         },

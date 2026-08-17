@@ -66,7 +66,7 @@ describe('appearance preferences', () => {
       registeredRepoPaths: ['/tmp/stella'],
       repositoryNames: {},
       paneWidths: {
-        changes: { left: 360, right: 400 },
+        diff: { left: 360, right: 400 },
         history: { left: 360 },
         activity: { left: 360 },
       },
@@ -80,26 +80,26 @@ describe('appearance preferences', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       paneWidths: {
-        changes: { left: 408, right: 400 },
+        diff: { left: 408, right: 400 },
         history: { left: 432 },
         activity: { left: 456 },
       },
     });
 
     expect(readPreferences().paneWidths).toEqual({
-      changes: { left: 408, right: 400 },
+      diff: { left: 408, right: 400 },
       history: { left: 432 },
       activity: { left: 456 },
     });
   });
 
-  it('restores legacy screen-specific pane widths', () => {
+  it('restores persisted screen-specific pane widths', () => {
     localStorage.setItem(
       'stella.preferences.v1',
       JSON.stringify({
         ...DEFAULT_PREFERENCES,
         paneWidths: {
-          changes: { left: 408, right: 400 },
+          diff: { left: 408, right: 400 },
           history: { left: 384 },
           activity: { left: 560 },
         },
@@ -107,7 +107,7 @@ describe('appearance preferences', () => {
     );
 
     expect(readPreferences().paneWidths).toEqual({
-      changes: { left: 408, right: 400 },
+      diff: { left: 408, right: 400 },
       history: { left: 384 },
       activity: { left: 560 },
     });
@@ -175,16 +175,6 @@ describe('appearance preferences', () => {
       JSON.stringify({ ...DEFAULT_PREFERENCES, diffFileListDisplay: 'invalid' }),
     );
     expect(readPreferences().diffFileListDisplay).toBe('nameAndPath');
-
-    localStorage.setItem(
-      'stella.preferences.v1',
-      JSON.stringify({
-        ...DEFAULT_PREFERENCES,
-        diffFileListDisplay: undefined,
-        changeListDisplay: 'fullPath',
-      }),
-    );
-    expect(readPreferences().diffFileListDisplay).toBe('fullPath');
   });
 
   it('defaults Conventional Commits to off and round-trips the enabled preference', () => {

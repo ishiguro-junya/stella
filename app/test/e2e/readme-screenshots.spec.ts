@@ -152,7 +152,7 @@ describe('README用スクリーンショット', () => {
       await expect($('.diff-view')).toBeDisplayed();
       await blurActiveElement();
       await debugAt('diff-screenshot');
-      await saveLogicalScreenshot(join(outputDirectory, 'changes', 'diff.png'), 1180, 760);
+      await saveLogicalScreenshot(join(outputDirectory, 'diff', 'diff.png'), 1180, 760);
     });
   });
 
@@ -197,7 +197,7 @@ describe('README用スクリーンショット', () => {
       );
       await expect(editor.$('.cm-activeLineGutter')).toHaveText('17');
       await debugAt('editor');
-      await saveLogicalScreenshot(join(outputDirectory, 'changes', 'editor.png'), 1180, 760);
+      await saveLogicalScreenshot(join(outputDirectory, 'diff', 'editor.png'), 1180, 760);
     });
   });
 
