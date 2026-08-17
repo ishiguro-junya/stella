@@ -14,8 +14,10 @@
 | `DESIGN.md` | 画面の視覚表現と操作状態の規則 |
 | `THIRD_PARTY_NOTICES.md` | 配布物に含む第三者の著作物とライセンス |
 | `docs/specification.md` | 利用者から見える動作、制約、対応範囲 |
-| `docs/architecture.md` | 内部構造、状態管理、永続化、安全性 |
+| `docs/architecture.md` | 内部構造、状態管理、永続化 |
+| `docs/security.md` | 脅威モデル、信頼境界、安全性保証、機密情報、依存関係、セキュリティ検査 |
 | `docs/testing.md` | 変更に応じた検証方法 |
+| `docs/review.md` | 変更のレビュー方針と完了基準 |
 | `docs/release.md` | 配布手順 |
 
 別のドキュメントに詳しい説明がある場合は、内容を写さずリンクします。  

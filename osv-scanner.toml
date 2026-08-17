@@ -1,0 +1,99 @@
+[[IgnoredVulns]]
+id = "GHSA-5c6j-r48x-rmvq"
+ignoreUntil = 2026-09-16
+reason = "WebdriverIOからMochaを介して使う開発専用の推移依存です。親依存の更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "GHSA-qj8w-gfj5-8c6v"
+ignoreUntil = 2026-09-16
+reason = "WebdriverIOからMochaを介して使う開発専用の推移依存です。親依存の更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "GHSA-jmr9-qjv8-65gv"
+ignoreUntil = 2026-09-16
+reason = "WebdriverIOからPuppeteerのブラウザー管理を介して使う開発専用の推移依存です。親依存の更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0413"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0416"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0412"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0418"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0411"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0417"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0414"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2026-09-16
+reason = "影響するglibはApple Silicon向け依存グラフに含まれません。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0415"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0420"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0419"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないTauriのLinux向け推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2026-09-16
+reason = "Apple Silicon向け依存グラフに含まれないGTKの推移依存です。Tauri更新時に解消状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+ignoreUntil = 2026-09-16
+reason = "Tauriからurlpatternを介して使う保守終了した推移依存です。Tauri更新時に置き換え状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+ignoreUntil = 2026-09-16
+reason = "Tauriからurlpatternを介して使う保守終了した推移依存です。Tauri更新時に置き換え状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+ignoreUntil = 2026-09-16
+reason = "Tauriからurlpatternを介して使う保守終了した推移依存です。Tauri更新時に置き換え状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+ignoreUntil = 2026-09-16
+reason = "Tauriからurlpatternを介して使う保守終了した推移依存です。Tauri更新時に置き換え状況を再確認します。"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+ignoreUntil = 2026-09-16
+reason = "Tauriからurlpatternを介して使う保守終了した推移依存です。Tauri更新時に置き換え状況を再確認します。"

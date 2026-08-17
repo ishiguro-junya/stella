@@ -54,6 +54,7 @@ mise run dev
 | `mise run test:integration` | 統合テストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
 | `mise run test:visual-regression` | ビジュアルリグレッションテストを実行する。 |
+| `mise run security` | セキュリティ検査を実行する。 |
 | `mise run ci` | 全ての検査を実行する。 |
 | `mise run screenshot` | スクリーンショットを生成する。 |
 | `mise run update` | パッケージを最新にアップデートする。 |
@@ -88,8 +89,10 @@ mise run dev
 │   ├── main.tsx            # フロントエンドの起動点
 │   └── styles.css          # アプリ全体のスタイル
 ├── docs/                   # 開発ドキュメント
-│   ├── architecture.md     # 内部構造と安全性
+│   ├── architecture.md     # 内部構造
 │   ├── release.md          # リリースと配布の手順
+│   ├── review.md           # レビュー方針と完了基準
+│   ├── security.md         # 安全性保証とセキュリティ検査
 │   ├── specification.md    # 利用者から見える仕様
 │   ├── testing.md          # テスト方針と実行方法
 │   └── writing.md          # ドキュメントの配置と書き方
@@ -204,6 +207,8 @@ mise run dev
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
 - [仕様](docs/specification.md)
 - [アーキテクチャ](docs/architecture.md)
+- [レビュー](docs/review.md)
+- [セキュリティ](docs/security.md)
 - [テスト](docs/testing.md)
 - [ドキュメントの書き方](docs/writing.md)
 - [リリース手順](docs/release.md)

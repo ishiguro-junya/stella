@@ -3,6 +3,7 @@
 このドキュメントでは、GitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
 Apple Silicon向けに配布します。  
 Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
+秘密鍵、検査、例外、公開前の安全性方針は[セキュリティ](security.md)に従います。  
 
 ## 前提
 
@@ -93,6 +94,7 @@ git status --short
 ```sh
 mise run lint
 mise run typecheck
+mise run security
 mise run test
 : "${STELLA_UPDATER_KEY:?自動更新用の秘密鍵のパスを設定してください}"
 export TAURI_SIGNING_PRIVATE_KEY="$STELLA_UPDATER_KEY"

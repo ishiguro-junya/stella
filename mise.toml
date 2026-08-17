@@ -4,9 +4,12 @@ cocogitto = "7.0.0"
 lefthook = "2.1.10"
 lychee = "0.24.2"
 node = "26.7.0"
+osv-scanner = "2.5.1"
 pnpm = "11.22.0"
 rust = { version = "1.97.1", components = "clippy,rustfmt" }
+semgrep = "1.173.0"
 taplo = "0.10.0"
+trufflehog = "3.97.0"
 
 [tasks.setup]
 description = "依存パッケージ、Gitフック、開発用データを準備する"
@@ -31,7 +34,13 @@ run = "node --import tsx scripts/native-slot.mts pnpm exec tauri build"
 
 [tasks.ci]
 description = "全ての検査を実行する"
-run = [ "mise run lint", "mise run typecheck", "mise run test", "mise run build" ]
+run = [
+  "mise run lint",
+  "mise run typecheck",
+  "mise run security",
+  "mise run test",
+  "mise run build",
+]
 
 [tasks."install"]
 description = "アプリをビルドして`/Applications`へインストールする"
@@ -60,6 +69,50 @@ run = [ "pnpm exec oxfmt .", "cargo fmt --all", "taplo fmt", "pnpm exec markdown
 [tasks.typecheck]
 description = "TypeScriptの型を検査する"
 run = "pnpm exec tsc -b"
+
+[tasks."security:code"]
+description = "TypeScriptとRustの脆弱性を静的検査する"
+run = "OTEL_SDK_DISABLED=true SEMGREP_SEND_METRICS=off semgrep scan --oss-only --metrics off --disable-version-check --error --strict --config p/javascript --config p/rust ."
+
+[tasks."security:package"]
+description = "依存パッケージの脆弱性と署名を検査する"
+run = [
+  "osv-scanner scan source --lockfile=pnpm-lock.yaml --lockfile=Cargo.lock --config=osv-scanner.toml",
+  "pnpm audit --prod --audit-level high",
+  "pnpm audit signatures",
+]
+
+[tasks."security:secrets"]
+description = "現在のファイルとGit履歴に含まれる機密情報を検査する"
+run = '''
+set -eu
+mkdir -p tmp/security/trufflehog-clones
+rm -f tmp/security/trufflehog-filesystem.sarif tmp/security/trufflehog-git.sarif
+
+status=0
+trufflehog --no-verification --no-update --fail --fail-on-scan-errors --sarif filesystem --exclude-paths .trufflehog-exclude-paths . > tmp/security/trufflehog-filesystem.sarif || status=$?
+if [ "$status" -ne 0 ] && [ "$status" -ne 183 ]; then
+  exit "$status"
+fi
+
+status=0
+trufflehog --no-verification --no-update --fail --fail-on-scan-errors --sarif git --exclude-paths .trufflehog-exclude-paths --clone-path tmp/security/trufflehog-clones file://. > tmp/security/trufflehog-git.sarif || status=$?
+if [ "$status" -ne 0 ] && [ "$status" -ne 183 ]; then
+  exit "$status"
+fi
+
+grep -h '"trufflehogFingerprint/v1"' tmp/security/trufflehog-filesystem.sarif tmp/security/trufflehog-git.sarif \
+  | sed 's/.*: "\([0-9a-f]*\)".*/\1/' \
+  | sort -u > tmp/security/trufflehog-fingerprints
+diff -u .trufflehog-allowlist tmp/security/trufflehog-fingerprints
+'''
+
+[tasks.security]
+description = "全てのセキュリティ検査を実行する"
+run = [ '''if [ "$(date -u +%Y%m%d)" -ge 20260916 ]; then
+    echo "セキュリティ例外の失効日を過ぎています。.trufflehog-allowlistとapp/native/src/git.rsのnosemgrep抑制を見直してください。" >&2
+    exit 1
+  fi''', "mise run security:code", "mise run security:package", "mise run security:secrets" ]
 
 [tasks.test]
 description = "全てのテストを実行する"

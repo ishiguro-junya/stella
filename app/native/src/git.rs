@@ -2,6 +2,7 @@ use crate::model::{CommandActivity, DiffTarget, ResetMode, WorkspaceError, Works
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
+use std::os::unix::fs::DirBuilderExt;
 #[cfg(debug_assertions)]
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::process::CommandExt;
@@ -48,12 +49,14 @@ struct ExecutableIdentity {
 #[cfg(debug_assertions)]
 impl DevelopmentBuildGuard {
     fn current() -> WorkspaceResult<Self> {
-        let executable = std::env::current_exe().map_err(|error| {
-            WorkspaceError::new(
-                crate::model::ErrorCode::Internal,
-                format!("開発版の実行ファイルを確認できません: {error}"),
-            )
-        })?;
+        // 開発中の再ビルド検知だけに使い、権限や配布物の信頼判定には使わない。失効日: 2026年9月16日。
+        let executable = std::env::current_exe() // nosemgrep: rust.lang.security.current-exe.current-exe
+            .map_err(|error| {
+                WorkspaceError::new(
+                    crate::model::ErrorCode::Internal,
+                    format!("開発版の実行ファイルを確認できません: {error}"),
+                )
+            })?;
         Self::capture(executable)
     }
 
@@ -1049,7 +1052,11 @@ impl GitExecutor {
         }
         let complete_stdout_required = command.requires_complete_stdout();
         let args = command.args();
-        let hook_trace = matches!(command, GitCommand::Commit { .. }).then(HookTrace::new);
+        let hook_trace = if matches!(command, GitCommand::Commit { .. }) {
+            Some(HookTrace::new()?)
+        } else {
+            None
+        };
         self.run_process(
             &self.executable,
             cwd,
@@ -1220,14 +1227,20 @@ impl GitExecutor {
 }
 
 struct HookTrace {
+    directory: PathBuf,
     path: PathBuf,
 }
 
 impl HookTrace {
-    fn new() -> Self {
-        Self {
-            path: std::env::temp_dir().join(format!("stella-hook-{}.trace", Uuid::new_v4())),
-        }
+    fn new() -> WorkspaceResult<Self> {
+        // 共有一時領域の中へ所有者だけがアクセスできるディレクトリを先に作る。失効日: 2026年9月16日。
+        let directory = std::env::temp_dir() // nosemgrep: rust.lang.security.temp-dir.temp-dir
+            .join(format!("stella-hook-{}", Uuid::new_v4()));
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(&directory).map_err(io_error)?;
+        let path = directory.join("trace.json");
+        Ok(Self { directory, path })
     }
 
     fn hook_executed(&self) -> bool {
@@ -1241,7 +1254,7 @@ impl HookTrace {
 
 impl Drop for HookTrace {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        let _ = fs::remove_dir_all(&self.directory);
     }
 }
 
@@ -1419,6 +1432,7 @@ fn io_error(error: std::io::Error) -> WorkspaceError {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::os::unix::fs::PermissionsExt;
 
     #[cfg(debug_assertions)]
     #[test]
@@ -1439,6 +1453,21 @@ mod tests {
             "更新があります。アプリを再起動してください。"
         );
         assert_eq!(error.localized_message.id, "developmentBuildUpdated");
+    }
+
+    #[test]
+    fn hook_trace_uses_a_private_temporary_directory() {
+        let trace = HookTrace::new().expect("hook trace");
+        let directory = trace.directory.clone();
+        let mode = fs::metadata(&directory)
+            .expect("hook trace metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o700);
+
+        drop(trace);
+        assert!(!directory.exists());
     }
 
     #[test]

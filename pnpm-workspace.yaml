@@ -1,3 +1,5 @@
+overrides:
+  deepmerge-ts: 8.0.1
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
 minimumReleaseAgeStrict: true
