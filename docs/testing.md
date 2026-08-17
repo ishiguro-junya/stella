@@ -11,7 +11,7 @@
 フレーキーなテストには、分かっている再現条件と修正方針をコードコメントで残します。  
 
 GitHub Actionsの実行コストを抑えるため、テスト用のCIワークフローは追加しません。  
-代わりにLefthookのプッシュ前フックで`mise run ci`を実行し、静的検査、型検査、単体テスト、統合テスト、E2Eテスト、配布用ビルドをローカルで確認します。  
+代わりにLefthookのプッシュ前フックで`mise run ci`を実行し、静的検査、型検査、単体テスト、統合テスト、E2Eテスト、ビジュアルリグレッションテスト、配布用ビルドをローカルで確認します。  
 配布物固有の検証は[リリース手順](release.md)に従います。  
 
 ## 変更内容に合う最小の検証から始める
@@ -23,7 +23,8 @@ GitHub Actionsの実行コストを抑えるため、テスト用のCIワーク�
 | TypeScriptの型 | `mise run typecheck` | TypeScript全体の型整合性 |
 | コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、未使用コードと依存関係、設定、Markdown、文章、リンク |
 | ネイティブ画面とGit操作 | `mise run test:e2e` | Tauriアプリを使ったE2Eテスト |
-| 全てのテスト | `mise run test` | 単体テスト、統合テスト、E2Eテスト |
+| 画面の意図しない変化 | `mise run test:visual-regression` | ローカル基準画像との画素差比較 |
+| 全てのテスト | `mise run test` | 単体テスト、統合テスト、E2Eテスト、ビジュアルリグレッションテスト |
 | 全ての検査 | `mise run ci` | 静的検査、型検査、全てのテスト、配布用ビルド |
 | READMEの画面画像 | `mise run screenshot` | `screenshots`に置くREADME用画像 |
 
@@ -49,8 +50,15 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 既定ではウィンドウを表示せず、画面を確認しながらデバッグする場合は`mise run test:e2e --headless=false`を実行します。  
 
 開発アプリはViteの`1420`番ポート、HMRの`1421`番ポート、`target/debug/Stella (DEV)`を使います。  
-E2Eは組み込みWebDriverの`4445`番ポートと`target/release/Stella (TEST)`を使い、Viteの開発サーバーを起動しません。  
-バンドルIDも`com.emuni.stella.dev`と`com.emuni.stella.e2e`に分かれているため、開発アプリを起動したままE2Eを実行できます。  
+E2E、ビジュアルリグレッション、スクリーンショット撮影は、次の実行ファイル、バンドルID、組み込みWebDriverポートを使い、Viteの開発サーバーを起動しません。  
+
+| 用途 | 実行ファイル | バンドルID | ポート |
+| --- | --- | --- | --- |
+| E2E | `target/release/Stella (E2E)` | `com.emuni.stella.e2e` | `4445` |
+| ビジュアルリグレッション | `target/release/Stella (VRT)` | `com.emuni.stella.vrt` | `4446` |
+| スクリーンショット | `target/release/Stella (SCR)` | `com.emuni.stella.scr` | `4447` |
+
+用途ごとに分離しているため、各コマンドを同時に実行してもアプリとWebDriverが競合しません。  
 
 機能または画面単位では`--spec`、個別テストまたはダイアログ単位では`--mochaOpts.grep`を使います。  
 
@@ -100,10 +108,23 @@ mise run screenshot -- \
   --mochaOpts.grep 'リポジトリ追加ダイアログ'
 ```
 
+ビジュアルリグレッションの基準画像は、最初に次のコマンドで作成します。  
+意図した視覚変更を基準へ反映する場合も同じコマンドを使います。  
+
+```sh
+mise run test:visual-regression --update
+```
+
+通常のテストでは`tmp/visual-regression/current`へ全ての視覚確認画像を撮影し、`tmp/visual-regression/baseline`とWeb標準のCanvasで比較します。  
+画素ごとの色差が16以下の変化を無視し、それを超える画素が全体の0.1%以下であれば描画上のブレとして許容します。  
+画像の追加、削除、寸法変更は許容しません。  
+基準画像がない場合は、更新コマンドを案内して失敗します。  
+
 ## 検証用データと画像を製品データから分離する
 
 - E2Eと視覚検証では、テストが作成したリポジトリとローカルのベアリモートだけを使います。
 - スクリーンショットは画面遷移に沿って`screenshots/diff`、`history`、`activity`、`settings`、`repositories`、`branches`へ分けます。
+- ビジュアルリグレッションの基準画像と比較画像は`tmp/visual-regression`へ保存します。
 - READMEへ掲載する5画像だけをGit管理し、それ以外のスクリーンショット、切り出し画像、比較画像はGit管理外とします。
 - ローカルの絶対パス、テスト件数、実行日時、過去の合格結果はドキュメントへ記録しません。
 - 個別の実行結果は、コミットまたはプルリクエストの説明へ残します。

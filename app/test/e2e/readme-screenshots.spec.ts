@@ -12,8 +12,8 @@ import {
 import { createFixtureDirectory, removeFixture, runGit } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
-const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
-const outputDirectory = 'screenshots';
+const screenshotMode = process.env.STELLA_TEST_MODE === 'scr';
+const outputDirectory = process.env.STELLA_SCREENSHOT_OUTPUT ?? 'screenshots';
 
 async function waitForDiff(): Promise<void> {
   await browser.waitUntil(

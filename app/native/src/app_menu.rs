@@ -385,7 +385,12 @@ mod tests {
         assert_eq!(metadata.icon.as_ref().map(Image::width), Some(1));
         assert_eq!(metadata.icon.as_ref().map(Image::height), Some(1));
 
-        for name in ["Stella (DEV)", "Stella (TEST)"] {
+        for name in [
+            "Stella (DEV)",
+            "Stella (E2E)",
+            "Stella (VRT)",
+            "Stella (SCR)",
+        ] {
             let mode_metadata = about_metadata(
                 name,
                 DEVELOPMENT_VERSION,

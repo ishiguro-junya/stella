@@ -69,6 +69,7 @@ mise run dev
 | `mise run test:unit` | 単体テストを実行する。 |
 | `mise run test:integration` | 統合テストを実行する。 |
 | `mise run test:e2e` | E2Eテストを実行する。 |
+| `mise run test:visual-regression` | ビジュアルリグレッションテストを実行する。 |
 | `mise run ci` | 全ての検査を実行する。 |
 | `mise run screenshot` | スクリーンショットを生成する。 |
 | `mise run update` | パッケージを最新にアップデートする。 |

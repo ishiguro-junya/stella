@@ -1,5 +1,6 @@
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -22,8 +23,14 @@ import {
 } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
-const screenshotMode = process.env.STELLA_SCREENSHOT === 'true';
-const visualQaDirectory = 'screenshots';
+const screenshotMode = ['scr', 'vrt'].includes(process.env.STELLA_TEST_MODE ?? '');
+const visualQaDirectory = process.env.STELLA_SCREENSHOT_OUTPUT ?? 'screenshots';
+
+async function listPngFiles(directory: string): Promise<string[]> {
+  return (await readdir(directory, { recursive: true }))
+    .filter((path) => path.endsWith('.png'))
+    .toSorted();
+}
 
 interface VisualRepository {
   currentPath: string;
@@ -48,6 +55,17 @@ async function withVisualRepository(
     await runGit(currentPath, ['branch', 'release']);
     await resetApp({ language: 'en', appearance: 'light' });
     await openRepository(currentPath, { language: 'en' });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() =>
+          Boolean(
+            document
+              .querySelector<HTMLElement>('.diff-surface diffs-container')
+              ?.shadowRoot?.querySelector('[data-line]'),
+          ),
+        ),
+      { timeout: 10_000, timeoutMsg: 'Diff did not load.' },
+    );
     await setLogicalWindowSize(1180, 760);
     await run({ currentPath, visualRoot });
   } finally {
@@ -114,6 +132,13 @@ async function captureDialog(directory: string, breakpoint: string): Promise<voi
 }
 
 describe('視覚確認用スクリーンショット', () => {
+  after(async () => {
+    if (process.env.STELLA_TEST_MODE !== 'vrt' || process.env.STELLA_VRT_UPDATE === 'true') return;
+    expect(await listPngFiles(visualQaDirectory)).toEqual(
+      await listPngFiles(join(visualQaDirectory, '..', 'baseline')),
+    );
+  });
+
   it('差分を撮影する', async function () {
     await withVisualRepository(async () => {
       const settings = $('.titlebar-actions button:last-child');
@@ -152,6 +177,17 @@ describe('視覚確認用スクリーンショット', () => {
     await withVisualRepository(async () => {
       await $('button=History').click();
       await expect($('.history-view')).toBeDisplayed();
+      await browser.waitUntil(
+        async () =>
+          browser.execute(() =>
+            Boolean(
+              document
+                .querySelector<HTMLElement>('.diff-surface diffs-container')
+                ?.shadowRoot?.querySelector('[data-line] span'),
+            ),
+          ),
+        { timeout: 10_000, timeoutMsg: 'History syntax highlighting did not load.' },
+      );
       await blurActiveElement();
       await debugAt('history');
       await saveLogicalScreenshot(
@@ -289,6 +325,14 @@ describe('視覚確認用スクリーンショット', () => {
       await selectSetting('appearance', 'dark');
       await $('button[aria-label="Activity"]').click();
       await expect($('.activity-view')).toBeDisplayed();
+      await browser.waitUntil(
+        async () =>
+          browser.execute(
+            () => document.querySelectorAll('.activity-chart-data tbody tr').length > 0,
+          ),
+        { timeout: 10_000, timeoutMsg: 'Commit activity data did not load.' },
+      );
+      await $('.activity-chart .recharts-surface').waitForDisplayed({ timeout: 10_000 });
       await debugAt('activity-dark');
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'activity', 'en-dark-1180x760.png'),
@@ -304,6 +348,7 @@ describe('視覚確認用スクリーンショット', () => {
       await settings.click();
       await selectSetting('appearance', 'light');
       await $('button[aria-label="Activity"]').click();
+      await $('.activity-chart .recharts-surface').waitForDisplayed({ timeout: 10_000 });
       await debugAt('activity-light');
       await saveLogicalScreenshot(
         join(visualQaDirectory, 'activity', 'en-light-1180x760.png'),

@@ -63,7 +63,12 @@ run = "pnpm exec tsc -b"
 
 [tasks.test]
 description = "全てのテストを実行する"
-run = [ "mise run test:unit", "mise run test:integration", "mise run test:e2e" ]
+run = [
+  "mise run test:unit",
+  "mise run test:integration",
+  "mise run test:e2e",
+  "mise run test:visual-regression",
+]
 
 [tasks."test:unit"]
 description = "単体テストを実行する"
@@ -85,20 +90,41 @@ flag "--headless <headless>" help="ウィンドウを表示せずに実行する
 arg "[wdio_args]" var=#true double_dash="required"
 '''
 run = [
-  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
-  "node --import tsx scripts/mode-app.mts test-link target/release/stella",
+  "VITE_E2E=true node --import tsx scripts/mode-app.mts e2e target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   '''
   eval "set -- ${usage_wdio_args-}"
-  STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
+  STELLA_TEST_MODE=e2e STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
+  ''',
+]
+
+[tasks."test:visual-regression"]
+description = "ビジュアルリグレッションテストを実行する"
+usage = '''
+flag "--update" help="基準画像を更新する"
+'''
+run = [
+  '''
+  if [ "${usage_update:-false}" != "true" ] && [ ! -d tmp/visual-regression/baseline ]; then
+    echo "基準画像がありません。mise run test:visual-regression --updateを実行してください。" >&2
+    exit 1
+  fi
+  rm -rf tmp/visual-regression/current
+  ''',
+  "VITE_E2E=true node --import tsx scripts/mode-app.mts vrt target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (VRT)\",\"identifier\":\"com.emuni.stella.vrt\"}'",
+  "STELLA_TEST_MODE=vrt STELLA_VRT_UPDATE=${usage_update:-false} STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT_OUTPUT=tmp/visual-regression/current pnpm exec wdio run wdio.conf.ts",
+  '''
+  if [ "${usage_update:-false}" = "true" ]; then
+    rm -rf tmp/visual-regression/baseline
+    mv tmp/visual-regression/current tmp/visual-regression/baseline
+  fi
   ''',
 ]
 
 [tasks."screenshot"]
 description = "スクリーンショットを生成する"
 run = [
-  "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
-  "node --import tsx scripts/mode-app.mts test-link target/release/stella",
-  "STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT=true pnpm exec wdio run wdio.conf.ts",
+  "VITE_E2E=true node --import tsx scripts/mode-app.mts scr target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (SCR)\",\"identifier\":\"com.emuni.stella.scr\"}'",
+  "STELLA_TEST_MODE=scr STELLA_E2E_HEADLESS=true pnpm exec wdio run wdio.conf.ts",
 ]
 
 [tasks.update]

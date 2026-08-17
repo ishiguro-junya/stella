@@ -1,5 +1,5 @@
 import { $, browser, expect } from '@wdio/globals';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 
 type Language = 'en' | 'ja';
 type Appearance = 'system' | 'light' | 'dark';
@@ -27,7 +27,7 @@ interface ResetAppOptions {
 }
 
 export async function setLogicalWindowSize(width: number, height: number): Promise<number> {
-  const scaleFactor = await browser.tauri.execute(() => window.devicePixelRatio);
+  const scaleFactor = await browser.execute(() => window.devicePixelRatio);
   await browser.setWindowSize(Math.round(width * scaleFactor), Math.round(height * scaleFactor));
   return scaleFactor;
 }
@@ -393,5 +393,102 @@ export async function saveLogicalScreenshot(
     const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
     await promisify(execFile)('/usr/bin/sips', ['-z', String(height), String(width), path]);
+  }
+  if (process.env.STELLA_TEST_MODE !== 'vrt' || process.env.STELLA_VRT_UPDATE === 'true') return;
+
+  const baselinePath = path.replace(
+    'tmp/visual-regression/current/',
+    'tmp/visual-regression/baseline/',
+  );
+  let baseline: Buffer;
+  try {
+    baseline = await readFile(baselinePath);
+  } catch {
+    throw new Error(`基準画像がありません: ${baselinePath}`);
+  }
+  const current = await readFile(path);
+  await browser.execute(
+    (url) => {
+      (window as typeof window & { stellaVrtBaseline?: string }).stellaVrtBaseline = url;
+    },
+    `data:image/png;base64,${baseline.toString('base64')}`,
+  );
+  await browser.execute(
+    (url) => {
+      (window as typeof window & { stellaVrtCurrent?: string }).stellaVrtCurrent = url;
+    },
+    `data:image/png;base64,${current.toString('base64')}`,
+  );
+  const difference = await browser.execute(async () => {
+    const comparisonWindow = window as typeof window & {
+      stellaVrtBaseline?: string;
+      stellaVrtCurrent?: string;
+    };
+    const images = await Promise.all(
+      [comparisonWindow.stellaVrtBaseline!, comparisonWindow.stellaVrtCurrent!].map(
+        (url) =>
+          new Promise<HTMLImageElement>((resolve, reject) => {
+            const image = new Image();
+            image.addEventListener('load', () => resolve(image), { once: true });
+            image.addEventListener(
+              'error',
+              () => reject(new Error('画像を読み込めませんでした。')),
+              {
+                once: true,
+              },
+            );
+            image.src = url;
+          }),
+      ),
+    );
+    const baselineImage = images[0];
+    const currentImage = images[1];
+    if (!baselineImage || !currentImage) throw new Error('比較画像が足りません。');
+    if (
+      baselineImage.naturalWidth !== currentImage.naturalWidth ||
+      baselineImage.naturalHeight !== currentImage.naturalHeight
+    ) {
+      return { dimensionsMatch: false, changedPixels: 0, totalPixels: 1 };
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = baselineImage.naturalWidth;
+    canvas.height = baselineImage.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('画像比較用Canvasを作成できませんでした。');
+    context.drawImage(baselineImage, 0, 0);
+    const baselinePixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(currentImage, 0, 0);
+    const currentPixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let changedPixels = 0;
+    for (let index = 0; index < baselinePixels.length; index += 4) {
+      if (
+        Math.max(
+          Math.abs(baselinePixels[index]! - currentPixels[index]!),
+          Math.abs(baselinePixels[index + 1]! - currentPixels[index + 1]!),
+          Math.abs(baselinePixels[index + 2]! - currentPixels[index + 2]!),
+          Math.abs(baselinePixels[index + 3]! - currentPixels[index + 3]!),
+        ) > 16
+      ) {
+        changedPixels += 1;
+      }
+    }
+    return { dimensionsMatch: true, changedPixels, totalPixels: canvas.width * canvas.height };
+  });
+  await browser.execute(() => {
+    const comparisonWindow = window as typeof window & {
+      stellaVrtBaseline?: string;
+      stellaVrtCurrent?: string;
+    };
+    delete comparisonWindow.stellaVrtBaseline;
+    delete comparisonWindow.stellaVrtCurrent;
+  });
+  if (!difference.dimensionsMatch) throw new Error(`画像の寸法が一致しません: ${path}`);
+  const changedRatio = difference.changedPixels / difference.totalPixels;
+  if (changedRatio > 0.001) {
+    throw new Error(
+      `画像差分が許容範囲を超えました: ${path} (${difference.changedPixels}/${difference.totalPixels} pixels)`,
+    );
   }
 }

@@ -8,6 +8,12 @@ const fixtureRoot = join(process.cwd(), 'tmp', 'e2e');
 
 export async function createFixtureDirectory(prefix: string): Promise<string> {
   await mkdir(fixtureRoot, { recursive: true });
+  if (process.env.STELLA_TEST_MODE === 'vrt') {
+    const path = join(fixtureRoot, prefix);
+    await rm(path, { recursive: true, force: true });
+    await mkdir(path);
+    return realpath(path);
+  }
   return realpath(await mkdtemp(join(fixtureRoot, `${prefix}-`)));
 }
 

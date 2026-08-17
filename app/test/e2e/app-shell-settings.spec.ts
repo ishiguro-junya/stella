@@ -1,6 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
 import { $, browser, expect } from '@wdio/globals';
 import '@wdio/tauri-service';
 
@@ -11,8 +8,6 @@ import {
   selectSetting,
   setLogicalWindowSize,
 } from './support/app.js';
-
-const execFileAsync = promisify(execFile);
 
 type SettingsCategory = 'general' | 'permissions' | 'appearance' | 'diff' | 'editor' | 'git';
 
@@ -46,11 +41,6 @@ describe('App shell and Settings', () => {
       ]),
     );
     await debugAt('app-shell');
-    const { stdout: launchServices } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
-    const app = launchServices
-      .split('\n---')
-      .find((entry) => entry.includes('/target/release/Stella (TEST)'));
-    expect(app).toContain('"LSDisplayName"="Stella (TEST)"');
     const headerButtonLabels = await browser.tauri.execute(() =>
       [...document.querySelectorAll<HTMLButtonElement>('.titlebar-actions button')].map(
         (button) => button.ariaLabel,

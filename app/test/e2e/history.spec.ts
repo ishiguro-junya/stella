@@ -21,7 +21,10 @@ import {
 } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
 
-const visualQaDirectory = process.env.STELLA_SCREENSHOT === 'true' ? 'screenshots' : undefined;
+const visualQaDirectory =
+  process.env.STELLA_TEST_MODE === 'scr'
+    ? (process.env.STELLA_SCREENSHOT_OUTPUT ?? 'screenshots')
+    : undefined;
 
 async function clickHistoryDiffToggle(): Promise<void> {
   await browser.execute(() => {
