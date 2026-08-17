@@ -197,18 +197,24 @@ describe('Activity', () => {
     ]);
     const activityTableLayout = await browser.execute(() => {
       const container = document.querySelector<HTMLElement>('.activity-chart-data > div')!;
-      const headers = [...container.querySelectorAll<HTMLElement>('thead th')];
+      const analyticsHeaders = [...container.querySelectorAll<HTMLElement>('thead th')];
+      const operationHeaders = [
+        ...document.querySelectorAll<HTMLElement>('.activity-operation-table thead th'),
+      ];
+      const headers = [...analyticsHeaders, ...operationHeaders];
       return {
         horizontalOverflow: container.scrollWidth > container.clientWidth,
         clippedHeaders: headers
           .filter((header) => header.scrollWidth > header.clientWidth)
           .map((header) => header.textContent),
-        contributorWidth: Math.round(headers[2]?.getBoundingClientRect().width ?? 0),
+        wrappedHeaders: headers
+          .filter((header) => getComputedStyle(header).whiteSpace !== 'nowrap')
+          .map((header) => header.textContent),
       };
     });
     expect(activityTableLayout.horizontalOverflow).toBe(false);
     expect(activityTableLayout.clippedHeaders).toEqual([]);
-    expect(activityTableLayout.contributorWidth).toBeLessThanOrEqual(100);
+    expect(activityTableLayout.wrappedHeaders).toEqual([]);
     expect(
       await browser.execute(() => {
         const cells = document.querySelectorAll<HTMLElement>('.activity-chart-data thead th');

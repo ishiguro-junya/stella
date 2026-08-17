@@ -20,6 +20,30 @@ describe('global scroll behavior', () => {
   });
 });
 
+describe('Activity tables', () => {
+  it('keeps analytics headers on one line while sizing columns from their content', () => {
+    expect(styles).toMatch(
+      /\.activity-chart-data th,\s*\.activity-chart-data td\s*\{[^}]*white-space:\s*nowrap;/u,
+    );
+    expect(styles).not.toMatch(/\.activity-chart-data table\s*\{[^}]*table-layout:\s*fixed;/u);
+    expect(styles).not.toMatch(
+      /\.activity-chart-data tr > :(?:first-child|nth-child\(2\)|nth-child\(3\)|last-child)\s*\{[^}]*width:/u,
+    );
+    expect(styles).not.toMatch(/\.activity-chart-data thead th\s*\{[^}]*white-space:\s*normal;/u);
+  });
+
+  it('keeps operation headers and values on one line in the fixed, scrollable table', () => {
+    expect(styles).toMatch(/\.activity-operation-table\s*\{[^}]*overflow:\s*auto;/u);
+    expect(styles).toMatch(
+      /\.activity-list\s*\{[^}]*min-width:\s*560px;[^}]*table-layout:\s*fixed;/u,
+    );
+    expect(styles).toMatch(/\.activity-list thead th\s*\{[^}]*white-space:\s*nowrap;/u);
+    expect(styles).toMatch(
+      /\.activity-list tbody th,\s*\.activity-list tbody td\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/u,
+    );
+  });
+});
+
 describe('Diff file selection', () => {
   it('uses neutral list selection with a one-pixel accent focus ring', () => {
     expect(styles).toMatch(

@@ -3203,6 +3203,7 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   font-size: 0.65625rem;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
 }
 .activity-list tbody tr {
   cursor: default;
@@ -3439,7 +3440,6 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   min-width: 0;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
-  table-layout: fixed;
 }
 .activity-chart-data th,
 .activity-chart-data td {
@@ -3449,15 +3449,7 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   white-space: nowrap;
 }
 .activity-chart-data tr > :first-child {
-  width: 48%;
   padding-left: 14px;
-}
-.activity-chart-data tr > :nth-child(2),
-.activity-chart-data tr > :last-child {
-  width: 18%;
-}
-.activity-chart-data tr > :nth-child(3) {
-  width: 16%;
 }
 .activity-chart-data tr > :last-child {
   padding-right: 14px;
@@ -3468,7 +3460,6 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   top: 0;
   background: var(--surface-raised);
   color: var(--text-tertiary);
-  white-space: normal;
 }
 .activity-chart-data tbody {
   color: var(--text-secondary);
