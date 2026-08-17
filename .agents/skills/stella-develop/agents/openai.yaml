@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Stella Develop'
+  short_description: 'アプリの仕様駆動開発を役割別エージェントで完遂する'
+  default_prompt: '`stella-develop`自身、配下の役割契約、連携するエージェント定義の変更を除き、アプリの変更を仕様化から検証まで実装するために、$stella-develop を使用してください。'

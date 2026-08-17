@@ -215,6 +215,7 @@ mise run dev
 
 ## 🧩 エージェントスキル
 
+- [stella-develop](.agents/skills/stella-develop/SKILL.md)
 - [mattpocock/skills](https://www.skills.sh/mattpocock/skills)
 - [ponytail](https://www.skills.sh/dietrichgebert/ponytail/ponytail)
 - [natural-japanese](https://www.skills.sh/coji/natural-japanese/natural-japanese)

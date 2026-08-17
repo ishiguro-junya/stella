@@ -41,8 +41,13 @@ screenshots/**
 # AI Agents
 AGENTS.md
 CLAUDE.md
-.codex/
-.claude/
+.codex/*
+!.codex/agents/
+.claude/*
+!.claude/agents/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/stella-develop
 
 # Git Worktree
 /worktrees/
