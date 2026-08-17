@@ -7,10 +7,10 @@ const command = process.argv[2];
 
 if (command === 'setup') {
   const path = await setupShowcaseFixtureBase();
-  console.log(`基底フィクスチャを作成しました: ${path}`);
+  console.log(`Created the base fixture: ${path}`);
 } else if (command === 'reset') {
   const paths = await resetDevelopmentShowcaseFixture();
-  console.log(`開発用フィクスチャを初期状態へ戻しました:\n${paths.join('\n')}`);
+  console.log(`Reset the development fixtures to their initial state:\n${paths.join('\n')}`);
 } else {
-  throw new Error('使い方: node --import tsx scripts/showcase-fixture.mts <setup|reset>');
+  throw new Error('Usage: node --import tsx scripts/showcase-fixture.mts <setup|reset>');
 }

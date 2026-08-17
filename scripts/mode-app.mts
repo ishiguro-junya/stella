@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 const mode = process.argv[2];
 const source = process.argv[3];
 if ((mode !== 'dev' && mode !== 'test-link') || !source) {
-  throw new Error('使い方: mode-app.mts <dev|test-link> <実行ファイル> [...引数]');
+  throw new Error('Usage: mode-app.mts <dev|test-link> <executable> [...args]');
 }
 
 const name = mode === 'dev' ? 'Stella (DEV)' : 'Stella (TEST)';

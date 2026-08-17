@@ -61,10 +61,10 @@ function run(command: string, args: string[], options: RunOptions = {}) {
     encoding: 'utf8',
     stdio: options.capture ? 'pipe' : 'inherit',
   });
-  if (result.error) fail(`${command}を起動できませんでした: ${result.error.message}`);
+  if (result.error) fail(`Could not start ${command}: ${result.error.message}`);
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout ?? ''}${result.stderr ?? ''}` : '';
-    fail(`${command}が終了コード${String(result.status)}で失敗しました。${detail}`);
+    fail(`${command} failed with exit code ${String(result.status)}.${detail}`);
   }
   return options.capture ? (result.stdout ?? '').trim() : '';
 }
@@ -72,7 +72,7 @@ function run(command: string, args: string[], options: RunOptions = {}) {
 function resetInstallDirectory() {
   const relativePath = relative(temporaryRoot, installDirectory);
   if (relativePath.startsWith('..') || relativePath === '') {
-    fail(`一時ディレクトリのパスが不正です: ${installDirectory}`);
+    fail(`Invalid temporary directory path: ${installDirectory}`);
   }
   rmSync(installDirectory, { recursive: true, force: true });
   mkdirSync(installDirectory, { recursive: true });
@@ -90,12 +90,12 @@ function bundleValue(application: string, key: string) {
 
 function inspectBundle(application: string): BundleInfo {
   if (!existsSync(application) || !statSync(application).isDirectory()) {
-    fail(`アプリのバンドルがありません: ${application}`);
+    fail(`Application bundle not found: ${application}`);
   }
   const executable = bundleValue(application, 'CFBundleExecutable');
   const executablePath = join(application, 'Contents', 'MacOS', executable);
   if (!existsSync(executablePath) || !statSync(executablePath).isFile()) {
-    fail(`アプリの実行ファイルがありません: ${executablePath}`);
+    fail(`Application executable not found: ${executablePath}`);
   }
   return {
     identifier: bundleValue(application, 'CFBundleIdentifier'),
@@ -109,7 +109,7 @@ function assertExpectedBundle(bundle: BundleInfo, expected: BundleInfo, applicat
   const keys: (keyof BundleInfo)[] = ['identifier', 'version', 'executable', 'executableSha256'];
   for (const key of keys) {
     if (bundle[key] !== expected[key]) {
-      fail(`${application}の${key}がビルド成果物と一致しません。`);
+      fail(`The ${key} value in ${application} does not match the build artifact.`);
     }
   }
 }
@@ -136,7 +136,7 @@ function delay(milliseconds: number) {
 async function waitForInstalledApplicationToExit(deadline: number) {
   if (installedApplicationPids().length === 0) return;
   if (Date.now() >= deadline) {
-    fail('Stellaを10秒以内に終了できませんでした。アプリは置き換えていません。');
+    fail('Stella did not exit within 10 seconds. The application was not replaced.');
   }
   await delay(100);
   await waitForInstalledApplicationToExit(deadline);
@@ -146,7 +146,7 @@ async function terminateInstalledApplication() {
   const pids = installedApplicationPids();
   if (pids.length === 0) return;
 
-  console.log('起動中のStellaを終了します。');
+  console.log('Stopping the running Stella application.');
   for (const pid of pids) {
     try {
       process.kill(pid, 'SIGTERM');
@@ -170,25 +170,25 @@ function rollback(previousMoved: boolean, installedMoved: boolean) {
     try {
       renameSync(destinationApplication, failedApplication);
     } catch (error) {
-      errors.push(`新しいアプリを退避できませんでした: ${errorMessage(error)}`);
+      errors.push(`Could not preserve the new application: ${errorMessage(error)}`);
     }
   }
   if (previousMoved && existsSync(previousApplication) && !existsSync(destinationApplication)) {
     try {
       renameSync(previousApplication, destinationApplication);
     } catch (error) {
-      errors.push(`以前のアプリを復元できませんでした: ${errorMessage(error)}`);
+      errors.push(`Could not restore the previous application: ${errorMessage(error)}`);
     }
   }
   return errors;
 }
 
 async function install() {
-  if (platform() !== 'darwin') fail('アプリのインストールはmacOS専用です。');
+  if (platform() !== 'darwin') fail('Application installation is supported only on macOS.');
   try {
     accessSync('/Applications', constants.W_OK);
   } catch {
-    fail('/Applicationsへ書き込めません。書き込み権限を確認してください。');
+    fail('Cannot write to /Applications. Check write permissions.');
   }
   mkdirSync(temporaryRoot, { recursive: true });
   recoverInterruptedInstall();
@@ -196,7 +196,7 @@ async function install() {
 
   const sourceBundle = inspectBundle(sourceApplication);
   if (sourceBundle.identifier !== 'com.emuni.stella') {
-    fail(`バンドルIDがcom.emuni.stellaではありません: ${sourceBundle.identifier}`);
+    fail(`Unexpected bundle identifier: ${sourceBundle.identifier} (expected com.emuni.stella)`);
   }
 
   run('/usr/bin/ditto', [sourceApplication, stagedApplication]);
@@ -220,11 +220,11 @@ async function install() {
   } catch (error) {
     const rollbackErrors = rollback(previousMoved, installedMoved);
     const rollbackDetail = rollbackErrors.length > 0 ? `\n${rollbackErrors.join('\n')}` : '';
-    fail(`アプリの置き換えに失敗しました: ${errorMessage(error)}${rollbackDetail}`);
+    fail(`Failed to replace the application: ${errorMessage(error)}${rollbackDetail}`);
   }
 
   rmSync(installDirectory, { recursive: true, force: true });
-  console.log(`Stella ${sourceBundle.version}を${destinationApplication}へインストールしました。`);
+  console.log(`Installed Stella ${sourceBundle.version} to ${destinationApplication}.`);
 }
 
 try {
