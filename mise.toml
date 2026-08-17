@@ -83,7 +83,7 @@ run = [
   "VITE_E2E=true pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
   "node --import tsx scripts/mode-app.mts test-link target/release/stella",
   '''
-  eval "set -- ${usage_wdio_args?}"
+  eval "set -- ${usage_wdio_args-}"
   STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
   ''',
 ]

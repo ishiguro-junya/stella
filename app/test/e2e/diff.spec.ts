@@ -171,8 +171,11 @@ describe('Diff', () => {
       trigger?.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
       trigger?.blur();
     });
+    await expect($('.app-tooltip')).not.toExist();
     await browser.execute(() => {
-      document.querySelector<HTMLButtonElement>('.change-group-collapse-toggle')?.focus();
+      const trigger = document.querySelector<HTMLButtonElement>('.change-group-collapse-toggle');
+      trigger?.focus();
+      trigger?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
     const keyboardTooltip = $('.app-tooltip');
     await expect(keyboardTooltip).toBeDisplayed();
@@ -187,7 +190,9 @@ describe('Diff', () => {
     await expect($('.app-tooltip')).not.toExist();
 
     await browser.execute(() => {
-      document.querySelector<HTMLButtonElement>('.sidebar-toggle-button')?.focus();
+      const trigger = document.querySelector<HTMLButtonElement>('.sidebar-toggle-button');
+      trigger?.focus();
+      trigger?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
     const edgeTooltip = $('.app-tooltip');
     await expect(edgeTooltip).toBeDisplayed();
@@ -207,7 +212,9 @@ describe('Diff', () => {
     const closeButton = dialog.$('.dialog-close-button');
     await closeButton.waitForDisplayed({ timeout: 10_000 });
     await browser.execute(() => {
-      document.querySelector<HTMLButtonElement>('.dialog-close-button')?.focus();
+      const trigger = document.querySelector<HTMLButtonElement>('.dialog-close-button');
+      trigger?.focus();
+      trigger?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
     const closeButtonLabel = await closeButton.getAttribute('aria-label');
     if (!closeButtonLabel) throw new Error('The dialog close button has no accessible label.');
@@ -425,9 +432,10 @@ describe('Diff', () => {
       .join('\n');
     if (originalPatterns !== savedPatterns) {
       await ignorePatterns.setValue(originalPatterns);
-      await ignorePatterns.click();
       await browser.execute(() =>
-        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+        document
+          .querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')
+          ?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })),
       );
     }
     await $('button=差分').click();
@@ -443,11 +451,13 @@ describe('Diff', () => {
 
     try {
       await testIgnorePatterns.setValue(testPatterns);
-      await testIgnorePatterns.click();
       await browser.execute(() =>
-        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+        document
+          .querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')
+          ?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })),
       );
       await $('button=差分').click();
+      await browser.execute(() => window.dispatchEvent(new Event('focus')));
       await $(stageIgnoredFile).waitForExist({ reverse: true, timeout: 10_000 });
       expect(await runGit(repositoryPath, ['status', '--short'])).toContain(ignoredPath);
     } finally {
@@ -456,11 +466,13 @@ describe('Diff', () => {
       const restorePatterns = $('textarea[name="ignore-patterns"]');
       await restorePatterns.waitForEnabled();
       await restorePatterns.setValue(originalPatterns);
-      await restorePatterns.click();
       await browser.execute(() =>
-        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+        document
+          .querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')
+          ?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })),
       );
       await $('button=差分').click();
+      await browser.execute(() => window.dispatchEvent(new Event('focus')));
       await $(stageIgnoredFile).waitForExist({ timeout: 10_000 });
     }
   });
@@ -1704,24 +1716,23 @@ describe('Diff', () => {
     const editorPosition = await waitForEditorPosition('line-42');
     expect(editorPosition.focused).toBe(true);
 
-    await browser.waitUntil(
-      async () =>
-        browser.execute(() => {
-          const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
-          const content = document.querySelector<HTMLElement>('.file-editor .cm-content');
-          const lastLine = document.querySelector<HTMLElement>('.file-editor .cm-line:last-child');
-          if (!scroller || !content || !lastLine) return false;
-          scroller.scrollTop = scroller.scrollHeight;
-          const contentPaddingTop = Number.parseFloat(getComputedStyle(content).paddingTop) || 0;
-          return (
-            Math.abs(
-              lastLine.getBoundingClientRect().top -
-                (scroller.getBoundingClientRect().top + contentPaddingTop),
-            ) <= 2
-          );
-        }),
-      { timeout: 10_000, timeoutMsg: 'The last editor line could not reach the viewport top.' },
-    );
+    const lastLineAtTop = await browser.executeAsync<boolean, []>((done) => {
+      const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
+      if (!scroller) return done(false);
+      scroller.scrollTop = scroller.scrollHeight;
+      scroller.dispatchEvent(new Event('scroll'));
+      requestAnimationFrame(() => {
+        const lastLine = document.querySelector<HTMLElement>('.file-editor .cm-line:last-child');
+        done(
+          Boolean(
+            lastLine &&
+            Math.abs(lastLine.getBoundingClientRect().top - scroller.getBoundingClientRect().top) <=
+              2,
+          ),
+        );
+      });
+    });
+    expect(lastLineAtTop).toBe(true);
   });
 
   it('places Hunk actions at the right edge and opens line actions from a blue selection', async () => {

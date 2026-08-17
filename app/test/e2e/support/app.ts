@@ -65,6 +65,33 @@ export async function resetApp(options: ResetAppOptions = {}): Promise<void> {
   await browser.refresh();
   await setLogicalWindowSize(1180, 760);
   await $('[data-testid="app-shell"]').waitForDisplayed({ timeout: 10_000 });
+  if (process.env.STELLA_E2E_HEADLESS !== 'false') {
+    await browser.execute(() => {
+      // 非表示のWebViewではフレームとタイマーが間引かれるため、E2E中だけタスクで進める。
+      const style = document.createElement('style');
+      style.textContent = '* { animation: none !important; }';
+      document.head.append(style);
+      const callbacks = new Map<number, FrameRequestCallback>();
+      const channel = new MessageChannel();
+      let nextHandle = 0;
+      channel.port1.addEventListener('message', (event: MessageEvent<number>) => {
+        const callback = callbacks.get(event.data);
+        if (!callback) return;
+        callbacks.delete(event.data);
+        callback(performance.now());
+      });
+      channel.port1.start();
+      window.requestAnimationFrame = (callback) => {
+        const handle = ++nextHandle;
+        callbacks.set(handle, callback);
+        channel.port2.postMessage(handle);
+        return handle;
+      };
+      window.cancelAnimationFrame = (handle) => {
+        callbacks.delete(handle);
+      };
+    });
+  }
 }
 
 export async function selectSetting(name: string, value: string): Promise<void> {
