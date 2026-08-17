@@ -190,9 +190,9 @@ export function SettingsView({
     onRepositoryBasePathChange(path);
   };
 
-  const commitIgnorePatterns = (): void => {
-    if (!toolchainStatus || ignorePatternsDraft === toolchainStatus.ignorePatterns) return;
-    onIgnorePatternsChange(ignorePatternsDraft);
+  const commitIgnorePatterns = (draft = ignorePatternsDraft): void => {
+    if (!toolchainStatus || draft === toolchainStatus.ignorePatterns) return;
+    onIgnorePatternsChange(draft);
   };
 
   const moveCategory = (event: KeyboardEvent<HTMLButtonElement>, nextIndex: number): void => {
@@ -775,7 +775,7 @@ export function SettingsView({
                   autoCorrect="off"
                   spellCheck={false}
                   onChange={(event) => setIgnorePatternsDraft(event.currentTarget.value)}
-                  onBlur={commitIgnorePatterns}
+                  onBlur={(event) => commitIgnorePatterns(event.currentTarget.value)}
                 />
               </section>
               <section

@@ -73,9 +73,16 @@ async function runHistoryAction(
   const dialog = $(`[role="dialog"][aria-labelledby="history-${kind}-title"]`);
   await expect(dialog).toBeDisplayed();
   if (field) await dialog.$(`[aria-label="${field.label}"]`).setValue(field.value);
-  await dialog.$('button=次へ').click();
+  const next = dialog.$('button=次へ');
+  await next.waitForClickable();
+  await next.click();
   const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
-  await expect(confirmation).toBeDisplayed();
+  const runtimeError = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
+  await browser.waitUntil(
+    async () => (await confirmation.isDisplayed()) || (await runtimeError.isDisplayed()),
+    { timeoutMsg: `The ${kind} preview did not finish.` },
+  );
+  if (await runtimeError.isDisplayed()) throw new Error(await runtimeError.getText());
   await confirmation.$(`button=${actionLabel}`).click();
   await expect(confirmation).not.toExist();
 }
@@ -842,8 +849,11 @@ describe('History', () => {
     const rebaseOid = await createTarget('e2e-rebase-target', 'e2e-rebase.txt');
     const mergeOid = await createTarget('e2e-merge-target', 'e2e-merge.txt');
     const cherryPickOid = await createTarget('e2e-cherry-target', 'e2e-cherry.txt');
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await expect($('.branch-toggle')).toHaveText('e2e-cherry-target');
     await runGit(repositoryPath, ['switch', currentBranch]);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await expect($('.branch-toggle')).toHaveText(currentBranch);
     await $('button=履歴').click();
 
     await runHistoryAction(baseOid, 'ブランチを作成', 'createBranch', '作成', {

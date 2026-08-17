@@ -48,9 +48,7 @@ async function readEditorPosition(): Promise<EditorPosition> {
   });
 }
 
-// フレーキー: 全E2E実行時にCodeMirrorのレイアウト確定が遅れ、
-// activeLineとfocusが正しくてもscrollTopが0のままになることがある。
-// 要素の寸法確定を待ってからスクロール位置を検証する。
+// CodeMirrorの実寸確定後に行位置とフォーカスがそろうまで待つ。
 async function waitForEditorPosition(expectedLine: string): Promise<EditorPosition> {
   let position = await readEditorPosition();
   try {
@@ -123,8 +121,6 @@ describe('Diff', () => {
     repositoryPath = '';
   });
 
-  // フレーキー: フォーカス移動直後の描画が間に合わず、ツールチップが表示されないことがある。
-  // フォーカス状態と描画完了を同期してから表示を検証する。
   it('shows the shared rich tooltip for pointer and keyboard use in both themes', async () => {
     const groupToggle = $('.change-group-collapse-toggle');
     await groupToggle.waitForDisplayed();
@@ -170,6 +166,11 @@ describe('Diff', () => {
 
     await browser.execute(() => {
       document.documentElement.dataset.theme = 'light';
+      const trigger = document.querySelector<HTMLButtonElement>('.change-group-collapse-toggle');
+      trigger?.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
+      trigger?.blur();
+    });
+    await browser.execute(() => {
       document.querySelector<HTMLButtonElement>('.change-group-collapse-toggle')?.focus();
     });
     const keyboardTooltip = $('.app-tooltip');
@@ -407,26 +408,44 @@ describe('Diff', () => {
     await expect($('.diff-surface')).toHaveAttribute('data-wrap-column', '80');
   });
 
-  // フレーキー: 設定保存後のスナップショット更新が遅れ、対象ファイルが10秒以内に消えないことがある。
-  // 保存完了とスナップショット更新を待ってから表示を検証する。
+  // 保存の中間状態ではなく、スナップショットへ反映されたファイル表示を待つ。
   it('applies the global ignore list without changing plain Git behavior', async () => {
     const ignoredPath = 'stella-e2e-only.ignore';
-    await writeRepositoryFile(repositoryPath, ignoredPath, 'ignored by Stella\n');
-    await browser.execute(() => window.dispatchEvent(new Event('focus')));
     const stageIgnoredFile = `input[aria-label="ステージ ${ignoredPath}"]`;
-    await $(stageIgnoredFile).waitForExist();
 
     await $('button=設定').click();
     await $('button[data-settings-category="git"]').click();
     const ignorePatterns = $('textarea[name="ignore-patterns"]');
     await ignorePatterns.waitForEnabled();
-    const originalPatterns = await ignorePatterns.getValue();
+    const savedPatterns = await ignorePatterns.getValue();
+    const originalPatterns = savedPatterns
+      .split('\n')
+      .filter((pattern) => pattern !== ignoredPath)
+      .join('\n');
+    if (originalPatterns !== savedPatterns) {
+      await ignorePatterns.setValue(originalPatterns);
+      await ignorePatterns.click();
+      await browser.execute(() =>
+        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+      );
+    }
+    await $('button=差分').click();
+    await writeRepositoryFile(repositoryPath, ignoredPath, 'ignored by Stella\n');
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $(stageIgnoredFile).waitForExist();
+
+    await $('button=設定').click();
+    await $('button[data-settings-category="git"]').click();
+    const testIgnorePatterns = $('textarea[name="ignore-patterns"]');
+    await testIgnorePatterns.waitForEnabled();
     const testPatterns = `${originalPatterns}${originalPatterns.endsWith('\n') ? '' : '\n'}${ignoredPath}`;
 
     try {
-      await ignorePatterns.setValue(testPatterns);
-      await browser.keys(['Tab']);
-      await ignorePatterns.waitForEnabled();
+      await testIgnorePatterns.setValue(testPatterns);
+      await testIgnorePatterns.click();
+      await browser.execute(() =>
+        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+      );
       await $('button=差分').click();
       await $(stageIgnoredFile).waitForExist({ reverse: true, timeout: 10_000 });
       expect(await runGit(repositoryPath, ['status', '--short'])).toContain(ignoredPath);
@@ -436,8 +455,10 @@ describe('Diff', () => {
       const restorePatterns = $('textarea[name="ignore-patterns"]');
       await restorePatterns.waitForEnabled();
       await restorePatterns.setValue(originalPatterns);
-      await browser.keys(['Tab']);
-      await restorePatterns.waitForEnabled();
+      await restorePatterns.click();
+      await browser.execute(() =>
+        document.querySelector<HTMLTextAreaElement>('textarea[name="ignore-patterns"]')?.blur(),
+      );
       await $('button=差分').click();
       await $(stageIgnoredFile).waitForExist({ timeout: 10_000 });
     }
@@ -1471,6 +1492,12 @@ describe('Diff', () => {
       { timeout: 10_000, timeoutMsg: 'The Hunk edit action did not appear.' },
     );
     await browser.execute(() => {
+      // 初回描画だけ極小になるフレックス配置を固定して再現する。
+      const style = document.createElement('style');
+      style.id = 'e2e-delayed-editor-layout';
+      style.textContent =
+        '.file-editor-body { flex: none !important; height: 1px !important; overflow: hidden !important; }';
+      document.head.append(style);
       const root = document.querySelector<HTMLElement>(
         '.diff-surface diffs-container',
       )!.shadowRoot!;
@@ -1479,6 +1506,11 @@ describe('Diff', () => {
         ?.click();
     });
     const editor = $('.file-editor-pane');
+    try {
+      await editor.waitForExist({ timeout: 10_000 });
+    } finally {
+      await browser.execute(() => document.querySelector('#e2e-delayed-editor-layout')?.remove());
+    }
     await editor.waitForDisplayed({ timeout: 10_000 });
     const hunkEditorPosition = await waitForEditorPosition('line-117');
     expect(hunkEditorPosition.scrollTop).toBeGreaterThan(0);

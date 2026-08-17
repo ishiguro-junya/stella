@@ -347,8 +347,24 @@ export function TextEditor({
     if (!scrollRequested) view.scrollDOM.scrollTop = 0;
     view.scrollDOM.scrollLeft = 0;
     if (scrollRequested) view.focus();
+    let initialScrollObserver: ResizeObserver | undefined;
+    if (scrollRequested && typeof ResizeObserver !== 'undefined') {
+      // 初回のフレックス計測が極小でも、実寸確定後に開始位置を補正する。
+      initialScrollObserver = new ResizeObserver(() => {
+        const viewportHeight = view.scrollDOM.clientHeight;
+        if (viewportHeight <= view.defaultLineHeight) return;
+        initialScrollObserver?.disconnect();
+        view.scrollDOM.scrollTop = Math.max(
+          0,
+          view.lineBlockAt(scrollPosition).top - viewportHeight * INITIAL_SCROLL_TOP_RATIO,
+        );
+        view.focus();
+      });
+      initialScrollObserver.observe(view.scrollDOM);
+    }
     viewRef.current = view;
     return () => {
+      initialScrollObserver?.disconnect();
       view.destroy();
       viewRef.current = null;
     };

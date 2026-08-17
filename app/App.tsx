@@ -479,6 +479,9 @@ export function App({
   const manualUpdateCheckRequestedRef = useRef(false);
   const lastAutomaticUpdateCheckRef = useRef(0);
   const promptedUpdateVersionRef = useRef<string | undefined>(undefined);
+  const repositoryAvailabilityRequestsRef = useRef(
+    new Map<string, Promise<RepositoryAvailability>>(),
+  );
   const repo = selectedRepo(workspace);
   const repositoryLandingVisible = page === 'repositories' || (page === 'workspace' && !repo);
   const effectiveRepositoryLogoLoader =
@@ -603,10 +606,23 @@ export function App({
 
   const inspectRepositoryPath = useCallback(
     async (path: string): Promise<RepositoryAvailability> => {
-      const result = await adapter.query({ kind: 'repositoryAvailability', path });
-      if (result.kind !== 'repositoryAvailability') throw new Error(t('repositoryCheckFailed'));
-      setRepositoryAvailability((current) => ({ ...current, [path]: result.availability }));
-      return result.availability;
+      const request = adapter.query({ kind: 'repositoryAvailability', path }).then((result) => {
+        if (result.kind !== 'repositoryAvailability') throw new Error(t('repositoryCheckFailed'));
+        return result.availability;
+      });
+      repositoryAvailabilityRequestsRef.current.set(path, request);
+      let latest = request;
+      for (;;) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 先行した確認は、その場所に対する最新の確認結果へ合流する。
+        const availability = await latest;
+        const current = repositoryAvailabilityRequestsRef.current.get(path);
+        if (current && current !== latest) {
+          latest = current;
+          continue;
+        }
+        setRepositoryAvailability((values) => ({ ...values, [path]: availability }));
+        return availability;
+      }
     },
     [adapter, t],
   );

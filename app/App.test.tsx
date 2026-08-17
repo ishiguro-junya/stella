@@ -2915,6 +2915,43 @@ describe('App repository attach', () => {
 });
 
 describe('App repository recovery', () => {
+  it('keeps the newest repository availability when checks finish out of order', async () => {
+    const path = '/tmp/moved-repository';
+    writePreferences({ ...DEFAULT_PREFERENCES, registeredRepoPaths: [path] });
+    const resolvers: Array<(availability: RepositoryAvailability) => void> = [];
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'repositoryAvailability') {
+        const availability = await new Promise<RepositoryAvailability>((resolve) =>
+          resolvers.push(resolve),
+        );
+        return { kind: 'repositoryAvailability', path: request.path, availability };
+      }
+      if (request.kind === 'activity') return { kind: 'activity', entries: [] };
+      throw new Error(`Unexpected query: ${request.kind}`);
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query,
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+    await act(async () => resolvers[1]?.('missing'));
+    await act(async () => resolvers[0]?.('available'));
+
+    expect(await screen.findByText('Check location')).toBeInTheDocument();
+  });
+
   it('rechecks registered repository access when the app regains focus', async () => {
     const user = userEvent.setup();
     const path = '/tmp/protected-repository';

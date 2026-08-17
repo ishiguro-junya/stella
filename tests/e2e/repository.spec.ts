@@ -597,9 +597,15 @@ describe('Repository and Branch navigation', () => {
 
     await rename(oldPath, relocatedPath);
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
-
-    const missingRepository = $('.registered-repositories [role="option"]');
-    await expect(missingRepository).toHaveText(expect.stringContaining('場所を確認'));
+    await browser.waitUntil(
+      async () => {
+        const repository = $('.registered-repositories [role="option"]');
+        return (
+          (await repository.isExisting()) && (await repository.getText()).includes('場所を確認')
+        );
+      },
+      { timeoutMsg: 'The relocated repository did not show its missing-location status.' },
+    );
     await $('.registered-repositories .switcher-action-trigger').click();
     await $('button=リポジトリを切り替え').click();
     const confirmation = $('[role="alertdialog"][aria-labelledby="repository-relocation-title"]');

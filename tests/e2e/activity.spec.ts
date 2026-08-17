@@ -34,6 +34,7 @@ describe('Activity', () => {
     const activity = $('button[aria-label="活動"]');
     await expect(activity).toHaveText('活動');
     await expect($('button[aria-label="設定"]')).toHaveText('設定');
+    await activity.waitForClickable();
     await activity.click();
     await expect($('.activity-view')).toBeDisplayed();
     const firstOperation = $('.activity-list tbody tr:first-child');
