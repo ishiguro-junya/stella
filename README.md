@@ -4,7 +4,7 @@
   <img src="logo.png" alt="Stellaのアイコン" width="128" height="128">
 </p>
 
-<p align="center">ファイル差分の確認に集中できるシンプルなGitクライアント</p>
+<p align="center">ファイルの差分の確認に集中できるシンプルなGitクライアント</p>
 
 > [!WARNING]
 > このアプリは現在α版です。  
