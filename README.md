@@ -4,7 +4,7 @@
   <img src="logo.png" alt="Stellaのアイコン" width="128" height="128">
 </p>
 
-<p align="center">ファイルの差分の確認に集中できるシンプルなGitクライアント</p>
+<p align="center">ファイルの差分確認に集中できるシンプルなGitクライアント</p>
 
 ![ファイル差分の画面](screenshots/dark/1180x760/diff/diff.png)
 
