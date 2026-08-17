@@ -50,7 +50,7 @@ run = [
   "taplo check",
   "pnpm exec markdownlint-cli2",
   "pnpm exec textlint README.md CONTRIBUTING.md DESIGN.md THIRD_PARTY_NOTICES.md 'docs/**/*.md'",
-  "lychee --files-from .lycheeinputs",
+  "lychee '**/*.md'",
 ]
 
 [tasks.format]

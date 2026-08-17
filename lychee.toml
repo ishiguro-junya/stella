@@ -1,6 +1,5 @@
 cache = true
 cache_exclude_status = "429,500.."
-files_from = ".lycheeinputs"
 include_fragments = "full"
 max_cache_age = "1d"
 max_concurrency = 16
