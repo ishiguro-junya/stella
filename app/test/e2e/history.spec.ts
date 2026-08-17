@@ -406,19 +406,47 @@ describe('History', () => {
     await $('button=履歴').click();
     await $('.history-view .diff-surface').waitForDisplayed({ timeout: 10_000 });
 
-    expect(
-      await browser.execute(() => {
-        const detailPane = document.querySelector<HTMLElement>('.commit-detail-pane');
-        const diffSurface = detailPane?.querySelector<HTMLElement>('.diff-surface');
-        if (!detailPane || !diffSurface) throw new Error('The History right pane was not found.');
-        detailPane.scrollTop = detailPane.scrollHeight;
-        return {
-          detailOverflowY: getComputedStyle(detailPane).overflowY,
-          detailScrolls: detailPane.scrollTop > 0,
-          diffOverflowY: getComputedStyle(diffSurface).overflowY,
-        };
-      }),
-    ).toEqual({ detailOverflowY: 'auto', detailScrolls: true, diffOverflowY: 'visible' });
+    const scrollState = await browser.execute(() => {
+      const detailPane = document.querySelector<HTMLElement>('.commit-detail-pane');
+      const diffSurfaces = detailPane?.querySelectorAll<HTMLElement>('.diff-surface');
+      const diffSurface = diffSurfaces?.[0];
+      const lastDiffSurface = diffSurfaces?.[diffSurfaces.length - 1];
+      if (!detailPane || !diffSurface) throw new Error('The History right pane was not found.');
+
+      const lastDiffHost = lastDiffSurface?.querySelector<HTMLElement>('diffs-container');
+      if (!lastDiffHost) throw new Error('The final History diff was not found.');
+      const lastDiffCode = lastDiffHost.shadowRoot?.querySelector<HTMLElement>('[data-code]');
+      if (!lastDiffCode) throw new Error('The final History diff code was not found.');
+
+      detailPane.scrollTop = detailPane.scrollHeight - detailPane.clientHeight;
+      const paneBounds = detailPane.getBoundingClientRect();
+      const lastDiffBounds = lastDiffHost.getBoundingClientRect();
+      return {
+        detailOverflowY: getComputedStyle(detailPane).overflowY,
+        detailHasOverflow: detailPane.scrollHeight > detailPane.clientHeight,
+        detailAtEnd:
+          Math.abs(detailPane.scrollTop - (detailPane.scrollHeight - detailPane.clientHeight)) <= 1,
+        diffOverflowY: getComputedStyle(diffSurface).overflowY,
+        diffHostAllowsVerticalScrollChaining:
+          getComputedStyle(lastDiffHost).overscrollBehaviorY !== 'none',
+        diffCodeAllowsVerticalScrollChaining:
+          getComputedStyle(lastDiffCode).overscrollBehaviorY !== 'none',
+        lastDiffAtPaneEnd:
+          lastDiffBounds.bottom <= paneBounds.bottom + 1 &&
+          lastDiffBounds.bottom >= paneBounds.top - 1 &&
+          lastDiffBounds.top <= paneBounds.bottom + 1,
+      };
+    });
+
+    expect(scrollState).toEqual({
+      detailOverflowY: 'auto',
+      detailHasOverflow: true,
+      detailAtEnd: true,
+      diffOverflowY: 'visible',
+      diffHostAllowsVerticalScrollChaining: true,
+      diffCodeAllowsVerticalScrollChaining: true,
+      lastDiffAtPaneEnd: true,
+    });
   });
 
   it('uses the regular file header for History image previews', async () => {

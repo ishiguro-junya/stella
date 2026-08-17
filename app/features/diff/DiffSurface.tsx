@@ -134,11 +134,6 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   --diffs-bg-deletion-emphasis-override: var(--diff-deletion-emphasis);
   --diffs-gap-block: 0px;
   --diffs-scrollbar-gutter-override: 0px;
-  overscroll-behavior: none;
-}
-
-[data-code] {
-  overscroll-behavior: none;
 }
 
 [data-gutter-buffer],

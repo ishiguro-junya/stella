@@ -243,8 +243,8 @@ describe('DiffSurface line selection', () => {
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       "[data-indicators='classic'] [data-column-number][data-line-type='change-addition']::before {\n  content: '+';",
     );
-    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
-      '[data-code] {\n  overscroll-behavior: none;\n}',
+    expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).not.toContain(
+      'overscroll-behavior',
     );
     expect(patchDiffPropsMock.mock.lastCall?.[0].options.unsafeCSS).toContain(
       '[data-line][data-selected-line] {\n  --diffs-computed-selected-line-bg: var(--diff-selection-surface);',
