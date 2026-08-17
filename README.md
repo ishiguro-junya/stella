@@ -6,7 +6,7 @@
 
 <p align="center">ファイルの差分の確認に集中できるシンプルなGitクライアント</p>
 
-<img src="screenshots/dark/1180x760/diff/diff.png" alt="ファイル差分の画面" style="display: block; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 12px;">
+![ファイル差分の画面](screenshots/dark/1180x760/diff/diff.png)
 
 ## ✨ 機能
 
@@ -185,19 +185,19 @@ mise run dev
 
 ### ファイル編集の画面
 
-<img src="screenshots/dark/1180x760/diff/editor.png" alt="ファイル編集の画面" style="display: block; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 12px;">
+![ファイル編集の画面](screenshots/dark/1180x760/diff/editor.png)
 
 ### 履歴の画面
 
-<img src="screenshots/dark/1180x760/history/history.png" alt="履歴の画面" style="display: block; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 12px;">
+![履歴の画面](screenshots/dark/1180x760/history/history.png)
 
 ### 活動の画面
 
-<img src="screenshots/dark/1180x760/activity/activity.png" alt="活動の画面" style="display: block; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 12px;">
+![活動の画面](screenshots/dark/1180x760/activity/activity.png)
 
 ### 設定の画面
 
-<img src="screenshots/dark/1180x760/settings/settings.png" alt="設定の画面" style="display: block; border: 1px solid rgba(127, 127, 127, 0.35); border-radius: 12px;">
+![設定の画面](screenshots/dark/1180x760/settings/settings.png)
 
 ## 📚 ドキュメント
 
