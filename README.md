@@ -22,6 +22,14 @@
 > 将来的に破壊的な変更が入る可能性があります。  
 > 操作やバグによって生じた損害について、作者は一切の責任を負いません。  
 
+### GitHub Release
+
+[最新のGitHub Release](https://github.com/ishiguro-junya/stella/releases/latest)のAssetsのリンク「Stella_X.X.X_arm64.zip」からZIPファイルをダウンロードします。  
+ZIPファイルを展開し、`Stella.app`を`/Applications`へ移動します。  
+初回起動が拒否された場合は、一度開いてから「システム設定」→「プライバシーとセキュリティ」→「このまま開く」を選択してください。  
+
+### Homebrew
+
 ```sh
 brew tap ishiguro-junya/stella https://github.com/ishiguro-junya/stella
 brew install --cask ishiguro-junya/stella/stella
