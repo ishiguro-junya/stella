@@ -15,20 +15,22 @@
 ✅ コミット数、コントリビューター数、ブランチ数の推移を閲覧できます。  
 ✅ 言語や外観、文字サイズ、レイアウト、ステージの表示などを好みに合わせて設定できます。  
 
-## 📦 インストール
+## 📦 インストール方法
 
 > [!WARNING]
 > このアプリは現在評価版です。  
 > 将来的に破壊的な変更が入る可能性があります。  
 > 操作やバグによって生じた損害について、作者は一切の責任を負いません。  
 
-### GitHub Release
+インストール方法はGitHub Releaseから手動でダウンロードしている方法とHomebrewの2種類あります。  
+初回起動時にmacOSの警告が表示された場合や起動が拒否された場合は、一度開いてから「システム設定」→「プライバシーとセキュリティ」→「このまま開く」を選択してください。  
 
-[最新のGitHub Release](https://github.com/ishiguro-junya/stella/releases/latest)のAssetsのリンク「Stella_X.X.X_arm64.zip」からZIPファイルをダウンロードします。  
+### GitHub Releaseから手動でインストールする
+
+最新の[GitHub Release](https://github.com/ishiguro-junya/stella/releases/latest)からAssetsの「Stella_X.X.X_arm64.zip」のZIPファイルをダウンロードします。  
 ZIPファイルを展開し、`Stella.app`を`/Applications`へ移動します。  
-初回起動が拒否された場合は、一度開いてから「システム設定」→「プライバシーとセキュリティ」→「このまま開く」を選択してください。  
 
-### Homebrew
+### Homebrew経由でインストールする
 
 ```sh
 brew tap ishiguro-junya/stella https://github.com/ishiguro-junya/stella

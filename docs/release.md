@@ -2,7 +2,10 @@
 
 このドキュメントでは、GitHub Release、自動更新用ファイル、Homebrew Caskの公開までを手動で行う手順を定義します。  
 Apple Silicon向けに配布します。  
-Developer ID署名とApple公証は行いませんが、自動更新用ファイルにはTauri Updaterの署名を付けます。  
+macOSアプリはアドホック署名で配布します。  
+アドホック署名はアプリの改変検知に利用できますが、署名者の本人性を保証しません。  
+Developer ID署名とApple公証ではありません。  
+自動更新用ファイルには別途Tauri Updaterの署名を付けます。  
 秘密鍵、検査、例外、公開前の安全性方針は[セキュリティ](security.md)に従います。  
 
 ## 前提
@@ -121,10 +124,13 @@ unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 file target/release/bundle/macos/Stella.app/Contents/MacOS/stella
 node --import tsx scripts/toolchain.mts release-gate \
   target/release/bundle/macos/Stella.app
+codesign --verify --deep --strict --verbose=4 \
+  target/release/bundle/macos/Stella.app
 ```
 
 出力がそれぞれ`$STELLA_VERSION`、`com.emuni.stella`、`arm64`であることを確認します。  
 ツールチェーンのリリース検査では、同梱するGit、Git LFS、git-flow-nextのバージョン、arm64アーキテクチャ、チェックサム、ヘルパー、テンプレート、動的リンク先を検証します。  
+`codesign`の検査が成功し、アプリバンドル全体の署名整合性が確認できることを確認します。  
 
 ## 4. リリース成果物を作成する
 
@@ -152,7 +158,7 @@ shasum -a 256 "$STELLA_GIT_SOURCE"
 - 変更内容
 - 動作環境
 - プレリリースの場合は、アルファ版、ベータ版、またはリリース候補版であること
-- Developer ID未署名、Apple未公証であること
+- アドホック署名であり、配布元の本人性、Appleによる検査、公証を保証しないこと
 
 リリースノートと署名から自動更新用の`latest.json`を作成します。  
 
