@@ -3803,6 +3803,9 @@ button.toggle-button[data-reverse-icons][aria-pressed='true'] .toggle-button-thu
   background: var(--surface-overlay);
   box-shadow: var(--shadow-sheet);
 }
+.operation-progress-sheet {
+  background: var(--surface-raised);
+}
 .dialog-header {
   flex: none;
   padding: 22px 56px 12px 24px;
