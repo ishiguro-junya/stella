@@ -22,7 +22,7 @@ import type {
   LineEventBaseProps,
   SelectedLineRange,
 } from '@pierre/diffs';
-import { CodeView, FileDiff, PatchDiff, WorkerPoolContextProvider } from '@pierre/diffs/react';
+import { CodeView, FileDiff, WorkerPoolContextProvider } from '@pierre/diffs/react';
 // oxlint-disable-next-line import/default -- Viteの`?worker`クエリーが既定エクスポートとしてWorkerコンストラクターを生成する。
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 
@@ -1124,7 +1124,13 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
           codeViewItems,
         };
       }
-      return { ok: true as const, fileDiff: undefined, codeViewItems: [] };
+      const fileDiffs = parsePatchFiles(source.patch, source.cacheKey).flatMap(
+        (patch) => patch.files,
+      );
+      if (fileDiffs.length !== 1) {
+        throw new Error('The patch must contain exactly one displayable file diff.');
+      }
+      return { ok: true as const, fileDiff: fileDiffs[0], codeViewItems: [] };
     } catch (error) {
       console.error('DiffSurface parse failed', error);
       return { ok: false as const, fileDiff: undefined, codeViewItems: [] };
@@ -1152,14 +1158,6 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
 
   const diff = !parsed.ok ? (
     fallback
-  ) : source.kind === 'patch' ? (
-    <PatchDiff
-      patch={source.patch}
-      options={options}
-      {...(showFileHeaders ? { renderCustomHeader: renderFileHeader } : {})}
-      selectedLines={selection}
-      disableWorkerPool={disableWorkerPool}
-    />
   ) : source.kind === 'codeView' ? (
     <CodeView
       items={codeViewItems}

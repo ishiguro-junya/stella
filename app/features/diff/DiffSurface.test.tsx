@@ -73,11 +73,17 @@ interface MockPatchDiffProps {
   renderCustomHeader?: (fileDiff: MockCodeViewItem['fileDiff']) => ReactNode;
 }
 
-const { codeViewPropsMock, parsePatchFilesMock, patchDiffPropsMock } = vi.hoisted(() => ({
-  codeViewPropsMock: vi.fn<(props: MockCodeViewProps) => void>(),
-  parsePatchFilesMock: vi.fn<(patch: string, cacheKey: string) => unknown[]>(),
-  patchDiffPropsMock: vi.fn<(props: MockPatchDiffProps) => void>(),
-}));
+interface MockFileDiffProps extends MockPatchDiffProps {
+  fileDiff: MockCodeViewItem['fileDiff'];
+}
+
+const { codeViewPropsMock, fileDiffPropsMock, parsePatchFilesMock, patchDiffPropsMock } =
+  vi.hoisted(() => ({
+    codeViewPropsMock: vi.fn<(props: MockCodeViewProps) => void>(),
+    fileDiffPropsMock: vi.fn<(props: MockFileDiffProps) => void>(),
+    parsePatchFilesMock: vi.fn<(patch: string, cacheKey: string) => unknown[]>(),
+    patchDiffPropsMock: vi.fn<(props: MockPatchDiffProps) => void>(),
+  }));
 
 vi.mock('@pierre/diffs', () => ({
   registerCustomCSSVariableTheme: vi.fn<() => void>(),
@@ -90,7 +96,11 @@ vi.mock('@pierre/diffs/react', () => ({
     codeViewPropsMock(props);
     return <div>CodeView</div>;
   },
-  FileDiff: () => <div>FileDiff</div>,
+  FileDiff: (props: MockFileDiffProps) => {
+    fileDiffPropsMock(props);
+    patchDiffPropsMock(props);
+    return <div>FileDiff</div>;
+  },
   PatchDiff: (props: MockPatchDiffProps) => {
     patchDiffPropsMock(props);
     return <div>PatchDiff</div>;
@@ -126,8 +136,12 @@ function CaptureI18n() {
 
 beforeEach(() => {
   codeViewPropsMock.mockReset();
+  fileDiffPropsMock.mockReset();
   parsePatchFilesMock.mockReset();
   patchDiffPropsMock.mockReset();
+  parsePatchFilesMock.mockReturnValue([
+    { files: [{ name: 'example.txt', type: 'change', hunks: [] }] },
+  ]);
 });
 
 function createDiffHost(): { host: HTMLElement; root: ShadowRoot } {
@@ -175,6 +189,58 @@ describe('DiffSurface fallback', () => {
       screen.getByText('The formatted diff could not be loaded. Showing plain text instead.'),
     ).toBeInTheDocument();
     expect(screen.getByText('diff --git a/a')).toBeInTheDocument();
+    consoleError.mockRestore();
+  });
+});
+
+describe('DiffSurface patch sources', () => {
+  it('uses the source cache key when parsing a single-file patch for FileDiff', () => {
+    const fileDiff = { name: 'example.txt', type: 'change' as const, hunks: [] };
+    parsePatchFilesMock.mockReturnValue([{ files: [fileDiff] }]);
+
+    render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'commit-b:example.txt',
+        }}
+      />,
+    );
+
+    expect(parsePatchFilesMock).toHaveBeenCalledWith(PATCH, 'commit-b:example.txt');
+    expect(fileDiffPropsMock).toHaveBeenCalledWith(expect.objectContaining({ fileDiff }));
+    expect(screen.getByText('FileDiff')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['empty', []],
+    [
+      'multiple',
+      [
+        {
+          files: [
+            { name: 'first.txt', type: 'change', hunks: [] },
+            { name: 'second.txt', type: 'change', hunks: [] },
+          ],
+        },
+      ],
+    ],
+  ])('falls back safely when a patch has %s displayable file diffs', (_kind, parsedPatches) => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    parsePatchFilesMock.mockReturnValue(parsedPatches);
+
+    render(
+      <DiffSurface
+        source={{ kind: 'patch', patch: PATCH, path: 'example.txt', cacheKey: 'revision-1' }}
+      />,
+    );
+
+    expect(
+      screen.getByText('The formatted diff could not be loaded. Showing plain text instead.'),
+    ).toBeInTheDocument();
+    expect(fileDiffPropsMock).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
 });
