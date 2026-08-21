@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -223,10 +224,15 @@ describe('App repository attach', () => {
     const user = userEvent.setup();
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
-      query: vi.fn<WorkspaceAdapter['query']>(async () => ({
-        kind: 'activity' as const,
-        entries: [],
-      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? {
+              kind: 'repositoryAvailability' as const,
+              path: request.path,
+              availability: 'available',
+            }
+          : { kind: 'activity' as const, entries: [] },
+      ),
       preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
         throw new Error('unused');
       }),
@@ -771,10 +777,15 @@ describe('App repository attach', () => {
         selectedRepoId: repo.repoId,
         activities: [],
       })),
-      query: vi.fn<WorkspaceAdapter['query']>(async () => ({
-        kind: 'activity' as const,
-        entries: [],
-      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? {
+              kind: 'repositoryAvailability' as const,
+              path: request.path,
+              availability: 'available',
+            }
+          : { kind: 'activity' as const, entries: [] },
+      ),
       preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
         throw new Error('unused');
       }),
@@ -798,28 +809,149 @@ describe('App repository attach', () => {
     );
   });
 
-  it('always starts on the repository landing without restoring a previously open repository', async () => {
-    const repo = repoSnapshot({ path: '/tmp/restored-stella' });
-    localStorage.setItem(
-      'stella.preferences.v1',
-      JSON.stringify({
-        ...DEFAULT_PREFERENCES,
-        registeredRepoPaths: [repo.path],
-        openRepoPaths: [repo.path],
-        selectedRepoPath: repo.path,
-        view: 'history',
-      }),
-    );
+  it('does not attach a registered repository while its availability check is pending', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot({ path: '/tmp/pending-registered-stella' });
+    writePreferences({ ...DEFAULT_PREFERENCES, registeredRepoPaths: [repo.path] });
+    const resolvers: Array<(availability: RepositoryAvailability) => void> = [];
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
         repos: [repo],
         selectedRepoId: repo.repoId,
         activities: [],
       })),
-      query: vi.fn<WorkspaceAdapter['query']>(async () => ({
-        kind: 'activity' as const,
-        entries: [],
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'repositoryAvailability') {
+          const availability = await new Promise<RepositoryAvailability>((resolve) =>
+            resolvers.push(resolve),
+          );
+          return { kind: 'repositoryAvailability' as const, path: request.path, availability };
+        }
+        return { kind: 'activity' as const, entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    await user.dblClick(
+      screen.getByRole('option', {
+        name: 'pending-registered-stella/tmp/pending-registered-stella',
+      }),
+    );
+    await act(async () => resolvers[0]?.('missing'));
+
+    expect(await screen.findByText('Check location')).toBeInTheDocument();
+    expect(adapter.attach).not.toHaveBeenCalled();
+  });
+
+  it('saves the repository after its selection changes', async () => {
+    const user = userEvent.setup();
+    const first = repoSnapshot({ repoId: 'first', path: '/tmp/first' });
+    const second = repoSnapshot({ repoId: 'second', path: '/tmp/second' });
+    writePreferences({ ...DEFAULT_PREFERENCES, registeredRepoPaths: [first.path, second.path] });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async (request) => {
+        const repo = request.kind !== 'clone' && request.path === second.path ? second : first;
+        return { repos: [repo], selectedRepoId: repo.repoId, activities: [] };
+      }),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? {
+              kind: 'repositoryAvailability' as const,
+              path: request.path,
+              availability: 'available',
+            }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.dblClick(screen.getByRole('option', { name: 'first/tmp/first' }));
+    await waitFor(() => expect(readPreferences().lastSelectedRepoPath).toBe(first.path));
+    await user.click(screen.getByRole('button', { name: 'Repository' }));
+    await user.dblClick(screen.getByRole('option', { name: 'second/tmp/second' }));
+    await waitFor(() => expect(readPreferences().lastSelectedRepoPath).toBe(second.path));
+  });
+
+  it('restores the saved available repository with OpenExisting and shows History once', async () => {
+    const repo = repoSnapshot({ path: '/tmp/restored-stella' });
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [repo.path],
+      lastSelectedRepoPath: repo.path,
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
       })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'repositoryAvailability') {
+          return {
+            kind: 'repositoryAvailability' as const,
+            path: request.path,
+            availability: 'available',
+          };
+        }
+        if (request.kind === 'history') return { kind: 'history' as const, commits: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(
+      <StrictMode>
+        <App adapter={adapter} />
+      </StrictMode>,
+    );
+
+    await waitFor(() =>
+      expect(adapter.attach).toHaveBeenCalledWith({ kind: 'openExisting', path: repo.path }),
+    );
+    expect(adapter.attach).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: 'History' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('keeps the repository landing when there is no saved selection', async () => {
+    const path = '/tmp/available-stella';
+    writePreferences({ ...DEFAULT_PREFERENCES, registeredRepoPaths: [path] });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? {
+              kind: 'repositoryAvailability' as const,
+              path: request.path,
+              availability: 'available',
+            }
+          : { kind: 'activity' as const, entries: [] },
+      ),
       preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
         throw new Error('unused');
       }),
@@ -833,8 +965,39 @@ describe('App repository attach', () => {
 
     expect(await screen.findByRole('region', { name: 'Repositories' })).toBeVisible();
     expect(adapter.attach).not.toHaveBeenCalled();
-    await waitFor(() => expect(readPreferences()).not.toHaveProperty('openRepoPaths'));
-    expect(readPreferences()).not.toHaveProperty('selectedRepoPath');
+  });
+
+  it('keeps the repository landing when the saved selection is unavailable', async () => {
+    const path = '/tmp/unavailable-stella';
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: [path],
+      lastSelectedRepoPath: path,
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({ repos: [], activities: [] })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'repositoryAvailability'
+          ? {
+              kind: 'repositoryAvailability' as const,
+              path: request.path,
+              availability: 'missing',
+            }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    expect(await screen.findByRole('region', { name: 'Repositories' })).toBeVisible();
+    expect(adapter.attach).not.toHaveBeenCalled();
   });
 
   it('opens repository dialogs over the repository landing without navigating away', async () => {
@@ -1090,6 +1253,9 @@ describe('App repository attach', () => {
         activities: [],
       })),
       query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'repositoryAvailability') {
+          return { kind: 'repositoryAvailability', path: request.path, availability: 'available' };
+        }
         if (request.kind === 'remotes') {
           return {
             kind: 'remotes',
@@ -1171,6 +1337,9 @@ describe('App repository attach', () => {
       registeredRepoPaths: [repo.path],
     });
     const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'repositoryAvailability') {
+        return { kind: 'repositoryAvailability', path: request.path, availability: 'available' };
+      }
       if (request.kind === 'remotes') {
         return {
           kind: 'remotes',
@@ -1893,6 +2062,7 @@ describe('App repository attach', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: /Current repository first/u })).toBeVisible();
     expect(screen.getByRole('dialog', { name: 'Switch Repository' })).toBeVisible();
+    expect(readPreferences().lastSelectedRepoPath).toBe(first.path);
   });
 
   it('uses the latest dirty state when a deferred attach completes', async () => {

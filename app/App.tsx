@@ -482,7 +482,9 @@ export function App({
   const repositoryAvailabilityRequestsRef = useRef(
     new Map<string, Promise<RepositoryAvailability>>(),
   );
+  const restoreStartedRef = useRef(false);
   const repo = selectedRepo(workspace);
+  const selectedRepoPath = repo?.path;
   const repositoryLandingVisible = page === 'repositories' || (page === 'workspace' && !repo);
   const effectiveRepositoryLogoLoader =
     repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
@@ -777,6 +779,15 @@ export function App({
   }, [workspace]);
 
   useEffect(() => {
+    if (!selectedRepoPath || !registeredPaths.includes(selectedRepoPath)) return;
+    updatePreferences((current) =>
+      current.lastSelectedRepoPath === selectedRepoPath
+        ? current
+        : { ...current, lastSelectedRepoPath: selectedRepoPath },
+    );
+  }, [registeredPaths, selectedRepoPath]);
+
+  useEffect(() => {
     updatePreferences((current) => ({
       ...current,
       appearance,
@@ -1036,6 +1047,53 @@ export function App({
       }
     },
     [adapter, showError, t],
+  );
+
+  useEffect(() => {
+    const path = initialPreferences.lastSelectedRepoPath;
+    if (!path || !registeredPaths.includes(path) || restoreStartedRef.current) return undefined;
+    let active = true;
+    void inspectRepositoryPath(path)
+      .then(async (availability) => {
+        if (
+          !active ||
+          availability !== 'available' ||
+          restoreStartedRef.current ||
+          pageRef.current !== 'workspace' ||
+          selectedRepo(workspaceRef.current)
+        )
+          return;
+        restoreStartedRef.current = true;
+        const attached = await attach({ kind: 'openExisting', path }, undefined, false);
+        if (
+          !active ||
+          !attached ||
+          pageRef.current !== 'workspace' ||
+          selectedRepo(workspaceRef.current)
+        )
+          return;
+        requestNavigationRef.current({
+          repoId: attached.repoId,
+          page: 'workspace',
+          view: 'history',
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [attach, initialPreferences.lastSelectedRepoPath, inspectRepositoryPath, registeredPaths]);
+
+  const openRegisteredRepository = useCallback(
+    async (path: string): Promise<void> => {
+      const availability =
+        repositoryAvailability[path] ??
+        (await (repositoryAvailabilityRequestsRef.current.get(path) ??
+          inspectRepositoryPath(path)));
+      if (availability !== 'available') return;
+      await attach({ kind: 'openExisting', path });
+    },
+    [attach, inspectRepositoryPath, repositoryAvailability],
   );
 
   const loadRemoteManager = useCallback(
@@ -2275,7 +2333,7 @@ export function App({
                 focusFirst={repositoryLandingVisible}
                 busy={busy}
                 onAdd={openRepositoryDialog}
-                onOpen={(path) => settleUiAction(attach({ kind: 'openExisting', path }))}
+                onOpen={(path) => settleUiAction(openRegisteredRepository(path))}
                 onRepair={(path) => settleUiAction(chooseRelocatedRepository(path))}
                 onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}
                 onForget={requestForgetRepository}
@@ -2394,7 +2452,7 @@ export function App({
                 if (registration?.availability && registration.availability !== 'available') {
                   settleUiAction(chooseRelocatedRepository(path));
                 } else {
-                  settleUiAction(attach({ kind: 'openExisting', path }));
+                  settleUiAction(openRegisteredRepository(path));
                 }
               }}
               onManageRemotes={(path) => settleUiAction(openRemoteManager(path))}

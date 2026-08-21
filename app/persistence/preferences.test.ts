@@ -74,6 +74,7 @@ describe('appearance preferences', () => {
     expect(preferences).not.toHaveProperty('view');
     expect(preferences).not.toHaveProperty('openRepoPaths');
     expect(preferences).not.toHaveProperty('selectedRepoPath');
+    expect(preferences).not.toHaveProperty('lastSelectedRepoPath');
   });
 
   it('round-trips independent pane positions for Diff, History, and Activity', () => {
@@ -310,6 +311,18 @@ describe('appearance preferences', () => {
     ]);
   });
 
+  it('round-trips the last selected registered repository path without migrating legacy selection', () => {
+    writePreferences({
+      ...DEFAULT_PREFERENCES,
+      registeredRepoPaths: ['/tmp/stella'],
+      lastSelectedRepoPath: '/tmp/stella',
+    });
+    expect(readPreferences().lastSelectedRepoPath).toBe('/tmp/stella');
+
+    writePreferences({ ...DEFAULT_PREFERENCES, lastSelectedRepoPath: '/tmp/unregistered' });
+    expect(readPreferences().lastSelectedRepoPath).toBeUndefined();
+  });
+
   it('stores a custom repository name without replacing it on an ordinary reopen', () => {
     writePreferences(DEFAULT_PREFERENCES);
 
@@ -325,6 +338,7 @@ describe('appearance preferences', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       registeredRepoPaths: ['/old/repo'],
+      lastSelectedRepoPath: '/old/repo',
       repositoryNames: { '/old/repo': 'Moved' },
       repositoryHealthIssues: {
         '/old/repo': [
@@ -346,6 +360,7 @@ describe('appearance preferences', () => {
 
     expect(replaceRepositoryPath('/old/repo', '/new/repo')).toMatchObject({
       registeredRepoPaths: ['/new/repo'],
+      lastSelectedRepoPath: '/new/repo',
       repositoryNames: { '/new/repo': 'Moved' },
       repositoryHealthIssues: {
         '/new/repo': [{ kind: 'remote', remote: 'origin', reason: 'network' }],
@@ -410,11 +425,14 @@ describe('appearance preferences', () => {
     writePreferences({
       ...DEFAULT_PREFERENCES,
       registeredRepoPaths: ['/repo', '/other'],
+      lastSelectedRepoPath: '/repo',
       repositoryNames: { '/repo': 'Repo', '/other': 'Other' },
     });
-    expect(forgetRepositoryPath('/repo')).toMatchObject({
+    const preferences = forgetRepositoryPath('/repo');
+    expect(preferences).toMatchObject({
       registeredRepoPaths: ['/other'],
       repositoryNames: { '/other': 'Other' },
     });
+    expect(preferences).not.toHaveProperty('lastSelectedRepoPath');
   });
 });

@@ -58,6 +58,7 @@ export interface StellaPreferences {
   editorLineWrapping: boolean;
   editorWrapColumn: number;
   repositoryBasePath?: string;
+  lastSelectedRepoPath?: string;
   registeredRepoPaths: string[];
   repositoryNames: Record<string, string>;
   repositoryHealthIssues: Record<string, RepositoryHealthIssue[]>;
@@ -227,6 +228,7 @@ export function readPreferences(): StellaPreferences {
     const diffPaneWidths = isRecord(paneWidths.diff) ? paneWidths.diff : {};
     const historyPaneWidths = isRecord(paneWidths.history) ? paneWidths.history : {};
     const activityPaneWidths = isRecord(paneWidths.activity) ? paneWidths.activity : {};
+    const registeredRepoPaths = stringArray(value.registeredRepoPaths ?? value.recentRepoPaths);
     const sharedLeftPaneWidth = [
       paneWidths.left,
       diffPaneWidths.left,
@@ -273,7 +275,11 @@ export function readPreferences(): StellaPreferences {
       ...(typeof value.repositoryBasePath === 'string' && value.repositoryBasePath.startsWith('/')
         ? { repositoryBasePath: value.repositoryBasePath }
         : {}),
-      registeredRepoPaths: stringArray(value.registeredRepoPaths ?? value.recentRepoPaths),
+      ...(typeof value.lastSelectedRepoPath === 'string' &&
+      registeredRepoPaths.includes(value.lastSelectedRepoPath)
+        ? { lastSelectedRepoPath: value.lastSelectedRepoPath }
+        : {}),
+      registeredRepoPaths,
       repositoryNames: repositoryNameRecord(value.repositoryNames),
       repositoryHealthIssues: repositoryHealthIssueRecord(value.repositoryHealthIssues),
       paneWidths: {
@@ -372,6 +378,7 @@ export function replaceRepositoryPath(oldPath: string, newPath: string): StellaP
       registeredRepoPaths: current.registeredRepoPaths.map((path) =>
         path === oldPath ? newPath : path,
       ),
+      ...(current.lastSelectedRepoPath === oldPath ? { lastSelectedRepoPath: newPath } : {}),
       repositoryNames,
       repositoryHealthIssues,
       commitDrafts,
@@ -387,13 +394,15 @@ export function forgetRepositoryPath(path: string): StellaPreferences {
     delete repositoryNames[path];
     delete repositoryHealthIssues[path];
     delete commitDrafts[path];
-    return {
+    const preferences: StellaPreferences = {
       ...current,
       registeredRepoPaths: current.registeredRepoPaths.filter((candidate) => candidate !== path),
       repositoryNames,
       repositoryHealthIssues,
       commitDrafts,
     };
+    if (preferences.lastSelectedRepoPath === path) delete preferences.lastSelectedRepoPath;
+    return preferences;
   });
 }
 
