@@ -697,9 +697,16 @@ describe('Repository and Branch navigation', () => {
     await openRepository(repositoryPath, { language: 'ja' });
 
     await $('.diff-action-bar .diff-action-button[aria-label="フェッチ"]').click();
-    const error = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
-    await expect(error).toHaveText(expect.stringContaining('リモートリポジトリを利用できません'));
-    await error.$('button=閉じる').click();
+    const operationProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+    await operationProgress.waitForDisplayed();
+    await expect(operationProgress.$('h2')).toHaveText('フェッチ');
+    await expect(operationProgress.$('[role="alert"]')).toHaveText(
+      expect.stringContaining('リモートリポジトリを利用できません'),
+    );
+    await expect(operationProgress.$('pre[aria-label="stderr"]')).toBeDisplayed();
+    await expect($('[role="alertdialog"][aria-labelledby="runtime-error-title"]')).not.toExist();
+    await operationProgress.$('button=閉じる').click();
+    await operationProgress.waitForExist({ reverse: true });
 
     await $('.repository-toggle').click();
     const switcher = $('[role="dialog"]');

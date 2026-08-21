@@ -657,14 +657,19 @@ describe('Diff', () => {
     await fetchProgress.waitForDisplayed();
     await fetchProgress.waitForDisplayed({ reverse: true });
     await expect(refreshBranches).toHaveAttribute('aria-busy', 'false');
-    await pullDialog.$('button[type="submit"]').click();
-    const failureDialog = $('[role="alertdialog"]');
+    const pullSubmit = pullDialog.$('button[type="submit"]');
+    await pullSubmit.waitForEnabled({ timeout: 10_000 });
+    await pullSubmit.click();
+    const operationProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+    const operationFailure = $('[role="dialog"]:has(.operation-progress-dialog) [role="alert"]');
     await browser.waitUntil(
-      async () => !(await pullDialog.isExisting()) || (await failureDialog.isExisting()),
+      async () => !(await pullDialog.isExisting()) || (await operationFailure.isExisting()),
       { timeoutMsg: 'Pull did not complete or report a failure.' },
     );
-    if (await failureDialog.isExisting()) {
-      throw new Error(`Pull failed: ${await failureDialog.getText()}`);
+    if (await operationFailure.isExisting()) {
+      await expect(operationProgress.$('h2')).toHaveText('プル');
+      await expect($('[role="alertdialog"][aria-labelledby="runtime-error-title"]')).not.toExist();
+      throw new Error(`Pull failed: ${await operationProgress.getText()}`);
     }
     await expect(pullDialog).not.toExist();
     expect(await runGit(repositoryPath, ['show', 'HEAD:remote-update.md'])).toBe('remote update\n');
@@ -827,12 +832,24 @@ describe('Diff', () => {
     await $('.diff-action-button[aria-label="プッシュ"]').click();
     const pushDialog = $('[role="dialog"][aria-labelledby="push-dialog-title"]');
     await pushDialog.waitForDisplayed();
-    await pushDialog.$('label=安全に強制プッシュ（--force-with-lease）').$('input').click();
+    const forceWithLease = pushDialog
+      .$('label=安全に強制プッシュ（--force-with-lease）')
+      .$('input');
+    await forceWithLease.click();
     await pushDialog.$('button[type="submit"]').click();
-    const errorDialog = $('[role="alertdialog"]');
-    await errorDialog.waitForDisplayed();
+    const operationProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+    await operationProgress.waitForDisplayed();
+    await expect(operationProgress.$('h2')).toHaveText('プッシュ');
+    const operationError = operationProgress.$('[role="alert"]');
+    await expect(operationError).toHaveText(expect.stringMatching(/\S/u));
+    await expect($('[role="alertdialog"][aria-labelledby="runtime-error-title"]')).not.toExist();
+    await operationProgress.$('button=閉じる').click();
+    await operationProgress.waitForExist({ reverse: true });
 
     await expect(pushDialog).toBeDisplayed();
+    await expect(pushDialog.$('#push-remote')).toHaveValue('origin');
+    await expect(pushDialog.$('input[list="push-remote-branches"]')).toHaveValue('main');
+    await expect(forceWithLease).toBeChecked();
     expect((await runGit(remotePath, ['rev-parse', 'refs/heads/main'])).trim()).toBe(peerHead);
   });
 
