@@ -523,6 +523,135 @@ describe('History', () => {
     });
   });
 
+  it('loads an oversized History commit one file at a time', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-fallback-small.txt',
+      'small fallback body\n',
+    );
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-fallback-large.txt',
+      `${'x'.repeat(5 * 1024 * 1024 + 1)}\n`,
+    );
+    await runGit(repositoryPath, [
+      'add',
+      'history-fallback-small.txt',
+      'history-fallback-large.txt',
+    ]);
+    await runGit(repositoryPath, [
+      'commit',
+      '-m',
+      'test: 履歴の大きな差分をファイル単位で表示する',
+    ]);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+    await expect($('.commit-detail-pane .inline-alert.warning')).toHaveText(
+      'コミット全体の差分が大きいため、ファイルごとに読み込みます。\n必要なファイルを展開してください。',
+    );
+
+    const initial = await browser.execute(() => {
+      const sections = [...document.querySelectorAll<HTMLElement>('.history-diff-files > section')];
+      const files = Object.fromEntries(
+        sections.map((section) => {
+          const path = section.querySelector(
+            '.diff-file-custom-header-title > span:last-child',
+          )?.textContent;
+          const toggle = section.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle');
+          return [
+            path ?? '',
+            {
+              controls: toggle?.getAttribute('aria-controls'),
+              expanded: toggle?.getAttribute('aria-expanded'),
+            },
+          ];
+        }),
+      );
+      return {
+        files,
+        surfaces: document.querySelectorAll('.commit-detail-pane .diff-surface').length,
+      };
+    });
+    expect(initial).toEqual({
+      files: {
+        'history-fallback-large.txt': { controls: expect.any(String), expanded: 'false' },
+        'history-fallback-small.txt': { controls: expect.any(String), expanded: 'false' },
+      },
+      surfaces: 0,
+    });
+
+    await browser.execute(() => {
+      const section = [
+        ...document.querySelectorAll<HTMLElement>('.history-diff-files > section'),
+      ].find((value) => value.textContent?.includes('history-fallback-small.txt'));
+      section?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle')?.click();
+    });
+    await browser.waitUntil(
+      () =>
+        browser.execute(() => {
+          const host = document.querySelector<HTMLElement>('.diff-surface diffs-container');
+          return host?.shadowRoot?.textContent?.includes('small fallback body') ?? false;
+        }),
+      { timeoutMsg: 'The small fallback file did not render.' },
+    );
+
+    await browser.execute(() => {
+      const section = [
+        ...document.querySelectorAll<HTMLElement>('.history-diff-files > section'),
+      ].find((value) => value.textContent?.includes('history-fallback-large.txt'));
+      section?.querySelector<HTMLButtonElement>('.diff-file-collapse-toggle')?.click();
+    });
+    await browser.waitUntil(
+      () =>
+        browser.execute(() => {
+          const sections = [
+            ...document.querySelectorAll<HTMLElement>('.history-diff-files > section'),
+          ];
+          const large = sections.find((section) =>
+            section.textContent?.includes('history-fallback-large.txt'),
+          );
+          const small = sections.find((section) =>
+            section.textContent?.includes('history-fallback-small.txt'),
+          );
+          return Boolean(
+            large?.textContent?.includes('差分出力が切り詰められたため表示できません。') &&
+            small?.querySelector('.diff-surface'),
+          );
+        }),
+      { timeoutMsg: 'The large fallback file did not show its local truncation warning.' },
+    );
+    expect(
+      await browser.execute(() => {
+        const detail = document.querySelector<HTMLElement>('.commit-detail-pane');
+        const large = [
+          ...document.querySelectorAll<HTMLElement>('.history-diff-files > section'),
+        ].find((section) => section.textContent?.includes('history-fallback-large.txt'));
+        return {
+          detailFits: detail ? detail.scrollWidth <= detail.clientWidth : false,
+          largeHasSurface: large?.querySelector('.diff-surface') !== null,
+        };
+      }),
+    ).toEqual({ detailFits: true, largeHasSurface: false });
+    await setLogicalWindowSize(860, 560);
+    await expectHistoryCommitLayout(860, 560);
+    expect(
+      await browser.execute(() => {
+        const detail = document.querySelector<HTMLElement>('.commit-detail-pane');
+        return {
+          detailFits: detail ? detail.scrollWidth <= detail.clientWidth : false,
+          viewportFits:
+            document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        };
+      }),
+    ).toEqual({ detailFits: true, viewportFits: true });
+    await setLogicalWindowSize(1180, 760);
+  });
+
   it('separates a commit body from the subject as secondary text', async () => {
     await writeRepositoryFile(repositoryPath, 'src/commit-body.md', 'Commit body spacing\n');
     await runGit(repositoryPath, ['add', 'src/commit-body.md']);

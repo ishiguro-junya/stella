@@ -63,6 +63,7 @@ export type ImageBytesTarget =
       path: string;
       previousPath?: string;
       diffId: string;
+      patchScope?: 'all' | 'file';
     };
 
 interface DiffSelectionBase {
@@ -101,6 +102,13 @@ export interface CommitDetails extends CommitSummary {
   authorEmail?: string;
   committedAt?: string;
   diff?: DiffDocument;
+  files?: CommitDiffFile[];
+}
+
+export interface CommitDiffFile {
+  path: string;
+  previousPath?: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
 }
 
 export interface BranchSummary {
@@ -454,6 +462,7 @@ export type WorkspaceQuery =
   | { kind: 'diff'; repoId: RepoId; path: string; previousPath?: string; area: ChangeArea }
   | { kind: 'history'; repoId: RepoId; limit: number; skip: number; search?: string }
   | { kind: 'commitDetails'; repoId: RepoId; oid: string }
+  | { kind: 'commitFileDiff'; repoId: RepoId; oid: string; path: string; previousPath?: string }
   | { kind: 'branches'; repoId: RepoId }
   | { kind: 'gitFlowOverview'; repoId: RepoId }
   | { kind: 'conflict'; repoId: RepoId; path: string }
@@ -478,6 +487,7 @@ export type QueryResult =
   | { kind: 'diff'; diff: DiffDocument }
   | { kind: 'history'; commits: CommitSummary[] }
   | { kind: 'commitDetails'; commit: CommitDetails }
+  | { kind: 'commitFileDiff'; diff: DiffDocument }
   | { kind: 'branches'; branches: BranchSummary[] }
   | { kind: 'gitFlowOverview'; overview: GitFlowOverview }
   | { kind: 'conflict'; document: ConflictDocument }

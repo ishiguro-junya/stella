@@ -18,6 +18,7 @@ export type WireQuery =
   | { kind: 'branches' }
   | { kind: 'gitFlowOverview' }
   | { kind: 'commitDetails'; oid: string }
+  | { kind: 'commitFileDiff'; oid: string; path: string; previousPath?: string }
   | { kind: 'conflict'; path: string }
   | { kind: 'fileContents'; path: string }
   | { kind: 'remotes' }
@@ -43,6 +44,7 @@ export type WireQueryOutcome =
   | { kind: 'branches'; data: WireBranchResult }
   | { kind: 'gitFlowOverview'; data: WireGitFlowOverview }
   | { kind: 'commitDetails'; data: WireCommitDetails }
+  | { kind: 'commitFileDiff'; data: WireDiffResult }
   | { kind: 'conflict'; data: WireConflictDocument }
   | { kind: 'fileContents'; data: WireFileDocument }
   | { kind: 'remotes'; data: WireRemoteResult }
@@ -282,6 +284,13 @@ export interface WireCommitDetails extends WireCommitSummary {
   truncated: boolean;
   diffRevision: string;
   repoGeneration: number;
+  files?: WireCommitDiffFile[];
+}
+
+interface WireCommitDiffFile {
+  path: string;
+  previousPath?: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
 }
 
 interface WireBranchResult {

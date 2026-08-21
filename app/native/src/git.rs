@@ -183,6 +183,11 @@ pub(crate) enum GitCommand {
     CommitPatch {
         oid: String,
         parent: Option<String>,
+        paths: Vec<String>,
+    },
+    CommitNameStatus {
+        oid: String,
+        parent: Option<String>,
     },
     References,
     Branches,
@@ -484,7 +489,7 @@ impl GitCommand {
                 "--format=%P".into(),
                 oid.into(),
             ],
-            Self::CommitPatch { oid, parent } => {
+            Self::CommitPatch { oid, parent, paths } => {
                 let mut args = strings([
                     "diff",
                     "--binary",
@@ -500,6 +505,7 @@ impl GitCommand {
                     args = strings([
                         "diff-tree",
                         "--root",
+                        "-r",
                         "--no-commit-id",
                         "--binary",
                         "--no-color",
@@ -507,6 +513,40 @@ impl GitCommand {
                         "--no-textconv",
                         "--find-renames",
                         "-p",
+                    ]);
+                    args.push(oid.into());
+                }
+                if !paths.is_empty() {
+                    args.push("--".into());
+                    args.extend(paths.iter().map(OsString::from));
+                }
+                args
+            }
+            Self::CommitNameStatus { oid, parent } => {
+                let mut args = strings([
+                    "diff",
+                    "--name-status",
+                    "-z",
+                    "--no-color",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--find-renames",
+                ]);
+                if let Some(parent) = parent {
+                    args.push(parent.into());
+                    args.push(oid.into());
+                } else {
+                    args = strings([
+                        "diff-tree",
+                        "--root",
+                        "-r",
+                        "--no-commit-id",
+                        "--name-status",
+                        "-z",
+                        "--no-color",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--find-renames",
                     ]);
                     args.push(oid.into());
                 }
@@ -882,6 +922,7 @@ impl GitCommand {
                 | Self::CommitActivity { .. }
                 | Self::CommitMetadata { .. }
                 | Self::CommitParents { .. }
+                | Self::CommitNameStatus { .. }
                 | Self::References
                 | Self::Branches
                 | Self::RemoteNames
@@ -1594,6 +1635,11 @@ mod tests {
             GitCommand::Unmerged {
                 path: Some("*".into()),
             },
+            GitCommand::CommitPatch {
+                oid: "commit".into(),
+                parent: Some("parent".into()),
+                paths: vec!["*".into()],
+            },
         ];
         for command in commands {
             assert_eq!(
@@ -1601,6 +1647,25 @@ mod tests {
                 Some(&OsString::from("--literal-pathspecs"))
             );
         }
+    }
+
+    #[test]
+    fn commit_name_status_is_complete_and_nul_delimited() {
+        let command = GitCommand::CommitNameStatus {
+            oid: "commit".into(),
+            parent: Some("parent".into()),
+        };
+        let args = command.args();
+        assert!(command.requires_complete_stdout());
+        assert!(args.contains(&OsString::from("--name-status")));
+        assert!(args.contains(&OsString::from("-z")));
+        assert!(args.contains(&OsString::from("--find-renames")));
+        let root = GitCommand::CommitNameStatus {
+            oid: "root".into(),
+            parent: None,
+        }
+        .args();
+        assert!(root.contains(&OsString::from("-r")));
     }
 
     #[test]

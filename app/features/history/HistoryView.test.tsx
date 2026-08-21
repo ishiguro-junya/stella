@@ -9,6 +9,7 @@ import { I18nProvider } from '../../i18n/i18n';
 import type {
   CommitDetails,
   CommitSummary,
+  ImageBytesTarget,
   QueryResult,
   WorkspaceAction,
 } from '../../domain/workspace';
@@ -25,16 +26,25 @@ interface HistoryDiffSurfaceProps {
   onSelectionCopy?: (text: string) => void;
 }
 
-const { diffSurfaceMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(() => ({
-  diffSurfaceMock: vi.fn<(props: HistoryDiffSurfaceProps) => void>(),
-  imagePreviewToggleMock: vi.fn<(pressed: boolean, disabled: boolean | undefined) => void>(),
-  imageProbeState: { previewable: true },
-}));
+const { diffSurfaceMock, imagePreviewMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(
+  () => ({
+    diffSurfaceMock: vi.fn<(props: HistoryDiffSurfaceProps) => void>(),
+    imagePreviewMock: vi.fn<(target: ImageBytesTarget) => void>(),
+    imagePreviewToggleMock: vi.fn<(pressed: boolean, disabled: boolean | undefined) => void>(),
+    imageProbeState: { previewable: true },
+  }),
+);
 
 function latestHistoryDiffSurfaceProps(): HistoryDiffSurfaceProps {
   const props = diffSurfaceMock.mock.lastCall?.[0];
   if (!props) throw new Error('The History DiffSurface was not rendered.');
   return props;
+}
+
+function latestImagePreviewTarget(): ImageBytesTarget {
+  const target = imagePreviewMock.mock.lastCall?.[0];
+  if (!target) throw new Error('The History image preview was not rendered.');
+  return target;
 }
 
 interface IntersectionObserverRecord {
@@ -110,11 +120,14 @@ vi.mock('../diff/ImageDiffPreview', () => ({
     candidate,
     hidden,
     onProbeResult,
+    target,
   }: {
     candidate: { path: string };
     hidden?: boolean;
     onProbeResult?: (previewable: boolean) => void;
+    target: ImageBytesTarget;
   }) => {
+    imagePreviewMock(target);
     useEffect(() => onProbeResult?.(imageProbeState.previewable), [onProbeResult]);
     return hidden ? null : <div>Image preview content: {candidate.path}</div>;
   },
@@ -197,6 +210,7 @@ function linearHistory(prefix: string, count: number): CommitSummary[] {
 
 beforeEach(() => {
   diffSurfaceMock.mockClear();
+  imagePreviewMock.mockClear();
   imagePreviewToggleMock.mockClear();
   imageProbeState.previewable = true;
   intersectionObserver = undefined;
@@ -476,6 +490,12 @@ abc
     );
 
     expect(await screen.findByText('Image preview content: image.png')).toBeVisible();
+    expect(latestImagePreviewTarget()).toMatchObject({
+      kind: 'commit',
+      oid: 'head',
+      path: 'image.png',
+    });
+    expect(latestImagePreviewTarget()).not.toHaveProperty('patchScope');
     expect(screen.queryByRole('button', { name: 'Image preview' })).not.toBeInTheDocument();
   });
 
@@ -2413,5 +2433,293 @@ diff --git a/second.svg b/second.svg
         hunkSeparators: 'simple',
       }),
     ]);
+  });
+
+  it('loads a hard-limit commit file only after it is expanded', async () => {
+    const user = userEvent.setup();
+    const fileDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'one-file',
+      repoId: 'repo-1',
+      path: 'large.txt',
+      area: 'staged',
+      generation: 1,
+      patch: 'diff --git a/large.txt b/large.txt\n--- a/large.txt\n+++ b/large.txt\n+line\n',
+      binary: false,
+      tooLarge: false,
+    };
+    const details = {
+      ...commitDetails(undefined),
+      files: [{ path: 'large.txt', status: 'modified' as const }],
+    };
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'commitDetails')
+        return { kind: 'commitDetails' as const, commit: details };
+      if (request.kind === 'commitFileDiff')
+        return { kind: 'commitFileDiff' as const, diff: fileDiff };
+      if (request.kind === 'branches') return { kind: 'branches' as const, branches: [] };
+      return { kind: 'activity' as const, entries: [] };
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapterWithQuery(query)}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await screen.findByText(/The complete commit diff is large/u);
+    expect(query).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'commitFileDiff' }),
+      expect.anything(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Expand large.txt diff' }));
+    await waitFor(() =>
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'commitFileDiff', path: 'large.txt' }),
+      ),
+    );
+    expect(await screen.findByText('Diff')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Collapse large.txt diff' }));
+    await user.click(screen.getByRole('button', { name: 'Expand large.txt diff' }));
+    expect(query.mock.calls.filter(([request]) => request.kind === 'commitFileDiff')).toHaveLength(
+      1,
+    );
+  });
+
+  it('disables loading files and retries a failed file expansion', async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    const diff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'retry',
+      repoId: 'repo-1',
+      path: 'retry.txt',
+      area: 'staged',
+      generation: 1,
+      patch: 'diff --git a/retry.txt b/retry.txt\n',
+      binary: false,
+      tooLarge: false,
+    };
+    let resolve: ((result: QueryResult) => void) | undefined;
+    const query = vi.fn<WorkspaceAdapter['query']>((request) => {
+      if (request.kind === 'commitDetails')
+        return Promise.resolve({
+          kind: 'commitDetails' as const,
+          commit: {
+            ...commitDetails(undefined),
+            files: [{ path: 'retry.txt', status: 'modified' as const }],
+          },
+        });
+      if (request.kind === 'commitFileDiff') {
+        attempts += 1;
+        if (attempts === 1) return Promise.reject(new Error('failed'));
+        return new Promise((done) => {
+          resolve = done;
+        });
+      }
+      return Promise.resolve({ kind: 'activity' as const, entries: [] });
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapterWithQuery(query)}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Expand retry.txt diff' });
+    await user.click(button);
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: 'Expand retry.txt diff' }));
+    expect(screen.getByRole('button', { name: 'Collapse retry.txt diff' })).toBeDisabled();
+    expect(document.getElementById('history-diff-content-head-0')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    resolve?.({ kind: 'commitFileDiff', diff });
+    expect(await screen.findByText('Diff')).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it('keeps a truncated fallback file local while another file renders', async () => {
+    const user = userEvent.setup();
+    const normal: NonNullable<CommitDetails['diff']> = {
+      diffId: 'normal',
+      repoId: 'repo-1',
+      path: 'normal.txt',
+      area: 'staged',
+      generation: 1,
+      patch: 'diff --git a/normal.txt b/normal.txt\n',
+      binary: false,
+      tooLarge: false,
+    };
+    const truncated: NonNullable<CommitDetails['diff']> = {
+      ...normal,
+      diffId: 'truncated',
+      path: 'large.txt',
+      patch: '',
+      truncated: true,
+    };
+    const query = vi.fn<WorkspaceAdapter['query']>(async (request) => {
+      if (request.kind === 'commitDetails')
+        return {
+          kind: 'commitDetails' as const,
+          commit: {
+            ...commitDetails(undefined),
+            files: [
+              { path: 'large.txt', status: 'modified' as const },
+              { path: 'normal.txt', status: 'modified' as const },
+            ],
+          },
+        };
+      if (request.kind === 'commitFileDiff')
+        return {
+          kind: 'commitFileDiff' as const,
+          diff: request.path === 'large.txt' ? truncated : normal,
+        };
+      return { kind: 'activity' as const, entries: [] };
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapterWithQuery(query)}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand large.txt diff' }));
+    await user.click(screen.getByRole('button', { name: 'Expand normal.txt diff' }));
+    const large = document.getElementById('history-diff-content-head-0');
+    if (!large) throw new Error('The large fallback content was not found.');
+    expect(
+      await within(large).findByText('The diff output was truncated and cannot be displayed.'),
+    ).toBeInTheDocument();
+    expect(within(large).queryByText('Diff')).not.toBeInTheDocument();
+    expect(await screen.findByText('Diff')).toBeInTheDocument();
+  });
+
+  it('marks fallback image previews as file-scoped', async () => {
+    const user = userEvent.setup();
+    const imageDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'fallback-image',
+      repoId: 'repo-1',
+      path: 'image.png',
+      area: 'staged',
+      generation: 1,
+      patch: 'diff --git a/image.png b/image.png\nGIT binary patch\nliteral 1\nabc\n',
+      binary: true,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return {
+            kind: 'commitDetails' as const,
+            commit: {
+              ...commitDetails(undefined),
+              files: [{ path: 'image.png', status: 'modified' as const }],
+            },
+          };
+        if (request.kind === 'commitFileDiff')
+          return { kind: 'commitFileDiff' as const, diff: imageDiff };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand image.png diff' }));
+    expect(await screen.findByText('Image preview content: image.png')).toBeInTheDocument();
+    expect(latestImagePreviewTarget()).toMatchObject({
+      kind: 'commit',
+      oid: 'head',
+      path: 'image.png',
+      diffId: 'fallback-image',
+      patchScope: 'file',
+    });
+  });
+
+  it('ignores an old fallback response after switching commits', async () => {
+    const user = userEvent.setup();
+    const first = {
+      ...commitDetails(undefined),
+      oid: 'first',
+      shortOid: 'first',
+      subject: 'first',
+      files: [{ path: 'old.txt', status: 'modified' as const }],
+    };
+    const second = {
+      ...commitDetails(undefined),
+      oid: 'second',
+      shortOid: 'second',
+      subject: 'second',
+      files: [{ path: 'new.txt', status: 'modified' as const }],
+    };
+    let resolveOld: ((result: QueryResult) => void) | undefined;
+    const query = vi.fn<WorkspaceAdapter['query']>((request) => {
+      if (request.kind === 'commitDetails')
+        return Promise.resolve({
+          kind: 'commitDetails' as const,
+          commit: request.oid === 'second' ? second : first,
+        });
+      if (request.kind === 'commitFileDiff')
+        return new Promise((done) => {
+          resolveOld = done;
+        });
+      return Promise.resolve({ kind: 'activity' as const, entries: [] });
+    });
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [first, second] })}
+        adapter={adapterWithQuery(query)}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand old.txt diff' }));
+    const secondRow = document.querySelector<HTMLButtonElement>(
+      '[data-history-commit-oid="second"]',
+    );
+    if (!secondRow) throw new Error('The second commit row was not found.');
+    await user.click(secondRow);
+    await screen.findByRole('heading', { name: 'second' });
+    diffSurfaceMock.mockClear();
+    await act(async () => {
+      resolveOld?.({
+        kind: 'commitFileDiff',
+        diff: {
+          diffId: 'old',
+          repoId: 'repo-1',
+          path: 'old.txt',
+          area: 'staged',
+          generation: 1,
+          patch: 'diff --git a/old.txt b/old.txt\n',
+          binary: false,
+          tooLarge: false,
+        },
+      });
+      await Promise.resolve();
+    });
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Collapse old.txt diff' })).not.toBeInTheDocument();
   });
 });

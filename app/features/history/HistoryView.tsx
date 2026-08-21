@@ -39,6 +39,8 @@ import {
 } from '../../domain/historyLanes';
 import type {
   CommitDetails,
+  CommitDiffFile,
+  DiffDocument,
   CommitSummary,
   DiffStyle,
   ImageDiffCandidate,
@@ -450,12 +452,14 @@ function DeferredHistoryFileHeader({
   collapsed,
   controlsId,
   onToggle,
+  disabled = false,
 }: {
   path: string;
   status: ImageDiffCandidate['changeKind'];
   collapsed: boolean;
   controlsId: string;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -469,6 +473,7 @@ function DeferredHistoryFileHeader({
           aria-label={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
           tooltip={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
           onClick={onToggle}
+          disabled={disabled}
         >
           {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
         </Button>
@@ -495,6 +500,7 @@ interface HistoryCommitDiffProps {
   onImagePreviewChange: (key: string, enabled: boolean) => void;
   onImageProbeResult: (key: string, previewable: boolean) => void;
   onCopySelectedLines: (text: string) => Promise<void>;
+  commitImagePatchScope?: 'file';
 }
 
 const HistoryCommitDiff = memo(function HistoryCommitDiff({
@@ -513,6 +519,7 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
   onImagePreviewChange,
   onImageProbeResult,
   onCopySelectedLines,
+  commitImagePatchScope,
 }: HistoryCommitDiffProps) {
   const { t } = useI18n();
   const [expandedFileKeys, setExpandedFileKeys] = useState<{
@@ -555,6 +562,26 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
       setSelectionMenuContext({ point, text }),
     onSelectionCopy: (text: string) => void onCopySelectedLines(text),
   };
+  if (details.files && !diff) {
+    return (
+      <HistoryCommitFileFallback
+        adapter={adapter}
+        repoId={repoId}
+        details={details}
+        files={details.files}
+        diffStyle={diffStyle}
+        imagePreviewLayout={imagePreviewLayout}
+        lineWrapping={lineWrapping}
+        wrapColumn={wrapColumn}
+        stickyFileHeaders={stickyFileHeaders}
+        imagePreviewEnabled={imagePreviewEnabled}
+        imageProbeResults={imageProbeResults}
+        onImagePreviewChange={onImagePreviewChange}
+        onImageProbeResult={onImageProbeResult}
+        onCopySelectedLines={onCopySelectedLines}
+      />
+    );
+  }
   if (!diff) return null;
   if (diff.truncated) return null;
 
@@ -665,6 +692,7 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
               path: candidate.path,
               ...(candidate.previousPath ? { previousPath: candidate.previousPath } : {}),
               diffId: diff.diffId,
+              ...(commitImagePatchScope ? { patchScope: commitImagePatchScope } : {}),
             }}
             candidate={candidate}
             binaryFallback={t('binaryDiffUnavailable')}
@@ -729,6 +757,134 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
     </div>
   );
 });
+
+interface HistoryCommitFileFallbackProps extends Omit<
+  HistoryCommitDiffProps,
+  'files' | 'initiallyCollapsed'
+> {
+  files: CommitDiffFile[];
+}
+
+function HistoryCommitFileFallback({
+  adapter,
+  repoId,
+  details,
+  files,
+  ...props
+}: HistoryCommitFileFallbackProps) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<Map<string, DiffDocument>>(new Map());
+  const [errors, setErrors] = useState<Map<string, Error>>(new Map());
+  const toggle = (file: CommitDiffFile) => {
+    const key = `${file.previousPath ?? ''}\u0000${file.path}`;
+    if (loading.has(key)) return;
+    if (expanded.has(key)) {
+      setExpanded((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+    if (results.has(key)) {
+      setExpanded((current) => new Set(current).add(key));
+      return;
+    }
+    setLoading((current) => new Set(current).add(key));
+    setExpanded((current) => new Set(current).add(key));
+    setErrors((current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+    void adapter
+      .query({
+        kind: 'commitFileDiff',
+        repoId,
+        oid: details.oid,
+        path: file.path,
+        ...(file.previousPath ? { previousPath: file.previousPath } : {}),
+      })
+      .then((result) => {
+        if (result.kind !== 'commitFileDiff') throw new Error('Invalid commit file diff response.');
+        setResults((current) => new Map(current).set(key, result.diff));
+      })
+      .catch((error: unknown) => {
+        setExpanded((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+        setErrors((current) =>
+          new Map(current).set(key, error instanceof Error ? error : new Error(String(error))),
+        );
+      })
+      .finally(() => {
+        setLoading((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+      });
+  };
+
+  return (
+    <div className="history-diff-files">
+      {files.map((file, index) => {
+        const key = `${file.previousPath ?? ''}\u0000${file.path}`;
+        const isLoading = loading.has(key);
+        const isExpanded = expanded.has(key);
+        const diff = results.get(key);
+        const error = errors.get(key);
+        const contentId = `history-diff-content-${details.oid}-${index}`;
+        return (
+          <section key={key} className="history-image-preview-item">
+            <header
+              className={`diff-file-standalone-header history-image-file-header${
+                props.stickyFileHeaders ? ' is-sticky' : ''
+              }`}
+            >
+              <DeferredHistoryFileHeader
+                path={file.path}
+                status={file.status}
+                collapsed={!isExpanded}
+                controlsId={contentId}
+                onToggle={() => toggle(file)}
+                disabled={isLoading}
+              />
+            </header>
+            <div id={contentId} hidden={!isExpanded} aria-busy={isLoading}>
+              {isLoading ? <LoadingIndicator /> : null}
+              {diff?.truncated ? (
+                <output className="inline-alert warning">{t('diffTruncatedUnavailable')}</output>
+              ) : null}
+              {diff && !diff.truncated ? (
+                <HistoryCommitDiff
+                  adapter={adapter}
+                  repoId={repoId}
+                  details={{ ...details, diff }}
+                  files={diffFileSections(diff.patch, diff.diffId)}
+                  initiallyCollapsed={false}
+                  {...props}
+                  commitImagePatchScope="file"
+                />
+              ) : null}
+            </div>
+            {error ? (
+              <div className="inline-alert error" role="alert">
+                <WorkspaceErrorDetails
+                  error={describeWorkspaceError(error, t('loadCommitFileDiffFailed'))}
+                />
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 function appendUniqueCommits(
   current: RepoSnapshot['history'],
@@ -1529,6 +1685,8 @@ export function HistoryView({
             ) : null}
             {details.diff?.truncated ? (
               <output className="inline-alert warning">{t('diffTruncatedUnavailable')}</output>
+            ) : details.files && !details.diff ? (
+              <output className="inline-alert warning">{t('commitDiffFilesFallback')}</output>
             ) : diffSoftLimitExceeded ? (
               <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
             ) : null}

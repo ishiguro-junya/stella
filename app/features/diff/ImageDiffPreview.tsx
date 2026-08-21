@@ -138,7 +138,8 @@ export function ImageDiffPreview({
   const targetArea = target.kind === 'workingTree' ? target.area : undefined;
   const targetGeneration = target.kind === 'workingTree' ? target.generation : undefined;
   const targetOid = target.kind === 'commit' ? target.oid : undefined;
-  const targetKey = `${targetKind}:${targetDiffId}:${targetPath}`;
+  const targetPatchScope = target.kind === 'commit' ? target.patchScope : undefined;
+  const targetKey = `${targetKind}:${targetPatchScope ?? 'all'}:${targetDiffId}:${targetPath}`;
   const candidatePath = candidate.path;
   const candidatePreviousPath = candidate.previousPath;
   const candidateChangeKind = candidate.changeKind;
@@ -175,6 +176,7 @@ export function ImageDiffPreview({
                 path: targetPath,
                 ...(targetPreviousPath ? { previousPath: targetPreviousPath } : {}),
                 diffId: targetDiffId,
+                ...(targetPatchScope ? { patchScope: targetPatchScope } : {}),
               };
         const result = await adapter.query({
           kind: 'imageBytes',
@@ -246,6 +248,7 @@ export function ImageDiffPreview({
     targetKey,
     targetKind,
     targetOid,
+    targetPatchScope,
     targetPath,
     targetPreviousPath,
   ]);

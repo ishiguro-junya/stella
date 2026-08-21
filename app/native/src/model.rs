@@ -111,7 +111,17 @@ pub enum ImageBytesTarget {
         path: String,
         previous_path: Option<String>,
         diff_id: String,
+        #[serde(default)]
+        patch_scope: CommitImagePatchScope,
     },
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CommitImagePatchScope {
+    #[default]
+    All,
+    File,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -161,6 +171,11 @@ pub enum Query {
     GitFlowOverview,
     CommitDetails {
         oid: String,
+    },
+    CommitFileDiff {
+        oid: String,
+        path: String,
+        previous_path: Option<String>,
     },
     Conflict {
         path: String,
@@ -237,6 +252,7 @@ pub enum QueryOutcome {
     Branches(BranchResult),
     GitFlowOverview(GitFlowOverview),
     CommitDetails(CommitDetails),
+    CommitFileDiff(DiffResult),
     Conflict(Box<ConflictDocument>),
     FileContents(FileDocument),
     Remotes(RemoteResult),
@@ -901,6 +917,26 @@ pub struct CommitDetails {
     pub truncated: bool,
     pub diff_revision: String,
     pub repo_generation: RepoGeneration,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<CommitDiffFile>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDiffFile {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_path: Option<String>,
+    pub status: CommitDiffFileStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CommitDiffFileStatus {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

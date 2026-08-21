@@ -671,6 +671,67 @@ describe('tauriWorkspaceAdapter', () => {
     expect(result.commit.diff).toBeUndefined();
   });
 
+  it('maps fallback files and requests a single commit file diff', async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'commitDetails') {
+        return {
+          kind: 'commitDetails',
+          data: {
+            ...wireCommit('large'),
+            authorEmail: 'stella@example.com',
+            body: '',
+            patch: '',
+            truncated: true,
+            diffRevision: 'all',
+            repoGeneration: 1,
+            files: [{ path: 'old.txt', previousPath: 'new.txt', status: 'renamed' }],
+          },
+        };
+      }
+      if (command === 'workspace_query' && requestedQueryKind(args) === 'commitFileDiff') {
+        return {
+          kind: 'commitFileDiff',
+          data: {
+            patch: 'diff --git a/old.txt b/new.txt\n',
+            truncated: false,
+            diffRevision: 'one',
+            repoGeneration: 1,
+          },
+        };
+      }
+      return baseInvoke()(command, args);
+    });
+    const adapter = createTauriWorkspaceAdapter();
+    const details = await adapter.query({ kind: 'commitDetails', repoId: 'repo-1', oid: 'large' });
+    expect(details).toEqual(
+      expect.objectContaining({
+        kind: 'commitDetails',
+        commit: expect.objectContaining({
+          files: [{ path: 'old.txt', previousPath: 'new.txt', status: 'renamed' }],
+        }),
+      }),
+    );
+    const result = await adapter.query({
+      kind: 'commitFileDiff',
+      repoId: 'repo-1',
+      oid: 'large',
+      path: 'old.txt',
+      previousPath: 'new.txt',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        kind: 'commitFileDiff',
+        diff: expect.objectContaining({ diffId: 'one', path: 'old.txt' }),
+      }),
+    );
+    expect(invokeMock).toHaveBeenCalledWith('workspace_query', {
+      request: {
+        repoId: 'repo-1',
+        query: { kind: 'commitFileDiff', oid: 'large', path: 'old.txt', previousPath: 'new.txt' },
+      },
+    });
+  });
+
   it('queries both rename paths so Git can preserve rename metadata', async () => {
     invokeMock.mockImplementation(async (command, args) => {
       if (command === 'workspace_query' && requestedQueryKind(args) === 'diff') {

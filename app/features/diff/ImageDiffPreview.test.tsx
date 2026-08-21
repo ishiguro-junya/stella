@@ -121,6 +121,42 @@ describe('ImageDiffPreview', () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a file-scoped commit target when requesting image bytes', async () => {
+    const workspace = adapter();
+    render(
+      <I18nProvider language="en">
+        <ImageDiffPreview
+          adapter={workspace}
+          repoId="repo-1"
+          target={{
+            kind: 'commit',
+            oid: 'abc',
+            path: 'image.png',
+            diffId: 'file-diff',
+            patchScope: 'file',
+          }}
+          candidate={{ path: 'image.png', changeKind: 'added', format: 'binary' }}
+        />
+      </I18nProvider>,
+    );
+
+    await screen.findByAltText('Image: image.png');
+    expect(workspace.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'imageBytes',
+        repoId: 'repo-1',
+        target: {
+          kind: 'commit',
+          oid: 'abc',
+          path: 'image.png',
+          diffId: 'file-diff',
+          patchScope: 'file',
+        },
+        side: 'after',
+      }),
+    );
+  });
+
   it('chooses a contrasting background while ignoring transparent pixels', () => {
     expect(
       imagePreviewBackgroundForPixels(Uint8ClampedArray.from([255, 255, 255, 0, 0, 0, 0, 255])),

@@ -11,6 +11,7 @@ import type {
   ChangeEntry,
   CommitSummary,
   CommitDetails,
+  CommitDiffFile,
   CommitActivitySeries,
   ConflictBlock,
   ConflictDocument,
@@ -417,6 +418,7 @@ function mapCommitDetails(details: WireCommitDetails, repoId: string): CommitDet
           },
         }
       : {}),
+    ...(details.files ? { files: details.files.map((file): CommitDiffFile => ({ ...file })) } : {}),
   };
 }
 
@@ -1031,6 +1033,31 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
           });
           if (outcome.kind !== 'commitDetails') throw new Error('Invalid commit details response.');
           return { kind: 'commitDetails', commit: mapCommitDetails(outcome.data, request.repoId) };
+        }
+        case 'commitFileDiff': {
+          const outcome = await queryWire(request.repoId, {
+            kind: 'commitFileDiff',
+            oid: request.oid,
+            path: request.path,
+            ...(request.previousPath ? { previousPath: request.previousPath } : {}),
+          });
+          if (outcome.kind !== 'commitFileDiff')
+            throw new Error('Invalid commit file diff response.');
+          const profile = profileDiffPatch(outcome.data.patch, outcome.data.truncated);
+          return {
+            kind: 'commitFileDiff',
+            diff: {
+              diffId: outcome.data.diffRevision,
+              repoId: request.repoId,
+              path: request.path,
+              area: 'staged',
+              generation: outcome.data.repoGeneration,
+              patch: outcome.data.patch,
+              binary: profile.binary,
+              tooLarge: profile.performanceMode,
+              truncated: outcome.data.truncated,
+            },
+          };
         }
         case 'history': {
           const search = request.search?.trim();

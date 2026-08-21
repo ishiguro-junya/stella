@@ -775,12 +775,35 @@ impl Workspace {
                         GitCommand::CommitPatch {
                             oid: resolved.clone(),
                             parent: parents.first().cloned(),
+                            paths: Vec::new(),
                         },
                         None,
                         None,
                     )?
                     .ensure_success()?;
-                let patch = String::from_utf8_lossy(&patch_output.stdout).into_owned();
+                let truncated = patch_output.truncated || patch_output.stdout.len() > DIFF_LIMIT;
+                let files = if truncated {
+                    let name_status = self
+                        .git
+                        .run(
+                            Some(&repo.root),
+                            GitCommand::CommitNameStatus {
+                                oid: resolved.clone(),
+                                parent: parents.first().cloned(),
+                            },
+                            None,
+                            None,
+                        )?
+                        .ensure_success()?;
+                    Some(parse_commit_diff_files(&name_status.stdout)?)
+                } else {
+                    None
+                };
+                let patch = if truncated {
+                    String::new()
+                } else {
+                    String::from_utf8_lossy(&patch_output.stdout).into_owned()
+                };
                 Ok(QueryOutcome::CommitDetails(CommitDetails {
                     oid: resolved,
                     parents,
@@ -797,7 +820,77 @@ impl Workspace {
                     body: text(fields[7]),
                     diff_revision: hash(&patch_output.stdout),
                     patch,
-                    truncated: patch_output.truncated,
+                    truncated,
+                    repo_generation: snapshot.repo_generation,
+                    files,
+                }))
+            }
+            Query::CommitFileDiff {
+                oid,
+                path,
+                previous_path,
+            } => {
+                validate_revision(&oid)?;
+                validate_path(&path)?;
+                if let Some(previous_path) = &previous_path {
+                    validate_path(previous_path)?;
+                }
+                let snapshot = self.snapshot(&repo)?;
+                let resolved = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::Resolve { revision: oid },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?
+                    .stdout_text()
+                    .trim()
+                    .to_owned();
+                let parents = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::CommitParents {
+                            oid: resolved.clone(),
+                        },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?
+                    .stdout_text()
+                    .split_whitespace()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let mut paths = vec![path.clone()];
+                if let Some(previous_path) = &previous_path
+                    && previous_path != &path
+                {
+                    paths.insert(0, previous_path.clone());
+                }
+                let output = self
+                    .git
+                    .run(
+                        Some(&repo.root),
+                        GitCommand::CommitPatch {
+                            oid: resolved,
+                            parent: parents.first().cloned(),
+                            paths,
+                        },
+                        None,
+                        None,
+                    )?
+                    .ensure_success()?;
+                let truncated = output.truncated || output.stdout.len() > DIFF_LIMIT;
+                Ok(QueryOutcome::CommitFileDiff(DiffResult {
+                    patch: if truncated {
+                        String::new()
+                    } else {
+                        String::from_utf8_lossy(&output.stdout).into_owned()
+                    },
+                    truncated,
+                    diff_revision: hash(&output.stdout),
                     repo_generation: snapshot.repo_generation,
                 }))
             }
@@ -956,6 +1049,7 @@ impl Workspace {
                 path,
                 previous_path,
                 diff_id,
+                patch_scope,
             } => {
                 validate_revision(&oid)?;
                 validate_path(&path)?;
@@ -989,19 +1083,48 @@ impl Workspace {
                     .split_whitespace()
                     .map(str::to_owned)
                     .collect::<Vec<_>>();
-                let patch = self
-                    .git
-                    .run(
-                        Some(&repo.root),
-                        GitCommand::CommitPatch {
-                            oid: resolved.clone(),
-                            parent: parents.first().cloned(),
-                        },
-                        None,
-                        None,
-                    )?
-                    .ensure_success()?;
-                if hash(&patch.stdout) != diff_id {
+                let matches_image_diff = |patch: &GitOutput| {
+                    !patch.truncated
+                        && patch.stdout.len() <= DIFF_LIMIT
+                        && hash(&patch.stdout) == diff_id
+                };
+                let mut paths = vec![path.clone()];
+                if let Some(previous_path) = &previous_path
+                    && previous_path != &path
+                {
+                    paths.insert(0, previous_path.clone());
+                }
+                let scoped_patch = || {
+                    self.git
+                        .run(
+                            Some(&repo.root),
+                            GitCommand::CommitPatch {
+                                oid: resolved.clone(),
+                                parent: parents.first().cloned(),
+                                paths: paths.clone(),
+                            },
+                            None,
+                            None,
+                        )?
+                        .ensure_success()
+                };
+                let patch = match patch_scope {
+                    CommitImagePatchScope::File => scoped_patch()?,
+                    CommitImagePatchScope::All => self
+                        .git
+                        .run(
+                            Some(&repo.root),
+                            GitCommand::CommitPatch {
+                                oid: resolved.clone(),
+                                parent: parents.first().cloned(),
+                                paths: Vec::new(),
+                            },
+                            None,
+                            None,
+                        )?
+                        .ensure_success()?,
+                };
+                if !matches_image_diff(&patch) {
                     return Err(stale_image_error());
                 }
                 ensure_image_target_in_patch(&patch.stdout, &path, previous_path.as_deref())?;
@@ -5887,6 +6010,74 @@ fn validate_paths(paths: &[String]) -> WorkspaceResult<()> {
     Ok(())
 }
 
+fn parse_commit_diff_files(bytes: &[u8]) -> WorkspaceResult<Vec<CommitDiffFile>> {
+    let fields = bytes.split(|byte| *byte == 0).collect::<Vec<_>>();
+    if !fields.last().is_some_and(|field| field.is_empty()) {
+        return Err(WorkspaceError::new(
+            ErrorCode::GitFailed,
+            "Failed to parse changed files for commit",
+        ));
+    }
+    let mut files = Vec::new();
+    let mut index = 0;
+    while index + 1 < fields.len() {
+        let status = std::str::from_utf8(fields[index]).map_err(|_| {
+            WorkspaceError::new(ErrorCode::GitFailed, "Changed file status is not UTF-8")
+        })?;
+        index += 1;
+        let path = |value: &[u8]| -> WorkspaceResult<String> {
+            let path = std::str::from_utf8(value)
+                .map_err(|_| {
+                    WorkspaceError::new(ErrorCode::GitFailed, "Changed file path is not UTF-8")
+                })?
+                .to_owned();
+            validate_path(&path).map_err(|_| {
+                WorkspaceError::new(ErrorCode::GitFailed, "Changed file path is invalid")
+            })?;
+            Ok(path)
+        };
+        let (status, previous_path, path) = match status {
+            "A" => (CommitDiffFileStatus::Added, None, path(fields[index])?),
+            "M" | "T" => (CommitDiffFileStatus::Modified, None, path(fields[index])?),
+            "D" => (CommitDiffFileStatus::Deleted, None, path(fields[index])?),
+            value
+                if value.starts_with('R')
+                    && !value[1..].is_empty()
+                    && value[1..]
+                        .parse::<u8>()
+                        .is_ok_and(|score| (1..=100).contains(&score)) =>
+            {
+                if index + 2 >= fields.len() {
+                    return Err(WorkspaceError::new(
+                        ErrorCode::GitFailed,
+                        "Changed file rename is incomplete",
+                    ));
+                }
+                let previous_path = path(fields[index])?;
+                index += 1;
+                (
+                    CommitDiffFileStatus::Renamed,
+                    Some(previous_path),
+                    path(fields[index])?,
+                )
+            }
+            _ => {
+                return Err(WorkspaceError::new(
+                    ErrorCode::GitFailed,
+                    "Changed file status is unsupported",
+                ));
+            }
+        };
+        index += 1;
+        files.push(CommitDiffFile {
+            path,
+            previous_path,
+            status,
+        });
+    }
+    Ok(files)
+}
+
 fn validate_path(path: &str) -> WorkspaceResult<()> {
     let value = Path::new(path);
     if path.is_empty()
@@ -6843,6 +7034,31 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    #[test]
+    fn commit_diff_file_parser_keeps_git_order_and_rename_paths() {
+        let files = parse_commit_diff_files(
+            b"A\0added.txt\0R100\0old name.txt\0new name.txt\0D\0gone.txt\0",
+        )
+        .unwrap();
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].status, CommitDiffFileStatus::Added);
+        assert_eq!(files[1].previous_path.as_deref(), Some("old name.txt"));
+        assert_eq!(files[1].path, "new name.txt");
+        assert_eq!(files[2].status, CommitDiffFileStatus::Deleted);
+        assert_eq!(
+            parse_commit_diff_files(b"T\0mode.txt\0").unwrap()[0].status,
+            CommitDiffFileStatus::Modified
+        );
+        assert!(parse_commit_diff_files(b"A\0../outside\0").is_err());
+        assert!(parse_commit_diff_files(b"C100\0old\0new\0").is_err());
+        assert!(parse_commit_diff_files(b"R\0old\0new\0").is_err());
+        assert!(parse_commit_diff_files(b"R0\0old\0new\0").is_err());
+        assert!(parse_commit_diff_files(b"R101\0old\0new\0").is_err());
+        assert!(parse_commit_diff_files(b"R100\0old\0").is_err());
+        assert!(parse_commit_diff_files(b"A\0missing-nul").is_err());
+        assert!(parse_commit_diff_files(b"A\0\xff\0").is_err());
     }
 
     #[test]
@@ -12126,7 +12342,91 @@ exec /usr/bin/git "$@"
             value => panic!("unexpected query outcome: {value:?}"),
         };
         assert!(details.truncated);
-        assert!(details.patch.contains("output truncated by application"));
+        assert!(details.patch.is_empty());
+        assert_eq!(details.files.as_ref().map(Vec::len), Some(1));
+        assert_eq!(details.files.as_ref().unwrap()[0].path, "large.txt");
+    }
+
+    #[test]
+    fn commit_file_diff_uses_the_selected_path_and_hides_an_oversized_body() {
+        let fixture = GitFixture::new();
+        fixture.write("small.txt", "small\n");
+        fixture.write("large.txt", &format!("{}\n", "x".repeat(DIFF_LIMIT + 1)));
+        fixture.git(&["add", "--", "small.txt", "large.txt"]);
+        fixture.git(&["commit", "-m", "feat: large file"]);
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let details = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitDetails { oid: "HEAD".into() },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitDetails(details) => details,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(details.truncated);
+        assert_eq!(details.files.as_ref().map(Vec::len), Some(2));
+        assert!(
+            details
+                .files
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|file| file.path == "small.txt")
+        );
+        let diff = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitFileDiff {
+                    oid: "HEAD".into(),
+                    path: "large.txt".into(),
+                    previous_path: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitFileDiff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(diff.truncated);
+        assert!(diff.patch.is_empty());
+        let small = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitFileDiff {
+                    oid: "HEAD".into(),
+                    path: "small.txt".into(),
+                    previous_path: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitFileDiff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(!small.truncated);
+        assert!(small.patch.contains("small.txt"));
+        assert!(
+            workspace
+                .query(QueryRequest {
+                    repo_id: attached.repo_id,
+                    query: Query::CommitFileDiff {
+                        oid: "HEAD".into(),
+                        path: "../outside".into(),
+                        previous_path: None,
+                    },
+                })
+                .is_err()
+        );
     }
 
     #[test]
@@ -13819,15 +14119,17 @@ exec /usr/bin/git "$@"
             path: "image.bin".into(),
             previous_path: None,
             diff_id: details.diff_revision.clone(),
+            patch_scope: CommitImagePatchScope::All,
         };
         let forged_error = workspace
             .image_bytes(ImageBytesRequest {
                 repo_id: attached.repo_id.clone(),
                 target: ImageBytesTarget::Commit {
-                    oid: details.oid,
+                    oid: details.oid.clone(),
                     path: "unchanged.bin".into(),
                     previous_path: None,
                     diff_id: details.diff_revision,
+                    patch_scope: CommitImagePatchScope::All,
                 },
                 side: ImageDiffSide::After,
             })
@@ -13853,6 +14155,256 @@ exec /usr/bin/git "$@"
                 .unwrap(),
             changed
         );
+    }
+
+    #[test]
+    fn image_bytes_reject_large_commit_diff_ids_but_accepts_a_small_scoped_diff() {
+        let fixture = GitFixture::new();
+        let base = b"\0base-image";
+        let changed = b"\0changed-image";
+        fs::write(fixture.repo.join("small.bin"), base).unwrap();
+        fixture.git(&["add", "--", "small.bin"]);
+        fixture.git(&["commit", "-m", "test: base image"]);
+
+        fs::write(fixture.repo.join("small.bin"), changed).unwrap();
+        let mut state = 0x4d59_5df4_u32;
+        let large = (0..=DIFF_LIMIT)
+            .map(|_| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (state >> 24) as u8
+            })
+            .collect::<Vec<_>>();
+        fs::write(fixture.repo.join("large.bin"), large).unwrap();
+        fixture.git(&["add", "--", "small.bin", "large.bin"]);
+        fixture.git(&["commit", "-m", "test: large image diff"]);
+
+        let workspace = fixture.workspace();
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let details = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitDetails { oid: "HEAD".into() },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitDetails(details) => details,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(details.truncated);
+        let target = |path: &str, diff_id: String, patch_scope| ImageBytesTarget::Commit {
+            oid: details.oid.clone(),
+            path: path.into(),
+            previous_path: None,
+            diff_id,
+            patch_scope,
+        };
+        let aggregate_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: target(
+                    "small.bin",
+                    details.diff_revision.clone(),
+                    CommitImagePatchScope::All,
+                ),
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(aggregate_error.code, ErrorCode::StaleGeneration);
+
+        let small = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitFileDiff {
+                    oid: details.oid.clone(),
+                    path: "small.bin".into(),
+                    previous_path: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitFileDiff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(!small.truncated);
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: target(
+                        "small.bin",
+                        small.diff_revision,
+                        CommitImagePatchScope::File
+                    ),
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+
+        let large = match workspace
+            .query(QueryRequest {
+                repo_id: attached.repo_id.clone(),
+                query: Query::CommitFileDiff {
+                    oid: details.oid.clone(),
+                    path: "large.bin".into(),
+                    previous_path: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitFileDiff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        assert!(large.truncated);
+        let large_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id,
+                target: target(
+                    "large.bin",
+                    large.diff_revision,
+                    CommitImagePatchScope::File,
+                ),
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(large_error.code, ErrorCode::StaleGeneration);
+    }
+
+    #[test]
+    fn image_bytes_uses_only_the_requested_commit_patch_scope() {
+        let fixture = GitFixture::new();
+        let base = b"\0base-image";
+        let changed = b"\0changed-image";
+        fs::write(fixture.repo.join("image.bin"), base).unwrap();
+        fixture.git(&["add", "--", "image.bin"]);
+        fixture.git(&["commit", "-m", "test: base image"]);
+        fs::write(fixture.repo.join("image.bin"), changed).unwrap();
+        fixture.write("other.txt", "other\n");
+        fixture.git(&["add", "--", "image.bin", "other.txt"]);
+        fixture.git(&["commit", "-m", "test: changed image"]);
+
+        let id_workspace = fixture.workspace();
+        let id_attached = id_workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let details = match id_workspace
+            .query(QueryRequest {
+                repo_id: id_attached.repo_id.clone(),
+                query: Query::CommitDetails { oid: "HEAD".into() },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitDetails(details) => details,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+        let file_diff = match id_workspace
+            .query(QueryRequest {
+                repo_id: id_attached.repo_id,
+                query: Query::CommitFileDiff {
+                    oid: details.oid.clone(),
+                    path: "image.bin".into(),
+                    previous_path: None,
+                },
+            })
+            .unwrap()
+        {
+            QueryOutcome::CommitFileDiff(diff) => diff,
+            value => panic!("unexpected query outcome: {value:?}"),
+        };
+
+        let patch_log = fixture.temp.path().join("commit-patches.log");
+        let wrapper = fixture.temp.path().join("record-commit-patches");
+        fs::write(
+            &wrapper,
+            format!(
+                r#"#!/bin/sh
+case "$*" in
+  *"diff --binary --no-color --no-ext-diff --no-textconv --find-renames"*)
+    printf '%s\n' "$*" >> "{patch_log}"
+    ;;
+esac
+exec /usr/bin/git "$@"
+"#,
+                patch_log = patch_log.display(),
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&wrapper).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&wrapper, permissions).unwrap();
+        let workspace = Workspace::new(
+            GitExecutor::at(wrapper),
+            test_journal_store(&fixture.temp.path().join("patch-scope-journal")).unwrap(),
+        );
+        let attached = workspace
+            .attach(
+                OpenRequest::Open {
+                    path: fixture.repo_string(),
+                },
+                None,
+            )
+            .unwrap();
+        let target = |diff_id: String, patch_scope| ImageBytesTarget::Commit {
+            oid: details.oid.clone(),
+            path: "image.bin".into(),
+            previous_path: None,
+            diff_id,
+            patch_scope,
+        };
+
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id.clone(),
+                    target: target(details.diff_revision.clone(), CommitImagePatchScope::All),
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+        let all_patches = fs::read_to_string(&patch_log).unwrap();
+        assert_eq!(all_patches.lines().count(), 1);
+        assert!(!all_patches.contains(" -- image.bin"));
+
+        fs::write(&patch_log, "").unwrap();
+        let all_scope_error = workspace
+            .image_bytes(ImageBytesRequest {
+                repo_id: attached.repo_id.clone(),
+                target: target(file_diff.diff_revision.clone(), CommitImagePatchScope::All),
+                side: ImageDiffSide::After,
+            })
+            .unwrap_err();
+        assert_eq!(all_scope_error.code, ErrorCode::StaleGeneration);
+        let rejected_all_patches = fs::read_to_string(&patch_log).unwrap();
+        assert_eq!(rejected_all_patches.lines().count(), 1);
+        assert!(!rejected_all_patches.contains(" -- image.bin"));
+
+        fs::write(&patch_log, "").unwrap();
+        assert_eq!(
+            workspace
+                .image_bytes(ImageBytesRequest {
+                    repo_id: attached.repo_id,
+                    target: target(file_diff.diff_revision, CommitImagePatchScope::File),
+                    side: ImageDiffSide::After,
+                })
+                .unwrap(),
+            changed
+        );
+        let file_patches = fs::read_to_string(&patch_log).unwrap();
+        assert_eq!(file_patches.lines().count(), 1);
+        assert!(file_patches.contains(" -- image.bin"));
     }
 
     #[test]
