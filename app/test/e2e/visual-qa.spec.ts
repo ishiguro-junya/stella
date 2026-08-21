@@ -267,7 +267,21 @@ describe('視覚確認用スクリーンショット', () => {
   });
 
   it('活動を視覚確認用に撮影する', async function () {
-    await withVisualRepository(async (_repository, appearance) => {
+    await withVisualRepository(async ({ currentPath }, appearance) => {
+      // 基底フィクスチャの日付に時計を固定し、撮影時刻による画像差分を防ぐ。
+      const screenshotNow = new Date(
+        (await runGit(currentPath, ['log', '-1', '--format=%cI'])).trim(),
+      ).toISOString();
+      await browser.execute((now) => {
+        const fixedTime = Date.parse(now);
+        window.Date = new Proxy(Date, {
+          apply: (target) => new target(fixedTime).toString(),
+          construct: (target, args) =>
+            Reflect.construct(target, args.length === 0 ? [fixedTime] : args),
+          get: (target, property, receiver) =>
+            property === 'now' ? () => fixedTime : Reflect.get(target, property, receiver),
+        });
+      }, screenshotNow);
       await $('button[aria-label="Activity"]').click();
       await expect($('.activity-view')).toBeDisplayed();
       await browser.waitUntil(
