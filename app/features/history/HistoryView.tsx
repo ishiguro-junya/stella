@@ -15,6 +15,7 @@ import {
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   GitBranch,
   GitCommitHorizontal,
   Search,
@@ -66,7 +67,12 @@ import {
   type HistoryActionKind,
   type HistoryActionTarget,
 } from './HistoryActionMenu';
-import type { RowActionMenuPoint } from '../../ui/RowActionMenu';
+import {
+  RowActionMenu,
+  type RowActionMenuItem,
+  type RowActionMenuPoint,
+} from '../../ui/RowActionMenu';
+import type { LocalizedMessage } from '../../i18n/i18n';
 
 export interface HistoryViewProps {
   repo: RepoSnapshot;
@@ -488,6 +494,7 @@ interface HistoryCommitDiffProps {
   imageProbeResults: ReadonlyMap<string, boolean>;
   onImagePreviewChange: (key: string, enabled: boolean) => void;
   onImageProbeResult: (key: string, previewable: boolean) => void;
+  onCopySelectedLines: (text: string) => Promise<void>;
 }
 
 const HistoryCommitDiff = memo(function HistoryCommitDiff({
@@ -505,35 +512,75 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
   imageProbeResults,
   onImagePreviewChange,
   onImageProbeResult,
+  onCopySelectedLines,
 }: HistoryCommitDiffProps) {
   const { t } = useI18n();
   const [expandedFileKeys, setExpandedFileKeys] = useState<{
     commitOid: string;
     keys: Set<string>;
   }>({ commitOid: '', keys: new Set() });
+  const [selectionMenuContext, setSelectionMenuContext] = useState<{
+    point: RowActionMenuPoint;
+    text: string;
+  }>();
   const diff = details.diff;
+  const copySelectionMenuItem: RowActionMenuItem<'copySelection'> = {
+    action: 'copySelection',
+    label: t('actionCopySelectedLines'),
+    icon: <Copy aria-hidden="true" focusable="false" size={15} />,
+  };
+  const selectionMenu = selectionMenuContext ? (
+    <RowActionMenu
+      triggerLabel={t('selectedLines')}
+      triggerTitle={t('selectedLines')}
+      menuLabel={t('selectedLines')}
+      items={[copySelectionMenuItem]}
+      open
+      disabled={false}
+      contextPoint={selectionMenuContext.point}
+      contextOnly
+      onOpenChange={(open) => {
+        if (!open) setSelectionMenuContext(undefined);
+      }}
+      onTriggerOpen={() => undefined}
+      onAction={async () => {
+        await onCopySelectedLines(selectionMenuContext.text);
+        setSelectionMenuContext(undefined);
+      }}
+    />
+  ) : null;
+  const selectionProps = {
+    selectable: true,
+    onSelectionContextMenu: (_selection: unknown, point: RowActionMenuPoint, text: string) =>
+      setSelectionMenuContext({ point, text }),
+    onSelectionCopy: (text: string) => void onCopySelectedLines(text),
+  };
   if (!diff) return null;
   if (diff.truncated) return null;
 
   if (!files.length) {
     if (diff.binary) return <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>;
     return (
-      <DiffSurface
-        source={{
-          kind: 'patch',
-          patch: diff.patch,
-          path: diff.path,
-          cacheKey: diff.diffId,
-        }}
-        diffStyle={diffStyle}
-        lineWrapping={lineWrapping}
-        wrapColumn={wrapColumn}
-        performanceMode={Boolean(diff.tooLarge)}
-        showFileHeaders
-        stickyFileHeaders={stickyFileHeaders}
-        hunkSeparators="simple"
-        ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
-      />
+      <>
+        <DiffSurface
+          source={{
+            kind: 'patch',
+            patch: diff.patch,
+            path: diff.path,
+            cacheKey: diff.diffId,
+          }}
+          diffStyle={diffStyle}
+          lineWrapping={lineWrapping}
+          wrapColumn={wrapColumn}
+          performanceMode={Boolean(diff.tooLarge)}
+          showFileHeaders
+          stickyFileHeaders={stickyFileHeaders}
+          hunkSeparators="simple"
+          ariaLabel={t('commitDiffAria', { oid: details.shortOid })}
+          {...selectionProps}
+        />
+        {selectionMenu}
+      </>
     );
   }
 
@@ -590,6 +637,7 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
             stickyFileHeaders={stickyFileHeaders}
             hunkSeparators="simple"
             ariaLabel={t('fileDiffAria', { path: file.path })}
+            {...selectionProps}
           />
         );
         if (!candidate)
@@ -677,6 +725,7 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
           </section>
         );
       })}
+      {selectionMenu}
     </div>
   );
 });
@@ -843,6 +892,7 @@ export function HistoryView({
   );
   const [imageProbeResults, setImageProbeResults] = useState<Map<string, boolean>>(() => new Map());
   const [error, setError] = useState<WorkspaceErrorContent>();
+  const [copyNotice, setCopyNotice] = useState<LocalizedMessage>();
   const [openMenu, setOpenMenu] = useState<{ oid: string; source: HistoryMenuSource }>();
   const [contextMenu, setContextMenu] = useState<
     { oid: string; point: RowActionMenuPoint } | undefined
@@ -924,6 +974,25 @@ export function HistoryView({
       setError(describeWorkspaceError(cause, fallback));
     },
     [onError],
+  );
+
+  useEffect(() => {
+    if (!copyNotice) return undefined;
+    const timeout = window.setTimeout(() => setCopyNotice(undefined), 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [copyNotice]);
+
+  const copySelectedLines = useCallback(
+    async (text: string): Promise<void> => {
+      setCopyNotice(undefined);
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopyNotice({ id: 'copiedSelectedLines' });
+      } catch (cause) {
+        reportRuntimeError(t('copySelectedLinesFailedTitle'), cause, t('copySelectedLinesFailed'));
+      }
+    },
+    [reportRuntimeError, t],
   );
 
   useEffect(
@@ -1453,12 +1522,18 @@ export function HistoryView({
                 </div>
               </dl>
             </header>
+            {copyNotice ? (
+              <output className="file-action-notice info" aria-live="polite">
+                {message(copyNotice)}
+              </output>
+            ) : null}
             {details.diff?.truncated ? (
               <output className="inline-alert warning">{t('diffTruncatedUnavailable')}</output>
             ) : diffSoftLimitExceeded ? (
               <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
             ) : null}
             <HistoryCommitDiff
+              key={details.oid}
               adapter={adapter}
               repoId={repo.repoId}
               details={details}
@@ -1473,6 +1548,7 @@ export function HistoryView({
               imageProbeResults={imageProbeResults}
               onImagePreviewChange={setImagePreview}
               onImageProbeResult={setImageProbeResult}
+              onCopySelectedLines={copySelectedLines}
             />
           </>
         ) : (

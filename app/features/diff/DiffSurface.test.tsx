@@ -900,6 +900,37 @@ describe('DiffSurface line selection', () => {
     expect(onSelectionCopy).toHaveBeenCalledWith('second line\nthird line');
   });
 
+  it('advertises Command-C only when selected lines can be copied', () => {
+    const { rerender } = render(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+        onSelectionCopy={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText('Diff')).toHaveAttribute('aria-keyshortcuts', 'Meta+C');
+
+    rerender(
+      <DiffSurface
+        source={{
+          kind: 'patch',
+          patch: PATCH,
+          path: 'example.txt',
+          cacheKey: 'revision-1',
+        }}
+        selectable
+      />,
+    );
+
+    expect(screen.getByLabelText('Diff')).not.toHaveAttribute('aria-keyshortcuts');
+  });
+
   it('keeps direct selection available for a single-file performance CodeView', () => {
     const onSelectionChange = vi.fn<(selection: SurfaceSelection | null) => void>();
     parsePatchFilesMock.mockReturnValue([{ files: [{}] }]);

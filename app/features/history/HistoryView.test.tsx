@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import { HISTORY_PAGE_SIZE } from '../../domain/historyLanes';
+import { I18nProvider } from '../../i18n/i18n';
 import type {
   CommitDetails,
   CommitSummary,
@@ -14,11 +15,27 @@ import type {
 import { repoSnapshot } from '../../test/unit/fixtures';
 import { HistoryView } from './HistoryView';
 
+interface HistoryDiffSurfaceProps {
+  selectable?: boolean;
+  onSelectionContextMenu?: (
+    selection: unknown,
+    point: { x: number; y: number },
+    text: string,
+  ) => void;
+  onSelectionCopy?: (text: string) => void;
+}
+
 const { diffSurfaceMock, imagePreviewToggleMock, imageProbeState } = vi.hoisted(() => ({
-  diffSurfaceMock: vi.fn<(props: unknown) => void>(),
+  diffSurfaceMock: vi.fn<(props: HistoryDiffSurfaceProps) => void>(),
   imagePreviewToggleMock: vi.fn<(pressed: boolean, disabled: boolean | undefined) => void>(),
   imageProbeState: { previewable: true },
 }));
+
+function latestHistoryDiffSurfaceProps(): HistoryDiffSurfaceProps {
+  const props = diffSurfaceMock.mock.lastCall?.[0];
+  if (!props) throw new Error('The History DiffSurface was not rendered.');
+  return props;
+}
 
 interface IntersectionObserverRecord {
   callback: IntersectionObserverCallback;
@@ -54,7 +71,7 @@ function intersect(observer = latestIntersectionObserver()): void {
 }
 
 vi.mock('../diff/DiffSurface', () => ({
-  DiffSurface: (props: unknown) => {
+  DiffSurface: (props: HistoryDiffSurfaceProps) => {
     diffSurfaceMock(props);
     return <div>Diff</div>;
   },
@@ -236,6 +253,150 @@ async function openCommitAction(
 }
 
 describe('HistoryView', () => {
+  it('connects text History diffs to selected-line copy actions and notifications', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    const diff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'copy-revision',
+      repoId: 'repo-1',
+      path: 'copy.txt',
+      area: 'staged',
+      generation: 1,
+      patch:
+        'diff --git a/copy.txt b/copy.txt\n--- a/copy.txt\n+++ b/copy.txt\n@@ -1 +1,2 @@\n-old\n+first line\n+second line\n',
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) =>
+        request.kind === 'commitDetails'
+          ? { kind: 'commitDetails' as const, commit: commitDetails(diff) }
+          : { kind: 'activity' as const, entries: [] },
+      ),
+    );
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(diffSurfaceMock).toHaveBeenCalled());
+    const props = latestHistoryDiffSurfaceProps();
+    expect(props).toEqual(
+      expect.objectContaining({
+        selectable: true,
+        onSelectionContextMenu: expect.any(Function),
+        onSelectionCopy: expect.any(Function),
+      }),
+    );
+    act(() => props.onSelectionContextMenu?.({}, { x: 20, y: 30 }, 'first line\nsecond line'));
+
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
+    expect(within(menu).getByRole('menuitem', { name: 'Copy Selected Lines' })).toBeVisible();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Copy Selected Lines' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('first line\nsecond line'));
+    expect(screen.getByRole('status')).toHaveTextContent('Copied the selected lines.');
+  });
+
+  it('reports selected-line copy failures through the current language error path', async () => {
+    const failure = new Error('Clipboard unavailable.');
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(failure);
+    const onError = vi.fn<(title: string, cause: unknown, fallback: string) => void>();
+    const diff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'copy-failure-revision',
+      repoId: 'repo-1',
+      path: 'copy.txt',
+      area: 'staged',
+      generation: 1,
+      patch:
+        'diff --git a/copy.txt b/copy.txt\n--- a/copy.txt\n+++ b/copy.txt\n@@ -1 +1 @@\n-old\n+new\n',
+      binary: false,
+      tooLarge: false,
+    };
+    render(
+      <I18nProvider language="ja">
+        <HistoryView
+          repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+          adapter={adapterWithQuery(async (request) =>
+            request.kind === 'commitDetails'
+              ? { kind: 'commitDetails' as const, commit: commitDetails(diff) }
+              : { kind: 'activity' as const, entries: [] },
+          )}
+          onError={onError}
+          onShowDiff={() => undefined}
+          onAction={async () => undefined}
+          paneWidths={{ left: 240, right: 330 }}
+          onPaneWidthsChange={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(diffSurfaceMock).toHaveBeenCalled());
+    act(() => latestHistoryDiffSurfaceProps().onSelectionCopy?.('selected line'));
+
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        '選択行をコピーできませんでした',
+        failure,
+        '選択行をコピーできませんでした。',
+      ),
+    );
+  });
+
+  it('closes the selected-line copy menu when switching commits', async () => {
+    const user = userEvent.setup();
+    const diff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'shared-copy-revision',
+      repoId: 'repo-1',
+      path: 'copy.txt',
+      area: 'staged',
+      generation: 1,
+      patch:
+        'diff --git a/copy.txt b/copy.txt\n--- a/copy.txt\n+++ b/copy.txt\n@@ -1 +1 @@\n-old\n+new\n',
+      binary: false,
+      tooLarge: false,
+    };
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitSummary('first'), commitSummary('second')] })}
+        adapter={adapterWithQuery(async (request) =>
+          request.kind === 'commitDetails'
+            ? {
+                kind: 'commitDetails' as const,
+                commit: {
+                  ...commitDetails(diff),
+                  oid: request.oid,
+                  shortOid: request.oid,
+                },
+              }
+            : { kind: 'activity' as const, entries: [] },
+        )}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(diffSurfaceMock).toHaveBeenCalled());
+    act(() =>
+      latestHistoryDiffSurfaceProps().onSelectionContextMenu?.({}, { x: 20, y: 30 }, 'old'),
+    );
+    expect(await screen.findByRole('menu')).toBeVisible();
+    await user.click(
+      document.querySelector<HTMLButtonElement>('[data-history-commit-oid="second"]')!,
+    );
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
   it('shows the empty History state in the detail pane when the repository has no commits', () => {
     render(
       <HistoryView

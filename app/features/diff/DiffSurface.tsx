@@ -1247,6 +1247,7 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       data-line-wrapping={lineWrapping}
       data-wrap-column={normalizedWrapColumn}
       aria-label={resolvedAriaLabel}
+      aria-keyshortcuts={onSelectionCopy ? 'Meta+C' : undefined}
       tabIndex={-1}
       hidden={collapsed === true}
     >

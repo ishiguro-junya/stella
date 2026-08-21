@@ -584,6 +584,75 @@ describe('History', () => {
     }
   });
 
+  it('copies selected lines from the History right pane', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-copy.txt',
+      'first line\nsecond line\nthird line\n',
+    );
+    await runGit(repositoryPath, ['add', 'history-copy.txt']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: 履歴の選択行をコピーする']);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>('.diff-surface diffs-container')?.shadowRoot;
+      const lines = [
+        ...(root?.querySelectorAll<HTMLElement>(
+          "[data-content] [data-line-type='change-addition']",
+        ) ?? []),
+      ];
+      if (lines.length < 3) throw new Error('The History copy fixture lines were not rendered.');
+      lines[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      lines[2]?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, composed: true, shiftKey: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return (
+            root?.querySelectorAll('[data-content] [data-line][data-selected-line]').length === 3
+          );
+        }),
+      { timeout: 10_000, timeoutMsg: 'The selected History lines were not rendered.' },
+    );
+    await browser.keys(['Meta', 'c']);
+    await $('.file-action-notice[aria-live="polite"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $('.file-action-notice[aria-live="polite"]').getText()).toBe(
+      '選択行をコピーしました。',
+    );
+
+    await browser.execute(() => {
+      const root = document.querySelector<HTMLElement>(
+        '.diff-surface diffs-container',
+      )!.shadowRoot!;
+      const line = root.querySelector<HTMLElement>(
+        '[data-content] [data-line][data-selected-line]',
+      )!;
+      const rect = line.getBoundingClientRect();
+      line.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + 8,
+          clientY: rect.top + 8,
+        }),
+      );
+    });
+    await $('[role="menu"]').waitForDisplayed({ timeout: 10_000 });
+    expect(await $$('[role="menuitem"]').map((item) => item.getText())).toEqual([
+      '選択した行をコピー',
+    ]);
+  });
+
   it('shows a tooltip when focusing a single-file diff toggle', async () => {
     await writeRepositoryFile(repositoryPath, 'single-tooltip.txt', 'single file\n');
     await runGit(repositoryPath, ['add', 'single-tooltip.txt']);
