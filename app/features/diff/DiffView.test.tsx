@@ -913,11 +913,35 @@ rename to new.png
       />,
     );
 
-    expect(await screen.findByText(/The diff exceeded the display limit/u)).toBeVisible();
-    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({ selectable: false, performanceMode: true }),
+    expect(await screen.findByText(/cannot be displayed/u)).toBeVisible();
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+  });
+
+  it('defers a single soft-limit diff until it is expanded', async () => {
+    const user = userEvent.setup();
+    render(
+      <DiffView
+        repo={repoSnapshot({
+          changes: [{ path: 'src/large.ts', area: 'unstaged', status: 'modified' }],
+        })}
+        adapter={adapterWithDiff({ patch: '+x\n'.repeat(20_001) })}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
     );
-    expect(diffSurfaceMock.mock.lastCall?.[0]).not.toHaveProperty('hunkAction');
+
+    expect(await screen.findByText(/too large to display/u)).toBeVisible();
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+    const toggle = screen.getByRole('button', { name: 'Expand src/large.ts diff' });
+    expect(toggle).toHaveAttribute('aria-controls', 'selected-file-diff-body');
+    const body = document.getElementById('selected-file-diff-body');
+    expect(body).toBeInTheDocument();
+    expect(body).not.toContainElement(toggle);
+    await user.click(toggle);
+    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({ performanceMode: true }),
+    );
   });
 
   it('keeps line selection enabled for a single-file performance diff', async () => {
@@ -2371,6 +2395,49 @@ rename to new.png
       diffSurfaceMock.mock.calls.findLast(([props]) => props.source?.path === path)?.[0];
     expect(latestPropsFor('src/first.ts')).toEqual(expect.objectContaining({ collapsed: true }));
     expect(latestPropsFor('src/second.ts')).toEqual(expect.objectContaining({ collapsed: false }));
+  });
+
+  it('defers every selected file when their combined profiles exceed the soft limit', async () => {
+    const user = userEvent.setup();
+    render(
+      <DiffView
+        repo={repoSnapshot({
+          changes: [
+            { path: 'src/first.ts', area: 'unstaged', status: 'modified' },
+            { path: 'src/second.ts', area: 'unstaged', status: 'modified' },
+          ],
+        })}
+        adapter={adapterWithDiff({ patch: '+x\n'.repeat(10_001) })}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(changeRow(/first\.ts/u));
+    fireEvent.click(changeRow(/second\.ts/u), { shiftKey: true });
+
+    const firstToggle = await screen.findByRole('button', { name: 'Expand src/first.ts diff' });
+    expect(firstToggle).toHaveAttribute('aria-expanded', 'false');
+    const controlledId = firstToggle.getAttribute('aria-controls');
+    expect(controlledId).toBeTruthy();
+    const controlledBody = controlledId ? document.getElementById(controlledId) : null;
+    expect(controlledBody).toBeInTheDocument();
+    expect(controlledBody).not.toContainElement(firstToggle);
+    expect(screen.getByRole('button', { name: 'Expand src/second.ts diff' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    diffSurfaceMock.mockClear();
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+
+    await user.click(firstToggle);
+    expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        performanceMode: true,
+        source: expect.objectContaining({ path: 'src/first.ts' }),
+      }),
+    );
   });
 
   it('keeps file headers in the normal scroll flow by default', async () => {

@@ -27,6 +27,7 @@ function isSvgPath(path: string | undefined): boolean {
 
 export interface DiffPatchProfile {
   binary: boolean;
+  softLimitExceeded: boolean;
   performanceMode: boolean;
   bytes: number;
   lines: number;
@@ -45,24 +46,48 @@ function bytes(value: string): number {
 
 export function profileDiffPatch(patch: string, truncated = false): DiffPatchProfile {
   const patchLines = patch.split('\n');
+  if (patch.endsWith('\n')) patchLines.pop();
   const patchBytes = bytes(patch);
-  const maxLineBytes = patchLines.reduce((maximum, line) => Math.max(maximum, bytes(line)), 0);
+  const maxLineBytes = patchLines.reduce(
+    (maximum, line) => Math.max(maximum, bytes(line.endsWith('\r') ? line.slice(0, -1) : line)),
+    0,
+  );
   const filePatches = patch.split(/^diff --git /gmu).slice(1);
   const binary =
     BINARY_PATCH_PATTERN.test(patch) &&
     filePatches.every((filePatch) => BINARY_PATCH_PATTERN.test(filePatch));
+  const softLimitExceeded =
+    patchBytes > STANDARD_BYTES ||
+    patchLines.length > STANDARD_LINES ||
+    maxLineBytes > PERFORMANCE_MAX_LINE_BYTES;
   return {
     binary,
-    performanceMode:
-      !binary &&
-      (truncated ||
-        patchBytes > STANDARD_BYTES ||
-        patchLines.length > STANDARD_LINES ||
-        maxLineBytes > PERFORMANCE_MAX_LINE_BYTES),
+    softLimitExceeded,
+    performanceMode: !binary && (truncated || softLimitExceeded),
     bytes: patchBytes,
     lines: patchLines.length,
     maxLineBytes,
   };
+}
+
+export function diffPatchProfilesExceedSoftLimit(
+  profiles: Iterable<Pick<DiffPatchProfile, 'bytes' | 'lines' | 'maxLineBytes'>>,
+): boolean {
+  let totalBytes = 0;
+  let totalLines = 0;
+  let totalMaxLineBytes = 0;
+  for (const profile of profiles) {
+    totalBytes += profile.bytes;
+    totalLines += profile.lines;
+    totalMaxLineBytes = Math.max(totalMaxLineBytes, profile.maxLineBytes);
+    if (
+      totalBytes > STANDARD_BYTES ||
+      totalLines > STANDARD_LINES ||
+      totalMaxLineBytes > PERFORMANCE_MAX_LINE_BYTES
+    )
+      return true;
+  }
+  return false;
 }
 
 export function patchContainsMultipleFiles(patch: string): boolean {

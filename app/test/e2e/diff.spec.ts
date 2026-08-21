@@ -1928,4 +1928,58 @@ describe('Diff', () => {
       '選択行を破棄',
     ]);
   });
+
+  it('defers soft diffs and keeps hard diffs unavailable', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'soft-limit.txt',
+      `${Array.from({ length: 20_001 }, (_, index) => `soft line ${index + 1}`).join('\n')}\n`,
+    );
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ soft-limit.txt"]').waitForExist({ timeout: 20_000 });
+    await browser.execute(() => {
+      const row = [...document.querySelectorAll<HTMLElement>('.change-item')].find((item) =>
+        item.querySelector('.file-path')?.textContent?.includes('soft-limit.txt'),
+      );
+      row?.querySelector<HTMLButtonElement>('button.change-row')?.click();
+    });
+
+    const softNotice = $('.diff-pane output.inline-alert.warning');
+    await expect(softNotice).toHaveText(
+      expect.stringContaining('差分本文が大きいため初期表示では省略しています。'),
+    );
+    const softToggle = $('.selected-file-toggle');
+    await expect(softToggle).toHaveAttribute('aria-expanded', 'false');
+    const softControlsId = await softToggle.getAttribute('aria-controls');
+    if (!softControlsId) throw new Error('The soft diff toggle has no controlled body.');
+    expect(
+      await browser.execute((controlsId) => {
+        const toggle = document.querySelector('.selected-file-toggle');
+        const body = document.getElementById(controlsId);
+        return Boolean(body && !body.contains(toggle));
+      }, softControlsId),
+    ).toBe(true);
+    await expect($('.diff-surface')).not.toExist();
+
+    await softToggle.click();
+    await expect(softToggle).toHaveAttribute('aria-expanded', 'true');
+    await $('.diff-surface').waitForDisplayed({ timeout: 20_000 });
+
+    await writeRepositoryFile(repositoryPath, 'hard-limit.txt', 'x'.repeat(5 * 1024 * 1024 + 1));
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ hard-limit.txt"]').waitForExist({ timeout: 20_000 });
+    await browser.execute(() => {
+      const row = [...document.querySelectorAll<HTMLElement>('.change-item')].find((item) =>
+        item.querySelector('.file-path')?.textContent?.includes('hard-limit.txt'),
+      );
+      row?.querySelector<HTMLButtonElement>('button.change-row')?.click();
+    });
+
+    await expect($('.diff-pane output.inline-alert.warning')).toHaveText(
+      expect.stringContaining('差分出力が切り詰められたため表示できません。'),
+    );
+    await expect($('.selected-file-toggle')).not.toExist();
+    await expect($('.diff-surface')).not.toExist();
+    await expect($('.diff-file-toolbar .file-action-trigger')).toBeEnabled();
+  });
 });

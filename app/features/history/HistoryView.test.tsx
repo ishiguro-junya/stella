@@ -2053,7 +2053,7 @@ diff --git a/second.svg b/second.svg
     );
   });
 
-  it('labels a truncated commit patch as a partial view', async () => {
+  it('does not render a truncated commit patch', async () => {
     const truncatedDiff: NonNullable<CommitDetails['diff']> = {
       diffId: 'truncated-revision',
       repoId: 'repo-1',
@@ -2089,9 +2089,115 @@ diff --git a/second.svg b/second.svg
       />,
     );
 
-    expect(await screen.findByText(/The diff exceeded the display limit/u)).toBeVisible();
+    expect(await screen.findByText(/cannot be displayed/u)).toBeVisible();
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+  });
+
+  it('defers every soft-limit commit file until it is expanded', async () => {
+    const user = userEvent.setup();
+    const softDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'soft-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/a b/a\n--- a/a\n+++ b/a\n${'+x\n'.repeat(20_001)}diff --git a/b b/b\n--- a/b\n+++ b/b\n`,
+      binary: false,
+      tooLarge: false,
+    };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails')
+          return { kind: 'commitDetails' as const, commit: commitDetails(softDiff) };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [commitDetails(undefined)] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Expand a diff' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'Expand a diff' })).toHaveAttribute(
+      'aria-controls',
+      'history-diff-content-head-soft-revision-0',
+    );
+    const body = document.getElementById('history-diff-content-head-soft-revision-0');
+    expect(body).toHaveAttribute('hidden');
+    expect(diffSurfaceMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Expand a diff' }));
+    const collapse = screen.getByRole('button', { name: 'Collapse a diff' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    expect(body).not.toHaveAttribute('hidden');
     expect(diffSurfaceMock.mock.lastCall?.[0]).toEqual(
       expect.objectContaining({ performanceMode: true }),
+    );
+    await user.click(collapse);
+    expect(screen.getByRole('button', { name: 'Expand a diff' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('Diff')).not.toBeInTheDocument();
+  });
+
+  it('resets a soft-limit file when another commit has the same diff ID', async () => {
+    const user = userEvent.setup();
+    const sharedDiff: NonNullable<CommitDetails['diff']> = {
+      diffId: 'shared-revision',
+      repoId: 'repo-1',
+      path: 'head',
+      area: 'staged',
+      generation: 1,
+      patch: `diff --git a/a b/a\n--- a/a\n+++ b/a\n${'+x\n'.repeat(20_001)}`,
+      binary: false,
+      tooLarge: false,
+    };
+    const firstCommit = { ...commitDetails(sharedDiff), oid: 'first', shortOid: 'first' };
+    const secondCommit = { ...commitDetails(sharedDiff), oid: 'second', shortOid: 'second' };
+    const adapter = adapterWithQuery(
+      vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind !== 'commitDetails') return { kind: 'activity' as const, entries: [] };
+        return {
+          kind: 'commitDetails' as const,
+          commit: request.oid === 'second' ? secondCommit : firstCommit,
+        };
+      }),
+    );
+
+    render(
+      <HistoryView
+        repo={repoSnapshot({ history: [firstCommit, secondCommit] })}
+        adapter={adapter}
+        onShowDiff={() => undefined}
+        onAction={async () => undefined}
+        paneWidths={{ left: 240, right: 330 }}
+        onPaneWidthsChange={() => undefined}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Expand a diff' }));
+    expect(screen.getByRole('button', { name: 'Collapse a diff' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    const second = document.querySelector<HTMLButtonElement>('[data-history-commit-oid="second"]');
+    if (!second) throw new Error('The second commit row was not found.');
+    await user.click(second);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Expand a diff' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      ),
     );
   });
 

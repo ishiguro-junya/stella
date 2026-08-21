@@ -23,10 +23,12 @@ import {
 import { Button } from '../../ui/Button';
 import { isPullDivergenceError, type WorkspaceAdapter } from '../../adapters/workspaceAdapter';
 import {
+  diffPatchProfilesExceedSoftLimit,
   editorLineForDiffSelection,
   imageDiffCandidates,
   imagePreviewToggleAvailable,
   patchContainsMultipleFiles,
+  profileDiffPatch,
 } from '../../domain/diffProfile';
 import type { UnsavedChangesHandle } from '../../domain/unsavedChanges';
 import type {
@@ -200,6 +202,8 @@ export function DiffView({
   const [collapsedMultiDiffKeys, setCollapsedMultiDiffKeys] = useState<Set<string>>(
     () => new Set(),
   );
+  const [multiDiffsSoftLimited, setMultiDiffsSoftLimited] = useState(false);
+  const [expandedSingleDiffId, setExpandedSingleDiffId] = useState<string>();
   const [disabledImagePreviewKeys, setDisabledImagePreviewKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -326,14 +330,27 @@ export function DiffView({
   const queryPreviousPath = querySelected?.previousPath;
   const visibleDiff =
     diff && diff.path === selectedPath && diff.area === selectedArea ? diff : undefined;
+  const visibleDiffProfile = useMemo(
+    () => (visibleDiff ? profileDiffPatch(visibleDiff.patch, visibleDiff.truncated) : undefined),
+    [visibleDiff],
+  );
+  const visibleDiffCollapsed = Boolean(
+    visibleDiff &&
+    !visibleDiff.truncated &&
+    visibleDiffProfile?.softLimitExceeded &&
+    expandedSingleDiffId !== visibleDiff.diffId,
+  );
+  const visibleDiffDisplayable = Boolean(
+    visibleDiff && !visibleDiff.truncated && !visibleDiffCollapsed,
+  );
   const visibleImageCandidate = useMemo(
     () =>
-      visibleDiff
+      visibleDiffDisplayable && visibleDiff
         ? imageDiffCandidates(visibleDiff.patch, visibleDiff.diffId).find(
             (candidate) => candidate.path === visibleDiff.path,
           )
         : undefined,
-    [visibleDiff],
+    [visibleDiff, visibleDiffDisplayable],
   );
   const selectedSurfaceSelection: SurfaceSelection | undefined = selection
     ? {
@@ -390,6 +407,8 @@ export function DiffView({
 
   useEffect(() => {
     setCollapsedMultiDiffKeys(new Set());
+    setMultiDiffsSoftLimited(false);
+    setExpandedSingleDiffId(undefined);
     setDisabledImagePreviewKeys(new Set());
     setMultiDetailFileMenuKey(undefined);
     setMultiDetailFileMenuContext(undefined);
@@ -555,6 +574,7 @@ export function DiffView({
     if (editingTarget) return undefined;
     if (!multipleFilesSelected) {
       setMultiDiffs((current) => (current.length ? [] : current));
+      setMultiDiffsSoftLimited(false);
       return undefined;
     }
     let cancelled = false;
@@ -574,7 +594,21 @@ export function DiffView({
       }),
     )
       .then((documents) => {
-        if (!cancelled) setMultiDiffs(documents);
+        if (cancelled) return;
+        const softLimited = diffPatchProfilesExceedSoftLimit(
+          documents.map((document) => profileDiffPatch(document.patch, document.truncated)),
+        );
+        setMultiDiffs(documents);
+        setMultiDiffsSoftLimited(softLimited);
+        setCollapsedMultiDiffKeys(
+          softLimited
+            ? new Set(
+                documents
+                  .filter((document) => !document.truncated)
+                  .map((document) => `${document.area}:${document.path}`),
+              )
+            : new Set(),
+        );
       })
       .catch((cause: unknown) => {
         if (!cancelled)
@@ -1447,6 +1481,7 @@ export function DiffView({
     menuOpen,
     menuContextPoint,
     titleId,
+    controlsId,
     binary = false,
     imagePreview,
     onToggle,
@@ -1458,6 +1493,7 @@ export function DiffView({
     menuOpen: boolean;
     menuContextPoint: FileActionMenuPoint | undefined;
     titleId?: string;
+    controlsId?: string;
     binary?: boolean;
     imagePreview?:
       | { pressed: boolean; disabled?: boolean; onPressedChange: (pressed: boolean) => void }
@@ -1491,6 +1527,7 @@ export function DiffView({
             <Button
               type="button"
               className="selected-file-toggle"
+              aria-controls={controlsId}
               aria-expanded={!collapsed}
               aria-label={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', {
                 path: entry.path,
@@ -1747,7 +1784,19 @@ export function DiffView({
               ? renderDiffFileHeader({
                   entry: displayedSelected,
                   binary: Boolean(visibleDiff?.binary),
-                  ...(visibleImagePreviewShown
+                  ...(visibleDiffCollapsed ? { collapsed: true } : {}),
+                  ...(visibleDiffProfile?.softLimitExceeded
+                    ? { controlsId: 'selected-file-diff-body' }
+                    : {}),
+                  ...(visibleDiffProfile?.softLimitExceeded && !visibleDiff?.truncated
+                    ? {
+                        onToggle: () =>
+                          setExpandedSingleDiffId((current) =>
+                            current === visibleDiff?.diffId ? undefined : visibleDiff?.diffId,
+                          ),
+                      }
+                    : {}),
+                  ...(visibleImagePreviewShown && visibleDiffDisplayable
                     ? {
                         imagePreview: {
                           pressed: visibleImagePreviewPressed,
@@ -1764,217 +1813,248 @@ export function DiffView({
                   onMenuContextPointChange: setDetailFileMenuContextPoint,
                 })
               : null}
-            {operationActionDisabledReason ? (
-              <p id="diff-operation-action-reason" className="sr-only">
-                {operationActionDisabledReason}
-              </p>
-            ) : null}
-            {error ? (
-              <div className="inline-alert error" role="alert">
-                <WorkspaceErrorDetails error={error} />
-              </div>
-            ) : null}
-            {repo.changes.length === 0 ? <p className="diff-empty-state">{t('noDiff')}</p> : null}
-            {multipleFilesSelected ? (
-              <div className="multi-diff-list">
-                {multiDiffs.map((document) => {
-                  const entry = selectedFileEntries.find(
-                    (candidate) =>
-                      candidate.path === document.path && candidate.area === document.area,
-                  ) ?? {
-                    path: document.path,
-                    area: document.area,
-                    status: document.binary ? ('binary' as const) : ('modified' as const),
-                  };
-                  const itemKey = `${document.area}:${document.path}`;
-                  const imageKey = itemKey;
-                  const imageProbeKey = `${itemKey}:${document.diffId}`;
-                  const imageCandidate = imageDiffCandidates(document.patch, document.diffId).find(
-                    (candidate) => candidate.path === document.path,
-                  );
-                  const target = imageCandidate ? imageTarget(document, imageCandidate) : undefined;
-                  const imageProbeResult = imageProbeResults.get(imageProbeKey);
-                  const imageProbePending = Boolean(
-                    target && imageCandidate && imageProbeResult === undefined,
-                  );
-                  const imageUnavailable = imageProbeResult === false;
-                  const imagePreviewShown = imagePreviewToggleAvailable(document.path);
-                  const imagePreviewEnabled = Boolean(
-                    target &&
-                    imageCandidate &&
-                    imageProbeResult !== false &&
-                    (!imagePreviewShown || !disabledImagePreviewKeys.has(imageKey)),
-                  );
-                  const collapsed = collapsedMultiDiffKeys.has(itemKey);
-                  const toggle = () => {
-                    setCollapsedMultiDiffKeys((current) => {
-                      const next = new Set(current);
-                      if (next.has(itemKey)) next.delete(itemKey);
-                      else next.add(itemKey);
-                      return next;
-                    });
-                  };
-                  const header = renderDiffFileHeader({
-                    entry,
-                    binary: Boolean(document.binary),
-                    ...(imagePreviewShown
-                      ? {
-                          imagePreview: {
-                            pressed: imagePreviewEnabled,
-                            disabled: imageUnavailable,
-                            onPressedChange: (pressed: boolean) =>
-                              setImagePreviewEnabled(imageKey, pressed),
-                          },
-                        }
-                      : {}),
-                    collapsed,
-                    menuOpen: multiDetailFileMenuKey === itemKey,
-                    menuContextPoint:
-                      multiDetailFileMenuContext?.key === itemKey
-                        ? multiDetailFileMenuContext.point
-                        : undefined,
-                    onToggle: toggle,
-                    onMenuOpenChange: (open) =>
-                      setMultiDetailFileMenuKey(open ? itemKey : undefined),
-                    onMenuContextPointChange: (point) =>
-                      setMultiDetailFileMenuContext(point ? { key: itemKey, point } : undefined),
-                  });
-                  const multiHunkAction = createHunkAction(document, entry, false);
-                  return (
-                    <section
-                      key={`${document.area}:${document.path}:${document.diffId}`}
-                      className={`${document.binary ? 'multi-diff-binary' : 'multi-diff-item'}${collapsed ? ' is-collapsed' : ''}`}
-                    >
-                      {header}
-                      {document.truncated && !collapsed ? (
-                        <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
-                      ) : null}
-                      {!collapsed &&
+            <div id={multipleFilesSelected ? undefined : 'selected-file-diff-body'}>
+              {operationActionDisabledReason ? (
+                <p id="diff-operation-action-reason" className="sr-only">
+                  {operationActionDisabledReason}
+                </p>
+              ) : null}
+              {error ? (
+                <div className="inline-alert error" role="alert">
+                  <WorkspaceErrorDetails error={error} />
+                </div>
+              ) : null}
+              {repo.changes.length === 0 ? <p className="diff-empty-state">{t('noDiff')}</p> : null}
+              {multipleFilesSelected ? (
+                <div className="multi-diff-list">
+                  {multiDiffs.map((document) => {
+                    const entry = selectedFileEntries.find(
+                      (candidate) =>
+                        candidate.path === document.path && candidate.area === document.area,
+                    ) ?? {
+                      path: document.path,
+                      area: document.area,
+                      status: document.binary ? ('binary' as const) : ('modified' as const),
+                    };
+                    const itemKey = `${document.area}:${document.path}`;
+                    const imageKey = itemKey;
+                    const imageProbeKey = `${itemKey}:${document.diffId}`;
+                    const collapsed = collapsedMultiDiffKeys.has(itemKey);
+                    const deferred = multiDiffsSoftLimited && collapsed;
+                    const displayable = !document.truncated && !deferred;
+                    const imageCandidate = displayable
+                      ? imageDiffCandidates(document.patch, document.diffId).find(
+                          (candidate) => candidate.path === document.path,
+                        )
+                      : undefined;
+                    const target = imageCandidate
+                      ? imageTarget(document, imageCandidate)
+                      : undefined;
+                    const imageProbeResult = imageProbeResults.get(imageProbeKey);
+                    const imageProbePending = Boolean(
+                      target && imageCandidate && imageProbeResult === undefined,
+                    );
+                    const imageUnavailable = imageProbeResult === false;
+                    const imagePreviewShown = imagePreviewToggleAvailable(document.path);
+                    const imagePreviewEnabled = Boolean(
                       target &&
                       imageCandidate &&
-                      (imagePreviewEnabled || imageProbePending) ? (
-                        <ImageDiffPreview
-                          adapter={adapter}
-                          repoId={repo.repoId}
-                          target={target}
-                          candidate={imageCandidate}
-                          layout={imagePreviewLayout}
-                          hidden={imageProbePending}
-                          onProbeResult={(previewable) =>
-                            setImageProbeResult(imageProbeKey, previewable)
+                      imageProbeResult !== false &&
+                      (!imagePreviewShown || !disabledImagePreviewKeys.has(imageKey)),
+                    );
+                    const toggle = () => {
+                      setCollapsedMultiDiffKeys((current) => {
+                        const next = new Set(current);
+                        if (next.has(itemKey)) next.delete(itemKey);
+                        else next.add(itemKey);
+                        return next;
+                      });
+                    };
+                    const header = renderDiffFileHeader({
+                      entry,
+                      binary: Boolean(document.binary),
+                      ...(imagePreviewShown && displayable
+                        ? {
+                            imagePreview: {
+                              pressed: imagePreviewEnabled,
+                              disabled: imageUnavailable,
+                              onPressedChange: (pressed: boolean) =>
+                                setImagePreviewEnabled(imageKey, pressed),
+                            },
                           }
-                        />
-                      ) : null}
-                      {document.binary ? (
-                        !imagePreviewEnabled && !imageProbePending && !collapsed ? (
-                          <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
-                        ) : null
-                      ) : !imagePreviewEnabled ? (
-                        <DiffSurface
-                          source={
-                            document.tooLarge || patchContainsMultipleFiles(document.patch)
-                              ? {
-                                  kind: 'codeView',
-                                  patch: document.patch,
-                                  cacheKey: document.diffId,
-                                }
-                              : {
-                                  kind: 'patch',
-                                  patch: document.patch,
-                                  path: document.path,
-                                  cacheKey: document.diffId,
-                                }
-                          }
-                          diffStyle={diffStyle}
-                          lineWrapping={editorLineWrapping}
-                          wrapColumn={editorWrapColumn}
-                          performanceMode={Boolean(document.tooLarge)}
-                          collapsed={collapsed}
-                          {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
-                          ariaLabel={t('fileDiffAria', { path: document.path })}
-                        />
-                      ) : null}
-                    </section>
-                  );
-                })}
-              </div>
-            ) : null}
-            {!multipleFilesSelected &&
-            visibleImageTarget &&
-            visibleImageCandidate &&
-            (visibleImagePreviewEnabled || visibleImageProbePending) ? (
-              <ImageDiffPreview
-                adapter={adapter}
-                repoId={repo.repoId}
-                target={visibleImageTarget}
-                candidate={visibleImageCandidate}
-                layout={imagePreviewLayout}
-                hidden={visibleImageProbePending}
-                onProbeResult={(previewable) =>
-                  setImageProbeResult(visibleImageProbeKey, previewable)
-                }
-              />
-            ) : null}
-            {!multipleFilesSelected &&
-            visibleDiff?.binary &&
-            !visibleImagePreviewEnabled &&
-            !visibleImageProbePending ? (
-              <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
-            ) : null}
-            {!multipleFilesSelected && visibleDiff?.truncated ? (
-              <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
-            ) : null}
-            {!multipleFilesSelected &&
-            visibleDiff &&
-            !visibleDiff.binary &&
-            !visibleImagePreviewEnabled ? (
-              <DiffSurface
-                source={
-                  visibleDiff.tooLarge || diffContainsMultipleFiles
-                    ? {
-                        kind: 'codeView',
-                        patch: visibleDiff.patch,
-                        cacheKey: visibleDiff.diffId,
-                      }
-                    : {
-                        kind: 'patch',
-                        patch: visibleDiff.patch,
-                        path: visibleDiff.path,
-                        cacheKey: visibleDiff.diffId,
-                      }
-                }
-                selectable={lineSelectionEnabled}
-                {...(hunkAction ? { hunkAction } : {})}
-                diffStyle={diffStyle}
-                lineWrapping={editorLineWrapping}
-                wrapColumn={editorWrapColumn}
-                performanceMode={Boolean(visibleDiff.tooLarge)}
-                initialSelection={restoredDiffSelection}
-                onSelectionChange={handleSurfaceSelection}
-                onSelectionContextMenu={(_surfaceSelection, point, text) =>
-                  setSelectionMenuContext({ point, text })
-                }
-                onSelectionCopy={(text) => void copySelectedLines(text)}
-                ariaLabel={t('fileDiffAria', { path: visibleDiff.path })}
-              />
-            ) : null}
-            {!multipleFilesSelected && selection ? (
-              <RowActionMenu
-                triggerLabel={t('selectedLines')}
-                triggerTitle={t('selectedLines')}
-                menuLabel={t('selectedLines')}
-                items={selectionMenuItems}
-                open={selectionMenuContext !== undefined}
-                disabled={repositoryActionsDisabled}
-                contextPoint={selectionMenuContext?.point}
-                contextOnly
-                onOpenChange={(open) => {
-                  if (!open) setSelectionMenuContext(undefined);
-                }}
-                onTriggerOpen={() => undefined}
-                onAction={runSelectionAction}
-              />
-            ) : null}
+                        : {}),
+                      ...(document.truncated ? {} : { collapsed }),
+                      ...(document.truncated
+                        ? {}
+                        : { controlsId: `multi-diff-body-${document.diffId}` }),
+                      menuOpen: multiDetailFileMenuKey === itemKey,
+                      menuContextPoint:
+                        multiDetailFileMenuContext?.key === itemKey
+                          ? multiDetailFileMenuContext.point
+                          : undefined,
+                      ...(document.truncated ? {} : { onToggle: toggle }),
+                      onMenuOpenChange: (open) =>
+                        setMultiDetailFileMenuKey(open ? itemKey : undefined),
+                      onMenuContextPointChange: (point) =>
+                        setMultiDetailFileMenuContext(point ? { key: itemKey, point } : undefined),
+                    });
+                    const multiHunkAction = createHunkAction(document, entry, false);
+                    return (
+                      <section
+                        key={`${document.area}:${document.path}:${document.diffId}`}
+                        className={`${document.binary ? 'multi-diff-binary' : 'multi-diff-item'}${
+                          collapsed ? ' is-collapsed' : ''
+                        }`}
+                      >
+                        {header}
+                        <div id={`multi-diff-body-${document.diffId}`}>
+                          {document.truncated ? (
+                            <output className="inline-alert warning">
+                              {t('diffTruncatedFileAction')}
+                            </output>
+                          ) : collapsed && multiDiffsSoftLimited ? (
+                            <output className="inline-alert warning">
+                              {t('diffDisplayLimit')}
+                            </output>
+                          ) : null}
+                          {!collapsed &&
+                          target &&
+                          imageCandidate &&
+                          (imagePreviewEnabled || imageProbePending) ? (
+                            <ImageDiffPreview
+                              adapter={adapter}
+                              repoId={repo.repoId}
+                              target={target}
+                              candidate={imageCandidate}
+                              layout={imagePreviewLayout}
+                              hidden={imageProbePending}
+                              onProbeResult={(previewable) =>
+                                setImageProbeResult(imageProbeKey, previewable)
+                              }
+                            />
+                          ) : null}
+                          {document.binary ? (
+                            !imagePreviewEnabled && !imageProbePending && !collapsed ? (
+                              <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
+                            ) : null
+                          ) : displayable && !imagePreviewEnabled ? (
+                            <DiffSurface
+                              source={
+                                document.tooLarge || patchContainsMultipleFiles(document.patch)
+                                  ? {
+                                      kind: 'codeView',
+                                      patch: document.patch,
+                                      cacheKey: document.diffId,
+                                    }
+                                  : {
+                                      kind: 'patch',
+                                      patch: document.patch,
+                                      path: document.path,
+                                      cacheKey: document.diffId,
+                                    }
+                              }
+                              diffStyle={diffStyle}
+                              lineWrapping={editorLineWrapping}
+                              wrapColumn={editorWrapColumn}
+                              performanceMode={
+                                Boolean(document.tooLarge) ||
+                                multiDiffsSoftLimited ||
+                                profileDiffPatch(document.patch, document.truncated).performanceMode
+                              }
+                              collapsed={collapsed}
+                              {...(multiHunkAction ? { hunkAction: multiHunkAction } : {})}
+                              ariaLabel={t('fileDiffAria', { path: document.path })}
+                            />
+                          ) : null}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {!multipleFilesSelected &&
+              visibleImageTarget &&
+              visibleImageCandidate &&
+              (visibleImagePreviewEnabled || visibleImageProbePending) ? (
+                <ImageDiffPreview
+                  adapter={adapter}
+                  repoId={repo.repoId}
+                  target={visibleImageTarget}
+                  candidate={visibleImageCandidate}
+                  layout={imagePreviewLayout}
+                  hidden={visibleImageProbePending}
+                  onProbeResult={(previewable) =>
+                    setImageProbeResult(visibleImageProbeKey, previewable)
+                  }
+                />
+              ) : null}
+              {!multipleFilesSelected &&
+              visibleDiff?.binary &&
+              visibleDiffDisplayable &&
+              !visibleImagePreviewEnabled &&
+              !visibleImageProbePending ? (
+                <p className="empty-state-small">{t('binaryWholeFileOnly')}</p>
+              ) : null}
+              {!multipleFilesSelected && visibleDiff?.truncated ? (
+                <output className="inline-alert warning">{t('diffTruncatedFileAction')}</output>
+              ) : !multipleFilesSelected && visibleDiffCollapsed ? (
+                <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
+              ) : null}
+              {!multipleFilesSelected &&
+              visibleDiff &&
+              visibleDiffDisplayable &&
+              !visibleDiff.binary &&
+              !visibleImagePreviewEnabled ? (
+                <DiffSurface
+                  source={
+                    visibleDiff.tooLarge || diffContainsMultipleFiles
+                      ? {
+                          kind: 'codeView',
+                          patch: visibleDiff.patch,
+                          cacheKey: visibleDiff.diffId,
+                        }
+                      : {
+                          kind: 'patch',
+                          patch: visibleDiff.patch,
+                          path: visibleDiff.path,
+                          cacheKey: visibleDiff.diffId,
+                        }
+                  }
+                  selectable={lineSelectionEnabled}
+                  {...(hunkAction ? { hunkAction } : {})}
+                  diffStyle={diffStyle}
+                  lineWrapping={editorLineWrapping}
+                  wrapColumn={editorWrapColumn}
+                  performanceMode={
+                    Boolean(visibleDiff.tooLarge) || Boolean(visibleDiffProfile?.performanceMode)
+                  }
+                  initialSelection={restoredDiffSelection}
+                  onSelectionChange={handleSurfaceSelection}
+                  onSelectionContextMenu={(_surfaceSelection, point, text) =>
+                    setSelectionMenuContext({ point, text })
+                  }
+                  onSelectionCopy={(text) => void copySelectedLines(text)}
+                  ariaLabel={t('fileDiffAria', { path: visibleDiff.path })}
+                />
+              ) : null}
+              {!multipleFilesSelected && selection ? (
+                <RowActionMenu
+                  triggerLabel={t('selectedLines')}
+                  triggerTitle={t('selectedLines')}
+                  menuLabel={t('selectedLines')}
+                  items={selectionMenuItems}
+                  open={selectionMenuContext !== undefined}
+                  disabled={repositoryActionsDisabled}
+                  contextPoint={selectionMenuContext?.point}
+                  contextOnly
+                  onOpenChange={(open) => {
+                    if (!open) setSelectionMenuContext(undefined);
+                  }}
+                  onTriggerOpen={() => undefined}
+                  onAction={runSelectionAction}
+                />
+              ) : null}
+            </div>
           </main>
         )}
         {commitDialogOpen ? (

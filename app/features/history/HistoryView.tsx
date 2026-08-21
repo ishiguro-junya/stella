@@ -9,13 +9,26 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
-import { GitBranch, GitCommitHorizontal, Search, Tag } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  GitBranch,
+  GitCommitHorizontal,
+  Search,
+  Tag,
+} from 'lucide-react';
 
 import type { WorkspaceAdapter } from '../../adapters/workspaceAdapter';
-import { diffFileSections, imagePreviewToggleAvailable } from '../../domain/diffProfile';
+import {
+  diffFileSections,
+  imagePreviewToggleAvailable,
+  profileDiffPatch,
+} from '../../domain/diffProfile';
 import { Button } from '../../ui/Button';
+import { FileStatusIcon } from '../../ui/FileStatusIcon';
 import { Input } from '../../ui/Input';
 import { LoadingIndicator } from '../../ui/LoadingIndicator';
 import {
@@ -425,11 +438,47 @@ function imageCandidateKey(candidate: ImageDiffCandidate): string {
   return `${candidate.previousPath ?? ''}\0${candidate.path}`;
 }
 
+function DeferredHistoryFileHeader({
+  path,
+  status,
+  collapsed,
+  controlsId,
+  onToggle,
+}: {
+  path: string;
+  status: ImageDiffCandidate['changeKind'];
+  collapsed: boolean;
+  controlsId: string;
+  onToggle: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="diff-file-custom-header">
+      <div className="diff-file-custom-header-title">
+        <Button
+          type="button"
+          className="diff-file-collapse-toggle"
+          aria-controls={controlsId}
+          aria-expanded={!collapsed}
+          aria-label={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+          tooltip={t(collapsed ? 'expandFileDiff' : 'collapseFileDiff', { path })}
+          onClick={onToggle}
+        >
+          {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+        </Button>
+        <FileStatusIcon status={status} />
+        <span>{path}</span>
+      </div>
+    </div>
+  );
+}
+
 interface HistoryCommitDiffProps {
   adapter: WorkspaceAdapter;
   repoId: string;
   details: CommitDetails;
   files: ReturnType<typeof diffFileSections>;
+  initiallyCollapsed: boolean;
   diffStyle: DiffStyle;
   imagePreviewLayout: DiffStyle;
   lineWrapping: boolean;
@@ -446,6 +495,7 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
   repoId,
   details,
   files,
+  initiallyCollapsed,
   diffStyle,
   imagePreviewLayout,
   lineWrapping,
@@ -457,8 +507,13 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
   onImageProbeResult,
 }: HistoryCommitDiffProps) {
   const { t } = useI18n();
+  const [expandedFileKeys, setExpandedFileKeys] = useState<{
+    commitOid: string;
+    keys: Set<string>;
+  }>({ commitOid: '', keys: new Set() });
   const diff = details.diff;
   if (!diff) return null;
+  if (diff.truncated) return null;
 
   if (!files.length) {
     if (diff.binary) return <p className="empty-state-small">{t('binaryDiffUnavailable')}</p>;
@@ -485,7 +540,40 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
   return (
     <div className="history-diff-files">
       {files.map((file, index) => {
+        const fileKey = `${index}:${file.path}`;
+        const collapsed =
+          initiallyCollapsed &&
+          !(expandedFileKeys.commitOid === details.oid && expandedFileKeys.keys.has(fileKey));
         const candidate = file.imageCandidate;
+        const contentId = `history-diff-content-${details.oid}-${diff.diffId}-${index}`;
+        const toggleCollapsed = () =>
+          setExpandedFileKeys((current) => {
+            const keys = new Set(current.commitOid === details.oid ? current.keys : []);
+            if (keys.has(fileKey)) keys.delete(fileKey);
+            else keys.add(fileKey);
+            return { commitOid: details.oid, keys };
+          });
+        const deferredSection = (body: ReactNode) => (
+          <section key={fileKey} className="history-image-preview-item">
+            <header
+              className={`diff-file-standalone-header history-image-file-header${
+                stickyFileHeaders ? ' is-sticky' : ''
+              }`}
+            >
+              <DeferredHistoryFileHeader
+                path={file.path}
+                status={candidate?.changeKind ?? 'modified'}
+                collapsed={collapsed}
+                controlsId={contentId}
+                onToggle={toggleCollapsed}
+              />
+            </header>
+            <div id={contentId} hidden={collapsed}>
+              {body}
+            </div>
+          </section>
+        );
+        if (collapsed) return deferredSection(null);
         const surface = (showFileHeaders: boolean) => (
           <DiffSurface
             source={{
@@ -497,14 +585,19 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
             diffStyle={diffStyle}
             lineWrapping={lineWrapping}
             wrapColumn={wrapColumn}
-            performanceMode={Boolean(diff.tooLarge)}
+            performanceMode={Boolean(diff.tooLarge) || profileDiffPatch(file.patch).performanceMode}
             showFileHeaders={showFileHeaders}
             stickyFileHeaders={stickyFileHeaders}
             hunkSeparators="simple"
             ariaLabel={t('fileDiffAria', { path: file.path })}
           />
         );
-        if (!candidate) return <Fragment key={file.path}>{surface(true)}</Fragment>;
+        if (!candidate)
+          return initiallyCollapsed ? (
+            deferredSection(surface(true))
+          ) : (
+            <Fragment key={file.path}>{surface(true)}</Fragment>
+          );
 
         const candidateKey = imageCandidateKey(candidate);
         const probeResult = imageProbeResults.get(candidateKey);
@@ -534,6 +627,13 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
         );
 
         if (probePending || (candidate.format === 'probe' && probeFailed)) {
+          if (initiallyCollapsed)
+            return deferredSection(
+              <>
+                {preview}
+                {probeFailed ? surface(true) : null}
+              </>,
+            );
           return (
             <Fragment key={candidateKey}>
               {preview}
@@ -541,6 +641,14 @@ const HistoryCommitDiff = memo(function HistoryCommitDiff({
             </Fragment>
           );
         }
+
+        if (initiallyCollapsed)
+          return deferredSection(
+            <>
+              {preview}
+              {candidate.format === 'svg' && !previewEnabled ? surface(false) : null}
+            </>,
+          );
 
         return (
           <section key={candidateKey} className="history-image-preview-item">
@@ -770,7 +878,19 @@ export function HistoryView({
     [historyPage.commits],
   );
   const diffFiles = useMemo(
-    () => (details?.diff ? diffFileSections(details.diff.patch, details.diff.diffId) : []),
+    () =>
+      details?.diff && !details.diff.truncated
+        ? diffFileSections(details.diff.patch, details.diff.diffId)
+        : [],
+    [details],
+  );
+  const diffSoftLimitExceeded = useMemo(
+    () =>
+      Boolean(
+        details?.diff &&
+        !details.diff.truncated &&
+        profileDiffPatch(details.diff.patch).softLimitExceeded,
+      ),
     [details],
   );
   const moveCommitSelection = useCallback(
@@ -1334,13 +1454,16 @@ export function HistoryView({
               </dl>
             </header>
             {details.diff?.truncated ? (
-              <output className="inline-alert warning">{t('diffBeginningOnly')}</output>
+              <output className="inline-alert warning">{t('diffTruncatedUnavailable')}</output>
+            ) : diffSoftLimitExceeded ? (
+              <output className="inline-alert warning">{t('diffDisplayLimit')}</output>
             ) : null}
             <HistoryCommitDiff
               adapter={adapter}
               repoId={repo.repoId}
               details={details}
               files={diffFiles}
+              initiallyCollapsed={diffSoftLimitExceeded}
               diffStyle={diffStyle}
               imagePreviewLayout={imagePreviewLayout}
               lineWrapping={lineWrapping}

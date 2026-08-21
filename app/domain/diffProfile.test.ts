@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   diffFileSections,
+  diffPatchProfilesExceedSoftLimit,
   editorLineForDiffSelection,
   imageDiffCandidates,
   imagePreviewToggleAvailable,
@@ -140,6 +141,75 @@ abc`;
 
   it('enables performance mode above the ordinary line limit', () => {
     expect(profileDiffPatch('+x\n'.repeat(20_001)).performanceMode).toBe(true);
+  });
+
+  it('keeps the byte soft limit inclusive', () => {
+    const line = 'x'.repeat(256 * 1024 - 1);
+    const atLimit = `${[line, line, line, line].join('\n')}\n`;
+
+    expect(profileDiffPatch(atLimit).softLimitExceeded).toBe(false);
+    expect(profileDiffPatch(`${atLimit}x`).softLimitExceeded).toBe(true);
+  });
+
+  it('keeps the line soft limit inclusive', () => {
+    expect(profileDiffPatch('+x\n'.repeat(20_000)).softLimitExceeded).toBe(false);
+    expect(profileDiffPatch('+x\n'.repeat(20_001)).softLimitExceeded).toBe(true);
+  });
+
+  it('keeps the longest-line soft limit inclusive', () => {
+    expect(profileDiffPatch('x'.repeat(256 * 1024)).softLimitExceeded).toBe(false);
+    expect(profileDiffPatch('x'.repeat(256 * 1024 + 1)).softLimitExceeded).toBe(true);
+  });
+
+  it('excludes CRLF from the longest-line soft limit', () => {
+    expect(profileDiffPatch(`${'x'.repeat(256 * 1024)}\r\n`).softLimitExceeded).toBe(false);
+    expect(profileDiffPatch(`${'x'.repeat(256 * 1024 + 1)}\r\n`).softLimitExceeded).toBe(true);
+  });
+
+  it('detects a multi-file soft limit without concatenating patches', () => {
+    expect(
+      diffPatchProfilesExceedSoftLimit([
+        profileDiffPatch('+x\n'.repeat(10_001)),
+        profileDiffPatch('+x\n'.repeat(10_001)),
+      ]),
+    ).toBe(true);
+  });
+
+  it('keeps the combined line soft limit inclusive with trailing newlines', () => {
+    expect(
+      diffPatchProfilesExceedSoftLimit([
+        profileDiffPatch('+x\n'.repeat(10_000)),
+        profileDiffPatch('+x\n'.repeat(10_000)),
+      ]),
+    ).toBe(false);
+    expect(
+      diffPatchProfilesExceedSoftLimit([
+        profileDiffPatch('+x\n'.repeat(10_000)),
+        profileDiffPatch('+x\n'.repeat(10_001)),
+      ]),
+    ).toBe(true);
+  });
+
+  it('keeps the combined profile soft limit inclusive', () => {
+    const profileAtLineLimit = profileDiffPatch('x'.repeat(256 * 1024));
+
+    expect(
+      diffPatchProfilesExceedSoftLimit([
+        profileAtLineLimit,
+        profileAtLineLimit,
+        profileAtLineLimit,
+        profileAtLineLimit,
+      ]),
+    ).toBe(false);
+    expect(
+      diffPatchProfilesExceedSoftLimit([
+        profileAtLineLimit,
+        profileAtLineLimit,
+        profileAtLineLimit,
+        profileAtLineLimit,
+        profileDiffPatch('x'),
+      ]),
+    ).toBe(true);
   });
 
   it('recognizes a patch containing multiple files', () => {

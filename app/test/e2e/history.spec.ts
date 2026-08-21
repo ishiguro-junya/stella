@@ -1706,4 +1706,45 @@ describe('History', () => {
     await $('button=差分').click();
     await expect($('.diff-view')).toBeDisplayed();
   });
+
+  it('defers soft commit diffs until each file is expanded', async () => {
+    await writeRepositoryFile(
+      repositoryPath,
+      'history-soft-limit.txt',
+      `${Array.from({ length: 20_001 }, (_, index) => `history soft line ${index + 1}`).join('\n')}\n`,
+    );
+    await runGit(repositoryPath, ['add', 'history-soft-limit.txt']);
+    await runGit(repositoryPath, ['commit', '-m', 'test: defer large History diff']);
+    const commitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+
+    await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('button=履歴').click();
+    const commit = $(`[data-history-commit-oid="${commitOid}"]`);
+    await commit.waitForDisplayed({ timeout: 20_000 });
+    await commit.click();
+
+    await expect($('.commit-detail-pane output.inline-alert.warning')).toHaveText(
+      expect.stringContaining('差分本文が大きいため初期表示では省略しています。'),
+    );
+    const softDiffToggle = $('.history-image-file-header .diff-file-collapse-toggle');
+    await expect(softDiffToggle).toHaveAttribute('aria-expanded', 'false');
+    const controlsId = await softDiffToggle.getAttribute('aria-controls');
+    if (!controlsId) throw new Error('The History soft diff toggle has no controlled body.');
+    expect(
+      await browser.execute((bodyId) => {
+        const toggle = document.querySelector(
+          '.history-image-file-header .diff-file-collapse-toggle',
+        );
+        const body = document.getElementById(bodyId);
+        return Boolean(body && !body.contains(toggle));
+      }, controlsId),
+    ).toBe(true);
+    await expect($('.history-view .diff-surface')).not.toExist();
+
+    await softDiffToggle.click();
+    await expect(softDiffToggle).toHaveAttribute('aria-expanded', 'true');
+    await $('.history-view .diff-surface').waitForDisplayed({ timeout: 20_000 });
+    await softDiffToggle.click();
+    await expect(softDiffToggle).toHaveAttribute('aria-expanded', 'false');
+  });
 });
