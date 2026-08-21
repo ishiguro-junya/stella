@@ -20,6 +20,7 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { documentDir } from '@tauri-apps/api/path';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -128,6 +129,7 @@ import { applyTypography, type CodeFont, type FontSize, type UiFont } from './th
 
 const EMPTY_WORKSPACE: WorkspaceSnapshot = { repos: [], activities: [] };
 const APP_UPDATE_INTERVAL_MS = 60 * 60 * 1_000;
+const STARTUP_RESTORE_TIMEOUT_MS = 10_000;
 const ActivityView = lazy(async () => {
   const module = await import('./features/activity/ActivityView');
   return { default: module.ActivityView };
@@ -455,7 +457,13 @@ export function App({
   const [pendingUpdateInstall, setPendingUpdateInstall] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [workspaceViewRevision, setWorkspaceViewRevision] = useState(0);
-  const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView>();
+  const [workspaceViewTransition, setWorkspaceViewTransition] = useState<WorkspaceView | undefined>(
+    () =>
+      initialPreferences.lastSelectedRepoPath &&
+      initialPreferences.registeredRepoPaths.includes(initialPreferences.lastSelectedRepoPath)
+        ? 'history'
+        : undefined,
+  );
   const [addRepositoryDialog, setAddRepositoryDialog] = useState<AddRepositoryState>();
   const [repositorySwitcherOpen, setRepositorySwitcherOpen] = useState(false);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState>();
@@ -483,8 +491,11 @@ export function App({
     new Map<string, Promise<RepositoryAvailability>>(),
   );
   const restoreStartedRef = useRef(false);
+  const nativeWindowShownRef = useRef(false);
   const repo = selectedRepo(workspace);
   const selectedRepoPath = repo?.path;
+  const startupRestorePending =
+    page === 'workspace' && !repo && workspaceViewTransition !== undefined;
   const repositoryLandingVisible = page === 'repositories' || (page === 'workspace' && !repo);
   const effectiveRepositoryLogoLoader =
     repositoryLogoLoader ?? (providedAdapter ? undefined : loadRepositoryLogo);
@@ -607,7 +618,10 @@ export function App({
   );
 
   const inspectRepositoryPath = useCallback(
-    async (path: string): Promise<RepositoryAvailability> => {
+    async (
+      path: string,
+      shouldApply: () => boolean = () => true,
+    ): Promise<RepositoryAvailability> => {
       const request = adapter.query({ kind: 'repositoryAvailability', path }).then((result) => {
         if (result.kind !== 'repositoryAvailability') throw new Error(t('repositoryCheckFailed'));
         return result.availability;
@@ -622,7 +636,9 @@ export function App({
           latest = current;
           continue;
         }
-        setRepositoryAvailability((values) => ({ ...values, [path]: availability }));
+        if (shouldApply()) {
+          setRepositoryAvailability((values) => ({ ...values, [path]: availability }));
+        }
         return availability;
       }
     },
@@ -630,6 +646,7 @@ export function App({
   );
 
   const checkRegisteredRepositories = useCallback(async (): Promise<void> => {
+    if (startupRestorePending) return;
     await Promise.allSettled(
       registeredPaths.map(async (path) => {
         const availability = await inspectRepositoryPath(path);
@@ -646,7 +663,7 @@ export function App({
         await disconnectRepository(attached);
       }),
     );
-  }, [disconnectRepository, inspectRepositoryPath, registeredPaths]);
+  }, [disconnectRepository, inspectRepositoryPath, registeredPaths, startupRestorePending]);
 
   useEffect(() => {
     void checkRegisteredRepositories();
@@ -666,18 +683,16 @@ export function App({
     if (!Reflect.has(globalThis, '__TAURI_INTERNALS__')) return () => undefined;
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void import('@tauri-apps/api/window').then(({ getCurrentWindow }) =>
-      getCurrentWindow()
-        .onCloseRequested((event) => {
-          if (!unsavedDirtyRef.current) return;
-          event.preventDefault();
-          setPendingWindowClose(true);
-        })
-        .then((listener) => {
-          if (disposed) listener();
-          else unlisten = listener;
-        }),
-    );
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        if (!unsavedDirtyRef.current) return;
+        event.preventDefault();
+        setPendingWindowClose(true);
+      })
+      .then((listener) => {
+        if (disposed) listener();
+        else unlisten = listener;
+      });
     return () => {
       disposed = true;
       unlisten?.();
@@ -1003,11 +1018,14 @@ export function App({
       request: AttachRequest,
       repositoryName?: string,
       navigate = true,
+      shouldApply: () => boolean = () => true,
     ): Promise<RepoSnapshot | undefined> => {
+      if (!shouldApply()) return undefined;
       setBusy(true);
       setNotice(undefined);
       try {
         const attached = await adapter.attach(request);
+        if (!shouldApply()) return undefined;
         setWorkspace((current) => {
           const withRepos = attached.repos.reduce(replaceRepo, current);
           const withActivities = {
@@ -1036,6 +1054,7 @@ export function App({
         }
         return attached.repos.find((candidate) => candidate.repoId === attachedRepoId);
       } catch (cause) {
+        if (!shouldApply()) return undefined;
         if (cause instanceof WorkspaceAdapterError && cause.code === 'cancelled') {
           setNotice({ level: 'info', message: { id: 'errorCancelled' } });
         } else {
@@ -1043,7 +1062,7 @@ export function App({
         }
         return undefined;
       } finally {
-        setBusy(false);
+        if (shouldApply()) setBusy(false);
       }
     },
     [adapter, showError, t],
@@ -1051,38 +1070,81 @@ export function App({
 
   useEffect(() => {
     const path = initialPreferences.lastSelectedRepoPath;
-    if (!path || !registeredPaths.includes(path) || restoreStartedRef.current) return undefined;
+    if (!path || !registeredPaths.includes(path)) {
+      setWorkspaceViewTransition(undefined);
+      return undefined;
+    }
+    if (restoreStartedRef.current) return undefined;
     let active = true;
-    void inspectRepositoryPath(path)
+    const finishRestore = (): void => {
+      if (!active) return;
+      active = false;
+      window.clearTimeout(timeout);
+      setWorkspaceViewTransition(undefined);
+    };
+    const timeout = window.setTimeout(() => {
+      if (!active) return;
+      active = false;
+      setBusy(false);
+      setWorkspaceViewTransition(undefined);
+    }, STARTUP_RESTORE_TIMEOUT_MS);
+    void inspectRepositoryPath(path, () => active)
       .then(async (availability) => {
+        if (!active) return;
+        if (availability !== 'available') {
+          finishRestore();
+          return;
+        }
         if (
-          !active ||
-          availability !== 'available' ||
           restoreStartedRef.current ||
           pageRef.current !== 'workspace' ||
           selectedRepo(workspaceRef.current)
-        )
+        ) {
+          finishRestore();
           return;
+        }
         restoreStartedRef.current = true;
-        const attached = await attach({ kind: 'openExisting', path }, undefined, false);
-        if (
-          !active ||
-          !attached ||
-          pageRef.current !== 'workspace' ||
-          selectedRepo(workspaceRef.current)
-        )
+        const attached = await attach(
+          { kind: 'openExisting', path },
+          undefined,
+          false,
+          () => active,
+        );
+        if (!active) return;
+        if (!attached || pageRef.current !== 'workspace' || selectedRepo(workspaceRef.current)) {
+          finishRestore();
           return;
+        }
+        active = false;
+        window.clearTimeout(timeout);
         requestNavigationRef.current({
           repoId: attached.repoId,
           page: 'workspace',
           view: 'history',
         });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) finishRestore();
+      });
     return () => {
       active = false;
+      window.clearTimeout(timeout);
     };
   }, [attach, initialPreferences.lastSelectedRepoPath, inspectRepositoryPath, registeredPaths]);
+
+  useEffect(() => {
+    if (
+      workspaceViewTransition ||
+      nativeWindowShownRef.current ||
+      import.meta.env.VITE_E2E === 'true' ||
+      !Reflect.has(globalThis, '__TAURI_INTERNALS__')
+    )
+      return;
+    nativeWindowShownRef.current = true;
+    void getCurrentWindow()
+      .show()
+      .catch(() => undefined);
+  }, [workspaceViewTransition]);
 
   const openRegisteredRepository = useCallback(
     async (path: string): Promise<void> => {
@@ -1900,7 +1962,6 @@ export function App({
     }
     setPendingWindowClose(false);
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().destroy();
     } catch (cause) {
       showError(t('closeWindowFailedTitle'), cause, t('closeWindowFailed'));
@@ -1999,6 +2060,7 @@ export function App({
       )}
     </Button>
   );
+  if (page === 'workspace' && !repo && workspaceViewTransition) return null;
   return (
     <I18nProvider language={language}>
       <AppearanceProvider appearance={appearance}>

@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
+    "core:window:allow-show",
     "core:window:allow-start-dragging",
     "core:app:allow-set-app-theme",
     "dialog:allow-open"

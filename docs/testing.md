@@ -19,6 +19,7 @@ GitHub Actionsの実行コストを抑えるため、テスト用のCIワーク�
 | 変更内容 | コマンド | 確認対象 |
 | --- | --- | --- |
 | ReactまたはRustのロジック | `mise run test:unit` | ReactとRustの単体テスト |
+| 起動先確定後のウィンドウ表示 | `mise run test:unit`、`mise run test:e2e` | 表示前の判定、履歴または一覧のDOM確定後の表示、E2Eの表示管理 |
 | `Workspace`を介したGit操作 | `mise run test:integration` | 一時リポジトリを使うRustの統合テスト |
 | TypeScriptの型 | `mise run typecheck` | TypeScript全体の型整合性 |
 | コード、設定、ドキュメント | `mise run lint` | 書式、静的解析、未使用コードと依存関係、設定、Markdown、文章、リンク |
@@ -73,6 +74,7 @@ Rustの単体テストでは、Git出力の解析、入力検証、安全判定�
 `mise run test:e2e`はE2E機能を有効にしたネイティブ実行ファイルをビルドし、WebdriverIOの組み込みプロバイダーで操作します。  
 実リポジトリや外部ネットワークは使いません。  
 開発用の隔離されたリポジトリだけを操作します。  
+E2Eでは`VITE_E2E=true`によりフロントエンドがウィンドウを表示せず、ヘッドレス指定を含む表示状態をWebDriverが管理することを確認します。  
 画面移動、主要なGit操作、ダイアログ、キーボード操作、永続化がフロントエンドからRustとGitまで正しく動くことを確認します。  
 既定ではウィンドウを表示せず、画面を確認しながらデバッグする場合は`mise run test:e2e --headless=false`を実行します。  
 
