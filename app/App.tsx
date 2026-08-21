@@ -1886,12 +1886,16 @@ export function App({
     }
     setBusy(true);
     try {
-      const preview = await adapter.preview(request);
+      const preview = await adapter.preview(request).catch((cause: unknown) => {
+        showError(t('previewFailedTitle'), cause, t('previewFailed'));
+        throw markWorkspaceErrorHandled(cause, t('previewFailed'));
+      });
+      if (action.kind === 'createBranch' && action.checkout === true) {
+        await execute({ ...request, preview });
+        return;
+      }
       setPendingAction({ request, preview });
       setTypedConfirmation('');
-    } catch (cause) {
-      showError(t('previewFailedTitle'), cause, t('previewFailed'));
-      throw markWorkspaceErrorHandled(cause, t('previewFailed'));
     } finally {
       setBusy(false);
     }

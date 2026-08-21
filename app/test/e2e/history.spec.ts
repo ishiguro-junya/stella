@@ -1748,11 +1748,15 @@ describe('History', () => {
       ),
     );
     await branchDialog.$('input[aria-label="ブランチ名"]').setValue(branchName);
-    await branchDialog.$('button=影響を確認').click();
-    const branchConfirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
-    await expect(branchConfirmation).toBeDisplayed();
-    await branchConfirmation.$('button=作成').click();
-    await expect(branchConfirmation).not.toExist();
+    await branchDialog.$('button=作成').click();
+    await browser.waitUntil(
+      async () =>
+        runGit(repositoryPath, ['branch', '--show-current']).then(
+          (currentBranch) => currentBranch.trim() === branchName,
+          () => false,
+        ),
+      { timeout: 20_000, timeoutMsg: 'Create Branch did not switch to the new branch.' },
+    );
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining(branchName));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe(`${branchName}\n`);
     await expect($(`[data-local-branch="${branchName}"]`)).toBeDisplayed();

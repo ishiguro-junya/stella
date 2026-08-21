@@ -551,12 +551,18 @@ describe('Repository and Branch navigation', () => {
     await createBranchButton.click();
     const branchDialog = $('[role="dialog"][aria-labelledby="create-branch-title"]');
     await branchDialog.waitForDisplayed();
-    await branchDialog.$('input[aria-label="ブランチ名"]').setValue('created-with-changes');
-    await branchDialog.$('button=影響を確認').click();
-    const confirmation = $('[role="alertdialog"][aria-labelledby="action-preview-title"]');
-    await expect(confirmation).toBeDisplayed();
-    await confirmation.$('button=作成').click();
-    await expect($('.branch-toggle')).toHaveText(expect.stringContaining('created-with-changes'));
+    const branchName = 'created-with-changes';
+    await branchDialog.$('input[aria-label="ブランチ名"]').setValue(branchName);
+    await branchDialog.$('button=作成').click();
+    await browser.waitUntil(
+      async () =>
+        runGit(repositoryPath, ['branch', '--show-current']).then(
+          (currentBranch) => currentBranch.trim() === branchName,
+          () => false,
+        ),
+      { timeout: 20_000, timeoutMsg: 'Create Branch did not switch to the new branch.' },
+    );
+    await expect($('.branch-toggle')).toHaveText(expect.stringContaining(branchName));
     expect((await runGit(repositoryPath, ['status', '--short'])).trim()).toBe(expectedStatus);
   });
 

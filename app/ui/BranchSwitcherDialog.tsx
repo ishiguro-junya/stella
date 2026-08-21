@@ -183,7 +183,7 @@ export function BranchSwitcherDialog({
             variant="primary"
             disabled={!branchName.trim() || Boolean(disabledReason)}
           >
-            {t('reviewImpact')}
+            {t('create')}
           </Button>
         </DialogFooter>
       </Dialog>

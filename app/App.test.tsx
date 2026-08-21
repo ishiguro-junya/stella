@@ -2313,7 +2313,7 @@ describe('App repository attach', () => {
     expect(dialog).not.toHaveTextContent(/[⌘⇧]/u);
   });
 
-  it('loads local branches, checks out a selection, and creates the next branch', async () => {
+  it('loads local branches, checks out a selection, and creates the next branch directly', async () => {
     const user = userEvent.setup();
     const repo = repoSnapshot({
       branch: {
@@ -2355,8 +2355,8 @@ describe('App repository attach', () => {
         },
       };
     });
-    const preview = vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
-      repoId: request.repoId,
+    const branchPreview: ActionPreview = {
+      repoId: repo.repoId,
       title: { id: 'actionCreateBranch' },
       summary: { id: 'actionCreateBranch' },
       affectedPaths: [],
@@ -2364,7 +2364,8 @@ describe('App repository attach', () => {
       lostCommitOids: [],
       resolvedTargets: [{ input: 'feature-oid', oid: 'feature-oid' }],
       destructive: false,
-    }));
+    };
+    const preview = vi.fn<WorkspaceAdapter['preview']>(async () => branchPreview);
     let resolveBranches!: (result: QueryResult) => void;
     const branchesResult = new Promise<QueryResult>((resolve) => {
       resolveBranches = resolve;
@@ -2435,19 +2436,19 @@ describe('App repository attach', () => {
       within(createDialog).getByRole('textbox', { name: 'Branch name' }),
       'feature/new-flow',
     );
-    await user.click(within(createDialog).getByRole('button', { name: 'Review impact' }));
-
-    expect(preview).toHaveBeenCalledWith({
-      repoId: repo.repoId,
-      action: {
-        kind: 'createBranch',
-        name: 'feature/new-flow',
-        startOid: 'feature-oid',
-        checkout: true,
-      },
-    });
-    const confirmation = screen.getByRole('alertdialog', { name: 'Create Branch' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Create' }));
+    await user.click(within(createDialog).getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(preview).toHaveBeenCalledWith({
+        repoId: repo.repoId,
+        action: {
+          kind: 'createBranch',
+          name: 'feature/new-flow',
+          startOid: 'feature-oid',
+          checkout: true,
+        },
+      }),
+    );
+    expect(screen.queryByRole('alertdialog', { name: 'Create Branch' })).not.toBeInTheDocument();
     expect(execute).toHaveBeenLastCalledWith({
       repoId: repo.repoId,
       action: {
@@ -2456,11 +2457,88 @@ describe('App repository attach', () => {
         startOid: 'feature-oid',
         checkout: true,
       },
-      preview: expect.objectContaining({ repoId: repo.repoId }),
+      preview: branchPreview,
     });
     expect(
       await screen.findByRole('button', { name: /Current branch feature\/new-flow/u }),
     ).toBeVisible();
+  });
+
+  it('requires preview when creating a branch from History', async () => {
+    const user = userEvent.setup();
+    const historyCommit: RepoSnapshot['history'][number] = {
+      oid: '0123456789abcdef0123456789abcdef01234567',
+      shortOid: '0123456',
+      subject: 'feat: history branch',
+      authorName: 'Stella',
+      authoredAt: '2026-08-22T00:00:00Z',
+      parents: [],
+      refs: [],
+      lane: 0,
+    };
+    const repo = repoSnapshot({ history: [historyCommit] });
+    const preview = vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
+      repoId: request.repoId,
+      title: { id: 'actionCreateBranch' },
+      summary: { id: 'actionCreateBranch' },
+      affectedPaths: [],
+      affectedCommits: [historyCommit.oid],
+      lostCommitOids: [],
+      resolvedTargets: [{ input: historyCommit.oid, oid: historyCommit.oid }],
+      destructive: false,
+    }));
+    const execute = vi.fn<WorkspaceAdapter['execute']>(async () => {
+      throw new Error('unused');
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async (request) => {
+        if (request.kind === 'commitDetails') {
+          return { kind: 'commitDetails' as const, commit: { ...historyCommit, body: '' } };
+        }
+        if (request.kind === 'history') return { kind: 'history' as const, commits: [] };
+        return { kind: 'activity' as const, entries: [] };
+      }),
+      preview,
+      execute,
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(addRepositorySubmitButton());
+    await user.click(await screen.findByRole('button', { name: 'History' }));
+    await user.click(
+      await screen.findByRole('button', {
+        name: `More actions for commit ${historyCommit.shortOid}`,
+      }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Create Branch' }));
+    const historyDialog = screen.getByRole('dialog', { name: 'Create branch' });
+    await user.type(
+      within(historyDialog).getByRole('textbox', { name: 'Branch name' }),
+      'feature/history-preview',
+    );
+    await user.click(within(historyDialog).getByRole('button', { name: 'Next' }));
+
+    await waitFor(() =>
+      expect(preview).toHaveBeenCalledWith({
+        repoId: repo.repoId,
+        action: {
+          kind: 'createBranch',
+          name: 'feature/history-preview',
+          startOid: historyCommit.oid,
+        },
+      }),
+    );
+    expect(screen.getByRole('alertdialog', { name: 'Create Branch' })).toBeVisible();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('updates Stage state without showing a routine success notice', async () => {

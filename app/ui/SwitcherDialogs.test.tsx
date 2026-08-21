@@ -579,7 +579,7 @@ describe('BranchSwitcherDialog', () => {
     expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
   });
 
-  it('creates from the selected branch and also opens creation from the row menu', async () => {
+  it('creates directly from the selected branch through the footer and row menu', async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn<(branchName: string, startOid: string) => void>();
     render(
@@ -605,15 +605,21 @@ describe('BranchSwitcherDialog', () => {
     expect(input).toHaveFocus();
     expect(input).not.toHaveAttribute('placeholder');
     await user.type(input, 'feature/new-flow');
-    await user.click(within(creation).getByRole('button', { name: 'Review impact' }));
+    expect(within(creation).getByRole('button', { name: 'Create' })).toBeEnabled();
+    await user.keyboard('{Enter}');
 
     expect(onCreate).toHaveBeenCalledWith('feature/new-flow', 'feature-oid');
 
     await user.click(within(creation).getByRole('button', { name: 'Cancel' }));
     await user.click(screen.getByRole('button', { name: 'More actions for main' }));
     await user.click(screen.getByRole('menuitem', { name: 'Create Branch' }));
-    expect(screen.getByRole('dialog', { name: 'Create branch' })).toHaveTextContent(
-      'Create a branch from main and switch to it.',
+    const creationFromMenu = screen.getByRole('dialog', { name: 'Create branch' });
+    expect(creationFromMenu).toHaveTextContent('Create a branch from main and switch to it.');
+    await user.type(
+      within(creationFromMenu).getByRole('textbox', { name: 'Branch name' }),
+      'feature/menu',
     );
+    await user.click(within(creationFromMenu).getByRole('button', { name: 'Create' }));
+    expect(onCreate).toHaveBeenLastCalledWith('feature/menu', 'main-oid');
   });
 });
