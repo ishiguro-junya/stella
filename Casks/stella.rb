@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 cask "stella" do
-  version "1.0.0-alpha.11"
-  sha256 "a2c17ed761e8aa4dfe93fda62984b41fec8d9dc650338a1ade838a3e0b127e82"
+  version "1.0.0-alpha.12"
+  sha256 "4c82d85a4ce4fcca1ad241b1c675b9f77690d9bc611a711c2e79b91f16f2ba9c"
 
   url "https://github.com/ishiguro-junya/stella/releases/download/v#{version}/Stella_#{version}_arm64.zip",
       verified: "github.com/ishiguro-junya/stella/"
