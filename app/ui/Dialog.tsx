@@ -103,7 +103,7 @@ export function Dialog({
     const initial =
       dialog.querySelector<HTMLElement>('[data-dialog-initial-focus]') ??
       dialog.querySelector<HTMLElement>(FOCUSABLE);
-    initial?.focus();
+    (initial ?? dialog).focus();
 
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (dialogStack.at(-1)?.id !== entry.id) return;

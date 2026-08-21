@@ -702,7 +702,7 @@ function commandFromEventDetails(details: Record<string, string> | undefined): s
   }
 }
 
-function actionTitle(action: WorkspaceAction): LocalizedMessage {
+export function workspaceActionTitle(action: WorkspaceAction): LocalizedMessage {
   switch (action.kind) {
     case 'stageFiles':
       return localized('actionStageFiles');
@@ -1199,7 +1199,7 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
       });
       const preview: ActionPreview = {
         repoId: request.repoId,
-        title: actionTitle(request.action),
+        title: workspaceActionTitle(request.action),
         summary: outcome.summary,
         affectedPaths: outcome.affectedPaths,
         affectedCommits: outcome.affectedCommits,
@@ -1233,7 +1233,7 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
       }
       const action = await mapAction(request.action, repo, state.conflicts);
       const operationId = crypto.randomUUID();
-      state.activityTitles.set(operationId, actionTitle(request.action));
+      state.activityTitles.set(operationId, workspaceActionTitle(request.action));
       state.activityRepositoryNames.set(operationId, repo.name);
       let outcome: WireActionOutcome;
       try {
@@ -1279,7 +1279,7 @@ export function createTauriWorkspaceAdapter(): WorkspaceAdapter {
         id: outcome.operationId,
         repoId: request.repoId,
         repositoryName: previousActivity?.repositoryName ?? repo.name,
-        action: previousActivity?.action ?? actionTitle(request.action),
+        action: previousActivity?.action ?? workspaceActionTitle(request.action),
         summary: outcome.summary,
         status: outcome.command.cancelled
           ? 'cancelled'

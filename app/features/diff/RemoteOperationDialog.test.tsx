@@ -121,6 +121,9 @@ describe('RemoteOperationDialog', () => {
   it('keeps the Pull fields visible while refreshed targets reload', async () => {
     const user = userEvent.setup();
     const adapter = adapterWithTargets();
+    const onRefreshBranches = vi.fn<
+      Parameters<typeof RemoteOperationDialog>[0]['onRefreshBranches']
+    >(async () => undefined);
     render(
       <RemoteOperationDialog
         kind="pull"
@@ -128,7 +131,7 @@ describe('RemoteOperationDialog', () => {
         adapter={adapter}
         busy={false}
         onDismiss={() => undefined}
-        onRefreshBranches={async () => undefined}
+        onRefreshBranches={onRefreshBranches}
         onPull={async () => undefined}
         onPush={async () => undefined}
       />,
@@ -151,11 +154,18 @@ describe('RemoteOperationDialog', () => {
     const refresh = within(dialog).getByRole('button', { name: 'Refresh branches' });
     await user.click(refresh);
     await waitFor(() => expect(adapter.query).toHaveBeenCalledTimes(2));
-    expect(refresh).toBeDisabled();
+    await user.click(refresh);
+    expect(onRefreshBranches).toHaveBeenCalledOnce();
+    expect(refresh).toBeEnabled();
     expect(refresh).toHaveAttribute('aria-busy', 'true');
     expect(target).toBeVisible();
     expect(target).toHaveValue('origin/main');
+    expect(target).toBeEnabled();
     expect(within(dialog).getByRole('textbox', { name: 'Local branch' })).toBeDisabled();
+    expect(
+      within(dialog).getByRole('checkbox', { name: 'Commit merged changes immediately' }),
+    ).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Pull' })).toBeEnabled();
     expect(within(dialog).queryByText('Loading…')).not.toBeInTheDocument();
 
     finishReload?.();
@@ -253,13 +263,12 @@ describe('RemoteOperationDialog', () => {
     expect(branch).toHaveValue('review/new');
   });
 
-  it('can be dismissed while a Push is running', async () => {
+  it('keeps the Push form enabled while preventing a duplicate submission', async () => {
     const user = userEvent.setup();
     let finishPush: (() => void) | undefined;
     const push = new Promise<void>((resolve) => {
       finishPush = resolve;
     });
-    const onDismiss = vi.fn<() => void>();
     const onPush = vi.fn<Parameters<typeof RemoteOperationDialog>[0]['onPush']>(() => push);
     render(
       <RemoteOperationDialog
@@ -267,7 +276,7 @@ describe('RemoteOperationDialog', () => {
         repo={repoSnapshot()}
         adapter={adapterWithTargets()}
         busy={false}
-        onDismiss={onDismiss}
+        onDismiss={() => undefined}
         onRefreshBranches={async () => undefined}
         onPull={async () => undefined}
         onPush={onPush}
@@ -275,15 +284,67 @@ describe('RemoteOperationDialog', () => {
     );
 
     const dialog = await screen.findByRole('dialog', { name: 'Push' });
-    await user.click(within(dialog).getByRole('button', { name: 'Push' }));
+    const remote = within(dialog).getByRole('combobox', { name: 'Remote' });
+    const branch = within(dialog).getByRole('combobox', { name: 'Remote branch' });
+    const forceWithLease = within(dialog).getByRole('checkbox', {
+      name: 'Force push safely (--force-with-lease)',
+    });
+    const submit = within(dialog).getByRole('button', { name: 'Push' });
+    await user.click(submit);
     await waitFor(() => expect(onPush).toHaveBeenCalledOnce());
-    const close = within(dialog).getByRole('button', { name: 'Close' });
-    expect(close).toBeEnabled();
-    await user.click(close);
-    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(remote).toBeEnabled();
+    expect(branch).toBeEnabled();
+    expect(forceWithLease).toBeEnabled();
+    expect(submit).toBeEnabled();
+    expect(within(dialog).getByRole('textbox', { name: 'Local branch' })).toBeDisabled();
+    await user.clear(branch);
+    await user.type(branch, 'review/next');
+    await user.click(submit);
+    expect(onPush).toHaveBeenCalledOnce();
+    expect(branch).toHaveValue('review/next');
 
     finishPush?.();
-    await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(submit).toBeEnabled());
+  });
+
+  it('keeps the Pull form enabled while preventing a duplicate submission', async () => {
+    const user = userEvent.setup();
+    let finishPull: (() => void) | undefined;
+    const pull = new Promise<void>((resolve) => {
+      finishPull = resolve;
+    });
+    const onPull = vi.fn<Parameters<typeof RemoteOperationDialog>[0]['onPull']>(() => pull);
+    render(
+      <RemoteOperationDialog
+        kind="pull"
+        repo={repoSnapshot()}
+        adapter={adapterWithTargets()}
+        busy={false}
+        onDismiss={() => undefined}
+        onRefreshBranches={async () => undefined}
+        onPull={onPull}
+        onPush={async () => undefined}
+      />,
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: 'Pull' });
+    const target = within(dialog).getByRole('combobox', { name: 'Remote branch' });
+    const commitImmediately = within(dialog).getByRole('checkbox', {
+      name: 'Commit merged changes immediately',
+    });
+    const submit = within(dialog).getByRole('button', { name: 'Pull' });
+    await user.click(submit);
+    await waitFor(() => expect(onPull).toHaveBeenCalledOnce());
+    expect(target).toBeEnabled();
+    expect(commitImmediately).toBeEnabled();
+    expect(submit).toBeEnabled();
+    expect(within(dialog).getByRole('textbox', { name: 'Local branch' })).toBeDisabled();
+    await user.click(commitImmediately);
+    await user.click(submit);
+    expect(onPull).toHaveBeenCalledOnce();
+    expect(commitImmediately).not.toBeChecked();
+
+    finishPull?.();
   });
 
   it('requires an explicit Pull target without an upstream or same-name remote branch', async () => {

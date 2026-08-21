@@ -31,7 +31,10 @@ import {
   WorkspaceAdapterError,
   type WorkspaceAdapter,
 } from './adapters/workspaceAdapter';
-import { createTauriWorkspaceAdapter } from './adapters/tauriWorkspaceAdapter';
+import {
+  createTauriWorkspaceAdapter,
+  workspaceActionTitle,
+} from './adapters/tauriWorkspaceAdapter';
 import {
   createTauriToolchainAdapter,
   type ToolchainAdapter,
@@ -107,6 +110,7 @@ import {
   type ShowWorkspaceError,
 } from './ui/WorkspaceErrorDialog';
 import { describeWorkspaceError, type WorkspaceErrorContent } from './ui/WorkspaceErrorDetails';
+import { OperationProgressDialog } from './ui/OperationProgressDialog';
 import {
   DEFAULT_PREFERENCES,
   clearRemoteHealthIssue,
@@ -145,6 +149,8 @@ export interface AppProps {
 interface PendingAction {
   request: ActionRequest;
   preview: ActionPreview;
+  previewConsumed?: boolean;
+  refreshing?: boolean;
 }
 
 interface PendingNavigation {
@@ -175,6 +181,20 @@ interface AppNotice {
 interface AppError extends WorkspaceErrorContent {
   id: number;
   title: string;
+}
+
+interface OperationProgress {
+  id: number;
+  action: LocalizedMessage;
+  repositoryName: string;
+  repoId?: string;
+  previousActivityIds: ReadonlySet<string>;
+  activity?: ActivityEntry;
+  status: 'running' | 'cancelling' | 'failed';
+  error?: WorkspaceErrorContent;
+  cancelError?: WorkspaceErrorContent;
+  cancelRequested: boolean;
+  dismissConfirmation?: boolean;
 }
 
 interface AddRepositoryState {
@@ -245,6 +265,36 @@ function actionNeedsPreview(action: WorkspaceAction): boolean {
     'abortOperation',
     'materializeConflict',
   ].includes(action.kind);
+}
+
+export function showsOperationProgress(action: WorkspaceAction): boolean {
+  return (
+    action.kind === 'commit' ||
+    action.kind === 'fetch' ||
+    action.kind === 'pull' ||
+    action.kind === 'push' ||
+    action.kind === 'checkoutBranch' ||
+    (action.kind === 'createBranch' && action.checkout === true) ||
+    action.kind === 'gitFlow' ||
+    action.kind === 'merge' ||
+    action.kind === 'rebase' ||
+    action.kind === 'cherryPick' ||
+    action.kind === 'revert' ||
+    action.kind === 'reset' ||
+    action.kind === 'continueOperation' ||
+    action.kind === 'skipOperation' ||
+    action.kind === 'abortOperation'
+  );
+}
+
+function activityError(activity: ActivityEntry, fallback: string): WorkspaceErrorContent {
+  return {
+    message: fallback,
+    localizedMessage: activity.summary,
+    ...(activity.stderr ? { stderr: activity.stderr } : {}),
+    ...(activity.stdout ? { stdout: activity.stdout } : {}),
+    ...(activity.exitCode !== undefined ? { exitCode: String(activity.exitCode) } : {}),
+  };
 }
 
 function confirmationActionLabel(action: WorkspaceAction, t: I18nValue['t']): string {
@@ -443,6 +493,7 @@ export function App({
   >({});
   const [repositoryLogoUrls, setRepositoryLogoUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [operationProgress, setOperationProgress] = useState<OperationProgress>();
   const [notice, setNotice] = useState<AppNotice>();
   const [errors, setErrors] = useState<AppError[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction>();
@@ -480,6 +531,9 @@ export function App({
   const requestNavigationRef = useRef<(navigation: PendingNavigation) => void>(() => undefined);
   const focusRepositoriesOnWorkspaceRef = useRef(false);
   const errorIdRef = useRef(0);
+  const operationProgressIdRef = useRef(0);
+  const operationProgressRef = useRef<OperationProgress | undefined>(undefined);
+  const operationExecutionRef = useRef(false);
   const logoRequestsRef = useRef(new Set<string>());
   const branchRequestIdRef = useRef(0);
   const workspaceViewTransitionTimerRef = useRef<number | undefined>(undefined);
@@ -553,6 +607,85 @@ export function App({
   const dismissError = useCallback((): void => {
     setErrors((current) => current.slice(1));
   }, []);
+  const updateOperationProgress = useCallback((next: OperationProgress | undefined): void => {
+    operationProgressRef.current = next;
+    setOperationProgress(next);
+  }, []);
+  const beginOperationProgress = useCallback(
+    (
+      action: LocalizedMessage,
+      repositoryName: string,
+      repoId?: string,
+      dismissConfirmation = false,
+    ): number => {
+      operationProgressIdRef.current += 1;
+      const progress: OperationProgress = {
+        id: operationProgressIdRef.current,
+        action,
+        repositoryName,
+        ...(repoId ? { repoId } : {}),
+        previousActivityIds: new Set(workspaceRef.current.activities.map((entry) => entry.id)),
+        status: 'running',
+        cancelRequested: false,
+        ...(dismissConfirmation ? { dismissConfirmation: true } : {}),
+      };
+      updateOperationProgress(progress);
+      return progress.id;
+    },
+    [updateOperationProgress],
+  );
+  const finishOperationProgress = useCallback(
+    (id: number): void => {
+      const current = operationProgressRef.current;
+      if (current?.id === id && current.status !== 'failed') {
+        if (current.dismissConfirmation) {
+          setPendingAction(undefined);
+          setTypedConfirmation('');
+        }
+        updateOperationProgress(undefined);
+      }
+    },
+    [updateOperationProgress],
+  );
+  const failOperationProgress = useCallback(
+    (id: number, error: WorkspaceErrorContent): void => {
+      const current = operationProgressRef.current;
+      if (current?.id !== id) return;
+      if (current.dismissConfirmation) {
+        setPendingAction((pending) => (pending ? { ...pending, previewConsumed: true } : pending));
+      }
+      updateOperationProgress({ ...current, status: 'failed', error });
+    },
+    [updateOperationProgress],
+  );
+  const bindOperationActivity = useCallback(
+    (activity: ActivityEntry): void => {
+      const current = operationProgressRef.current;
+      if (!current) return;
+      if (current.activity?.id === activity.id) {
+        if (activity.status === 'failed') {
+          failOperationProgress(current.id, activityError(activity, t('operationFailed')));
+        } else if (activity.status !== 'running') {
+          finishOperationProgress(current.id);
+        } else {
+          updateOperationProgress({ ...current, activity });
+        }
+        return;
+      }
+      if (
+        current.status !== 'running' ||
+        activity.status !== 'running' ||
+        current.previousActivityIds.has(activity.id) ||
+        activity.action.id !== current.action.id ||
+        (current.repoId
+          ? activity.repoId !== current.repoId
+          : activity.repositoryName !== current.repositoryName)
+      )
+        return;
+      updateOperationProgress({ ...current, activity });
+    },
+    [failOperationProgress, finishOperationProgress, t, updateOperationProgress],
+  );
   const openFilesAndFoldersSettings = useCallback((): void => {
     void openFilesAndFoldersSystemSettings().catch((cause: unknown) =>
       showError(t('openSystemSettingsFailedTitle'), cause, t('openSystemSettingsFailed')),
@@ -879,6 +1012,7 @@ export function App({
       .subscribe((event) => {
         if (!alive) return;
         setWorkspace((current) => reduceEvent(current, event));
+        if (event.kind === 'activityChanged') bindOperationActivity(event.activity);
         if (event.kind === 'conflictChanged') setLatestConflict(event.document);
         if (event.kind === 'notice') {
           if (event.level === 'error') {
@@ -902,7 +1036,7 @@ export function App({
       alive = false;
       unlisten?.();
     };
-  }, [adapter, message, showError, t]);
+  }, [adapter, bindOperationActivity, message, showError, t]);
 
   useEffect(() => {
     let active = true;
@@ -1021,6 +1155,13 @@ export function App({
       shouldApply: () => boolean = () => true,
     ): Promise<RepoSnapshot | undefined> => {
       if (!shouldApply()) return undefined;
+      const progressId =
+        request.kind === 'clone'
+          ? beginOperationProgress(
+              { id: 'actionCloneRepository' },
+              repositoryName ?? repositoryNameFromPath(request.destination) ?? request.destination,
+            )
+          : undefined;
       setBusy(true);
       setNotice(undefined);
       try {
@@ -1052,11 +1193,21 @@ export function App({
             ...(request.kind === 'clone' ? {} : { page: 'workspace', view: 'diff' }),
           });
         }
+        if (progressId !== undefined) finishOperationProgress(progressId);
         return attached.repos.find((candidate) => candidate.repoId === attachedRepoId);
       } catch (cause) {
         if (!shouldApply()) return undefined;
         if (cause instanceof WorkspaceAdapterError && cause.code === 'cancelled') {
           setNotice({ level: 'info', message: { id: 'errorCancelled' } });
+          if (progressId !== undefined) {
+            setAddRepositoryDialog(undefined);
+            finishOperationProgress(progressId);
+          }
+        } else if (progressId !== undefined) {
+          failOperationProgress(
+            progressId,
+            describeWorkspaceError(cause, t('openRepositoryFailed')),
+          );
         } else {
           showError(t('openRepositoryFailedTitle'), cause, t('openRepositoryFailed'));
         }
@@ -1065,7 +1216,7 @@ export function App({
         if (shouldApply()) setBusy(false);
       }
     },
-    [adapter, showError, t],
+    [adapter, beginOperationProgress, failOperationProgress, finishOperationProgress, showError, t],
   );
 
   useEffect(() => {
@@ -1360,7 +1511,7 @@ export function App({
     for (const remote of remotesToFetch) {
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- 共有の処理中状態を競合させずリモートごとに実行する。
-        await execute({ repoId, action: { kind: 'fetch', remote } });
+        await execute({ repoId, action: { kind: 'fetch', remote } }, false);
       } catch {
         // リモート設定は完了済みのため、フェッチ失敗は通常のエラー表示に残す。
       }
@@ -1633,6 +1784,7 @@ export function App({
         pendingAction ||
         pendingNavigation ||
         pendingOperationAction ||
+        operationProgressRef.current ||
         errors.length > 0 ||
         branchDialog
       ) {
@@ -1658,11 +1810,26 @@ export function App({
     if (snapshot) setWorkspace((current) => replaceRepo(current, snapshot));
   };
 
-  const execute = async (request: ActionRequest): Promise<void> => {
+  const execute = async (
+    request: ActionRequest,
+    showProgress = true,
+    dismissConfirmation = false,
+  ): Promise<void> => {
     const requestedRepo = workspaceRef.current.repos.find(
       (candidate) => candidate.repoId === request.repoId,
     );
     const remote = requestedRepo ? actionRemote(request.action, requestedRepo) : undefined;
+    const tracksProgress = showProgress && showsOperationProgress(request.action);
+    if (tracksProgress && operationExecutionRef.current) return;
+    const progressId = tracksProgress
+      ? beginOperationProgress(
+          workspaceActionTitle(request.action),
+          requestedRepo?.name ?? request.repoId,
+          request.repoId,
+          dismissConfirmation,
+        )
+      : undefined;
+    if (tracksProgress) operationExecutionRef.current = true;
     setBusy(true);
     setNotice(undefined);
     try {
@@ -1673,16 +1840,33 @@ export function App({
         const preferences = clearRemoteHealthIssue(requestedRepo.path, remote);
         setRepositoryHealthIssues(preferences.repositoryHealthIssues);
       }
+      if (progressId !== undefined) finishOperationProgress(progressId);
     } catch (cause) {
-      if (request.action.kind === 'pull' && isPullDivergenceError(cause)) throw cause;
+      if (request.action.kind === 'pull' && isPullDivergenceError(cause)) {
+        if (progressId !== undefined) finishOperationProgress(progressId);
+        throw cause;
+      }
+      if (
+        progressId !== undefined &&
+        cause instanceof WorkspaceAdapterError &&
+        cause.code === 'cancelled'
+      ) {
+        finishOperationProgress(progressId);
+        return;
+      }
       const reason = remoteHealthReason(cause);
       if (requestedRepo && remote && reason) {
         const preferences = recordRemoteHealthIssue(requestedRepo.path, remote, reason);
         setRepositoryHealthIssues(preferences.repositoryHealthIssues);
       }
-      showError(t('operationFailedTitle'), cause, t('operationFailed'));
+      if (progressId !== undefined) {
+        failOperationProgress(progressId, describeWorkspaceError(cause, t('operationFailed')));
+      } else {
+        showError(t('operationFailedTitle'), cause, t('operationFailed'));
+      }
       throw markWorkspaceErrorHandled(cause, t('operationFailed'));
     } finally {
+      if (tracksProgress) operationExecutionRef.current = false;
       setBusy(false);
     }
   };
@@ -1801,20 +1985,47 @@ export function App({
 
   const confirmAction = async (): Promise<void> => {
     if (!pendingAction) return;
+    if (pendingAction.refreshing) return;
+    if (pendingAction.previewConsumed) {
+      const { request } = pendingAction;
+      setPendingAction({ ...pendingAction, refreshing: true });
+      setBusy(true);
+      try {
+        const preview = await adapter.preview(request);
+        setPendingAction((current) =>
+          current?.refreshing && current.request === request ? { request, preview } : current,
+        );
+      } catch (cause) {
+        setPendingAction((current) =>
+          current?.refreshing && current.request === request
+            ? { ...pendingAction, previewConsumed: true }
+            : current,
+        );
+        showError(t('previewFailedTitle'), cause, t('previewFailed'));
+        throw markWorkspaceErrorHandled(cause, t('previewFailed'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const completedAction = pendingAction.request.action;
     const request: ActionRequest = {
       ...pendingAction.request,
       preview: pendingAction.preview,
     };
-    setPendingAction(undefined);
-    await execute(request);
+    const keepConfirmation = showsOperationProgress(completedAction);
+    if (!keepConfirmation) setPendingAction(undefined);
+    await execute(request, true, keepConfirmation);
     if (completedAction.kind === 'setRemoteUrl' || completedAction.kind === 'addRemote') {
       if (completedAction.kind === 'addRemote' || completedAction.urlKind === 'fetch') {
         try {
-          await execute({
-            repoId: request.repoId,
-            action: { kind: 'fetch', remote: completedAction.remote },
-          });
+          await execute(
+            {
+              repoId: request.repoId,
+              action: { kind: 'fetch', remote: completedAction.remote },
+            },
+            false,
+          );
         } catch {
           // リモート設定は完了済みのため、フェッチ失敗は警告と通常の詳細画面に残す。
         }
@@ -1836,7 +2047,7 @@ export function App({
       if (nextView) setView(nextView);
       if (nextPage) setPage(nextPage);
       if (nextPage === 'settings' || nextPage === 'activity' || nextPage === 'repositories') {
-        setAddRepositoryDialog(undefined);
+        if (!cloneRequest) setAddRepositoryDialog(undefined);
         setRepositorySwitcherOpen(false);
         setBranchDialog(undefined);
         setPendingAction(undefined);
@@ -1910,7 +2121,10 @@ export function App({
   useEffect(() => {
     let alive = true;
     let unlisten: (() => void) | undefined;
-    void listenForOpenSettings(() => requestNavigation({ page: 'settings' }))
+    void listenForOpenSettings(() => {
+      if (operationProgressRef.current) return;
+      requestNavigation({ page: 'settings' });
+    })
       .then((dispose) => {
         if (alive) unlisten = dispose;
         else dispose();
@@ -1925,7 +2139,10 @@ export function App({
   useEffect(() => {
     let alive = true;
     let unlisten: (() => void) | undefined;
-    void listenForCheckAppUpdates(() => void checkAppUpdate(true))
+    void listenForCheckAppUpdates(() => {
+      if (operationProgressRef.current) return;
+      void checkAppUpdate(true);
+    })
       .then((dispose) => {
         if (alive) unlisten = dispose;
         else dispose();
@@ -1975,11 +2192,28 @@ export function App({
       showError(t('cancelOperationFailedTitle'), cause, t('cancelOperationFailed'));
     }
   };
+  const cancelOperationProgress = async (): Promise<void> => {
+    const current = operationProgressRef.current;
+    if (!current?.activity || current.cancelRequested || current.status !== 'running') return;
+    updateOperationProgress({ ...current, status: 'cancelling', cancelRequested: true });
+    try {
+      await adapter.cancel({ repoId: current.activity.repoId, activityId: current.activity.id });
+    } catch (cause) {
+      const latest = operationProgressRef.current;
+      if (latest?.id !== current.id) return;
+      updateOperationProgress({
+        ...latest,
+        status: 'running',
+        cancelError: describeWorkspaceError(cause, t('cancelOperationFailed')),
+      });
+    }
+  };
 
   const operationActions = repo && repo.operation.kind !== 'none' ? repo.operation : undefined;
   const repositoryUnavailable = Boolean(repo && unavailableRepoPath === repo.path);
   const currentActivities = workspace.activities;
   const hasRunningActivity = currentActivities.some((entry) => entry.status === 'running');
+  const interactionBusy = busy && !operationProgress;
   const updateBlocked =
     busy ||
     hasRunningActivity ||
@@ -2301,7 +2535,9 @@ export function App({
                     <div className="button-row compact">
                       <Button
                         type="button"
-                        disabled={!operationActions.canContinue || busy || repositoryUnavailable}
+                        disabled={
+                          !operationActions.canContinue || interactionBusy || repositoryUnavailable
+                        }
                         onClick={() => requestOperationAction({ kind: 'continueOperation' })}
                       >
                         {t('continueAction')}
@@ -2309,7 +2545,7 @@ export function App({
                       {operationActions.canSkip ? (
                         <Button
                           type="button"
-                          disabled={busy || repositoryUnavailable}
+                          disabled={interactionBusy || repositoryUnavailable}
                           onClick={() => requestOperationAction({ kind: 'skipOperation' })}
                         >
                           {t('skipAction')}
@@ -2318,7 +2554,9 @@ export function App({
                       <Button
                         type="button"
                         variant="dangerQuiet"
-                        disabled={!operationActions.canAbort || busy || repositoryUnavailable}
+                        disabled={
+                          !operationActions.canAbort || interactionBusy || repositoryUnavailable
+                        }
                         onClick={() => requestOperationAction({ kind: 'abortOperation' })}
                       >
                         {t('abortAction')}
@@ -2346,7 +2584,7 @@ export function App({
                       repo={repo}
                       adapter={adapter}
                       externalConflict={latestConflict}
-                      busy={busy || repositoryUnavailable}
+                      busy={interactionBusy || repositoryUnavailable}
                       onError={showError}
                       onAction={runAction}
                       onUnsavedDirtyChange={handleUnsavedDirtyChange}
@@ -2371,7 +2609,7 @@ export function App({
                       key={`history:${repo.repoId}`}
                       repo={repo}
                       adapter={adapter}
-                      busy={busy || repositoryUnavailable}
+                      busy={interactionBusy || repositoryUnavailable}
                       onError={showError}
                       onShowDiff={() => requestNavigation({ page: 'workspace', view: 'diff' })}
                       onAction={runAction}
@@ -2501,7 +2739,7 @@ export function App({
               repos={workspace.repos}
               registeredRepositories={orderedRegisteredRepositories}
               selectedRepoId={repo.repoId}
-              busy={busy}
+              busy={interactionBusy}
               onDismiss={() => setRepositorySwitcherOpen(false)}
               onSelectOpen={(repoId) => {
                 if (repoId === repo.repoId) return;
@@ -2877,8 +3115,9 @@ export function App({
                   type="button"
                   variant={pendingAction.preview.destructive ? 'danger' : 'primary'}
                   disabled={
-                    Boolean(pendingAction.preview.typedConfirmation) &&
-                    typedConfirmation !== pendingAction.preview.typedConfirmation
+                    pendingAction.refreshing ||
+                    (Boolean(pendingAction.preview.typedConfirmation) &&
+                      typedConfirmation !== pendingAction.preview.typedConfirmation)
                   }
                   onClick={() => settleUiAction(confirmAction())}
                 >
@@ -3051,7 +3290,7 @@ export function App({
               {...(addRepositoryDialog.errorField
                 ? { errorField: addRepositoryDialog.errorField }
                 : {})}
-              busy={busy}
+              busy={interactionBusy}
               onSourceChange={(source) =>
                 setAddRepositoryDialog((current) => {
                   if (!current) return current;
@@ -3123,7 +3362,27 @@ export function App({
             />
           ) : null}
 
-          {activeError ? (
+          {operationProgress ? (
+            <OperationProgressDialog
+              action={operationProgress.action}
+              repositoryName={operationProgress.repositoryName}
+              summary={operationProgress.activity?.summary ?? { id: 'backendOperationInProgress' }}
+              status={operationProgress.status}
+              {...(operationProgress.error ? { error: operationProgress.error } : {})}
+              {...(operationProgress.cancelError
+                ? { cancelError: operationProgress.cancelError }
+                : {})}
+              canCancel={
+                operationProgress.status === 'running' &&
+                operationProgress.activity?.cancellable === true &&
+                !operationProgress.cancelRequested
+              }
+              onCancel={() => settleUiAction(cancelOperationProgress())}
+              onDismiss={() => updateOperationProgress(undefined)}
+            />
+          ) : null}
+
+          {activeError && !operationProgress ? (
             <WorkspaceErrorDialog
               key={activeError.id}
               title={activeError.title}

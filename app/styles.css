@@ -1039,6 +1039,45 @@ button:where(:has(> .lucide)) > span {
   gap: 6px;
 }
 
+.operation-progress-dialog {
+  gap: 12px;
+}
+.operation-progress-repository {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.operation-progress-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+.operation-progress-segment {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform: translateX(28%);
+  animation: operation-progress-slide 1.2s ease-in-out infinite alternate;
+}
+@keyframes operation-progress-slide {
+  to {
+    transform: translateX(150%);
+  }
+}
+.operation-progress-summary {
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .operation-progress-segment {
+    animation: none;
+  }
+}
+
 .notice-output {
   display: grid;
   max-width: min(720px, 70vw);

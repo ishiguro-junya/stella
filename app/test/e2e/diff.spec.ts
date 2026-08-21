@@ -653,7 +653,10 @@ describe('Diff', () => {
     await expect(pullDialog.$('select')).toHaveValue('origin/main');
     const refreshBranches = pullDialog.$('button[aria-label="ブランチを更新"]');
     await refreshBranches.click();
-    await refreshBranches.waitForEnabled();
+    const fetchProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+    await fetchProgress.waitForDisplayed();
+    await fetchProgress.waitForDisplayed({ reverse: true });
+    await expect(refreshBranches).toHaveAttribute('aria-busy', 'false');
     await pullDialog.$('button[type="submit"]').click();
     const failureDialog = $('[role="alertdialog"]');
     await browser.waitUntil(
@@ -695,7 +698,22 @@ describe('Diff', () => {
     await expect(pullDialog.$('label=マージした変更をすぐにコミット').$('input')).toBeChecked();
     const refreshBranches = pullDialog.$('button[aria-label="ブランチを更新"]');
     await refreshBranches.click();
-    await refreshBranches.waitForEnabled();
+    const fetchProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+    await fetchProgress.waitForDisplayed();
+    await expect(fetchProgress.$('h2')).toHaveText('フェッチ');
+    await expect(fetchProgress.$('progress[aria-label="フェッチ"]')).toExist();
+    expect(
+      await browser.execute(() => {
+        const dialog = document.querySelector<HTMLElement>(
+          '[role="dialog"][aria-labelledby="pull-dialog-title"]',
+        );
+        return ['#pull-remote-branch', 'input[type="checkbox"]', 'button[type="submit"]'].map(
+          (selector) => dialog?.querySelector(selector)?.hasAttribute('disabled'),
+        );
+      }),
+    ).toEqual([false, false, false]);
+    await fetchProgress.waitForExist({ reverse: true });
+    await expect(refreshBranches).toHaveAttribute('aria-busy', 'false');
     await expect(pullDialog.$('select')).toHaveValue('origin/main');
     await pullDialog.$('button=キャンセル').click();
 
@@ -1111,7 +1129,7 @@ describe('Diff', () => {
     expect(await $('.change-group-worktree .empty-state-small').isExisting()).toBe(false);
   });
 
-  it('always shows Git Hook output and scrolls output longer than five lines', async () => {
+  it('keeps Git Hook failures in the operation progress dialog and scrolls output longer than five lines', async () => {
     await writeExecutableRepositoryFile(
       repositoryPath,
       '.git/hooks/commit-msg',
@@ -1127,20 +1145,44 @@ describe('Diff', () => {
     await commitDialog.$('[data-commit-field="description"]').setValue('Git Hookエラーを確認する');
     await commitDialog.$('.commit-form button[type="submit"]').click();
 
-    const errorDialog = $('[role="alertdialog"][aria-labelledby="runtime-error-title"]');
-    await errorDialog.waitForDisplayed({ timeout: 10_000 });
-    await expect(errorDialog).toHaveText(
+    const operationProgressSelector = '[role="dialog"]:has(.operation-progress-dialog)';
+    const operationProgress = $(operationProgressSelector);
+    await operationProgress.waitForDisplayed({ timeout: 10_000 });
+    const progressTitleId = await operationProgress.getAttribute('aria-labelledby');
+    await expect(operationProgress.$('h2')).toHaveText('コミット');
+    await expect(operationProgress.$('progress[aria-label="コミット"]')).toExist();
+    await expect(operationProgress.$('progress[aria-label="コミット"]')).not.toHaveAttribute(
+      'value',
+    );
+    await expect(operationProgress.$('.operation-progress-track')).toBeDisplayed();
+
+    await expect(operationProgress).toHaveText(
       expect.stringContaining('Gitフックによって操作が拒否されました。'),
     );
-    await expect(errorDialog.$('.eyebrow')).not.toExist();
-    await expect(errorDialog.$('details')).not.toExist();
-    await expect(errorDialog.$('summary')).not.toExist();
-    await expect(errorDialog.$('pre[aria-label="stderr"]')).toHaveText(
+    expect(await operationProgress.getAttribute('aria-labelledby')).toBe(progressTitleId);
+    await expect(operationProgress.$('h2')).toHaveText('コミット');
+    await expect(operationProgress.$('.eyebrow')).not.toExist();
+    await expect(operationProgress.$('details')).not.toExist();
+    await expect(operationProgress.$('summary')).not.toExist();
+    await expect(operationProgress.$('pre[aria-label="stderr"]')).toHaveText(
       expect.stringContaining('hook-line-6'),
     );
+    await expect($('[role="alertdialog"][aria-labelledby="runtime-error-title"]')).not.toExist();
+    await expect(commitDialog.$('[data-commit-field="description"]')).toHaveValue(
+      'Git Hookエラーを確認する',
+    );
+    expect(
+      await browser.execute(
+        (selector) =>
+          [...document.querySelector(selector)!.querySelectorAll<HTMLButtonElement>('button')]
+            .filter((button) => !button.disabled)
+            .map((button) => button.textContent?.trim() || button.getAttribute('aria-label')),
+        operationProgressSelector,
+      ),
+    ).toEqual(['閉じる', 'ダイアログを閉じる']);
     const outputLayout = await browser.execute(() => {
       const output = document.querySelector<HTMLElement>(
-        '[role="alertdialog"] .notice-output-streams',
+        '[role="dialog"]:has(.operation-progress-dialog) .notice-output-streams',
       )!;
       return {
         overflowY: getComputedStyle(output).overflowY,

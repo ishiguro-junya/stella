@@ -103,7 +103,7 @@ export function RemoteOperationDialog({
     [remoteNames, repo.branch.upstream],
   );
   const pushBranchSuggestions = targets.filter((target) => target.remote === pushRemote);
-  const locked = busy || refreshing || submitting;
+  const locked = busy;
   const refreshRemote =
     kind === 'pull'
       ? (targets.find((candidate) => candidate.label === pullTarget)?.remote ??
@@ -174,7 +174,7 @@ export function RemoteOperationDialog({
   }, [adapter, kind, reloadSequence, repo.branch.name, repo.branch.upstream, repo.repoId]);
 
   const refreshBranches = async (): Promise<void> => {
-    if (locked || !refreshRemote) return;
+    if (busy || refreshing || submitting || !refreshRemote) return;
     setRefreshing(true);
     try {
       await onRefreshBranches(refreshRemote);
@@ -187,7 +187,7 @@ export function RemoteOperationDialog({
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (locked || loading || loadError) return;
+    if (busy || refreshing || submitting || loading || loadError) return;
     const pullSelection = targets.find((candidate) => candidate.label === pullTarget);
     const remoteBranch = pushBranch.trim();
     if (kind === 'pull' ? !pullSelection : !pushRemote || !remoteBranch) return;

@@ -21,6 +21,7 @@ import {
   ensureLocalBareRemote,
   removeFixture,
   runGit,
+  writeExecutableRepositoryFile,
   writeRepositoryFile,
 } from './support/fixtures.js';
 import { copyE2EShowcaseRepository } from './support/showcaseRepository.js';
@@ -47,6 +48,7 @@ async function blurActiveElement(): Promise<void> {
 
 async function withVisualRepository(
   run: (repository: VisualRepository, appearance: ScreenshotAppearance) => Promise<void>,
+  prepare?: (repository: VisualRepository) => Promise<void>,
 ): Promise<void> {
   if (!screenshotMode) return;
   const visualRoot = await createFixtureDirectory('visual');
@@ -55,6 +57,7 @@ async function withVisualRepository(
     await writeRepositoryFile(currentPath, 'README.md', '# Stella Visual QA\n');
     await runGit(currentPath, ['branch', 'feature/search']);
     await runGit(currentPath, ['branch', 'release']);
+    await prepare?.({ currentPath, visualRoot });
     for (const appearance of SCREENSHOT_APPEARANCES) {
       // 外観ごとに初期状態を復元して同じ操作を撮影するため直列に実行する。
       // oxlint-disable-next-line no-await-in-loop
@@ -341,6 +344,58 @@ describe('視覚確認用スクリーンショット', () => {
       await expect($('[role="dialog"][aria-labelledby="commit-dialog-title"]')).toBeDisplayed();
       await captureDialog('diff/dialogs/commit', 'commit-dialog', appearance);
     });
+  });
+
+  it('コミット操作の進捗ダイアログを撮影する', async function () {
+    await withVisualRepository(
+      async (_repository, appearance) => {
+        const commit = $('.diff-action-bar .diff-action-button[aria-label="Commit"]');
+        await commit.waitForClickable({ timeout: 10_000 });
+        await commit.click();
+        const commitDialog = $('[role="dialog"][aria-labelledby="commit-dialog-title"]');
+        await commitDialog.waitForDisplayed({ timeout: 10_000 });
+        await commitDialog
+          .$('[data-commit-field="description"]')
+          .setValue('Capture operation progress');
+        await commitDialog.$('.commit-form button[type="submit"]').click();
+
+        const operationProgress = $('[role="dialog"]:has(.operation-progress-dialog)');
+        try {
+          await operationProgress.waitForDisplayed({ timeout: 10_000 });
+          await expect(operationProgress.$('h2')).toHaveText('Commit');
+          await expect(operationProgress).toHaveText(expect.stringContaining('stella-visual-qa'));
+          await expect(operationProgress.$('progress[aria-label="Commit"]')).toExist();
+          await expect(operationProgress.$('progress[aria-label="Commit"]')).not.toHaveAttribute(
+            'value',
+          );
+          await expect(operationProgress.$('.operation-progress-track')).toBeDisplayed();
+          await expect(operationProgress.$('.operation-progress-summary')).toHaveText(
+            'Operation in progress',
+          );
+          const cancel = operationProgress.$('button=Cancel');
+          await cancel.waitForClickable({ timeout: 10_000 });
+          await captureDialog(
+            'diff/dialogs/operation-progress',
+            'operation-progress-dialog',
+            appearance,
+          );
+        } finally {
+          const cancel = operationProgress.$('button=Cancel');
+          if (await cancel.isExisting()) {
+            await cancel.click();
+            await operationProgress.waitForExist({ reverse: true, timeout: 10_000 });
+          }
+        }
+      },
+      async ({ currentPath }) => {
+        await writeExecutableRepositoryFile(
+          currentPath,
+          '.git/hooks/commit-msg',
+          '#!/bin/sh\nsleep 300\n',
+        );
+        await runGit(currentPath, ['add', '--', 'README.md']);
+      },
+    );
   });
 
   it('Pullダイアログを撮影する', async function () {

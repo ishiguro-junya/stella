@@ -4,11 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceAdapterError, type WorkspaceAdapter } from './adapters/workspaceAdapter';
-import { App } from './App';
+import { App, showsOperationProgress } from './App';
 import type {
+  ActionPreview,
   QueryResult,
   RepositoryAvailability,
   RepoSnapshot,
+  WorkspaceAction,
   WorkspaceSnapshot,
 } from './domain/workspace';
 import type { AppUpdateInfo, AppUpdateInstallEvent } from './features/update/appUpdate';
@@ -39,6 +41,14 @@ const appUpdateMock = vi.hoisted(() => ({
   }),
 }));
 
+const settingsMenuMock = vi.hoisted(() => ({
+  handler: undefined as (() => void) | undefined,
+  listen: vi.fn<(handler: () => void) => Promise<() => void>>(async (handler) => {
+    settingsMenuMock.handler = handler;
+    return () => undefined;
+  }),
+}));
+
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     destroy: tauriWindowMock.destroy,
@@ -55,6 +65,10 @@ vi.mock('./features/update/appUpdate', () => ({
   checkForAppUpdate: appUpdateMock.check,
   installAppUpdate: appUpdateMock.install,
   listenForCheckAppUpdates: appUpdateMock.listen,
+}));
+
+vi.mock('./features/settings/settingsMenu', () => ({
+  listenForOpenSettings: settingsMenuMock.listen,
 }));
 
 vi.mock('./features/diff/DiffSurface', () => ({ DiffSurface: () => <div>Diff</div> }));
@@ -151,6 +165,96 @@ function addRepositorySubmitButton(): HTMLElement {
   const dialog = screen.getByRole('dialog', { name: 'Add Repository' });
   return within(dialog).getByRole('button', { name: 'Add Repository' });
 }
+
+describe('showsOperationProgress', () => {
+  const selection = {
+    kind: 'lines' as const,
+    diffId: 'diff',
+    path: 'README.md',
+    generation: 1,
+    side: 'additions' as const,
+    startLine: 1,
+    endLine: 1,
+  };
+  const progressActions = [
+    { kind: 'commit', input: { format: 'plain', message: 'message' }, includeAllChanges: false },
+    { kind: 'fetch', remote: 'origin' },
+    { kind: 'pull', remote: 'origin', remoteBranch: 'main' },
+    {
+      kind: 'push',
+      remote: 'origin',
+      remoteBranch: 'main',
+      forceWithLease: false,
+      pushTags: false,
+    },
+    { kind: 'checkoutBranch', name: 'main' },
+    { kind: 'createBranch', name: 'feature/progress', startOid: 'abc', checkout: true },
+    { kind: 'gitFlow', request: { command: 'init' } },
+    { kind: 'merge', sourceRef: 'origin/main', commitImmediately: true },
+    { kind: 'rebase', ontoRef: 'origin/main' },
+    { kind: 'cherryPick', oid: 'abc' },
+    { kind: 'revert', oid: 'abc' },
+    { kind: 'reset', oid: 'abc', mode: 'mixed' },
+    { kind: 'continueOperation' },
+    { kind: 'skipOperation' },
+    { kind: 'abortOperation' },
+  ] satisfies WorkspaceAction[];
+  const immediateActions = [
+    { kind: 'stageFiles', paths: ['README.md'] },
+    { kind: 'unstageFiles', paths: ['README.md'] },
+    { kind: 'discardFiles', paths: ['README.md'] },
+    { kind: 'stageSelection', selection },
+    { kind: 'unstageSelection', selection },
+    { kind: 'discardSelection', selection },
+    {
+      kind: 'setRemoteUrl',
+      remote: 'origin',
+      urlKind: 'fetch',
+      expectedUrl: 'https://example.test/old.git',
+      newUrl: 'https://example.test/new.git',
+    },
+    { kind: 'addRemote', remote: 'origin', url: 'https://example.test/repo.git' },
+    { kind: 'createBranch', name: 'feature/no-checkout', startOid: 'abc', checkout: false },
+    { kind: 'createBranch', name: 'feature/default', startOid: 'abc' },
+    { kind: 'deleteBranch', name: 'feature/old' },
+    { kind: 'createTag', name: 'v1.0.0', targetOid: 'abc' },
+    {
+      kind: 'conflictChoice',
+      sessionId: 'session',
+      path: 'README.md',
+      blockId: 'block',
+      choice: 'current',
+      draftText: 'text',
+      contentHash: 'hash',
+      documentRevision: 'revision',
+      baseDocumentRevision: 'base',
+    },
+    {
+      kind: 'saveConflict',
+      sessionId: 'session',
+      path: 'README.md',
+      draftText: 'text',
+      contentHash: 'hash',
+      documentRevision: 'revision',
+    },
+    { kind: 'markConflictResolved', sessionId: 'session', path: 'README.md', contentHash: 'hash' },
+    { kind: 'materializeConflict', sessionId: 'session', choice: 'current' },
+    { kind: 'openExternal', path: 'README.md' },
+    { kind: 'saveFile', path: 'README.md', text: 'text', expectedContentHash: 'hash' },
+    { kind: 'renameFile', path: 'README.md', newPath: 'GUIDE.md' },
+    { kind: 'fileAction', paths: ['README.md'], operation: 'moveToTrash' },
+    { kind: 'fileAction', paths: ['README.md'], operation: 'revealInFinder' },
+    { kind: 'fileAction', paths: ['README.md'], operation: 'openInDefaultApp' },
+  ] satisfies WorkspaceAction[];
+
+  it.each(progressActions)('tracks %s operations', (action) => {
+    expect(showsOperationProgress(action)).toBe(true);
+  });
+
+  it.each(immediateActions)('does not track %s operations', (action) => {
+    expect(showsOperationProgress(action)).toBe(false);
+  });
+});
 
 describe('App repository attach', () => {
   it('shows an available update dialog without adding a titlebar action', async () => {
@@ -629,7 +733,7 @@ describe('App repository attach', () => {
           activity: {
             id: 'clone-operation',
             repoId: 'clone-temporary',
-            repositoryName: 'stella',
+            repositoryName: 'custom-repository',
             action: { id: 'actionCloneRepository' },
             summary: { id: 'backendCloningRepository' },
             status: 'running',
@@ -678,16 +782,16 @@ describe('App repository attach', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Activity' })).toBeVisible();
+    const progress = await screen.findByRole('dialog', { name: 'Clone Repository' });
     expect(
-      screen.getByRole('row', { name: /Running Clone Repository Cloning repository/u }),
-    ).toHaveFocus();
+      within(progress).getByRole('progressbar', { name: 'Clone Repository' }),
+    ).not.toHaveAttribute('value');
     expect(attach).toHaveBeenCalledWith({
       kind: 'clone',
       remoteUrl: 'https://example.com/repository.git',
       destination: '/tmp/custom-repository',
     });
-    await user.click(screen.getByRole('row', { name: /Running Clone Repository/u }));
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(within(progress).getByRole('button', { name: 'Cancel' }));
     await waitFor(() =>
       expect(cancel).toHaveBeenCalledWith({
         repoId: 'clone-temporary',
@@ -713,6 +817,305 @@ describe('App repository attach', () => {
       }),
     );
     await waitFor(() => expect(attach).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps clone form values after a clone fails before an activity is bound', async () => {
+    const user = userEvent.setup();
+    let rejectClone: ((cause: unknown) => void) | undefined;
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async (request) => {
+        if (request.kind !== 'clone') return { repos: [], activities: [] };
+        return await new Promise((_, reject) => {
+          rejectClone = reject;
+        });
+      }),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({ kind: 'activity', entries: [] })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
+        throw new Error('unused');
+      }),
+      cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
+    };
+    render(<App adapter={adapter} directoryPicker={async () => '/tmp'} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await user.type(screen.getByRole('textbox', { name: 'Repository name' }), 'custom-repository');
+    await user.type(
+      screen.getByRole('textbox', { name: 'Repository URL' }),
+      'https://example.com/repository.git',
+    );
+    await user.click(addRepositorySubmitButton());
+    expect(await screen.findByRole('dialog', { name: 'Clone Repository' })).toBeVisible();
+    const addForm = document.querySelector<HTMLElement>(
+      '[role="dialog"][aria-labelledby="add-repository-title"]',
+    );
+    if (!addForm) throw new Error('Add Repository form not found');
+    expect(addForm).toHaveAttribute('aria-hidden', 'true');
+    for (const control of addForm.querySelectorAll('input, button')) {
+      expect(control).not.toBeDisabled();
+    }
+
+    act(() =>
+      rejectClone?.(
+        new WorkspaceAdapterError('gitFailed', 'Git operation failed.', { stderr: 'clone denied' }),
+      ),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('clone denied');
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+
+    const form = screen.getByRole('dialog', { name: 'Add Repository' });
+    expect(within(form).getByRole('textbox', { name: 'Repository URL' })).toHaveValue(
+      'https://example.com/repository.git',
+    );
+    expect(within(form).getByRole('textbox', { name: 'Repository path' })).toHaveValue('/tmp');
+    expect(within(form).getByRole('textbox', { name: 'Repository name' })).toHaveValue(
+      'custom-repository',
+    );
+    expect(within(form).getByRole('button', { name: 'Add Repository' })).toBeEnabled();
+  });
+
+  it('tracks only the new matching activity and keeps a failed Fetch in the progress dialog', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot();
+    settingsMenuMock.handler = undefined;
+    appUpdateMock.handler = undefined;
+    let subscriber: Parameters<WorkspaceAdapter['subscribe']>[0] | undefined;
+    let rejectFetch: ((cause: unknown) => void) | undefined;
+    const cancel = vi.fn<WorkspaceAdapter['cancel']>(async () => undefined);
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({ kind: 'activity', entries: [] })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(
+        async () =>
+          await new Promise((_, reject) => {
+            rejectFetch = reject;
+          }),
+      ),
+      cancel,
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async (onEvent) => {
+        subscriber = onEvent;
+        return () => undefined;
+      }),
+    };
+    render(<App adapter={adapter} />);
+    await waitFor(() => expect(subscriber).toBeDefined());
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(addRepositorySubmitButton());
+    await user.click(await screen.findByRole('button', { name: 'Fetch' }));
+
+    const progress = await screen.findByRole('dialog', { name: 'Fetch' });
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'unrelated-fetch',
+          repoId: 'other-repository',
+          repositoryName: 'other',
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendOperationInProgress' },
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+        },
+      });
+    });
+    expect(within(progress).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'fetch-operation',
+          repoId: repo.repoId,
+          repositoryName: repo.name,
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendOperationInProgress' },
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+          cancellable: false,
+        },
+      });
+    });
+    expect(within(progress).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'fetch-operation',
+          repoId: repo.repoId,
+          repositoryName: repo.name,
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendOperationInProgress' },
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+          cancellable: true,
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(within(progress).getByRole('button', { name: 'Cancel' })).toBeEnabled(),
+    );
+    await waitFor(() => expect(settingsMenuMock.handler).toBeDefined());
+    await waitFor(() => expect(appUpdateMock.handler).toBeDefined());
+    const diff = screen.getByRole('button', { name: 'Diff' });
+    const repositorySwitcher = screen.getByRole('button', { name: /Switch repository/u });
+    const repositoryName = repositorySwitcher.getAttribute('aria-label');
+    expectOnlyCurrentDestination(diff);
+    appUpdateMock.check.mockClear();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'O', metaKey: true, shiftKey: true });
+      settingsMenuMock.handler?.();
+      appUpdateMock.handler?.();
+    });
+    expect(progress).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Switch Repository' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
+    expectOnlyCurrentDestination(diff);
+    expect(repositorySwitcher).toHaveAttribute('aria-label', repositoryName);
+    expect(appUpdateMock.check).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    fireEvent.click(progress.parentElement!);
+    expect(progress).toBeVisible();
+
+    await user.click(within(progress).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(cancel).toHaveBeenCalledWith({ repoId: repo.repoId, activityId: 'fetch-operation' }),
+    );
+    act(() =>
+      rejectFetch?.(
+        new WorkspaceAdapterError('gitFailed', 'Permission denied.', {
+          stderr: 'permission denied',
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('permission denied')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('permission denied');
+    expect(screen.getByRole('dialog', { name: 'Fetch' })).toBeVisible();
+    expect(screen.queryByRole('alertdialog', { name: 'Operation failed' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Fetch' }));
+    const cancelledProgress = await screen.findByRole('dialog', { name: 'Fetch' });
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'cancelled-fetch-operation',
+          repoId: repo.repoId,
+          repositoryName: repo.name,
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendOperationInProgress' },
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+          cancellable: true,
+        },
+      });
+    });
+    await user.click(within(cancelledProgress).getByRole('button', { name: 'Cancel' }));
+    act(() => rejectFetch?.(new WorkspaceAdapterError('cancelled', 'Git operation cancelled.')));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fetch' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('alertdialog', { name: 'Operation failed' })).not.toBeInTheDocument();
+  });
+
+  it('keeps progress open and announces a rejected cancellation until its activity finishes', async () => {
+    const user = userEvent.setup();
+    const repo = repoSnapshot();
+    let subscriber: Parameters<WorkspaceAdapter['subscribe']>[0] | undefined;
+    const cancel = vi.fn<WorkspaceAdapter['cancel']>(async () => {
+      throw new WorkspaceAdapterError('gitFailed', 'Git operation failed.', {
+        stderr: 'cancel denied',
+      });
+    });
+    const adapter: WorkspaceAdapter = {
+      attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
+        repos: [repo],
+        selectedRepoId: repo.repoId,
+        activities: [],
+      })),
+      query: vi.fn<WorkspaceAdapter['query']>(async () => ({ kind: 'activity', entries: [] })),
+      preview: vi.fn<WorkspaceAdapter['preview']>(async () => {
+        throw new Error('unused');
+      }),
+      execute: vi.fn<WorkspaceAdapter['execute']>(async () => await new Promise(() => undefined)),
+      cancel,
+      subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async (onEvent) => {
+        subscriber = onEvent;
+        return () => undefined;
+      }),
+    };
+    render(<App adapter={adapter} />);
+    await waitFor(() => expect(subscriber).toBeDefined());
+
+    await user.click(screen.getByRole('button', { name: 'Add Repository' }));
+    await enterRepositoryPath(user, repo.path);
+    await user.click(addRepositorySubmitButton());
+    await user.click(await screen.findByRole('button', { name: 'Fetch' }));
+    const progress = await screen.findByRole('dialog', { name: 'Fetch' });
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'fetch-operation',
+          repoId: repo.repoId,
+          repositoryName: repo.name,
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendOperationInProgress' },
+          status: 'running',
+          startedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+          cancellable: true,
+        },
+      });
+    });
+    const cancelButton = within(progress).getByRole('button', { name: 'Cancel' });
+    await user.click(cancelButton);
+    await waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    expect(screen.getByRole('alert')).toHaveTextContent('cancel denied');
+    expect(cancelButton).toBeDisabled();
+    await user.click(cancelButton);
+    expect(cancel).toHaveBeenCalledOnce();
+
+    act(() => {
+      subscriber?.({
+        kind: 'activityChanged',
+        activity: {
+          id: 'fetch-operation',
+          repoId: repo.repoId,
+          repositoryName: repo.name,
+          action: { id: 'actionFetch' },
+          summary: { id: 'backendFetchCompleted' },
+          status: 'succeeded',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          detailAvailability: 'currentSession',
+        },
+      });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fetch' })).not.toBeInTheDocument(),
+    );
   });
 
   it('collects an Open path before invoking attach', async () => {
@@ -2441,6 +2844,67 @@ describe('App repository attach', () => {
         canAbort: true,
       },
     });
+    let resolveRefresh: (() => void) | undefined;
+    let rejectRefresh: (() => void) | undefined;
+    const initialPreview: ActionPreview = {
+      repoId: repo.repoId,
+      title: { id: 'actionAbortOperation' },
+      summary: { id: 'previewAbort' },
+      affectedPaths: [],
+      affectedCommits: ['1234567890abcdef'],
+      lostCommitOids: [],
+      resolvedTargets: [],
+      destructive: true,
+      typedConfirmation: 'abort',
+    };
+    const changedPreview: ActionPreview = {
+      ...initialPreview,
+      affectedCommits: ['fedcba9876543210'],
+    };
+    const preview = vi
+      .fn<WorkspaceAdapter['preview']>()
+      .mockResolvedValueOnce(initialPreview)
+      .mockResolvedValueOnce(changedPreview)
+      .mockResolvedValueOnce(initialPreview)
+      .mockImplementationOnce(
+        async () =>
+          await new Promise((resolve) => {
+            resolveRefresh = () => resolve(changedPreview);
+          }),
+      )
+      .mockResolvedValueOnce(initialPreview)
+      .mockImplementationOnce(
+        async () =>
+          await new Promise((_, reject) => {
+            rejectRefresh = () => reject(new Error('preview denied'));
+          }),
+      );
+    const execute = vi
+      .fn<WorkspaceAdapter['execute']>()
+      .mockRejectedValueOnce(
+        new WorkspaceAdapterError('hookFailed', 'Git operation failed.', {
+          stderr: 'policy denied this operation',
+          exitCode: '1',
+        }),
+      )
+      .mockResolvedValueOnce({
+        repoId: repo.repoId,
+        generation: repo.generation,
+        summary: { id: 'backendOperationAborted' },
+        snapshot: repo,
+      })
+      .mockRejectedValueOnce(
+        new WorkspaceAdapterError('hookFailed', 'Git operation failed.', {
+          stderr: 'policy denied this operation',
+          exitCode: '1',
+        }),
+      )
+      .mockRejectedValueOnce(
+        new WorkspaceAdapterError('hookFailed', 'Git operation failed.', {
+          stderr: 'policy denied this operation',
+          exitCode: '1',
+        }),
+      );
     const adapter: WorkspaceAdapter = {
       attach: vi.fn<WorkspaceAdapter['attach']>(async () => ({
         repos: [repo],
@@ -2454,22 +2918,8 @@ describe('App repository attach', () => {
             ? { kind: 'branches' as const, branches: [] }
             : { kind: 'activity' as const, entries: [] },
       ),
-      preview: vi.fn<WorkspaceAdapter['preview']>(async (request) => ({
-        repoId: request.repoId,
-        title: { id: 'actionAbortOperation' },
-        summary: { id: 'previewAbort' },
-        affectedPaths: [],
-        affectedCommits: ['1234567890abcdef'],
-        lostCommitOids: [],
-        resolvedTargets: [],
-        destructive: true,
-      })),
-      execute: vi.fn<WorkspaceAdapter['execute']>(async () => {
-        throw new WorkspaceAdapterError('hookFailed', 'Git operation failed.', {
-          stderr: 'policy denied this operation',
-          exitCode: '1',
-        });
-      }),
+      preview,
+      execute,
       cancel: vi.fn<WorkspaceAdapter['cancel']>(async () => undefined),
       subscribe: vi.fn<WorkspaceAdapter['subscribe']>(async () => () => undefined),
     };
@@ -2480,11 +2930,57 @@ describe('App repository attach', () => {
     await user.click(addRepositorySubmitButton());
     await user.click(await screen.findByRole('button', { name: 'Abort' }));
     expect(await screen.findByText('1234567890ab')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox'), 'abort');
     await user.click(screen.getByRole('button', { name: 'Run' }));
-    expect(await screen.findByRole('alertdialog', { name: 'Operation failed' })).toHaveTextContent(
+    expect(await screen.findByRole('dialog', { name: 'Abort Operation' })).toHaveTextContent(
       'The operation failed.',
     );
     expect(screen.getByLabelText('stderr')).toHaveTextContent('policy denied this operation');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('alertdialog', { name: 'Abort Operation' })).toBeVisible();
+    expect(screen.getByRole('textbox')).toHaveValue('abort');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
+    expect(execute).toHaveBeenCalledOnce();
+    expect(await screen.findByText('fedcba987654')).toBeVisible();
+    expect(screen.getByRole('textbox')).toHaveValue('abort');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alertdialog', { name: 'Abort Operation' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Abort' }));
+    await user.type(screen.getByRole('textbox'), 'abort');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await user.click(await screen.findByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(4));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => {
+      resolveRefresh?.();
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole('alertdialog', { name: 'Abort Operation' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Abort' }));
+    await user.type(screen.getByRole('textbox'), 'abort');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await user.click(await screen.findByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(6));
+    expect(rejectRefresh).toBeTypeOf('function');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => {
+      rejectRefresh?.();
+      await new Promise((resolve) => window.setTimeout(resolve));
+    });
+    await user.click(
+      within(
+        await screen.findByRole('alertdialog', { name: 'Could not preview operation' }),
+      ).getByRole('button', { name: 'Close' }),
+    );
+    expect(
+      screen.queryByRole('alertdialog', { name: 'Abort Operation', hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it('previews file deletion and gives the destructive confirmation a specific label', async () => {
@@ -2972,12 +3468,12 @@ describe('App repository attach', () => {
     await waitFor(() =>
       expect(
         Boolean(screen.queryByText('Fast-forward unavailable')) ||
-          Boolean(screen.queryByRole('alertdialog', { name: 'Operation failed' })),
+          Boolean(screen.queryByRole('dialog', { name: 'Pull' })),
       ).toBe(true),
     );
 
     const resolution = screen.queryByText('Fast-forward unavailable');
-    const errorDialog = screen.queryByRole('alertdialog', { name: 'Operation failed' });
+    const errorDialog = screen.queryByRole('dialog', { name: 'Pull' });
     expect(Boolean(resolution)).toBe(expectedResolution);
     expect(Boolean(errorDialog)).toBe(!expectedResolution);
     expect(errorDialog?.textContent ?? '').toContain(

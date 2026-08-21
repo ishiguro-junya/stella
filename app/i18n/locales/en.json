@@ -510,6 +510,7 @@
   "activityOperationDetail": "Operation detail",
   "activitySelectOperation": "Select an operation to view details.",
   "cancel": "Cancel",
+  "cancelling": "Cancelling…",
   "activityRepository": "Repository",
   "activityStarted": "Started",
   "activityFinished": "Finished",
