@@ -211,9 +211,9 @@ mise run dev
 
 ## 📚 ドキュメント
 
-- [AGENTS.md](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
-- [コントリビュートガイド](CONTRIBUTING.md)
-- [デザイン](DESIGN.md)
+- [AIエージェント向けガイドライン](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
+- [コントリビュートガイドライン](CONTRIBUTING.md)
+- [デザインガイドライン](DESIGN.md)
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
 - [仕様](docs/specification.md)
 - [アーキテクチャ](docs/architecture.md)
