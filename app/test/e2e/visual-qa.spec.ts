@@ -396,11 +396,11 @@ describe('視覚確認用スクリーンショット', () => {
             'value',
           );
           await expect(operationProgress.$('.operation-progress-track')).toBeDisplayed();
+          const cancel = operationProgress.$('button=Cancel');
+          await cancel.waitForClickable({ timeout: 10_000 });
           await expect(operationProgress.$('.operation-progress-summary')).toHaveText(
             'Operation in progress',
           );
-          const cancel = operationProgress.$('button=Cancel');
-          await cancel.waitForClickable({ timeout: 10_000 });
           await captureDialog(
             'diff/dialogs/operation-progress',
             'operation-progress-dialog',
