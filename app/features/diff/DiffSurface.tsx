@@ -226,10 +226,22 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   display: none;
 }
 
+[data-diff],
+[data-file],
+[data-code] {
+  container-type: inline-size;
+}
+
 [data-separator][data-stella-hunk-control-row] [data-separator-wrapper] {
   display: flex;
-  width: 100%;
+  width: 100cqi;
   background-color: var(--diffs-bg-separator);
+}
+
+[data-diff-type='split'][data-overflow='wrap']
+  [data-separator][data-stella-hunk-control-row]
+  [data-separator-wrapper] {
+  width: 50cqi;
 }
 
 [data-separator][data-stella-hunk-control-row] [data-separator-content] {
@@ -239,7 +251,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   box-sizing: border-box;
   justify-content: flex-end;
   overflow: visible;
-  padding: 0 8px 0 12px;
+  padding: 0 12px;
 }
 
 [data-stella-hunk-controls] {
@@ -252,10 +264,19 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   font: 0.625rem var(--diffs-header-font-family, var(--diffs-header-font-fallback));
 }
 
+[data-diff-type='split'][data-overflow='scroll'] > [data-code] {
+  min-width: 0;
+}
+
+[data-stella-hunk-actions-host] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  font: 0.625rem var(--diffs-header-font-family, var(--diffs-header-font-fallback));
+}
+
 [data-stella-hunk-actions] {
-  position: sticky;
-  right: 8px;
-  z-index: 5;
   display: flex;
   flex: none;
   gap: 5px;
@@ -271,14 +292,12 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.01em;
-  position: relative;
   text-overflow: ellipsis;
-  transform: translateX(calc(0px - var(--stella-hunk-left-offset, 0px)));
   white-space: nowrap;
-  z-index: 4;
 }
 
-[data-stella-hunk-controls] button {
+[data-stella-hunk-controls] button,
+[data-stella-hunk-actions-host] button {
   appearance: none;
   min-height: 22px;
   margin: 0;
@@ -292,16 +311,19 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
   white-space: nowrap;
 }
 
-[data-stella-hunk-controls] button:hover:not(:disabled) {
+[data-stella-hunk-controls] button:hover:not(:disabled),
+[data-stella-hunk-actions-host] button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--diffs-bg-separator) 76%, var(--diffs-fg) 9%);
 }
 
-[data-stella-hunk-controls] button:focus-visible {
+[data-stella-hunk-controls] button:focus-visible,
+[data-stella-hunk-actions-host] button:focus-visible {
   outline: 2px solid var(--diffs-modified-base);
   outline-offset: 1px;
 }
 
-[data-stella-hunk-controls] button:disabled {
+[data-stella-hunk-controls] button:disabled,
+[data-stella-hunk-actions-host] button:disabled {
   cursor: default;
   opacity: 0.45;
 }
@@ -610,20 +632,23 @@ function stopHunkControlPropagation(event: Event): void {
 }
 
 function appendHunkControls(
-  separator: HTMLElement,
+  labelSeparator: HTMLElement,
+  actionSeparator: HTMLElement,
   hunk: FileDiffMetadata['hunks'][number],
   selection: SurfaceHunkSelection,
   controlsState: MutableRefObject<HunkControlsState>,
-  leftOffset: number,
 ): void {
-  const content = separator.querySelector<HTMLElement>('[data-separator-content]');
-  const wrapper = separator.querySelector<HTMLElement>('[data-separator-wrapper]');
-  if (!content || !wrapper) return;
-  separator.dataset.stellaHunkControlRow = '';
-  wrapper.dataset.stellaHunkToolbar = '';
+  const labelContent = labelSeparator.querySelector<HTMLElement>('[data-separator-content]');
+  const labelWrapper = labelSeparator.querySelector<HTMLElement>('[data-separator-wrapper]');
+  const actionContent = actionSeparator.querySelector<HTMLElement>('[data-separator-content]');
+  const actionWrapper = actionSeparator.querySelector<HTMLElement>('[data-separator-wrapper]');
+  if (!labelContent || !labelWrapper || !actionContent || !actionWrapper) return;
+  labelSeparator.dataset.stellaHunkControlRow = '';
+  labelWrapper.dataset.stellaHunkToolbar = '';
+  actionSeparator.dataset.stellaHunkControlRow = '';
+  actionWrapper.dataset.stellaHunkToolbar = '';
   const controls = document.createElement('div');
   controls.dataset.stellaHunkControls = '';
-  controls.style.setProperty('--stella-hunk-left-offset', `${leftOffset}px`);
   const hunkNumber = selection.hunkIndex + 1;
 
   const [start, end] = hunkDisplayRange(hunk);
@@ -633,7 +658,14 @@ function appendHunkControls(
   controls.append(rangeLabel);
   const actions = document.createElement('div');
   actions.dataset.stellaHunkActions = '';
-  controls.append(actions);
+  if (actionSeparator === labelSeparator) {
+    controls.append(actions);
+  } else {
+    const actionsHost = document.createElement('div');
+    actionsHost.dataset.stellaHunkActionsHost = '';
+    actionsHost.append(actions);
+    actionContent.append(actionsHost);
+  }
   const addActionButton = (
     label: string,
     ariaLabel: string,
@@ -684,7 +716,7 @@ function appendHunkControls(
       );
     }
   }
-  content.append(controls);
+  labelContent.append(controls);
 }
 
 export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(function DiffSurface(
@@ -901,28 +933,38 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
       renderedHunkHostsRef.current.set(node, fileDiff);
 
       node
-        .querySelectorAll<HTMLElement>('[data-stella-hunk-controls]')
+        .querySelectorAll<HTMLElement>(
+          '[data-stella-hunk-controls], [data-stella-hunk-actions-host]',
+        )
         .forEach((item) => item.remove());
       root
-        .querySelectorAll<HTMLElement>('[data-stella-hunk-controls]')
+        .querySelectorAll<HTMLElement>(
+          '[data-stella-hunk-controls], [data-stella-hunk-actions-host]',
+        )
         .forEach((item) => item.remove());
 
       const itemId = itemIdByFileDiffRef.current.get(fileDiff);
       if (itemId) node.dataset.stellaItemId = itemId;
       else delete node.dataset.stellaItemId;
-      const preferredCode =
-        root.querySelector<HTMLElement>('[data-unified]') ??
-        root.querySelector<HTMLElement>('[data-additions]') ??
-        root.querySelector<HTMLElement>('[data-deletions]');
-      const contentColumn = preferredCode
-        ? directDiffColumns(preferredCode).find((column) => column.hasAttribute('data-content'))
+      const unifiedCode = root.querySelector<HTMLElement>('[data-unified]');
+      const deletionCode = root.querySelector<HTMLElement>('[data-deletions]');
+      const additionCode = root.querySelector<HTMLElement>('[data-additions]');
+      const labelCode = unifiedCode ?? deletionCode ?? additionCode;
+      const actionCode = unifiedCode ?? additionCode ?? deletionCode;
+      const labelGutter = labelCode
+        ? directDiffColumns(labelCode).find((column) => column.hasAttribute('data-gutter'))
         : undefined;
-      if (!preferredCode || !contentColumn) return;
-      const leftOffset = Math.max(
-        0,
-        contentColumn.getBoundingClientRect().left - preferredCode.getBoundingClientRect().left,
+      const actionGutter = actionCode
+        ? directDiffColumns(actionCode).find((column) => column.hasAttribute('data-gutter'))
+        : undefined;
+      if (!labelGutter || !actionGutter) return;
+      const separators = [...labelGutter.children].filter(
+        (element): element is HTMLElement =>
+          element instanceof HTMLElement &&
+          element.hasAttribute('data-separator') &&
+          !element.hasAttribute('data-separator-last'),
       );
-      const separators = [...contentColumn.children].filter(
+      const actionSeparators = [...actionGutter.children].filter(
         (element): element is HTMLElement =>
           element instanceof HTMLElement &&
           element.hasAttribute('data-separator') &&
@@ -931,12 +973,13 @@ export const DiffSurface = forwardRef<DiffSurfaceHandle, DiffSurfaceProps>(funct
 
       fileDiff.hunks.forEach((hunk, hunkIndex) => {
         const separator = separators[hunkIndex];
-        if (!separator) return;
+        const actionSeparator = actionSeparators[hunkIndex];
+        if (!separator || !actionSeparator) return;
         const hunkSelection: SurfaceHunkSelection = {
           hunkIndex,
           ...(itemId ? { itemId } : {}),
         };
-        appendHunkControls(separator, hunk, hunkSelection, hunkControlsRef, leftOffset);
+        appendHunkControls(separator, actionSeparator, hunk, hunkSelection, hunkControlsRef);
       });
     },
     [],

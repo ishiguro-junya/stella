@@ -66,6 +66,11 @@ const developmentPlayerRepositories = PLAYER_REPOSITORIES.map(({ slug }) =>
   join(developmentFixtureRoot, slug),
 );
 const ACTIVITY_CONTRIBUTOR = ['MLBデータ', 'mlb.data@example.invalid'] as const;
+const MLB_RECORD_BOOK_PATH = 'docs/mlb-record-book.md';
+const MLB_RECORD_BOOK_BASE_CONTENT =
+  '# MLB Record Book\n\n## 2024 Season\n\n- Los Angeles Dodgers\n- New York Yankees\n';
+const MLB_RECORD_BOOK_CHANGED_CONTENT =
+  '# MLB Record Book\n\n## 2024 Season\n\n- Los Angeles Dodgers\n- New York Yankees\n- San Diego Padres\n- Boston Red Sox\n- Chicago Cubs\n\n## Long diff line\n\nThis intentionally long MLB record-book entry verifies that the hunk line range and the edit, stage, and discard actions remain visible with a stable right margin when the window is resized or the diff is scrolled horizontally.\n\n## Checks\n\n1. The hunk line range is fully visible.\n2. Every hunk action remains inside the viewport.\n3. The right margin stays unchanged after resizing.\n';
 const FIFTY_FIFTY_MESSAGE = 'feat: 50本塁打・50盗塁 (50-50) を達成';
 const WORLD_SERIES_2024_MESSAGE = 'feat: ドジャースがワールドシリーズ制覇';
 const WORLD_SERIES_2025_MESSAGE = 'feat: ドジャースがワールドシリーズ2連覇';
@@ -822,7 +827,32 @@ async function createShowcaseRepository(root: string): Promise<string> {
   );
   await runGit(repositoryPath, ['add', 'src/teams/angels/shohei-ohtani.ts']);
   await commitAchievements(repositoryPath);
+  await commitFile(
+    repositoryPath,
+    MLB_RECORD_BOOK_PATH,
+    MLB_RECORD_BOOK_BASE_CONTENT,
+    'test: MLB記録集を追加',
+    ACTIVITY_CONTRIBUTOR,
+    '2025-11-03T12:00:00+09:00',
+    '2025-11-03T12:00:00+09:00',
+  );
   return realpath(repositoryPath);
+}
+
+async function ensureMlbRecordBookFixture(): Promise<void> {
+  try {
+    await access(join(fixtureBaseRepository, MLB_RECORD_BOOK_PATH));
+  } catch {
+    await commitFile(
+      fixtureBaseRepository,
+      MLB_RECORD_BOOK_PATH,
+      MLB_RECORD_BOOK_BASE_CONTENT,
+      'test: MLB記録集を追加',
+      ACTIVITY_CONTRIBUTOR,
+      '2025-11-03T12:00:00+09:00',
+      '2025-11-03T12:00:00+09:00',
+    );
+  }
 }
 
 async function requireFixtureBase(): Promise<void> {
@@ -854,6 +884,7 @@ export async function setupShowcaseFixtureBase(): Promise<string> {
 
 export async function resetDevelopmentShowcaseFixture(): Promise<string[]> {
   await requireFixtureBase();
+  await ensureMlbRecordBookFixture();
   await Promise.all(
     [developmentRepository, developmentRemote, ...developmentPlayerRepositories].map((path) =>
       rm(path, { recursive: true, force: true }),
@@ -866,6 +897,11 @@ export async function resetDevelopmentShowcaseFixture(): Promise<string[]> {
       cp(source, developmentPlayerRepositories[index]!, { recursive: true }),
     ),
   ]);
+  await writeRepositoryFile(
+    developmentRepository,
+    MLB_RECORD_BOOK_PATH,
+    MLB_RECORD_BOOK_CHANGED_CONTENT,
+  );
   await ensureLocalBareRemote(developmentRepository, developmentRemote);
   return Promise.all(
     [developmentRepository, ...developmentPlayerRepositories].map((path) => realpath(path)),

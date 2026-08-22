@@ -30,6 +30,53 @@ interface EditorPosition {
   viewportRatio: number;
 }
 
+interface HunkLayout {
+  actionLabels: string[][];
+  actionsInsidePane: boolean;
+  actionHitTargets: string[];
+  actionPositions: boolean;
+  actionRightGaps: number[];
+  bordered: boolean;
+  controlsInGutter: boolean;
+  controlsPosition: boolean;
+  hasHunkToggle: boolean;
+  headerAtPaneRight: number[];
+  headerPosition: boolean;
+  hunkLabels: string[];
+  labelAtPaneLeft: boolean;
+  labelsFit: boolean;
+  labelIsSubtle: boolean;
+  scrollLeft: number;
+  unmodifiedTextVisible: boolean;
+}
+
+function expectHunkLayout(layout: HunkLayout, expectedScrollLeft: number): void {
+  expect(layout).toEqual({
+    actionLabels: [
+      ['ハンクを編集', 'ハンクをステージ', 'ハンクを破棄'],
+      ['ハンクを編集', 'ハンクをステージ', 'ハンクを破棄'],
+    ],
+    actionsInsidePane: true,
+    actionHitTargets: ['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON', 'BUTTON', 'BUTTON'],
+    actionPositions: true,
+    actionRightGaps: expect.any(Array),
+    bordered: true,
+    controlsInGutter: true,
+    controlsPosition: true,
+    hasHunkToggle: false,
+    headerAtPaneRight: expect.any(Array),
+    headerPosition: true,
+    hunkLabels: ['ハンク1 行1037–1045', 'ハンク2 行1063–1069'],
+    labelAtPaneLeft: true,
+    labelsFit: true,
+    labelIsSubtle: true,
+    scrollLeft: expectedScrollLeft,
+    unmodifiedTextVisible: false,
+  });
+  expect(layout.headerAtPaneRight.every((gap) => Math.abs(gap) <= 1)).toBe(true);
+  expect(layout.actionRightGaps.every((gap) => gap >= 11 && gap <= 13)).toBe(true);
+}
+
 async function readEditorPosition(): Promise<EditorPosition> {
   return browser.execute(() => {
     const scroller = document.querySelector<HTMLElement>('.file-editor .cm-scroller');
@@ -1797,9 +1844,9 @@ describe('Diff', () => {
   it('places Hunk actions at the right edge and opens line actions from a blue selection', async () => {
     const longOldLine = `old-a-${'x'.repeat(500)}`;
     const base = [
-      ...Array.from({ length: 30 }, (_, index) => {
-        if (index === 7) return longOldLine;
-        if (index === 21) return 'old-b';
+      ...Array.from({ length: 1080 }, (_, index) => {
+        if (index === 1039) return longOldLine;
+        if (index === 1063) return 'old-b';
         return `line-${index + 1}`;
       }),
       '',
@@ -1838,68 +1885,163 @@ describe('Diff', () => {
     if (separatorDiagnostics.controlCount !== 2) {
       throw new Error(`Unexpected separators: ${JSON.stringify(separatorDiagnostics)}`);
     }
-    await setLogicalWindowSize(860, 760);
-
-    const hunkLayout = await browser.execute(() => {
-      const root = document.querySelector<HTMLElement>(
-        '.diff-surface diffs-container',
-      )!.shadowRoot!;
-      const controls = root.querySelector<HTMLElement>('[data-stella-hunk-controls]')!;
-      const content = controls.closest<HTMLElement>('[data-content]')!;
-      const hunkActions = controls.querySelector<HTMLElement>('[data-stella-hunk-actions]')!;
-      const controlsRect = controls.getBoundingClientRect();
-      const contentRect = content.getBoundingClientRect();
-      const paneRect = document
-        .querySelector<HTMLElement>('.diff-content-pane')!
-        .getBoundingClientRect();
-      const actionButtons = [...hunkActions.querySelectorAll<HTMLButtonElement>('button')];
-      const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];
-      const firstLabel = hunkLabels[0]!;
-      const firstLabelStyle = getComputedStyle(firstLabel);
-      const firstButtonStyle = getComputedStyle(actionButtons[0]!);
-      const separatorBackground = getComputedStyle(
-        controls.closest('[data-separator-wrapper]')!,
-      ).backgroundColor;
-      return {
-        actionLabels: actionButtons.map((button) => button.textContent),
-        hunkLabels: hunkLabels.map((label) => label.textContent),
-        bordered: actionButtons.every(
-          (button) =>
-            getComputedStyle(button).borderRightStyle !== 'none' &&
-            Number.parseFloat(getComputedStyle(button).borderRightWidth) > 0,
-        ),
-        actionsInsidePane: actionButtons.every((button) => {
-          const rect = button.getBoundingClientRect();
-          return rect.left >= paneRect.left - 1 && rect.right <= paneRect.right + 1;
+    const readHunkLayout = async (scrollLeft: number): Promise<HunkLayout> =>
+      browser.execute<HunkLayout, [number]>((nextScrollLeft) => {
+        const root = document.querySelector<HTMLElement>(
+          '.diff-surface diffs-container',
+        )!.shadowRoot!;
+        const code = root.querySelector<HTMLElement>('[data-code]')!;
+        code.scrollLeft = nextScrollLeft;
+        const controls = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-controls]')];
+        const actionHosts = [
+          ...root.querySelectorAll<HTMLElement>('[data-stella-hunk-actions-host]'),
+        ];
+        const hunkActions = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-actions]')];
+        const actionButtons = hunkActions.flatMap((actions) => [
+          ...actions.querySelectorAll<HTMLButtonElement>('button'),
+        ]);
+        const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];
+        const firstControls = controls[0]!;
+        const firstLabel = hunkLabels[0]!;
+        const firstLabelStyle = getComputedStyle(firstLabel);
+        const firstButtonStyle = getComputedStyle(actionButtons[0]!);
+        const separatorBackground = getComputedStyle(
+          firstControls.closest('[data-separator-wrapper]')!,
+        ).backgroundColor;
+        const paneRect = document
+          .querySelector<HTMLElement>('.diff-content-pane')!
+          .getBoundingClientRect();
+        const headerContents = hunkActions.map((actions) =>
+          actions
+            .closest<HTMLElement>('[data-separator]')!
+            .querySelector<HTMLElement>('[data-separator-content]')!,
+        );
+        return {
+          actionLabels: hunkActions.map((actions) =>
+            [...actions.querySelectorAll('button')].map((button) => button.textContent ?? ''),
+          ),
+          actionsInsidePane: actionButtons.every((button) => {
+            const rect = button.getBoundingClientRect();
+            return rect.left >= paneRect.left - 1 && rect.right <= paneRect.right + 1;
+          }),
+          actionPositions: hunkActions.every(
+            (actions) => getComputedStyle(actions).position === 'static',
+          ),
+          actionRightGaps: hunkActions.map(
+            (actions, index) =>
+              headerContents[index]!.getBoundingClientRect().right -
+              actions.getBoundingClientRect().right,
+          ),
+          actionHitTargets: actionButtons.map((button) => {
+            button.scrollIntoView({ block: 'center', inline: 'nearest' });
+            const rect = button.getBoundingClientRect();
+            const hit = root.elementFromPoint(
+              rect.left + rect.width / 2,
+              rect.top + rect.height / 2,
+            );
+            if (!hit) return 'NONE';
+            if (hit === button || button.contains(hit)) return 'BUTTON';
+            return [hit.tagName, ...[...hit.attributes].map(({ name }) => name)].join(' ');
+          }),
+          bordered: actionButtons.every(
+            (button) =>
+              getComputedStyle(button).borderRightStyle !== 'none' &&
+              Number.parseFloat(getComputedStyle(button).borderRightWidth) > 0,
+          ),
+          controlsInGutter: [...controls, ...actionHosts].every(
+            (control) => control.closest('[data-gutter]') !== null,
+          ),
+          controlsPosition: [...controls, ...actionHosts].every(
+            (control) => getComputedStyle(control).position === 'static',
+          ),
+          hasHunkToggle: root.querySelector('[data-stella-hunk-toggle]') !== null,
+          headerAtPaneRight: headerContents.map(
+            (headerContent) => paneRect.right - headerContent.getBoundingClientRect().right,
+          ),
+          headerPosition: headerContents.every(
+            (headerContent) => getComputedStyle(headerContent).position === 'static',
+          ),
+          hunkLabels: hunkLabels.map((label) => label.textContent ?? ''),
+          labelAtPaneLeft: hunkLabels.every(
+            (label) =>
+              label.getBoundingClientRect().left >= paneRect.left - 1 &&
+              label.getBoundingClientRect().left - paneRect.left <= 16,
+          ),
+          labelsFit: hunkLabels.every((label) => label.scrollWidth <= label.clientWidth),
+          labelIsSubtle:
+            firstLabelStyle.color !== separatorBackground &&
+            firstLabelStyle.color !== firstButtonStyle.color,
+          scrollLeft: code.scrollLeft,
+          unmodifiedTextVisible: [
+            ...root.querySelectorAll<HTMLElement>('[data-unmodified-lines]'),
+          ].some((element) => getComputedStyle(element).display !== 'none'),
+        };
+      }, scrollLeft);
+    const hunkLayouts: { expectedScrollLeft: number; layout: HunkLayout }[] = [];
+    for (const width of [1180, 1100, 1000, 920, 860, 920, 1000, 860]) {
+      // oxlint-disable-next-line no-await-in-loop -- 同じ差分を各ウィンドウ幅で順に再描画する。
+      await setLogicalWindowSize(width, 760);
+      for (const expectedScrollLeft of [0, 160]) {
+        // oxlint-disable-next-line no-await-in-loop -- 同じ幅で横スクロール位置を順に検証する。
+        const layout = await readHunkLayout(expectedScrollLeft);
+        hunkLayouts.push({ expectedScrollLeft, layout });
+      }
+    }
+    expect(hunkLayouts).toHaveLength(16);
+    for (const { expectedScrollLeft, layout } of hunkLayouts) {
+      expectHunkLayout(layout, expectedScrollLeft);
+    }
+    await $('button=設定').click();
+    await selectSetting('diff-layout', 'split');
+    await $('button=差分').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-diff-type="split"][data-overflow="scroll"]'));
         }),
-        inContentColumn: controls.closest('[data-gutter]') === null,
-        leftIsVisible: controlsRect.left >= contentRect.left - 1,
-        labelAtLeft: firstLabel.getBoundingClientRect().left - contentRect.left <= 8,
-        labelIsSubtle:
-          firstLabelStyle.color !== separatorBackground &&
-          firstLabelStyle.color !== firstButtonStyle.color,
-        rightGap: paneRect.right - hunkActions.getBoundingClientRect().right,
-        hasHunkToggle: controls.querySelector('[data-stella-hunk-toggle]') !== null,
-        unmodifiedTextVisible: [
-          ...root.querySelectorAll<HTMLElement>('[data-unmodified-lines]'),
-        ].some((element) => getComputedStyle(element).display !== 'none'),
-      };
-    });
-    expect(hunkLayout).toEqual({
-      actionLabels: ['ハンクを編集', 'ハンクをステージ', 'ハンクを破棄'],
-      hunkLabels: ['ハンク1 行5–13', 'ハンク2 行21–27'],
-      bordered: true,
-      actionsInsidePane: true,
-      inContentColumn: true,
-      leftIsVisible: true,
-      labelAtLeft: true,
-      labelIsSubtle: true,
-      rightGap: expect.any(Number),
-      hasHunkToggle: false,
-      unmodifiedTextVisible: false,
-    });
-    expect(hunkLayout.rightGap).toBeGreaterThanOrEqual(7);
-    expect(hunkLayout.rightGap).toBeLessThanOrEqual(9);
+      { timeout: 10_000, timeoutMsg: 'The split scrolling Diff did not render.' },
+    );
+    await setLogicalWindowSize(860, 760);
+    const splitScrollStartLayout = await readHunkLayout(0);
+    const splitScrollOffsetLayout = await readHunkLayout(160);
+    expectHunkLayout(splitScrollStartLayout, 0);
+    expectHunkLayout(splitScrollOffsetLayout, 160);
+    await $('button=設定').click();
+    await selectSetting('editor-line-wrapping', 'enabled');
+    await $('button=差分').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(root?.querySelector('[data-diff-type="split"][data-overflow="wrap"]'));
+        }),
+      { timeout: 10_000, timeoutMsg: 'The split wrapped Diff did not render.' },
+    );
+    const splitWrapLayout = await readHunkLayout(0);
+    expectHunkLayout(splitWrapLayout, 0);
+    await $('button=設定').click();
+    await selectSetting('diff-layout', 'unified');
+    await $('button=差分').click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const root = document.querySelector<HTMLElement>(
+            '.diff-surface diffs-container',
+          )?.shadowRoot;
+          return Boolean(
+            root?.querySelector('[data-unified]') && root.querySelector('[data-overflow="wrap"]'),
+          );
+        }),
+      {
+        timeout: 10_000,
+        timeoutMsg: 'The unified Diff did not return after the split wrap check.',
+      },
+    );
     await browser.execute(() => {
       const root = document.querySelector<HTMLElement>(
         '.diff-surface diffs-container',
