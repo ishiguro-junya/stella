@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Stella Fix'
+  short_description: 'Repair Stella regressions at the root cause'
+  default_prompt: 'Use $stella-fix to diagnose and repair this Stella bug with focused regression evidence.'

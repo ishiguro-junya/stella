@@ -73,6 +73,9 @@ mise run dev
 
 ```text
 .
+├── .agents/                # AIエージェントの共通知識
+│   ├── references/         # 仕様、運用手順、役割契約
+│   └── skills/             # 開発経路ごとのスキル
 ├── .github/workflows/      # Homebrew Caskを更新するGitHub Actions
 ├── .markdownlint-rules/    # リポジトリ固有のMarkdown検査
 ├── Casks/                  # Homebrew Caskの定義
@@ -98,14 +101,6 @@ mise run dev
 │   ├── App.tsx             # アプリの状態と画面遷移
 │   ├── main.tsx            # フロントエンドの起動点
 │   └── styles.css          # アプリ全体のスタイル
-├── docs/                   # 開発ドキュメント
-│   ├── architecture.md     # 内部構造
-│   ├── release.md          # リリースと配布の手順
-│   ├── review.md           # レビュー方針と完了基準
-│   ├── security.md         # 安全性保証とセキュリティ検査
-│   ├── specification.md    # 利用者から見える仕様
-│   ├── testing.md          # テスト方針と実行方法
-│   └── writing.md          # ドキュメントの配置と書き方
 ├── screenshots/            # スクリーンショットの保存先
 ├── scripts/                # 開発、検査、リリース用スクリプト
 │   ├── available-port.mts  # 開発アプリとテストの空きポート探索
@@ -124,7 +119,6 @@ mise run dev
 ├── .markdownlint-cli2.jsonc # Markdown検査設定
 ├── .textlintrc.json        # 日本語ドキュメントの検査設定
 ├── CONTRIBUTING.md         # 開発への参加方法
-├── DESIGN.md               # プロダクト設計の原則
 ├── LICENSE                 # アプリのライセンス
 ├── README.md               # 製品概要と開発の入口
 ├── THIRD_PARTY_NOTICES.md  # 第三者ソフトウェアのライセンス表示
@@ -213,19 +207,23 @@ mise run dev
 
 - [AIエージェント向けガイドライン](https://github.com/ishiguro-junya/ai-agent-guideline/blob/main/AGENTS.md)
 - [コントリビュートガイドライン](CONTRIBUTING.md)
-- [デザインガイドライン](DESIGN.md)
 - [サードパーティーに関する通知](THIRD_PARTY_NOTICES.md)
-- [仕様](docs/specification.md)
-- [アーキテクチャ](docs/architecture.md)
-- [レビュー](docs/review.md)
-- [セキュリティ](docs/security.md)
-- [テスト](docs/testing.md)
-- [ドキュメントの書き方](docs/writing.md)
-- [リリース手順](docs/release.md)
+- [プロダクト仕様](.agents/references/specifications/product.md)
+- [デザインガイドライン](.agents/references/specifications/design.md)
+- [アーキテクチャ](.agents/references/specifications/architecture.md)
+- [セキュリティ](.agents/references/specifications/security.md)
+- [テスト](.agents/references/workflows/testing.md)
+- [レビュー](.agents/references/workflows/review.md)
+- [ドキュメントの書き方](.agents/references/workflows/writing.md)
+- [リリース手順](.agents/references/workflows/release.md)
 
 ## 🧩 エージェントスキル
 
-- [stella-develop](.agents/skills/stella-develop/SKILL.md)
+- [stella-auto](.agents/skills/stella-auto/SKILL.md)
+- [stella-feature](.agents/skills/stella-feature/SKILL.md)
+- [stella-fix](.agents/skills/stella-fix/SKILL.md)
+- [stella-docs](.agents/skills/stella-docs/SKILL.md)
+- [stella-release](.agents/skills/stella-release/SKILL.md)
 - [mattpocock/skills](https://www.skills.sh/mattpocock/skills)
 - [ponytail](https://www.skills.sh/dietrichgebert/ponytail/ponytail)
 - [natural-japanese](https://www.skills.sh/coji/natural-japanese/natural-japanese)

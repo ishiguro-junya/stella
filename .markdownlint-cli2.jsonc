@@ -4,7 +4,7 @@
     "./.markdownlint-rules/sentence-per-line.mts",
     "./.markdownlint-rules/paragraph-line-end-spaces.mts",
   ],
-  "globs": ["**/*.md"],
+  "globs": ["**/*.md", ".agents/**/*.md"],
   "gitignore": true,
   "ignores": ["app/native/target/**", "coverage/**", "dist/**", "node_modules/**", "target/**"],
   "config": {

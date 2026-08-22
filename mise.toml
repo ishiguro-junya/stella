@@ -47,6 +47,14 @@ description = "アプリをビルドして`/Applications`へインストール�
 depends = [ "build" ]
 run = "node --import tsx scripts/install-app.mts"
 
+[tasks."lint:docs"]
+description = "ドキュメントの書式、文章、リンクを検査する"
+run = [
+  "pnpm exec markdownlint-cli2",
+  "pnpm exec textlint README.md CONTRIBUTING.md THIRD_PARTY_NOTICES.md '.agents/**/*.md'",
+  "lychee '**/*.md' '.agents/**/*.md'",
+]
+
 [tasks.lint]
 description = "コード、設定、ドキュメントを検査する"
 run = [
@@ -57,9 +65,7 @@ run = [
   "node --import tsx scripts/native-slot.mts cargo clippy --workspace --all-targets --all-features -- -D warnings",
   "taplo fmt --check",
   "taplo check",
-  "pnpm exec markdownlint-cli2",
-  "pnpm exec textlint README.md CONTRIBUTING.md DESIGN.md THIRD_PARTY_NOTICES.md 'docs/**/*.md'",
-  "lychee '**/*.md'",
+  "mise run lint:docs",
 ]
 
 [tasks.format]

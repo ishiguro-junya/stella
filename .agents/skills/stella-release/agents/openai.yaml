@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Stella Release'
+  short_description: 'Publish verified Stella changes within scope'
+  default_prompt: 'Use $stella-release to publish this verified Stella release within the explicitly authorized scope.'
+policy:
+  allow_implicit_invocation: false

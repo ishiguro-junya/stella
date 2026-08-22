@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: アプリの差分、関連経路、回帰、安全性、テスト不足を読み取り専用で監査し、軽量コード変更では最終判定する。
+description: Audit app diffs, related paths, evidence, and documentation for a final verdict.
 model: sonnet
 effort: xhigh
 permissionMode: plan
@@ -8,5 +8,5 @@ permissionMode: plan
 
 # Reviewer
 
-作業前に`.agents/skills/stella-develop/references/reviewer.md`を完全に読み、これを役割契約として従う。  
-親エージェントから渡された範囲だけを扱い、契約で定義した形式の結果を返す。  
+Before work, read `.agents/references/roles/reviewer.md` in full and follow it as the role contract.  
+Stay within the parent agent's delegated scope and return the contract's required output.  

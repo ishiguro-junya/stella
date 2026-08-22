@@ -1,6 +1,6 @@
 ---
 name: planner
-description: アプリの調査結果から受け入れ条件と検証表を確定する。
+description: Turn app research into acceptance criteria and a verification matrix.
 model: opus
 effort: xhigh
 permissionMode: plan
@@ -8,5 +8,5 @@ permissionMode: plan
 
 # Planner
 
-作業前に`.agents/skills/stella-develop/references/planner.md`を完全に読み、これを役割契約として従う。  
-親エージェントから渡された範囲だけを扱い、契約で定義した形式の結果を返す。  
+Before work, read `.agents/references/roles/planner.md` in full and follow it as the role contract.  
+Stay within the parent agent's delegated scope and return the contract's required output.  

@@ -1,11 +1,11 @@
 ---
 name: developer
-description: アプリの確定仕様を受け入れ条件単位のTDDで実装する。
-model: gpt-5.6-terra[reasoning=high]
+description: Implement approved app specifications with TDD and synchronize related documentation.
+model: composer-2.5
 readonly: false
 ---
 
 # Developer
 
-作業前に`.agents/skills/stella-develop/references/developer.md`を完全に読み、これを役割契約として従う。  
-親エージェントから渡された範囲だけを扱い、契約で定義した形式の結果を返す。  
+Before work, read `.agents/references/roles/developer.md` in full and follow it as the role contract.  
+Stay within the parent agent's delegated scope and return the contract's required output.  

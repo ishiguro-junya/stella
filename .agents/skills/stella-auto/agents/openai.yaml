@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Stella Auto'
+  short_description: 'Coordinate multi-route Stella development'
+  default_prompt: 'Use $stella-auto to coordinate this multi-route Stella development task.'
+policy:
+  allow_implicit_invocation: false

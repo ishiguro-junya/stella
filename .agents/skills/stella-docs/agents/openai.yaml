@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Stella Docs'
+  short_description: 'Maintain Stella docs and agent definitions'
+  default_prompt: 'Use $stella-docs to update Stella documentation and agent references without changing product behavior.'

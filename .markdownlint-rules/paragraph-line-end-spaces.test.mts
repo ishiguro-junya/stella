@@ -55,7 +55,7 @@ describe('paragraph-line-end-spaces', () => {
 
   it.each([
     '![画面](image.png)',
-    '[ドキュメント](docs/writing.md)',
+    '[ドキュメント](.agents/references/workflows/writing.md)',
     '`README.md`',
     '箇条書きです。',
   ])('ignores a non-sentence or list item line: %s', (line) => {

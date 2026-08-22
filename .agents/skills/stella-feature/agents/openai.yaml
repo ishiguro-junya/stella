@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Stella Feature'
+  short_description: 'Implement Stella features through focused roles'
+  default_prompt: 'Use $stella-feature to implement this Stella feature from specification through focused verification.'

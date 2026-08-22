@@ -47,7 +47,11 @@ CLAUDE.md
 !.claude/agents/
 !.claude/skills/
 .claude/skills/*
-!.claude/skills/stella-develop
+!.claude/skills/stella-docs
+!.claude/skills/stella-feature
+!.claude/skills/stella-fix
+!.claude/skills/stella-auto
+!.claude/skills/stella-release
 
 # Git Worktree
 /worktrees/
