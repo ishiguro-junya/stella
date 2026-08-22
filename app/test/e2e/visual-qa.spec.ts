@@ -190,9 +190,13 @@ describe('視覚確認用スクリーンショット', () => {
   });
 
   it('履歴を視覚確認用に撮影する', async function () {
-    await withVisualRepository(async (_repository, appearance) => {
+    await withVisualRepository(async ({ currentPath }, appearance) => {
+      const mainOid = (await runGit(currentPath, ['rev-parse', 'main'])).trim();
       await $('button=History').click();
       await expect($('.history-view')).toBeDisplayed();
+      const mainCommit = $(`[data-history-commit-oid="${mainOid}"]`);
+      await mainCommit.waitForClickable({ timeout: 20_000 });
+      await mainCommit.click();
       await browser.waitUntil(
         async () =>
           browser.execute(() =>
@@ -203,6 +207,24 @@ describe('視覚確認用スクリーンショット', () => {
             ),
           ),
         { timeout: 10_000, timeoutMsg: 'History syntax highlighting did not load.' },
+      );
+      await browser.waitUntil(
+        async () =>
+          browser.execute(() => {
+            const images = [
+              ...document.querySelectorAll<HTMLImageElement>(
+                '.history-view .image-diff-preview img',
+              ),
+            ];
+            return (
+              images.filter((image) => image.alt.endsWith('assets/number-17.svg')).length === 1 &&
+              images.filter((image) => image.alt.endsWith('assets/uniform.svg')).length === 2 &&
+              images.every(
+                (image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0,
+              )
+            );
+          }),
+        { timeout: 10_000, timeoutMsg: 'History image previews did not load.' },
       );
       await blurActiveElement();
       await debugAt('history');
@@ -441,11 +463,12 @@ describe('視覚確認用スクリーンショット', () => {
   });
 
   it('Tag作成ダイアログを撮影する', async function () {
-    await withVisualRepository(async (_repository, appearance) => {
+    await withVisualRepository(async ({ currentPath }, appearance) => {
+      const mainOid = (await runGit(currentPath, ['rev-parse', 'main'])).trim();
       await $('button=History').click();
-      const commit = $('.history-commit-item .commit-row');
-      await commit.waitForClickable({ timeout: 20_000 });
-      await commit.click();
+      const mainCommit = $(`[data-history-commit-oid="${mainOid}"]`);
+      await mainCommit.waitForClickable({ timeout: 20_000 });
+      await mainCommit.click();
       const actions = $('.history-commit-item.is-current .history-action-trigger');
       await actions.waitForEnabled({ timeout: 20_000 });
       await actions.click();
