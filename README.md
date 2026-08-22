@@ -27,7 +27,7 @@
 
 ### GitHub Releaseから手動でインストールする
 
-最新の[GitHub Release](https://github.com/ishiguro-junya/stella/releases/latest)からAssetsの「Stella_X.X.X_arm64.zip」のZIPファイルをダウンロードします。  
+最新の[GitHub Release](https://github.com/ishiguro-junya/stella/releases)からAssetsの「Stella_X.X.X_arm64.zip」のZIPファイルをダウンロードします。  
 ZIPファイルを展開し、`Stella.app`を`/Applications`へ移動します。  
 
 ### Homebrew経由でインストールする
@@ -56,7 +56,6 @@ mise run dev
 | `mise run reset` | 開発用リポジトリを初期状態へ戻す。 |
 | `mise run dev` | アプリを開発モードで起動する。 |
 | `mise run build` | アプリをビルドする。 |
-| `mise run install` | アプリをインストールする。 |
 | `mise run lint` | コードをリントチェックする。 |
 | `mise run format` | コードをフォーマットする。 |
 | `mise run test` | 全てのテストを実行する。 |
@@ -106,7 +105,6 @@ mise run dev
 │   ├── available-port.mts  # 開発アプリとテストの空きポート探索
 │   ├── available-port.test.mts # ポート探索の単体テスト
 │   ├── create-updater-manifest.mts # 更新マニフェストの生成
-│   ├── install-app.mts     # 構築したアプリのインストール
 │   ├── mode-app.mts        # 用途別のmacOSアプリ名を持つ実行ファイル作成
 │   ├── native-slot.mts     # worktree間で共有するネイティブ実行枠
 │   ├── native-slot.test.mts # ネイティブ実行枠の単体テスト

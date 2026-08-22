@@ -48,11 +48,6 @@ run = [
   fi''',
 ]
 
-[tasks."install"]
-description = "アプリをビルドして`/Applications`へインストールする"
-depends = [ "build" ]
-run = "node --import tsx scripts/install-app.mts"
-
 [tasks."lint:docs"]
 description = "ドキュメントの書式、文章、リンクを検査する"
 run = [
