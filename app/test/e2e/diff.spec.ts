@@ -1846,12 +1846,13 @@ describe('Diff', () => {
       )!.shadowRoot!;
       const controls = root.querySelector<HTMLElement>('[data-stella-hunk-controls]')!;
       const content = controls.closest<HTMLElement>('[data-content]')!;
+      const hunkActions = controls.querySelector<HTMLElement>('[data-stella-hunk-actions]')!;
       const controlsRect = controls.getBoundingClientRect();
       const contentRect = content.getBoundingClientRect();
       const paneRect = document
         .querySelector<HTMLElement>('.diff-content-pane')!
         .getBoundingClientRect();
-      const actionButtons = [...controls.querySelectorAll<HTMLButtonElement>('button')];
+      const actionButtons = [...hunkActions.querySelectorAll<HTMLButtonElement>('button')];
       const hunkLabels = [...root.querySelectorAll<HTMLElement>('[data-stella-hunk-label]')];
       const firstLabel = hunkLabels[0]!;
       const firstLabelStyle = getComputedStyle(firstLabel);
@@ -1877,7 +1878,7 @@ describe('Diff', () => {
         labelIsSubtle:
           firstLabelStyle.color !== separatorBackground &&
           firstLabelStyle.color !== firstButtonStyle.color,
-        rightGap: contentRect.right - controlsRect.right,
+        rightGap: paneRect.right - hunkActions.getBoundingClientRect().right,
         hasHunkToggle: controls.querySelector('[data-stella-hunk-toggle]') !== null,
         unmodifiedTextVisible: [
           ...root.querySelectorAll<HTMLElement>('[data-unmodified-lines]'),
@@ -1897,8 +1898,8 @@ describe('Diff', () => {
       hasHunkToggle: false,
       unmodifiedTextVisible: false,
     });
-    expect(hunkLayout.rightGap).toBeGreaterThanOrEqual(0);
-    expect(hunkLayout.rightGap).toBeLessThanOrEqual(8);
+    expect(hunkLayout.rightGap).toBeGreaterThanOrEqual(7);
+    expect(hunkLayout.rightGap).toBeLessThanOrEqual(9);
     await browser.execute(() => {
       const root = document.querySelector<HTMLElement>(
         '.diff-surface diffs-container',

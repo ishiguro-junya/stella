@@ -254,7 +254,7 @@ const STELLA_DIFF_HIGHLIGHT_CSS = `
 
 [data-stella-hunk-actions] {
   position: sticky;
-  right: 0;
+  right: 8px;
   z-index: 5;
   display: flex;
   flex: none;

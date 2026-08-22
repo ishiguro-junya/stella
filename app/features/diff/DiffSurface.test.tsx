@@ -1064,7 +1064,7 @@ describe('DiffSurface line selection', () => {
       '[data-stella-hunk-label] {\n  min-width: 0;\n  margin-right: auto;\n  overflow: hidden;',
     );
     expect(props?.options.unsafeCSS).toContain(
-      '[data-stella-hunk-actions] {\n  position: sticky;\n  right: 0;',
+      '[data-stella-hunk-actions] {\n  position: sticky;\n  right: 8px;',
     );
     expect(props?.options.unsafeCSS).toContain(
       'transform: translateX(calc(0px - var(--stella-hunk-left-offset, 0px)));',
