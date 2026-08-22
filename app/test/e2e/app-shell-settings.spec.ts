@@ -47,8 +47,8 @@ describe('App shell and Settings', () => {
       ),
     );
     expect(headerButtonLabels).toHaveLength(5);
-    expect(['Diff', '差分']).toContain(headerButtonLabels[0]);
-    expect(['History', '履歴']).toContain(headerButtonLabels[1]);
+    expect(['History', '履歴']).toContain(headerButtonLabels[0]);
+    expect(['Diff', '差分']).toContain(headerButtonLabels[1]);
     expect(['Activity', '活動']).toContain(headerButtonLabels[2]);
     expect(['Repository', '一覧']).toContain(headerButtonLabels[3]);
     expect(['Settings', '設定']).toContain(headerButtonLabels[4]);
@@ -228,7 +228,7 @@ describe('App shell and Settings', () => {
           (button) => button.innerText.trim(),
         ),
       ),
-    ).toEqual(['Diff', 'History', 'Activity', 'Repository', 'Settings']);
+    ).toEqual(['History', 'Diff', 'Activity', 'Repository', 'Settings']);
     await expect($('button[aria-label="Repository"]')).toBeDisplayed();
     await expect($('.titlebar-actions button[aria-label="Diff"]')).toBeDisabled();
     await expect($('.titlebar-actions button[aria-label="History"]')).toBeDisabled();

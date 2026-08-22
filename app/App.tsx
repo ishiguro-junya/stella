@@ -2362,20 +2362,6 @@ export function App({
                 <Button
                   type="button"
                   className="titlebar-menu-button"
-                  aria-label={t('diff')}
-                  aria-current={activeNavigationPage === 'diff' ? 'page' : undefined}
-                  disabled={!repo}
-                  onClick={() => {
-                    if (page !== 'workspace' || activeWorkspaceView !== 'diff')
-                      requestNavigation({ page: 'workspace', view: 'diff' });
-                  }}
-                >
-                  <FileDiff aria-hidden="true" focusable="false" />
-                  <span>{t('diff')}</span>
-                </Button>
-                <Button
-                  type="button"
-                  className="titlebar-menu-button"
                   aria-label={t('history')}
                   aria-current={activeNavigationPage === 'history' ? 'page' : undefined}
                   disabled={!repo}
@@ -2386,6 +2372,20 @@ export function App({
                 >
                   <HistoryIcon aria-hidden="true" focusable="false" />
                   <span>{t('history')}</span>
+                </Button>
+                <Button
+                  type="button"
+                  className="titlebar-menu-button"
+                  aria-label={t('diff')}
+                  aria-current={activeNavigationPage === 'diff' ? 'page' : undefined}
+                  disabled={!repo}
+                  onClick={() => {
+                    if (page !== 'workspace' || activeWorkspaceView !== 'diff')
+                      requestNavigation({ page: 'workspace', view: 'diff' });
+                  }}
+                >
+                  <FileDiff aria-hidden="true" focusable="false" />
+                  <span>{t('diff')}</span>
                 </Button>
                 <Button
                   type="button"

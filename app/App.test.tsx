@@ -291,7 +291,7 @@ describe('App repository attach', () => {
       within(actions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Diff', 'History', 'Activity', 'Repository', 'Settings']);
+    ).toEqual(['History', 'Diff', 'Activity', 'Repository', 'Settings']);
   });
 
   it('keeps a manual update check out of the titlebar', async () => {
@@ -386,8 +386,8 @@ describe('App repository attach', () => {
       repositoryList,
     ]);
     expect(within(titlebarActions).getAllByRole('button')).toEqual([
-      diff,
       history,
+      diff,
       activity,
       repositoryList,
       settings,
@@ -404,8 +404,8 @@ describe('App repository attach', () => {
     expect(container.querySelector('.settings-sidebar-footer')).not.toBeInTheDocument();
     expect(within(titlebarContext).queryByRole('button')).not.toBeInTheDocument();
     expect(within(titlebarActions).getAllByRole('button')).toEqual([
-      diff,
       history,
+      diff,
       activity,
       repositoryList,
       settings,
