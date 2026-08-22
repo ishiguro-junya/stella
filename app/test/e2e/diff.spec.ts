@@ -693,7 +693,11 @@ describe('Diff', () => {
     await runGit(peerPath, ['add', 'remote-update.md']);
     await runGit(peerPath, ['commit', '-m', 'test: リモートから更新する']);
     await runGit(peerPath, ['push', 'origin', 'main']);
+    await writeRepositoryFile(repositoryPath, 'pull-snapshot-sync.txt', 'sync\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ pull-snapshot-sync.txt"]').waitForExist({
+      timeout: 20_000,
+    });
 
     await $('.diff-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');
@@ -725,7 +729,11 @@ describe('Diff', () => {
   it('opens Pull and Push dialogs and resets Push options when reopened', async () => {
     const remotePath = `${fixturePath}/remote.git`;
     await ensureLocalBareRemote(repositoryPath, remotePath);
+    await writeRepositoryFile(repositoryPath, 'remote-dialog-snapshot-sync.txt', 'sync\n');
     await browser.execute(() => window.dispatchEvent(new Event('focus')));
+    await $('input[aria-label="ステージ remote-dialog-snapshot-sync.txt"]').waitForExist({
+      timeout: 20_000,
+    });
 
     await $('.diff-action-button[aria-label="プル"]').click();
     const pullDialog = $('[role="dialog"][aria-labelledby="pull-dialog-title"]');

@@ -1114,9 +1114,7 @@ describe('History', () => {
     );
     const mainCommit = $(`[data-history-commit-oid="${mainOid}"]`);
     await mainCommit.waitForDisplayed({ timeout: 20_000 });
-    await expect(mainCommit).toHaveText(
-      expect.stringContaining('feat: ドジャースがワールドシリーズ2連覇'),
-    );
+    await expect(mainCommit).toHaveText(expect.stringContaining('test: MLB記録集を追加'));
     const branchTips = await browser.execute(
       (names) =>
         names.map((name) => {
@@ -1283,7 +1281,16 @@ describe('History', () => {
 
   it('searches history and creates Tags and Branches from a Commit', async function () {
     this.timeout(process.env.STELLA_E2E_BREAKPOINT ? 2_147_483_646 : 120_000);
-    const multiFileCommitOid = (await runGit(repositoryPath, ['rev-parse', 'HEAD'])).trim();
+    const multiFileCommitOid = (
+      await runGit(repositoryPath, [
+        'log',
+        '--all',
+        '--format=%H',
+        '--fixed-strings',
+        '--grep=feat: ドジャースがワールドシリーズ2連覇',
+        '-1',
+      ])
+    ).trim();
     const mainSecondParentOid = (
       await runGit(repositoryPath, ['rev-parse', `${multiFileCommitOid}^2`])
     ).trim();
@@ -1654,9 +1661,9 @@ describe('History', () => {
     );
     await multiFileCommit.click();
     await expect(multiFileCommit).toHaveAttribute('aria-current', 'true');
-    await browser.waitUntil(async () => (await historyDiffFileCount()) === 15, {
+    await browser.waitUntil(async () => (await historyDiffFileCount()) === 14, {
       timeout: 10_000,
-      timeoutMsg: 'The History multi-file diff did not render fifteen files.',
+      timeoutMsg: 'The History multi-file diff did not render fourteen files.',
     });
     const historyDiffNames = await browser.execute(() =>
       [...document.querySelectorAll<HTMLElement>('.diff-surface diffs-container')].map(
@@ -1666,7 +1673,6 @@ describe('History', () => {
       ),
     );
     expect(historyDiffNames).toEqual([
-      'CHANGELOG.md',
       'data/current-champion.json',
       'docs/2025-postseason/ds/blue-jays-yankees.md',
       'docs/2025-postseason/ds/mariners-tigers.md',
@@ -1787,10 +1793,6 @@ describe('History', () => {
       ),
     ).toBe('none');
 
-    await expectHistoryCommitLayout(1180, 760);
-    await expectHistoryCommitLayout(860, 560);
-    await setLogicalWindowSize(1180, 760);
-
     const selectedCommit = $('.history-commit-item.is-current');
     const historyActions = selectedCommit.$('.history-action-trigger');
     await historyActions.click();
@@ -1846,6 +1848,9 @@ describe('History', () => {
     await expect(tagConfirmation).not.toExist();
     await setLogicalWindowSize(1180, 760);
     await expect($(`.ref-chip.tag[aria-label="タグ ${tagName}"]`)).toHaveText(tagName);
+    await expectHistoryCommitLayout(1180, 760);
+    await expectHistoryCommitLayout(860, 560);
+    await setLogicalWindowSize(1180, 760);
     expect(await runGit(repositoryPath, ['rev-parse', `refs/tags/${tagName}`])).toMatch(
       /^[0-9a-f]{40}\n$/u,
     );
@@ -1897,7 +1902,7 @@ describe('History', () => {
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining('main'));
     await expect($('.history-commit-item.is-current .history-action-trigger')).toBeEnabled();
 
-    await dispatchDoubleClick('.history-commit-item.is-current .commit-row');
+    await dispatchDoubleClick(`[data-history-commit-oid="${fixtureHeadOid}"]`);
     await expect($('.branch-toggle')).toHaveText(expect.stringContaining(branchName));
     expect(await runGit(repositoryPath, ['branch', '--show-current'])).toBe(`${branchName}\n`);
     await expect($('.history-commit-item.is-current .history-action-trigger')).toBeEnabled();
