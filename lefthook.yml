@@ -9,4 +9,4 @@ commit-msg:
 pre-push:
   commands:
     ci:
-      run: mise run ci
+      run: mise run ci --smoke

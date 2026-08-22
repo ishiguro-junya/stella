@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 
 const breakpoint = process.env.STELLA_E2E_BREAKPOINT;
 const headless = process.env.STELLA_E2E_HEADLESS !== 'false';
+const smoke = process.env.STELLA_TEST_SMOKE === 'true';
 
 const readmeScreenshotSpec = './app/test/e2e/readme-screenshots.spec.ts';
 const visualQaSpec = './app/test/e2e/visual-qa.spec.ts';
@@ -40,6 +41,7 @@ if (requestedMode !== 'e2e' && requestedMode !== 'vrt' && requestedMode !== 'scr
 }
 const testMode = requestedMode;
 const mode = testModes[requestedMode];
+const appBinaryPath = process.env.STELLA_TEST_APP_BINARY ?? mode.appBinaryPath;
 const isWorker = process.env.WDIO_WORKER_ID !== undefined;
 const isLauncher = process.argv.some((argument) => argument.endsWith('/wdio.js'));
 const portReservation =
@@ -66,7 +68,7 @@ export const config: WebdriverIO.Config = {
     [
       '@wdio/tauri-service',
       {
-        appBinaryPath: mode.appBinaryPath,
+        appBinaryPath,
         driverProvider: 'embedded',
         embeddedPort,
         env: {
@@ -90,7 +92,7 @@ export const config: WebdriverIO.Config = {
   framework: 'mocha',
   reporters: ['spec'],
   before: async () => {
-    const appName = mode.appBinaryPath.split('/').at(-1);
+    const appName = appBinaryPath.split('/').at(-1);
     const { stdout } = await execFileAsync('/usr/bin/lsappinfo', ['-all', 'list']);
     const app = stdout.split('\n---').find((entry) => entry.includes(`/target/release/${appName}`));
     if (!app?.includes(`"LSDisplayName"="${appName}"`)) {
@@ -111,6 +113,7 @@ export const config: WebdriverIO.Config = {
   },
   mochaOpts: {
     ui: 'bdd',
+    ...(smoke ? { grep: '@smoke' } : {}),
     // WebdriverIO subtracts 3ms, so use one less than Mocha's limit to effectively disable it.
     timeout: breakpoint ? 2_147_483_646 : testMode === 'e2e' ? 60_000 : 180_000,
   },

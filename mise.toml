@@ -34,12 +34,18 @@ run = "node --import tsx scripts/native-slot.mts pnpm exec tauri build"
 
 [tasks.ci]
 description = "全ての検査を実行する"
+usage = '''
+flag "--smoke" help="ネイティブテストを主要経路に限定する"
+'''
 run = [
   "mise run lint",
   "mise run typecheck",
   "mise run security",
-  "mise run test",
-  "mise run build",
+  '''if [ "${usage_smoke:-false}" = "true" ]; then
+    mise run test --smoke
+  else
+    mise run test
+  fi''',
 ]
 
 [tasks."install"]
@@ -122,11 +128,19 @@ run = [ '''if [ "$(date -u +%Y%m%d)" -ge 20260916 ]; then
 
 [tasks.test]
 description = "全てのテストを実行する"
+usage = '''
+flag "--smoke" help="ネイティブテストを主要経路に限定する"
+'''
 run = [
   "mise run test:unit",
   "mise run test:integration",
-  "mise run test:e2e",
-  "mise run test:visual-regression",
+  '''set -eu
+  smoke_arg=
+  if [ "${usage_smoke:-false}" = "true" ]; then
+    smoke_arg=--smoke
+  fi
+  mise run test:e2e $smoke_arg
+  STELLA_TEST_APP_BINARY='./target/release/Stella (E2E)' mise run test:visual-regression $smoke_arg''',
 ]
 
 [tasks."test:unit"]
@@ -143,34 +157,44 @@ run = "node --import tsx scripts/native-slot.mts cargo test --workspace --all-ta
 [tasks."test:e2e"]
 description = "E2Eテストを実行する"
 usage = '''
+flag "--smoke" help="主要経路だけを実行する"
 flag "--headless <headless>" help="ウィンドウを表示せずに実行する" default="true" {
   choices "true" "false"
 }
 arg "[wdio_args]" var=#true double_dash="required"
 '''
 run = [
-  "VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts e2e target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json",
+  '''if [ -z "${STELLA_TEST_APP_BINARY:-}" ]; then
+    VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts e2e target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json
+  fi''',
   '''
   eval "set -- ${usage_wdio_args-}"
-  STELLA_TEST_MODE=e2e STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
+  STELLA_TEST_MODE=e2e STELLA_TEST_SMOKE=${usage_smoke:-false} STELLA_E2E_HEADLESS=${usage_headless?} pnpm exec wdio run wdio.conf.ts "$@"
   ''',
 ]
 
 [tasks."test:visual-regression"]
 description = "ビジュアルリグレッションテストを実行する"
 usage = '''
+flag "--smoke" help="代表画面だけを実行する"
 flag "--update" help="基準画像を更新する"
 '''
 run = [
   '''
+  if [ "${usage_smoke:-false}" = "true" ] && [ "${usage_update:-false}" = "true" ]; then
+    echo "--smokeと--updateは同時に指定できません。" >&2
+    exit 1
+  fi
   if [ "${usage_update:-false}" != "true" ] && [ ! -d tmp/visual-regression/baseline ]; then
     echo "基準画像がありません。mise run test:visual-regression --updateを実行してください。" >&2
     exit 1
   fi
   rm -rf tmp/visual-regression/current
   ''',
-  "VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts vrt target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{\"productName\":\"Stella (VRT)\",\"identifier\":\"com.emuni.stella.vrt\"}'",
-  "STELLA_TEST_MODE=vrt STELLA_VRT_UPDATE=${usage_update:-false} STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT_OUTPUT=tmp/visual-regression/current pnpm exec wdio run wdio.conf.ts",
+  '''if [ -z "${STELLA_TEST_APP_BINARY:-}" ]; then
+    VITE_E2E=true node --import tsx scripts/native-slot.mts node --import tsx scripts/mode-app.mts vrt target/release/stella pnpm exec tauri build --no-bundle --features e2e --config app/native/tauri.e2e.conf.json --config '{"productName":"Stella (VRT)","identifier":"com.emuni.stella.vrt"}'
+  fi''',
+  "STELLA_TEST_MODE=vrt STELLA_TEST_SMOKE=${usage_smoke:-false} STELLA_VRT_UPDATE=${usage_update:-false} STELLA_E2E_HEADLESS=true STELLA_SCREENSHOT_OUTPUT=tmp/visual-regression/current pnpm exec wdio run wdio.conf.ts",
   '''
   if [ "${usage_update:-false}" = "true" ]; then
     rm -rf tmp/visual-regression/baseline

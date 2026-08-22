@@ -24,7 +24,7 @@ describe('App shell and Settings', () => {
     await resetApp({ language: 'ja' });
   });
 
-  it('launches the native app', async () => {
+  it('launches the native app @smoke', async () => {
     await expect(browser).toHaveTitle('Stella');
     await expect($('[data-testid="app-shell"]')).toBeDisplayed();
     const windowStates = await browser.tauri.execute(({ core }) =>

@@ -900,7 +900,7 @@ describe('Diff', () => {
     expect((await runGit(remotePath, ['rev-parse', 'refs/heads/main'])).trim()).toBe(peerHead);
   });
 
-  it('shows, stages, and commits a working tree change', async () => {
+  it('shows, stages, and commits a working tree change @smoke', async () => {
     const commitTrigger = $('.diff-action-bar .diff-action-button[aria-label="コミット"]');
     await expect(commitTrigger).toHaveAttribute('aria-expanded', 'false');
     const actionButtons = $$('.diff-action-bar .diff-action-button');

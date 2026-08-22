@@ -174,7 +174,7 @@ describe('Repository and Branch navigation', () => {
     }
   });
 
-  it('adds and initializes a repository and exposes the current Branch actions', async () => {
+  it('adds and initializes a repository and exposes the current Branch actions @smoke', async () => {
     await openRepository(repositoryPath, { language: 'ja', inspectDialog: true });
     await expect($('.diff-view')).toBeDisplayed();
     await $('button[aria-label="一覧"]').click();

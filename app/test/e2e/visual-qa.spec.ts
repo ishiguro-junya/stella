@@ -149,13 +149,18 @@ async function captureDialog(
 
 describe('視覚確認用スクリーンショット', () => {
   after(async () => {
-    if (process.env.STELLA_TEST_MODE !== 'vrt' || process.env.STELLA_VRT_UPDATE === 'true') return;
+    if (
+      process.env.STELLA_TEST_MODE !== 'vrt' ||
+      process.env.STELLA_TEST_SMOKE === 'true' ||
+      process.env.STELLA_VRT_UPDATE === 'true'
+    )
+      return;
     expect(await listPngFiles(visualQaDirectory)).toEqual(
       await listPngFiles(join(visualQaDirectory, '..', 'baseline')),
     );
   });
 
-  it('差分を視覚確認用に撮影する', async function () {
+  it('差分を視覚確認用に撮影する @smoke', async function () {
     await withVisualRepository(async (_repository, appearance) => {
       const settings = $('.titlebar-actions button:last-child');
       await settings.click();
